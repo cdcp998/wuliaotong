@@ -143,6 +143,8 @@ def _fetch_models(base_url: str, api_key: str) -> list[dict]:
 @router.post("/llm/siliconflow/models", dependencies=[Depends(require_permission("sys:config"))])
 def list_siliconflow_models(db: Session = Depends(get_db)) -> dict:
     """用已保存的视觉模型 Key 拉取模型列表（设置页保存后展示，供选择模型）。"""
+    if _sys_config(db, "llm.siliconflow.enabled") == "0":
+        raise BizError(E_PARAM, "视觉模型未启用：请先在系统设置中打开「启用视觉模型」开关并保存")
     key = _sys_config(db, "llm.siliconflow.api_key")
     if not key:
         raise BizError(E_PARAM, "请先填写并保存视觉模型 API Key，再获取模型列表")
@@ -153,6 +155,8 @@ def list_siliconflow_models(db: Session = Depends(get_db)) -> dict:
 @router.post("/llm/deepseek/models", dependencies=[Depends(require_permission("sys:config"))])
 def list_deepseek_models(db: Session = Depends(get_db)) -> dict:
     """用已保存的文本模型 Key 拉取模型列表（设置页保存后展示，供选择模型）。"""
+    if _sys_config(db, "llm.deepseek.enabled") == "0":
+        raise BizError(E_PARAM, "文本模型未启用：请先在系统设置中打开「启用文本模型」开关并保存")
     key = _sys_config(db, "llm.deepseek.api_key")
     if not key:
         raise BizError(E_PARAM, "请先填写并保存文本模型 API Key，再获取模型列表")
@@ -163,6 +167,8 @@ def list_deepseek_models(db: Session = Depends(get_db)) -> dict:
 @router.post("/llm/doubao/models", dependencies=[Depends(require_permission("sys:config"))])
 def list_doubao_models(db: Session = Depends(get_db)) -> dict:
     """用已保存的豆包 Key 拉取模型列表（设置页保存后展示，供选择模型）。"""
+    if _sys_config(db, "llm.doubao.enabled") == "0":
+        raise BizError(E_PARAM, "豆包大模型未启用：请先在系统设置中打开「启用豆包大模型」开关并保存")
     key = _sys_config(db, "llm.doubao.api_key")
     if not key:
         raise BizError(E_PARAM, "请先填写并保存豆包 API Key，再获取模型列表")

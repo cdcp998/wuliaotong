@@ -34,6 +34,16 @@ const EMPTY: Settings = {
   "smtp.from": "",
 };
 
+/** 表单值统一转字符串：InputNumber 字段（会话有效期/端口）返回 number、清空返回 null，
+ *  而 PUT /settings 契约是全字符串（后端 dict[str,str] 校验，非字符串返回 4006 保存失败）。 */
+function toStrings(values: Settings): Partial<Settings> {
+  const out: Partial<Settings> = {};
+  for (const [k, v] of Object.entries(values)) {
+    out[k as keyof Settings] = v === null || v === undefined ? "" : String(v);
+  }
+  return out;
+}
+
 /** 系统设置（电脑端）：按功能分类平铺（Tabs），所有设置项一目了然。 */
 export function SettingsPage() {
   const { message } = App.useApp();
@@ -90,7 +100,15 @@ export function SettingsPage() {
     setLoading(true);
     systemApi
       .getSettings()
-      .then((s) => form.setFieldsValue({ ...EMPTY, ...s }))
+      .then((s) => {
+        // 数据库未配置的键 GET 返回空串，会覆盖 EMPTY 默认值（如 llm.*.enabled 默认"1"）
+        // 导致开关显示开（"" !== "0"）但存储值是空串。空值回退 EMPTY 默认，保证显示与存储一致
+        const merged = { ...EMPTY };
+        for (const [k, v] of Object.entries(s)) {
+          if (v !== "") merged[k as keyof Settings] = v;
+        }
+        form.setFieldsValue(merged);
+      })
       .catch((e) => message.error(e instanceof Error ? e.message : "加载失败"))
       .finally(() => setLoading(false));
   }, [form, message]);
@@ -99,12 +117,13 @@ export function SettingsPage() {
     const values = form.getFieldsValue();
     setSaving(true);
     try {
-      await systemApi.updateSettings(values);
+      await systemApi.updateSettings(toStrings(values));
       message.success("保存成功（密钥字段留空表示不修改）");
-      // 已配置 Key 时，保存后拉取模型列表供选择
-      if (values["llm.siliconflow.api_key"]) void fetchSfModels();
-      if (values["llm.deepseek.api_key"]) void fetchDsModels();
-      if (values["llm.doubao.api_key"]) void fetchDoubaoModels();
+      // 仅当对应模型已启用且本次填了新 Key（非掩码）时，保存后自动拉取模型列表；
+      // 掩码/未填 Key 时点「获取模型列表」按钮手动刷新（按钮会引导启用/填写并自动保存）
+      if (values["llm.siliconflow.enabled"] === "1" && values["llm.siliconflow.api_key"] && !values["llm.siliconflow.api_key"].startsWith("****")) void fetchModelList("siliconflow", { skipCheck: true });
+      if (values["llm.deepseek.enabled"] === "1" && values["llm.deepseek.api_key"] && !values["llm.deepseek.api_key"].startsWith("****")) void fetchModelList("deepseek", { skipCheck: true });
+      if (values["llm.doubao.enabled"] === "1" && values["llm.doubao.api_key"] && !values["llm.doubao.api_key"].startsWith("****")) void fetchModelList("doubao", { skipCheck: true });
     } catch (e) {
       message.error(e instanceof Error ? e.message : "保存失败");
     } finally {
@@ -112,42 +131,52 @@ export function SettingsPage() {
     }
   }
 
-  async function fetchSfModels() {
-    setSfLoading(true);
-    try {
-      const r = await systemApi.listSiliconflowModels();
-      setSfModels(r.models);
-      message.success(`已获取 ${r.models.length} 个模型`);
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "获取模型列表失败");
-    } finally {
-      setSfLoading(false);
-    }
-  }
+  type LlmKind = "siliconflow" | "deepseek" | "doubao";
 
-  async function fetchDsModels() {
-    setDsLoading(true);
-    try {
-      const r = await systemApi.listDeepseekModels();
-      setDsModels(r.models);
-      message.success(`已获取 ${r.models.length} 个模型`);
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "获取模型列表失败");
-    } finally {
-      setDsLoading(false);
-    }
-  }
+  const LLM_META: Record<LlmKind, { label: string; enableLabel: string; api: () => Promise<{ models: { id: string; owned_by: string }[] }> }> = {
+    siliconflow: { label: "视觉模型", enableLabel: "启用视觉模型", api: systemApi.listSiliconflowModels },
+    deepseek: { label: "文本模型", enableLabel: "启用文本模型", api: systemApi.listDeepseekModels },
+    doubao: { label: "豆包大模型", enableLabel: "启用豆包大模型", api: systemApi.listDoubaoModels },
+  };
 
-  async function fetchDoubaoModels() {
-    setDoubaoLoading(true);
+  async function fetchModelList(kind: LlmKind, opts?: { skipCheck?: boolean }) {
+    const meta = LLM_META[kind];
+    const v = form.getFieldsValue();
+    if (!opts?.skipCheck) {
+      // 未启用（显式 "0"）→ 明确提示；空值视为启用（与 Switch 显示逻辑 v !== "0" 一致）
+      if (v[`llm.${kind}.enabled`] === "0") {
+        message.warning(`${meta.label}未启用：请先打开「${meta.enableLabel}」开关并保存，再获取模型列表`);
+        return;
+      }
+      const key = v[`llm.${kind}.api_key`];
+      if (!key) {
+        message.warning(`未填写${meta.label} API Key：请先填写并保存，再获取模型列表`);
+        return;
+      }
+      if (!key.startsWith("****")) {
+        setSaving(true);
+        try {
+          await systemApi.updateSettings(toStrings(v));
+          message.success("设置已保存，正在获取模型列表…");
+        } catch (e) {
+          message.error(e instanceof Error ? e.message : "保存失败");
+          setSaving(false);
+          return;
+        }
+        setSaving(false);
+      }
+    }
+    const setLoading = kind === "siliconflow" ? setSfLoading : kind === "deepseek" ? setDsLoading : setDoubaoLoading;
+    const setModels = kind === "siliconflow" ? setSfModels : kind === "deepseek" ? setDsModels : setDoubaoModels;
+    setLoading(true);
     try {
-      const r = await systemApi.listDoubaoModels();
-      setDoubaoModels(r.models);
+      const r = await meta.api();
+      setModels(r.models);
       message.success(`已获取 ${r.models.length} 个模型`);
     } catch (e) {
       message.error(e instanceof Error ? e.message : "获取模型列表失败");
     } finally {
-      setDoubaoLoading(false);
+      setLoading(false);
     }
   }
 
@@ -182,7 +211,6 @@ export function SettingsPage() {
       name={k}
       label={label}
       extra={opts?.hint}
-      rules={opts?.secret ? [{ pattern: /^\*{4}/, message: "密钥字段请留空（不修改）" }] : undefined}
     >
       <Input.Password
         autoComplete="new-password"
@@ -302,7 +330,7 @@ export function SettingsPage() {
             options={doubaoModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
             optionFilterProp="label"
           />
-          <Button loading={doubaoLoading} onClick={() => void fetchDoubaoModels()}>获取模型列表</Button>
+          <Button loading={doubaoLoading} onClick={() => void fetchModelList("doubao")}>获取模型列表</Button>
         </Space.Compact>
       </Form.Item>
       <SectionTitle>文本模型（文字结构化 / 材料分类）</SectionTitle>
@@ -330,7 +358,7 @@ export function SettingsPage() {
             options={dsModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
             optionFilterProp="label"
           />
-          <Button loading={dsLoading} onClick={() => void fetchDsModels()}>获取模型列表</Button>
+          <Button loading={dsLoading} onClick={() => void fetchModelList("deepseek")}>获取模型列表</Button>
         </Space.Compact>
       </Form.Item>
       <SectionTitle>视觉模型（送货单识别，必需）</SectionTitle>
@@ -358,7 +386,7 @@ export function SettingsPage() {
             options={sfModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
             optionFilterProp="label"
           />
-          <Button loading={sfLoading} onClick={() => void fetchSfModels()}>获取模型列表</Button>
+          <Button loading={sfLoading} onClick={() => void fetchModelList("siliconflow")}>获取模型列表</Button>
         </Space.Compact>
       </Form.Item>
     </>
@@ -426,10 +454,10 @@ export function SettingsPage() {
         >
           <Tabs
             items={[
-              { key: "base", label: "基础设置", children: baseTab },
-              { key: "ocr", label: "OCR 与大模型", children: ocrTab },
-              { key: "auth", label: "账号与安全", children: authTab },
-              { key: "smtp", label: "邮件服务", children: smtpTab },
+              { key: "base", label: "基础设置", children: baseTab, forceRender: true },
+              { key: "ocr", label: "OCR 与大模型", children: ocrTab, forceRender: true },
+              { key: "auth", label: "账号与安全", children: authTab, forceRender: true },
+              { key: "smtp", label: "邮件服务", children: smtpTab, forceRender: true },
             ]}
           />
         </Form>
