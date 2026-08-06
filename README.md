@@ -24,24 +24,37 @@
 - Python 3.13（`G:\Python\Python313`）
 - MySQL 5.7（phpstudy，root/root，端口 3306），生产目标 MySQL 8.0
 - Node 20 + npm workspaces
+- ⚠️ 本地 80 端口被 phpstudy 业务占用：后端 dev 端口 **8443（HTTPS）**，部署端口计划 **8080**
 
-## 快速启动（P0 之后）
+## 快速启动（P0 已就绪）
 
 ```bash
-# 后端
+# 1. 生成开发者自签名证书（已生成则跳过）
+cd backend && mkdir -p certs/dev
+openssl req -x509 -newkey rsa:2048 -keyout certs/dev/key.pem -out certs/dev/cert.pem \
+  -days 365 -nodes -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+
+# 2. 后端（HTTPS，端口 8443；浏览器首次访问需信任自签名证书）
 cd backend
-python -m venv .venv
-.venv/Scripts/activate
+python -m venv .venv && .venv/Scripts/activate
 pip install -r requirements.txt
 cp .env.example .env
-# 初始化数据库
-mysql -uroot -proot -e "CREATE DATABASE wuliaotong DEFAULT CHARACTER SET utf8mb4;"
+# 初始化数据库（MySQL 需已启动）
+mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS wuliaotong DEFAULT CHARACTER SET utf8mb4;"
 mysql -uroot -proot wuliaotong < sql/init.sql
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8443 \
+  --ssl-keyfile certs/dev/key.pem --ssl-certfile certs/dev/cert.pem
 
-# 前端（后续阶段）
+# 3. 接口测试（L2 门禁）
+cd backend && .venv/Scripts/python.exe -m pytest tests -q
+
+# 4. 前端（后续阶段）
 cd frontend && npm install && npm run dev
 ```
+
+## 默认账号
+
+- 管理员：`admin` / `admin123`（首次登录后请立即修改，密码 bcrypt 存储）
 
 ## 本地资源（不入库，需自行放置）
 

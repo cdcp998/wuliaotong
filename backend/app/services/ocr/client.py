@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from typing import Protocol
 
 from app.config import settings
@@ -85,3 +86,11 @@ def get_ocr_engine(engine: str | None = None) -> OCRClient:
     if engine == "paddle":
         raise NotImplementedError("PaddleOCREngine 在 Debian 部署阶段实现")
     raise ValueError(f"未知 OCR 引擎: {engine}")
+
+
+def ocr_engine_available(engine: str) -> bool:
+    """引擎资源是否就绪（只检查资产文件，不启动进程；供 /health 使用）。"""
+    if engine == "rapidocr":
+        exe = Path(__file__).resolve().parents[3] / "ocr" / "RapidOCR-json.exe"
+        return exe.is_file()
+    return False
