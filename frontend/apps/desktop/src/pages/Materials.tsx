@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag } from "antd";
+import { App, Button, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag, Typography } from "antd";
 import { CameraOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
@@ -33,6 +33,10 @@ export function MaterialsPage() {
   const [suppliers, setSuppliers] = useState<{ id: number; name: string }[]>([]);
   const supDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined); // 供应商服务端搜索防抖
   const [open, setOpen] = useState(false);
+  // 材料查重（P9-P1②）：扫描分组展示 + 人工标记重复
+  const [dedupeOpen, setDedupeOpen] = useState(false);
+  const [dedupeGroups, setDedupeGroups] = useState<{ group: { product_id: number; name: string; spec: string; material_code: string; unit_name: string }[]; reason: string; confidence: string }[]>([]);
+  const [dedupeLoading, setDedupeLoading] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form] = Form.useForm();
   // Space.Compact 内的表单控件拿不到 Form.Item 注入的 value/onChange（antd v6 只注入直接子元素）→ 显式受控
@@ -75,6 +79,30 @@ export function MaterialsPage() {
     supDebounce.current = setTimeout(() => {
       void baseApi.suppliers(1, k).then((d) => setSuppliers(d.list.map((s) => ({ id: s.id, name: s.name })))).catch(() => undefined);
     }, 300);
+  }
+
+  async function runDedupe() {
+    setDedupeOpen(true);
+    setDedupeLoading(true);
+    try {
+      const r = await baseApi.dedupeScan();
+      setDedupeGroups(r.groups);
+      if (!r.groups.length) message.info("未发现疑似重复材料");
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "查重失败");
+    } finally {
+      setDedupeLoading(false);
+    }
+  }
+
+  async function markDuplicate(id: number) {
+    try {
+      await baseApi.markDuplicate(id);
+      message.success("已标记为重复（见备注【疑似重复】）");
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "标记失败");
+    }
   }
 
   function openCreate() {
@@ -229,6 +257,7 @@ export function MaterialsPage() {
           onPressEnter={() => setPage(1)}
         />
         <Button type="primary" onClick={openCreate}>新建材料</Button>
+        <Button loading={dedupeLoading} onClick={() => void runDedupe()}>查重</Button>
       </Space>
       <DataTable
         rowKey="id"
@@ -339,6 +368,36 @@ export function MaterialsPage() {
           </Space>
         </Form>
       </Modal>
+
+      {/* 材料查重结果（P9-P1②）：AI 建议分组，人工确认后标记 */ }
+      <Drawer
+        title="材料查重建议（AI 辅助，仅供参考）"
+        open={dedupeOpen}
+        onClose={() => setDedupeOpen(false)}
+        width={680}
+      >
+        {dedupeGroups.length === 0 && !dedupeLoading && <Typography.Text type="secondary">未发现疑似重复材料</Typography.Text>}
+        {dedupeGroups.map((g, gi) => (
+          <div key={gi} style={{ border: "1px solid #e5e6eb", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <Tag color={g.confidence === "high" ? "red" : "orange"}>{g.confidence === "high" ? "高置信" : "AI 判断"}</Tag>
+              <Typography.Text>{g.reason}</Typography.Text>
+            </div>
+            {g.group.map((m) => (
+              <div key={m.product_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: "1px dashed #f0f0f0" }}>
+                <span>
+                  <b>{m.name}</b>
+                  {m.spec ? `（${m.spec}）` : ""}
+                  <span style={{ color: "#86909c", fontSize: 12, marginLeft: 8 }}>
+                    {m.material_code ? `编码 ${m.material_code}` : "无物料编码"} · {m.unit_name || "-"}
+                  </span>
+                </span>
+                <Button size="small" onClick={() => void markDuplicate(m.product_id)}>标记重复</Button>
+              </div>
+            ))}
+          </div>
+        ))}
+      </Drawer>
     </div>
   );
 }

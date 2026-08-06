@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import re
 import uuid
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
@@ -26,6 +27,7 @@ from app.models.base import (
     BaseDepartmentShelf,
     BaseLocation,
     BaseProduct,
+    BaseProductSupplier,
     BaseProductUnit,
     BaseShelf,
     BaseSupplier,
@@ -156,11 +158,26 @@ def list_units(db: Session = Depends(get_db)) -> dict:
     return ok([UnitOut(id=u.id, name=u.name, remark=u.remark).model_dump() for u in units])
 
 
+
+# 垃圾单位名：短名（≤6 字）+ 6 位 hex 随机尾（测试/误操作产生），禁止入库
+_UNIT_NAME_GARBAGE = re.compile(r"^.{1,6}[0-9a-f]{6}$")
+
+
+def _check_unit_name(name: str) -> str:
+    name = name.strip()
+    if not name or len(name) > 20:
+        raise BizError(E_PARAM, "单位名称长度须为 1-20 字")
+    if _UNIT_NAME_GARBAGE.match(name):
+        raise BizError(E_PARAM, "单位名称不规范（疑似随机后缀），请使用规范单位名")
+    return name
+
+
 @router.post("/units", dependencies=[Depends(require_permission("base:product"))])
 def create_unit(req: UnitReq, db: Session = Depends(get_db)) -> dict:
-    if db.scalar(select(BaseUnit.id).where(BaseUnit.name == req.name)):
+    name = _check_unit_name(req.name)
+    if db.scalar(select(BaseUnit.id).where(BaseUnit.name == name)):
         raise BizError(E_PARAM, "单位已存在")
-    unit = BaseUnit(name=req.name, remark=req.remark)
+    unit = BaseUnit(name=name, remark=req.remark)
     db.add(unit)
     db.commit()
     db.refresh(unit)
@@ -172,10 +189,11 @@ def update_unit(unit_id: int, req: UnitReq, db: Session = Depends(get_db)) -> di
     unit = db.get(BaseUnit, unit_id)
     if unit is None:
         raise BizError(E_NOT_FOUND, "单位不存在")
-    exists = db.scalar(select(BaseUnit.id).where(BaseUnit.name == req.name, BaseUnit.id != unit_id))
+    name = _check_unit_name(req.name)
+    exists = db.scalar(select(BaseUnit.id).where(BaseUnit.name == name, BaseUnit.id != unit_id))
     if exists:
         raise BizError(E_PARAM, "单位已存在")
-    unit.name = req.name
+    unit.name = name
     unit.remark = req.remark
     db.commit()
     return ok()
@@ -187,6 +205,8 @@ def delete_unit(unit_id: int, db: Session = Depends(get_db)) -> dict:
     if unit is None:
         raise BizError(E_NOT_FOUND, "单位不存在")
     used = db.scalar(select(func.count()).select_from(BaseProductUnit).where(BaseProductUnit.unit_id == unit_id)) or 0
+    # 产品主单位（base_product.unit_id）也计入引用，否则删除后产生悬空引用
+    used += db.scalar(select(func.count()).select_from(BaseProduct).where(BaseProduct.unit_id == unit_id)) or 0
     if used:
         raise BizError(E_PARAM, "单位已被商品引用，禁止删除")
     db.delete(unit)
@@ -248,9 +268,33 @@ def delete_supplier(sup_id: int, db: Session = Depends(get_db)) -> dict:
     sup = db.get(BaseSupplier, sup_id)
     if sup is None:
         raise BizError(E_NOT_FOUND, "供应商不存在")
+    # 数据一致性：仍有启用材料关联时禁止停用，避免材料-供应商关系悬空
+    linked = db.scalar(
+        select(func.count())
+        .select_from(BaseProductSupplier)
+        .join(BaseProduct, BaseProduct.id == BaseProductSupplier.product_id)
+        .where(BaseProductSupplier.supplier_id == sup_id, BaseProduct.status == 1)
+    ) or 0
+    if linked:
+        raise BizError(E_PARAM, f"仍有 {linked} 个启用材料关联该供应商，请先在材料中解除关联")
+    db.execute(BaseProductSupplier.__table__.delete().where(BaseProductSupplier.supplier_id == sup_id))  # 清理残留关联（停用材料的）
     sup.status = 0  # 软删除：停用
     db.commit()
     return ok()
+
+
+@router.get("/suppliers/{sup_id}/products")
+def supplier_products(sup_id: int, db: Session = Depends(get_db)) -> dict:
+    """供应商信息中查看关联材料（含停用材料，按材料 id 倒序）。"""
+    if db.get(BaseSupplier, sup_id) is None:
+        raise BizError(E_NOT_FOUND, "供应商不存在")
+    rows = db.scalars(
+        select(BaseProduct)
+        .join(BaseProductSupplier, BaseProductSupplier.product_id == BaseProduct.id)
+        .where(BaseProductSupplier.supplier_id == sup_id)
+        .order_by(BaseProduct.id.desc())
+    ).all()
+    return ok({"list": [_product_out(db, p) for p in rows], "total": len(rows)})
 
 
 SUPPLIER_IMPORT_COLUMNS = ["编码", "名称", "联系人", "电话", "地址"]
@@ -300,6 +344,13 @@ def _product_out(db: Session, p: BaseProduct) -> dict:
     units = db.scalars(
         select(BaseProductUnit).where(BaseProductUnit.product_id == p.id).order_by(BaseProductUnit.is_default.desc())
     ).all()
+    # 关联供应商（按 id 升序，保证输出稳定）
+    sups = db.scalars(
+        select(BaseSupplier)
+        .join(BaseProductSupplier, BaseProductSupplier.supplier_id == BaseSupplier.id)
+        .where(BaseProductSupplier.product_id == p.id)
+        .order_by(BaseSupplier.id)
+    ).all()
     return ProductOut(
         id=p.id, code=p.code, material_code=p.material_code, barcode=p.barcode, sku=p.sku, name=p.name,
         category_id=p.category_id, category_name=cat.name if cat else "",
@@ -307,7 +358,21 @@ def _product_out(db: Session, p: BaseProduct) -> dict:
         purchase_price=p.purchase_price, min_stock=p.min_stock, max_stock=p.max_stock,
         status=p.status, remark=p.remark,
         units=[{"id": u.id, "unit_id": u.unit_id, "unit_name": (db.get(BaseUnit, u.unit_id).name if db.get(BaseUnit, u.unit_id) else ""), "rate": format(u.rate, "f"), "is_default": u.is_default} for u in units],
+        supplier_ids=[s.id for s in sups], supplier_names=[s.name for s in sups],
     ).model_dump()
+
+
+def _apply_suppliers(db: Session, product_id: int, supplier_ids: list[int]) -> None:
+    """写入材料-供应商关联（全量替换，与 _apply_units 同模式）。"""
+    db.execute(BaseProductSupplier.__table__.delete().where(BaseProductSupplier.product_id == product_id))
+    seen: set[int] = set()
+    for sid in supplier_ids:
+        if sid <= 0 or sid in seen:
+            continue
+        if db.get(BaseSupplier, sid) is None:
+            raise BizError(E_PARAM, f"供应商 id={sid} 不存在")
+        seen.add(sid)
+        db.add(BaseProductSupplier(product_id=product_id, supplier_id=sid))
 
 
 def _apply_units(db: Session, product_id: int, unit_id: int, units: list) -> None:
@@ -368,17 +433,20 @@ def create_product(req: ProductReq, db: Session = Depends(get_db)) -> dict:
         raise BizError(E_PARAM, "商品编码已存在")
     if db.get(BaseUnit, req.unit_id) is None:
         raise BizError(E_PARAM, "基本单位不存在")
+    if req.barcode.strip() and db.scalar(select(BaseProduct.id).where(BaseProduct.barcode == req.barcode.strip())):
+        raise BizError(E_PARAM, "条码已存在，请勿重复录入")
     p = BaseProduct(
-        code=code, material_code=req.material_code, barcode=req.barcode, sku=req.sku, name=req.name,
+        code=code, material_code=req.material_code, barcode=req.barcode.strip(), sku=req.sku, name=req.name,
         category_id=req.category_id, spec=req.spec, unit_id=req.unit_id,
         purchase_price=_parse_dec(req.purchase_price, "进价"),
         min_stock=_parse_dec(req.min_stock, "下限"), max_stock=_parse_dec(req.max_stock, "上限"),
-        image_file_id=req.image_file_id, remark=req.remark,
+        image_file_id=req.image_file_id, status=req.status, remark=req.remark,
     )
     db.add(p)
     db.flush()
     try:
         _apply_units(db, p.id, req.unit_id, [u.model_dump() for u in req.units])
+        _apply_suppliers(db, p.id, req.supplier_ids or [])
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -401,12 +469,19 @@ def update_product(product_id: int, req: ProductReq, db: Session = Depends(get_d
         raise BizError(E_NOT_FOUND, "商品不存在")
     if req.code and db.scalar(select(BaseProduct.id).where(BaseProduct.code == req.code, BaseProduct.id != product_id)):
         raise BizError(E_PARAM, "商品编码已存在")
-    # 编码留空 = 保持原编码（编辑时可不填）
-    data = req.model_dump(exclude={"units", "code"}) if not req.code else req.model_dump(exclude={"units"})
+    if req.barcode.strip() and db.scalar(
+        select(BaseProduct.id).where(BaseProduct.barcode == req.barcode.strip(), BaseProduct.id != product_id)
+    ):
+        raise BizError(E_PARAM, "条码已存在，请勿重复录入")
+    # 编码留空 = 保持原编码（编辑时可不填）；supplier_ids 走关联表写入
+    data = req.model_dump(exclude={"units", "code", "supplier_ids"}) if not req.code else req.model_dump(exclude={"units", "supplier_ids"})
+    data["barcode"] = data["barcode"].strip()
     for k, v in data.items():
         setattr(p, k, _parse_dec(v, k) if k in ("purchase_price", "min_stock", "max_stock") else v)
     try:
         _apply_units(db, p.id, req.unit_id, [u.model_dump() for u in req.units])
+        if req.supplier_ids is not None:  # 缺省（None）保持原关联，避免状态切换等局部更新误清空
+            _apply_suppliers(db, p.id, req.supplier_ids)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -484,7 +559,7 @@ async def import_products(file: UploadFile = File(...), db: Session = Depends(ge
             # 单位：不存在自动创建
             unit = db.scalar(select(BaseUnit).where(BaseUnit.name == unit_name)) if unit_name else None
             if unit is None:
-                unit = BaseUnit(name=unit_name or "件", remark="导入自动创建")
+                unit = BaseUnit(name=(unit_name if unit_name and not _UNIT_NAME_GARBAGE.match(unit_name) else "件"), remark="导入自动创建")
                 db.add(unit)
                 db.flush()
             # 分类：材料大类（一级）+ 材料分类（二级）自动创建
@@ -547,7 +622,7 @@ async def import_products(file: UploadFile = File(...), db: Session = Depends(ge
         # 单位：存在则复用，不存在自动创建（默认单位）
         unit = db.scalar(select(BaseUnit).where(BaseUnit.name == unit_name)) if unit_name else None
         if unit is None:
-            unit = BaseUnit(name=unit_name or "件", remark="导入自动创建")
+            unit = BaseUnit(name=(unit_name if unit_name and not _UNIT_NAME_GARBAGE.match(unit_name) else "件"), remark="导入自动创建")
             db.add(unit)
             db.flush()
         # 分类：存在则复用，不存在自动创建（顶级）
@@ -643,8 +718,10 @@ def list_shelves(
     user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """仓库货架列表；非超管/管理者角色按所属单位过滤（单位下可用显示的货架）。"""
-    stmt = select(BaseShelf).where(BaseShelf.warehouse_id == wh_id)
+    """仓库货架列表；wh_id=0 返回全部货架（单位管理页一次拉取，避免逐仓库请求）；非超管按所属单位过滤。"""
+    stmt = select(BaseShelf)
+    if wh_id:
+        stmt = stmt.where(BaseShelf.warehouse_id == wh_id)
     visible = _visible_shelf_ids(db, user)
     if visible is not None:
         stmt = stmt.where(BaseShelf.id.in_(visible) if visible else False)
@@ -780,13 +857,24 @@ def list_departments(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/departments", dependencies=[Depends(require_permission("dept:manage"))])
 def create_department(req: DeptReq, db: Session = Depends(get_db)) -> dict:
-    if db.scalar(select(BaseDepartment.id).where(BaseDepartment.code == req.code)):
-        raise BizError(E_PARAM, "单位编码已存在")
-    d = BaseDepartment(code=req.code, name=req.name, remark=req.remark, status=req.status)
+    # 编码由系统自动生成（数字编码，对用户隐藏），不接受前端传入
+    d = BaseDepartment(code=_gen_dept_code(db), name=req.name, remark=req.remark, status=req.status)
     db.add(d)
     db.commit()
     db.refresh(d)
     return ok({"id": d.id, "code": d.code})
+
+
+def _gen_dept_code(db: Session) -> str:
+    """自动生成单位数字编码：{yyyyMMdd}{4位当日序号}（纯数字序列；删除后序号复用冲突时递增重试）。"""
+    today = datetime.now().strftime("%Y%m%d")
+    like = f"{today}%"
+    cnt = db.scalar(select(func.count()).select_from(BaseDepartment).where(BaseDepartment.code.like(like))) or 0
+    code = f"{today}{cnt + 1:04d}"
+    while db.scalar(select(BaseDepartment.id).where(BaseDepartment.code == code)):
+        cnt += 1
+        code = f"{today}{cnt + 1:04d}"
+    return code
 
 
 @router.put("/departments/{dept_id}", dependencies=[Depends(require_permission("dept:manage"))])
@@ -829,5 +917,25 @@ def update_department_shelves(dept_id: int, req: DeptShelvesReq, db: Session = D
     db.execute(BaseDepartmentShelf.__table__.delete().where(BaseDepartmentShelf.department_id == dept_id))
     for sid in req.shelf_ids:
         db.add(BaseDepartmentShelf(department_id=dept_id, shelf_id=sid))
+    db.commit()
+    return ok()
+
+
+@router.post("/products/dedupe-scan", dependencies=[Depends(require_permission("base:product"))])
+def products_dedupe_scan(db: Session = Depends(get_db)) -> dict:
+    """材料查重扫描：名称精确重复 + DeepSeek 判断名称相似候选 → 疑似重复分组（仅建议，不落库）。"""
+    from app.services.ai.dedupe import dedupe_scan as _scan
+
+    return ok({"groups": _scan(db)})
+
+
+@router.post("/products/{product_id}/mark-duplicate", dependencies=[Depends(require_permission("base:product"))])
+def mark_product_duplicate(product_id: int, db: Session = Depends(get_db)) -> dict:
+    """人工标记材料为重复（写 remark 前缀，不物理删除——红线禁删）。"""
+    p = db.get(BaseProduct, product_id)
+    if p is None:
+        raise BizError(E_NOT_FOUND, "材料不存在")
+    mark = "【疑似重复】" if not (p.remark or "").startswith("【疑似重复】") else ""
+    p.remark = f"{mark}{p.remark or ''}"
     db.commit()
     return ok()
