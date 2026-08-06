@@ -66,21 +66,22 @@ def _setup_product(name: str) -> int:
 
 def test_ocr_quick_match(monkeypatch):
     _login_admin()
-    pid = _setup_product("轴承6204")
+    name = "轴承" + uuid.uuid4().hex[:6]  # 唯一名称，避免 LIMIT 5 截断命中历史商品
+    pid = _setup_product(name)
     file_id = _upload_img()
-    monkeypatch.setattr("app.api.ocr.RapidOCREngine", lambda: _FakeEngine(["轴承6204", "数量 10"]))
+    monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine([name, "数量 10"]))
 
     r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
     assert r.json()["code"] == 0, r.text
     data = r.json()["data"]
-    assert data["lines"] == ["轴承6204", "数量 10"]
+    assert data["lines"] == [name, "数量 10"]
     assert any(m["product_id"] == pid for m in data["matches"])
 
 
 def test_ocr_recognize_task(monkeypatch):
     _login_admin()
     file_id = _upload_img()
-    monkeypatch.setattr("app.api.ocr.RapidOCREngine", lambda: _FakeEngine(["送货单", "轴承 10 8.50"]))
+    monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine(["送货单", "轴承 10 8.50"]))
 
     r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1")
     assert r.json()["code"] == 0, r.text
@@ -110,7 +111,7 @@ def test_ocr_recognize_failed(monkeypatch):
         def recognize(self, image_bytes: bytes):
             raise RuntimeError("engine down")
 
-    monkeypatch.setattr("app.api.ocr.RapidOCREngine", lambda: _Broken())
+    monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _Broken())
     r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1")
     task_id = r.json()["data"]["task_id"]
     for _ in range(20):
@@ -125,7 +126,7 @@ def test_ocr_recognize_failed(monkeypatch):
 def test_ai_suggestion_flow(monkeypatch):
     _login_admin()
     file_id = _upload_img()
-    monkeypatch.setattr("app.api.ocr.RapidOCREngine", lambda: _FakeEngine(["某新物料"]))
+    monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine(["某新物料"]))
     # 未匹配（不建商品）→ 记录 match_status=2
     r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
     assert r.json()["data"]["matches"] == []

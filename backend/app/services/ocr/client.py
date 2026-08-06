@@ -10,7 +10,11 @@ import threading
 from pathlib import Path
 from typing import Protocol
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.config import settings
+from app.models.sys import SysConfig
 from app.services.ocr.rapidocr_api import OcrAPI
 
 
@@ -78,9 +82,18 @@ class RapidOCREngine:
 # PaddleOCREngine：Debian/Linux 部署阶段实现（paddleocr CPU 推理），见开发排期 P5
 
 
-def get_ocr_engine(engine: str | None = None) -> OCRClient:
-    """按配置创建 OCR 引擎实例。engine 为空时读 settings（默认 rapidocr）。"""
-    engine = engine or settings.ocr_engine
+def get_ocr_engine(db: Session | None = None, engine: str | None = None) -> OCRClient:
+    """按配置创建 OCR 引擎实例。
+
+    优先级：显式 engine > 数据库 sys_config(ocr.engine，后台可切换) > 环境变量默认。
+    引擎选择由管理员在后台「系统设置」维护，切换只影响识别层。
+    """
+    if engine is None:
+        engine = settings.ocr_engine
+        if db is not None:
+            cfg = db.scalar(select(SysConfig).where(SysConfig.config_key == "ocr.engine"))
+            if cfg and cfg.config_value:
+                engine = cfg.config_value
     if engine == "rapidocr":
         return RapidOCREngine()
     if engine == "paddle":

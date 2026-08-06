@@ -32,7 +32,7 @@ from app.models.base import BaseCategory, BaseProduct, BaseUnit
 from app.models.ocr import AiSuggestion, OcrRecord
 from app.models.sys import SysFile, SysStorage, SysUser
 from app.services.llm import LLMNotConfigured, get_llm
-from app.services.ocr.client import RapidOCREngine
+from app.services.ocr.client import get_ocr_engine
 from app.services.storage import resolve_storage_path
 
 router = APIRouter(tags=["OCR/大模型"], dependencies=[Depends(get_current_user)])
@@ -137,7 +137,11 @@ def ocr_recognize(
 
     def _run() -> None:
         try:
-            lines = RapidOCREngine().recognize(data)
+            s_eng = SessionLocal()
+            try:
+                lines = get_ocr_engine(s_eng).recognize(data)  # 引擎选择读库（后台可切换）
+            finally:
+                s_eng.close()
             texts = [l.text for l in lines]
             structured = None
             if ocr_type == 1:  # 送货单结构化：后台线程必须用独立会话（不可共享请求级 db）
@@ -186,7 +190,7 @@ def ocr_quick(
     """同步识别商品照片并匹配系统商品（出入库带入用）。"""
     data = _read_file_bytes(db, file_id)
     try:
-        lines = RapidOCREngine().recognize(data)
+        lines = get_ocr_engine(db).recognize(data)
     except Exception as e:
         raise BizError(E_OCR_UNAVAILABLE, f"识别失败：{e}")
     texts = [l.text for l in lines]

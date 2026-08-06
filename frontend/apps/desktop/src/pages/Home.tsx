@@ -19,6 +19,11 @@ export function HomePage() {
           <a href={otherEndUrl("mobile")} style={{ marginRight: 12, color: "#1677ff" }}>
             手机版
           </a>
+          {hasPerm("sys:config") && (
+            <a href="/system/settings" style={{ marginRight: 12, color: "#1677ff" }}>
+              系统设置
+            </a>
+          )}
           <button
             onClick={async () => {
               await logout();

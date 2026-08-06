@@ -6,6 +6,7 @@ import { RequireAuth } from "./components/RequireAuth";
 import { HomePage } from "./pages/Home";
 import { LandingPage } from "./pages/Landing";
 import { LoginPage } from "./pages/Login";
+import { SettingsPage } from "./pages/Settings";
 
 const router = createBrowserRouter([
   { path: "/", element: <LandingPage /> }, // 入口：设备识别自动跳转 + 手动选择
@@ -15,6 +16,14 @@ const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <HomePage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/system/settings",
+    element: (
+      <RequireAuth>
+        <SettingsPage />
       </RequireAuth>
     ),
   },
