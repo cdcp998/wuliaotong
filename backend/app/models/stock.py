@@ -1,0 +1,106 @@
+"""库存/采购/期初 ORM 模型（对应《数据库设计.md》§2.4-2.5，6 张表）。"""
+from __future__ import annotations
+
+from datetime import datetime
+from decimal import Decimal
+
+from sqlalchemy import BigInteger, DateTime, Integer, Numeric, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db import Base
+from app.models.sys import TimestampMixin
+
+
+class StkStock(Base):
+    """实时库存（无 created_at，仅 updated_at；一切变动必须走 services/stock.py）。"""
+
+    __tablename__ = "stk_stock"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    product_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    warehouse_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    location_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    qty: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, default=0)
+    cost_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default="CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+    )
+
+
+class StkStockLog(Base):
+    """库存流水：一切库存变动的唯一事实来源。"""
+
+    __tablename__ = "stk_stock_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    product_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    warehouse_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    location_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    change_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    bill_type: Mapped[str] = mapped_column(String(30), nullable=False, default="")
+    bill_no: Mapped[str] = mapped_column(String(30), nullable=False, default="")
+    bill_item_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    before_qty: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    change_qty: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    after_qty: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    cost_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    photo_file_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    operator_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    remark: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default="CURRENT_TIMESTAMP"
+    )
+
+
+class StkOpening(TimestampMixin, Base):
+    __tablename__ = "stk_opening"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    bill_no: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
+    warehouse_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 0 草稿 / 1 已过账
+    remark: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    creator_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
+
+class StkOpeningItem(Base):
+    __tablename__ = "stk_opening_item"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    bill_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    product_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    location_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    qty: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    cost_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+
+
+class PchPurchaseIn(TimestampMixin, Base):
+    __tablename__ = "pch_purchase_in"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    bill_no: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
+    supplier_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    warehouse_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    total_qty: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, default=0)
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    status: Mapped[int] = mapped_column(Integer, nullable=False, default=1)  # 1 已入库 / 0 草稿 / -1 作废
+    bill_date: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default="CURRENT_TIMESTAMP"
+    )
+    operator_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    remark: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+
+
+class PchPurchaseInItem(Base):
+    __tablename__ = "pch_purchase_in_item"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    bill_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    product_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    qty: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    unit_name: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    location_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    photo_file_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

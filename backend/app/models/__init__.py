@@ -9,6 +9,14 @@ from app.models.base import (
     BaseUnit,
     BaseWarehouse,
 )
+from app.models.stock import (
+    PchPurchaseIn,
+    PchPurchaseInItem,
+    StkOpening,
+    StkOpeningItem,
+    StkStock,
+    StkStockLog,
+)
 from app.models.sys import (
     SysBackupLog,
     SysConfig,
@@ -31,6 +39,12 @@ __all__ = [
     "BaseSupplier",
     "BaseUnit",
     "BaseWarehouse",
+    "PchPurchaseIn",
+    "PchPurchaseInItem",
+    "StkOpening",
+    "StkOpeningItem",
+    "StkStock",
+    "StkStockLog",
     "SysBackupLog",
     "SysConfig",
     "SysFile",
