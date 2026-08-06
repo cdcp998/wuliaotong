@@ -425,7 +425,7 @@ def list_stock(
         loc = db.get(BaseLocation, s.location_id)
         out.append(StockRow(
             product_id=s.product_id, product_name=p.name if p else "", code=p.code if p else "",
-            barcode=p.barcode if p else "", spec=p.spec if p else "",
+            material_code=p.material_code if p else "", barcode=p.barcode if p else "", spec=p.spec if p else "",
             warehouse_id=s.warehouse_id, warehouse_name=wh.name if wh else "",
             location_id=s.location_id, location_code=loc.code if loc else "",
             qty=s.qty, cost_price=s.cost_price, amount=(s.qty * s.cost_price).quantize(_DEC2),

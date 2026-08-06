@@ -54,7 +54,7 @@ function InventorySummaryTab() {
 
   const columns: ColumnsType<InventorySummaryRow> = [
     { title: "编码", dataIndex: "code", width: 120 },
-    { title: "商品名称", dataIndex: "name" },
+    { title: "材料名称", dataIndex: "name" },
     { title: "规格", dataIndex: "spec", width: 120 },
     { title: "单位", dataIndex: "unit_name", width: 70 },
     { title: "期初数量", dataIndex: "opening_qty", width: 100, align: "right" },
@@ -119,7 +119,7 @@ function StockReportTab() {
 
   const columns: ColumnsType<StockReportRow> = [
     { title: "编码", dataIndex: "code", width: 120 },
-    { title: "商品名称", dataIndex: "name" },
+    { title: "材料名称", dataIndex: "name" },
     { title: "规格", dataIndex: "spec", width: 120 },
     { title: "仓库", dataIndex: "warehouse_name", width: 110 },
     { title: "数量", dataIndex: "qty", width: 90, align: "right" },

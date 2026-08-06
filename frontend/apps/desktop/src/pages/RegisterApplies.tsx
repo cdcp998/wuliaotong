@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, message, Space, Table, Tag } from "antd";
+import { App, Button, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type RegisterApply } from "@wlt/shared";
@@ -12,15 +12,22 @@ const STATUS: Record<number, { text: string; color: string }> = {
 
 /** 注册审核（电脑端，超管 sys:user）：审核注册模式下的账号开通申请。 */
 export function RegisterAppliesPage() {
+  const { message } = App.useApp();
   const [list, setList] = useState<RegisterApply[]>([]);
+  const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<number | undefined>(0);
 
   const load = useCallback(async () => {
+    setLoading(true);
+    try {
     const data = await adminApi.registerApplies(status, page);
     setList(data.list);
     setTotal(data.total);
+    } finally {
+      setLoading(false);
+    }
   }, [status, page]);
 
   useEffect(() => {
@@ -84,7 +91,7 @@ export function RegisterAppliesPage() {
       <p style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>
         审核注册模式下，新用户提交的注册申请在此处理；通过后账号即为"使用者"角色。
       </p>
-      <Table rowKey="id" size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <Table rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
     </div>
   );
 }

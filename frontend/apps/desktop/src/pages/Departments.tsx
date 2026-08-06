@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Form, Input, message, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
+import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, baseApi, type Department, type Shelf } from "@wlt/shared";
 
 /** 单位管理（电脑端，超管 dept:manage）：组织单位 + 可用货架关联；角色所属单位下的用户仅显示本单位货架。 */
 export function DepartmentsPage() {
+  const { message } = App.useApp();
   const [list, setList] = useState<Department[]>([]);
+  const [loading, setLoading] = useState(false);
   const [shelves, setShelves] = useState<Shelf[]>([]);
   const [creating, setCreating] = useState(false);
   const [shelfTarget, setShelfTarget] = useState<Department | null>(null);
@@ -14,7 +16,12 @@ export function DepartmentsPage() {
   const [form] = Form.useForm();
 
   const load = useCallback(async () => {
+    setLoading(true);
+    try {
     setList(await adminApi.departments());
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -92,9 +99,9 @@ export function DepartmentsPage() {
       <p style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>
         角色可归属单位；单位关联的仓库货架仅该单位角色（非超管/管理者）可见，用于 2D 货架图与库位选择。
       </p>
-      <Table rowKey="id" size="small" columns={columns} dataSource={list} pagination={false} />
+      <Table rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={false} />
 
-      <Modal title="新建单位" open={creating} onOk={() => void create()} onCancel={() => setCreating(false)} destroyOnClose>
+      <Modal title="新建单位" open={creating} onOk={() => void create()} onCancel={() => setCreating(false)} destroyOnHidden>
         <Form form={form} layout="vertical">
           <Form.Item name="code" label="编码" rules={[{ required: true, message: "请输入编码" }]}>
             <Input placeholder="如：DEPT01" />

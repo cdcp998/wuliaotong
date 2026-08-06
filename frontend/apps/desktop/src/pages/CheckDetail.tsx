@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, InputNumber, message, Space, Table } from "antd";
+import { App, Button, InputNumber, Space, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -7,6 +7,7 @@ import { checkApi, FileImage, type CheckItem } from "@wlt/shared";
 
 /** 盘点执行（电脑端）：录入实盘 → 提交 → 审核。 */
 export function CheckDetailPage() {
+  const { message } = App.useApp();
   const { id } = useParams();
   const navigate = useNavigate();
   const [items, setItems] = useState<CheckItem[]>([]);
@@ -74,7 +75,7 @@ export function CheckDetailPage() {
   }
 
   const columns: ColumnsType<CheckItem> = [
-    { title: "商品", dataIndex: "product_name" },
+    { title: "材料", dataIndex: "product_name" },
     { title: "编码", dataIndex: "code" },
     { title: "库位", dataIndex: "location_code" },
     { title: "账面", dataIndex: "book_qty" },
@@ -105,7 +106,7 @@ export function CheckDetailPage() {
         </h2>
         <Space2 status={status} saving={saving} auditing={auditing} onSave={() => void save()} onAudit={() => void audit()} onBack={() => navigate("/checks")} />
       </div>
-      <Table rowKey="id" columns={columns} dataSource={items} pagination={false} />
+      <Table rowKey="id" locale={{ emptyText: "暂无数据" }} columns={columns} dataSource={items} pagination={false} />
     </div>
   );
 }

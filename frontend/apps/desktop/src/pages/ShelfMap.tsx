@@ -124,7 +124,7 @@ export function ShelfMapPage() {
                     {it.alert !== "normal" && <Tag style={{ marginLeft: 4, fontSize: 10 }} color={ALERT_COLOR[it.alert]}>{ALERT_TEXT[it.alert]}</Tag>}
                   </div>
                 ))}
-                {loc.items.length > 2 && <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>…共 {loc.items.length} 种商品</div>}
+                {loc.items.length > 2 && <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>…共 {loc.items.length} 种材料</div>}
               </button>
             ))}
           </div>
@@ -137,7 +137,7 @@ export function ShelfMapPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: "#fafafa" }}>
-                <th style={thStyle}>商品</th><th style={thStyle}>编码</th><th style={thStyle}>数量</th><th style={thStyle}>状态</th>
+                <th style={thStyle}>材料名称</th><th style={thStyle}>编码</th><th style={thStyle}>数量</th><th style={thStyle}>状态</th>
               </tr>
             </thead>
             <tbody>

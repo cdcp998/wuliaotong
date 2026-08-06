@@ -1,24 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Form, Input, message, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
+import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type SysRole, type SysUser } from "@wlt/shared";
 
 /** 用户管理（电脑端，超管 sys:user）。 */
 export function UsersPage() {
+  const { message } = App.useApp();
   const [list, setList] = useState<SysUser[]>([]);
   const [roles, setRoles] = useState<SysRole[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [editing, setEditing] = useState<SysUser | null>(null);
   const [creating, setCreating] = useState(false);
   const [form] = Form.useForm();
 
   const load = useCallback(async () => {
+    setLoading(true);
+    try {
     const data = await adminApi.users({ keyword: keyword || undefined, page });
     setList(data.list);
     setTotal(data.total);
+    } finally {
+      setLoading(false);
+    }
   }, [keyword, page]);
 
   useEffect(() => {
@@ -128,14 +135,14 @@ export function UsersPage() {
           </Button>
         </Space>
       </div>
-      <Table rowKey="id" size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <Table rowKey="id" loading={loading} locale={{ emptyText: "暂无数据" }} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
 
       <Modal
         title={creating ? "新建用户" : `编辑用户：${editing?.username ?? ""}`}
         open={creating || Boolean(editing)}
         onOk={() => void submit()}
         onCancel={() => { setCreating(false); setEditing(null); }}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" initialValues={{ role_id: roles[0]?.id }}>
           {creating && (

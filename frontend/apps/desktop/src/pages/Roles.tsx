@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Checkbox, Form, Input, message, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
+import { App, Button, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type Department, type SysPermission, type SysRole } from "@wlt/shared";
 
-/** 角色与权限管理（电脑端，超管 sys:role）：角色 CRUD + 权限勾选 + 所属单位。 */
+/** 用户权限设置管理（电脑端，超管 sys:role）：角色 CRUD + 权限勾选 + 所属单位。 */
 export function RolesPage() {
+  const { message } = App.useApp();
   const [list, setList] = useState<SysRole[]>([]);
+  const [loading, setLoading] = useState(false);
   const [perms, setPerms] = useState<SysPermission[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [editingPerms, setEditingPerms] = useState<SysRole | null>(null);
@@ -15,9 +17,14 @@ export function RolesPage() {
   const [form] = Form.useForm();
 
   const load = useCallback(async () => {
+    setLoading(true);
+    try {
     setList(await adminApi.roles());
     setPerms(await adminApi.permissions());
     adminApi.departments().then(setDepartments).catch(() => undefined);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -99,17 +106,17 @@ export function RolesPage() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>角色与权限</h2>
+        <h2 style={{ margin: 0 }}>用户权限设置</h2>
         <Button type="primary" onClick={() => { setCreating(true); form.resetFields(); }}>新建角色</Button>
       </div>
-      <Table rowKey="id" size="small" columns={columns} dataSource={list} pagination={false} />
+      <Table rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={false} />
 
       <Modal
         title="新建角色"
         open={creating}
         onOk={() => void createRole()}
         onCancel={() => setCreating(false)}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical">
           <Form.Item name="code" label="编码" rules={[{ required: true, pattern: /^[a-z][a-z0-9:_-]*$/, message: "小写字母开头，可含数字/:_-" }]}>

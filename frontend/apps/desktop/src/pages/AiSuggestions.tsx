@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Input, InputNumber, message, Modal, Popconfirm, Select, Space, Table } from "antd";
+import { App, Button, Input, InputNumber, Modal, Popconfirm, Select, Space, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { aiApi, baseApi, type AiSuggestion, type CategoryNode } from "@wlt/shared";
 
 /** AI 建议处理（电脑端）：未匹配商品 → 豆包识别建议 → 人工确认新增/忽略。 */
 export function AiSuggestionsPage() {
+  const { message } = App.useApp();
   const [list, setList] = useState<AiSuggestion[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -63,7 +64,7 @@ export function AiSuggestionsPage() {
   }
 
   const columns: ColumnsType<AiSuggestion> = [
-    { title: "AI 建议商品名", dataIndex: "product_name" },
+    { title: "AI 建议材料名", dataIndex: "product_name" },
     { title: "规格", render: (_, r) => r.suggestion?.spec ?? "-" },
     { title: "类别", render: (_, r) => r.suggestion?.category ?? "-" },
     { title: "备注", render: (_, r) => r.suggestion?.note ?? "-" },
@@ -88,13 +89,13 @@ export function AiSuggestionsPage() {
     <div style={{ padding: 24 }}>
       <h2 style={{ margin: 0, marginBottom: 16 }}>AI 建议处理（待确认 {total} 条）</h2>
       <p style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>
-        拍照识别中未匹配到系统资料的商品，由豆包视觉识别后生成建议；**人工确认后才新增商品**（可在系统设置配置豆包 API Key）。
+        拍照识别中未匹配到系统资料的材料，由豆包视觉识别后生成建议；**人工确认后才新增材料**（可在系统设置配置豆包 API Key）。
       </p>
       <Table rowKey="id" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
 
-      <Modal title="确认新增商品" open={Boolean(accepting)} onOk={() => void doAccept()} onCancel={() => setAccepting(null)}>
+      <Modal title="确认新增材料" open={Boolean(accepting)} onOk={() => void doAccept()} onCancel={() => setAccepting(null)}>
         <Space direction="vertical" style={{ width: "100%" }}>
-          <Input placeholder="商品名称（缺省用 AI 建议名）" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+          <Input placeholder="材料名称（缺省用 AI 建议名）" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
           <Input placeholder="编码（缺省自动生成 AI+时间）" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))} />
           <Space>
             <Select style={{ width: 180 }} placeholder="分类" options={categories} fieldNames={{ label: "name", value: "id" }} value={form.category_id || undefined} onChange={(v) => setForm((f) => ({ ...f, category_id: v }))} allowClear />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, InputNumber, message, Modal, Popconfirm, Radio, Select, Space, Table, Tag } from "antd";
+import { App, Button, InputNumber, Modal, Popconfirm, Radio, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, transferApi, type TransferBill, type TransferDetail } from "@wlt/shared";
@@ -16,7 +16,9 @@ interface Row {
 }
 
 export function TransfersPage() {
+  const { message } = App.useApp();
   const [status, setStatus] = useState<number | undefined>();
+  const [loading, setLoading] = useState(false);
   const [list, setList] = useState<TransferBill[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -38,9 +40,14 @@ export function TransfersPage() {
   const [form, setForm] = useState({ from_warehouse_id: 0, to_warehouse_id: 0, rows: [] as Row[] });
 
   const load = useCallback(async () => {
+    setLoading(true);
+    try {
     const data = await transferApi.list(status, page);
     setList(data.list);
     setTotal(data.total);
+    } finally {
+      setLoading(false);
+    }
   }, [status, page]);
 
   useEffect(() => {
@@ -117,7 +124,7 @@ export function TransfersPage() {
         </Radio.Group>
         <Button type="primary" onClick={() => setOpen(true)}>新建调拨</Button>
       </Space>
-      <Table rowKey="id" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <Table rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
 
       <BillDetailDrawer
         open={detailOpen}
@@ -133,7 +140,7 @@ export function TransfersPage() {
           { label: "备注", value: detail?.remark, span: 2 },
         ]}
         columns={[
-          { title: "商品", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}</div></div> },
+          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}</div></div> },
           { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
           { title: "调出库位", dataIndex: "from_location_code", width: 130 },
           { title: "调入库位", dataIndex: "to_location_code", width: 130 },
@@ -150,7 +157,7 @@ export function TransfersPage() {
         </Space>
         {form.rows.map((r, i) => (
           <Space key={i} style={{ marginBottom: 8 }}>
-            <Select style={{ width: 200 }} showSearch placeholder="商品" options={products} fieldNames={{ label: "name", value: "id" }} filterOption={(input, o) => String((o as { name?: string }).name ?? "").includes(input)} value={r.product_id} onChange={(v) => setRow(i, { product_id: v })} />
+            <Select style={{ width: 200 }} showSearch placeholder="材料" options={products} fieldNames={{ label: "name", value: "id" }} filterOption={(input, o) => String((o as { name?: string }).name ?? "").includes(input)} value={r.product_id} onChange={(v) => setRow(i, { product_id: v })} />
             <Select style={{ width: 130 }} placeholder="出库位" options={locs[form.from_warehouse_id] ?? []} fieldNames={{ label: "code", value: "id" }} value={r.from_location_id} onChange={(v) => setRow(i, { from_location_id: v })} />
             <Select style={{ width: 130 }} placeholder="入库位" options={locs[form.to_warehouse_id] ?? []} fieldNames={{ label: "code", value: "id" }} value={r.to_location_id} onChange={(v) => setRow(i, { to_location_id: v })} />
             <InputNumber min={0.001} placeholder="数量" value={r.qty} onChange={(v) => setRow(i, { qty: v ?? 0 })} />

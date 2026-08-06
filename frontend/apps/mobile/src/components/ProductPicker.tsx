@@ -39,7 +39,7 @@ export function ProductPicker({
       <div style={{ padding: 16, display: "flex", flexDirection: "column", height: "100%" }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <Input
-            placeholder="商品名称/编码/条码"
+            placeholder="材料名称/编码/条码"
             value={keyword}
             onChange={setKeyword}
             onEnterPress={search}

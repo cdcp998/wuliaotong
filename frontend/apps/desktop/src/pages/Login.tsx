@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Alert, Button, Checkbox, Form, Input, message, Modal } from "antd";
+import { App, Alert, Button, Checkbox, Form, Input, Modal } from "antd";
 
 import { authApi, BizError, otherEndUrl, useAuthStore, type RegisterStatus } from "@wlt/shared";
 
 /** 登录页（电脑端双栏：品牌区 + 表单区）：已登录直进主页；连续失败 3 次需验证码；忘记密码/注册入口。 */
 export function LoginPage() {
+  const { message } = App.useApp();
   const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
   const fetchMe = useAuthStore((s) => s.fetchMe);
@@ -210,7 +211,7 @@ export function LoginPage() {
         open={forgotOpen}
         footer={null}
         onCancel={() => setForgotOpen(false)}
-        destroyOnClose
+        destroyOnHidden
       >
         {forgotStep === "ask" && (
           <Form form={forgotForm} layout="vertical">
@@ -249,7 +250,7 @@ export function LoginPage() {
       </Modal>
 
       {/* 注册账号 */}
-      <Modal title="注册账号" open={registerOpen} onOk={() => void doRegister()} onCancel={() => setRegisterOpen(false)} destroyOnClose>
+      <Modal title="注册账号" open={registerOpen} onOk={() => void doRegister()} onCancel={() => setRegisterOpen(false)} destroyOnHidden>
         <Form form={registerForm} layout="vertical">
           <Form.Item name="username" label="账号" rules={[{ required: true, min: 2, message: "至少 2 个字符" }]}>
             <Input placeholder="字母/数字/下划线" />

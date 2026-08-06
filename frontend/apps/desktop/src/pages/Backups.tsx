@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, message, Popconfirm, Space, Table, Tag } from "antd";
+import { App, Button, Popconfirm, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type BackupRecord } from "@wlt/shared";
@@ -12,15 +12,22 @@ function fmtSize(n: number): string {
 
 /** 备份管理（电脑端，超管 sys:backup）：手动备份 / 下载 / 删除；每日 02:00 自动备份。 */
 export function BackupsPage() {
+  const { message } = App.useApp();
   const [list, setList] = useState<BackupRecord[]>([]);
+  const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
+    try {
     const data = await adminApi.backups(page);
     setList(data.list);
     setTotal(data.total);
+    } finally {
+      setLoading(false);
+    }
   }, [page]);
 
   useEffect(() => {
@@ -81,7 +88,7 @@ export function BackupsPage() {
       <p style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>
         每日 02:00 自动备份（保留最近 14 份，更早自动清理）；备份文件为 gzip 压缩的 mysqldump 导出。
       </p>
-      <Table rowKey="id" size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <Table rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
     </div>
   );
 }

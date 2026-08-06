@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Button, Input, message, Space, Spin, Table, Tag, Upload } from "antd";
+import { App, Button, Input, Space, Spin, Table, Tag, Upload } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router-dom";
 
@@ -15,6 +15,7 @@ interface Row {
 
 /** 送货单 OCR 录入：上传图片 → 异步识别 → 人工确认 → 带入采购入库。 */
 export function DeliveryOcrPage() {
+  const { message } = App.useApp();
   const navigate = useNavigate();
   const [taskId, setTaskId] = useState<string>();
   const [task, setTask] = useState<OcrTask | null>(null);
@@ -79,14 +80,14 @@ export function DeliveryOcrPage() {
   function confirmAndGo() {
     if (!rows.length) return message.warning("识别结果为空，请确认图片清晰度");
     for (const r of rows) {
-      if (!r.product_name.trim()) return message.warning("存在空商品名，请修正");
+      if (!r.product_name.trim()) return message.warning("存在空材料名，请修正");
     }
     const items = rows.map((r) => ({ product_name: r.product_name.trim(), qty: r.qty, price: r.price }));
     navigate(`/purchase-in?items=${encodeURIComponent(JSON.stringify(items))}`);
   }
 
   const columns: ColumnsType<Row> = [
-    { title: "商品名称", dataIndex: "product_name", render: (v: string, r) => <Input value={v} onChange={(e) => setRows((rs) => rs.map((x) => (x.key === r.key ? { ...x, product_name: e.target.value } : x)))} /> },
+    { title: "材料名称", dataIndex: "product_name", render: (v: string, r) => <Input value={v} onChange={(e) => setRows((rs) => rs.map((x) => (x.key === r.key ? { ...x, product_name: e.target.value } : x)))} /> },
     { title: "数量", dataIndex: "qty", width: 100, render: (v: string, r) => <Input value={v} onChange={(e) => setRows((rs) => rs.map((x) => (x.key === r.key ? { ...x, qty: e.target.value } : x)))} /> },
     { title: "单价", dataIndex: "price", width: 100, render: (v: string, r) => <Input value={v} onChange={(e) => setRows((rs) => rs.map((x) => (x.key === r.key ? { ...x, price: e.target.value } : x)))} /> },
     { title: "金额", dataIndex: "amount", width: 100 },
@@ -117,12 +118,12 @@ export function DeliveryOcrPage() {
         <div style={{ marginTop: 24 }}>
           {rows.length > 0 ? (
             <>
-              <Tag color="green">识别到 {rows.length} 项商品（DeepSeek 结构化）</Tag>
+              <Tag color="green">识别到 {rows.length} 项材料（DeepSeek 结构化）</Tag>
               <Table rowKey="key" columns={columns} dataSource={rows} pagination={false} size="small" style={{ marginTop: 12, maxWidth: 720 }} />
             </>
           ) : (
             <>
-              <Tag color="orange">未识别出结构化商品（大模型未配置或识别失败），原始文本行如下：</Tag>
+              <Tag color="orange">未识别出结构化材料（大模型未配置或识别失败），原始文本行如下：</Tag>
               <pre style={{ background: "#f6f8fa", padding: 12, borderRadius: 8, marginTop: 12, whiteSpace: "pre-wrap", maxWidth: 720 }}>
                 {lines.join("\n")}
               </pre>

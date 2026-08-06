@@ -43,7 +43,7 @@ export function OutboundPage() {
       baseApi
         .product(pid)
         .then((p) => setRows((rs) => (rs.some((r) => r.product.id === p.id) ? rs : [...rs, { product: p, qty: "1" }])))
-        .catch(() => Toast.show("商品不存在"));
+        .catch(() => Toast.show("材料不存在"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -58,7 +58,7 @@ export function OutboundPage() {
   }
 
   async function submit() {
-    if (!rows.length) return Toast.show("请添加商品");
+    if (!rows.length) return Toast.show("请添加材料");
     for (const r of rows) {
       if (!r.location) return Toast.show(`请选择 ${r.product.name} 的库位`);
       if (!r.qty || Number(r.qty) <= 0) return Toast.show(`请填写 ${r.product.name} 的数量`);
@@ -109,7 +109,7 @@ export function OutboundPage() {
         </List.Item>
       </List>
 
-      <List header={`商品明细（${rows.length}）`}>
+      <List header={`材料明细（${rows.length}）`}>
         {rows.map((r, i) => (
           <List.Item
             key={i}
@@ -148,7 +148,7 @@ export function OutboundPage() {
           </List.Item>
         ))}
         <List.Item onClick={() => setPickerOpen(true)} arrow="horizontal">
-          + 添加商品
+          + 添加材料
         </List.Item>
       </List>
 
@@ -162,7 +162,7 @@ export function OutboundPage() {
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onPick={(p) => {
-          if (rows.some((r) => r.product.id === p.id)) return Toast.show("商品已在明细中");
+          if (rows.some((r) => r.product.id === p.id)) return Toast.show("材料已在明细中");
           setRows((rs) => [...rs, { product: p, qty: "1" }]);
         }}
       />

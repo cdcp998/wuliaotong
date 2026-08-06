@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  App,
   Badge,
   Button,
   Dropdown,
@@ -8,7 +9,6 @@ import {
   Input,
   Layout,
   Menu,
-  message,
   Modal,
   theme,
   type MenuProps,
@@ -99,7 +99,7 @@ const MENU: MenuNode[] = [
     children: [
       { key: "/system/settings", label: "系统设置", icon: <SettingOutlined />, perm: "sys:config" },
       { key: "/system/users", label: "用户管理", icon: <UserOutlined />, perm: "sys:user" },
-      { key: "/system/roles", label: "角色与权限", icon: <ShopOutlined />, perm: "sys:role" },
+      { key: "/system/roles", label: "用户权限设置", icon: <ShopOutlined />, perm: "sys:role" },
       { key: "/system/register-applies", label: "注册审核", icon: <AuditOutlined />, perm: "sys:user" },
       { key: "/system/departments", label: "单位管理", icon: <ApartmentOutlined />, perm: "dept:manage" },
       { key: "/system/logs", label: "操作日志", icon: <AppstoreOutlined />, perm: "sys:log" },
@@ -122,13 +122,14 @@ const TITLES: Record<string, string> = {
   "/ai-suggestions": "AI 建议处理",
   "/system/settings": "系统设置",
   "/system/users": "用户管理",
-  "/system/roles": "角色与权限",
+  "/system/roles": "用户权限设置",
   "/system/logs": "操作日志",
   "/system/backups": "备份管理",
 };
 
 /** 电脑端应用骨架：侧边导航 + 顶栏（《UI设计方案.md》§3.2/§4）。 */
 export function AppLayout({ children }: { children?: React.ReactNode }) {
+  const { message } = App.useApp();
   const [collapsed, setCollapsed] = useState(false);
   const [notices, setNotices] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
@@ -232,7 +233,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
           <Button type="text" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed(!collapsed)} />
           <div style={{ fontSize: 15, fontWeight: 600 }}>{TITLES[selectedKey] ?? "工作台"}</div>
           <Input.Search
-            placeholder="搜索商品 / 单号 / 条码…"
+            placeholder="搜索材料 / 单号 / 条码…"
             allowClear
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -320,7 +321,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
         }
       }}
       onCancel={() => setPwdOpen(false)}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form form={pwdForm} layout="vertical">
         <Form.Item name="old_password" label="原密码" rules={[{ required: true, message: "请输入原密码" }]}>

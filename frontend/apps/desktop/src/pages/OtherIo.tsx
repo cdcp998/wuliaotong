@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, InputNumber, message, Modal, Popconfirm, Radio, Select, Space, Table, Tag } from "antd";
+import { App, Button, InputNumber, Modal, Popconfirm, Radio, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, otherIoApi, type OtherIoBill, type OtherIoDetail } from "@wlt/shared";
@@ -15,7 +15,9 @@ interface Row {
 }
 
 export function OtherIoPage() {
+  const { message } = App.useApp();
   const [ioType, setIoType] = useState<string | undefined>();
+  const [loading, setLoading] = useState(false);
   const [list, setList] = useState<OtherIoBill[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -37,9 +39,14 @@ export function OtherIoPage() {
   }
 
   const load = useCallback(async () => {
+    setLoading(true);
+    try {
     const data = await otherIoApi.list(ioType, undefined, page);
     setList(data.list);
     setTotal(data.total);
+    } finally {
+      setLoading(false);
+    }
   }, [ioType, page]);
 
   useEffect(() => {
@@ -104,7 +111,7 @@ export function OtherIoPage() {
         </Radio.Group>
         <Button type="primary" onClick={() => setOpen(true)}>新建</Button>
       </Space>
-      <Table rowKey="id" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <Table rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
 
       <BillDetailDrawer
         open={detailOpen}
@@ -120,7 +127,7 @@ export function OtherIoPage() {
           { label: "备注", value: detail?.remark, span: 2 },
         ]}
         columns={[
-          { title: "商品", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
+          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
           { title: "库位", dataIndex: "location_code", width: 120 },
           { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
         ]}
@@ -136,7 +143,7 @@ export function OtherIoPage() {
         </Space>
         {form.rows.map((r, i) => (
           <Space key={i} style={{ marginBottom: 8 }}>
-            <Select style={{ width: 200 }} showSearch placeholder="商品" options={products} fieldNames={{ label: "name", value: "id" }} filterOption={(input, o) => String((o as { name?: string }).name ?? "").includes(input)} value={r.product_id} onChange={(v) => setRow(i, { product_id: v })} />
+            <Select style={{ width: 200 }} showSearch placeholder="材料" options={products} fieldNames={{ label: "name", value: "id" }} filterOption={(input, o) => String((o as { name?: string }).name ?? "").includes(input)} value={r.product_id} onChange={(v) => setRow(i, { product_id: v })} />
             <Select style={{ width: 140 }} placeholder="库位" options={locs} fieldNames={{ label: "code", value: "id" }} value={r.location_id} onChange={(v) => setRow(i, { location_id: v })} />
             <InputNumber min={0.001} placeholder="数量" value={r.qty} onChange={(v) => setRow(i, { qty: v ?? 0 })} />
             <Button size="small" danger onClick={() => setForm((f) => ({ ...f, rows: f.rows.filter((_, idx) => idx !== i) }))}>删</Button>

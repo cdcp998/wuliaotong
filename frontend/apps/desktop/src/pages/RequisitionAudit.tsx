@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Drawer, Input, message, Popconfirm, Select, Space, Table, Tag } from "antd";
+import { App, Button, Drawer, Input, Popconfirm, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { requisitionApi, type RequisitionBill, type RequisitionDetail } from "@wlt/shared";
@@ -13,6 +13,7 @@ const STATUS: Record<number, { text: string; color: string }> = {
 
 /** 领用审计（电脑端，仓管员）：主从布局——左侧待审计列表 + 右侧详情审计（《UI设计方案.md》§4.5）。 */
 export function RequisitionAuditPage() {
+  const { message } = App.useApp();
   const [status, setStatus] = useState<number>(1);
   const [keyword, setKeyword] = useState("");
   const [list, setList] = useState<RequisitionBill[]>([]);
@@ -144,7 +145,7 @@ export function RequisitionAuditPage() {
         width={560}
         open={auditOpen}
         onClose={() => setAuditOpen(false)}
-        destroyOnClose
+        destroyOnHidden
         extra={
           detail?.status === 1 ? (
             <Space>
@@ -182,7 +183,7 @@ export function RequisitionAuditPage() {
               pagination={false}
               dataSource={detail.items}
               columns={[
-                { title: "商品", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
+                { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
                 { title: "库位", dataIndex: "location_code", width: 110 },
                 { title: "数量", dataIndex: "qty", width: 80, align: "right" as const },
                 { title: "出库拍照", width: 90, render: (_, r) => (r.photo_file_id ? <Tag color="blue">已留痕</Tag> : <span style={{ color: "#c9cdd4" }}>未拍</span>) },

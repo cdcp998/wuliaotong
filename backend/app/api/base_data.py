@@ -346,7 +346,7 @@ def list_products(
     stmt = select(BaseProduct)
     if keyword:
         like = f"%{keyword}%"
-        stmt = stmt.where(or_(BaseProduct.name.like(like), BaseProduct.code.like(like), BaseProduct.material_code.like(like), BaseProduct.sku.like(like), BaseProduct.barcode.like(like)))
+        stmt = stmt.where(or_(BaseProduct.name.like(like), BaseProduct.code.like(like), BaseProduct.material_code.like(like), BaseProduct.spec.like(like), BaseProduct.sku.like(like), BaseProduct.barcode.like(like)))
     if category_id:
         stmt = stmt.where(BaseProduct.category_id == category_id)
     if barcode:

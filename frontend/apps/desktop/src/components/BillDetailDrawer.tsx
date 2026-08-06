@@ -45,7 +45,7 @@ export function BillDetailDrawer({
       width={width}
       open={open}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
     >
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", background: "#fafbfc", border: "1px solid #f0f1f3", borderRadius: 8, padding: "12px 14px" }}>
         {fields.map((f) => (

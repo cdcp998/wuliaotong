@@ -317,6 +317,7 @@ export interface StockRow {
   product_id: number;
   product_name: string;
   code: string;
+  material_code: string;
   barcode: string;
   spec: string;
   warehouse_id: number;

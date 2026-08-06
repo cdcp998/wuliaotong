@@ -121,6 +121,7 @@ class StockRow(BaseModel):
     product_id: int
     product_name: str = ""
     code: str = ""
+    material_code: str = ""
     barcode: str = ""
     spec: str = ""
     warehouse_id: int

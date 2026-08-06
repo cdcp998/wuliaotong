@@ -41,8 +41,9 @@ export function StockQueryPage() {
 
   const columns = useMemo<ColumnsType<StockRow>>(
     () => [
-      { title: "商品编码", dataIndex: "code", width: 110 },
-      { title: "商品名称", dataIndex: "product_name", render: (v) => <b>{v}</b> },
+      { title: "材料编码", dataIndex: "code", width: 100 },
+      { title: "物料编码", dataIndex: "material_code", width: 120, render: (v: string) => v || "-" },
+      { title: "材料名称", dataIndex: "product_name", render: (v) => <b>{v}</b> },
       { title: "条码", dataIndex: "barcode", width: 140 },
       { title: "规格", dataIndex: "spec", width: 110 },
       { title: "仓库 / 库位", width: 180, render: (_, r) => `${r.warehouse_name} / ${r.location_code}` },
@@ -64,7 +65,7 @@ export function StockQueryPage() {
       <h2 style={{ margin: 0, marginBottom: 16 }}>库存查询</h2>
       <Space wrap style={{ marginBottom: 16 }}>
         <Input.Search
-          placeholder="商品名称 / 编码 / 条码"
+          placeholder="材料名称 / 编码 / 条码"
           allowClear
           defaultValue={keyword}
           onSearch={(v) => {

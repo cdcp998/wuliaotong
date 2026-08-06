@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button, InputNumber, message, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
+import { App, Button, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { baseApi, purchaseApi, purchaseIn, type PurchaseInBill, type PurchaseInDetail } from "@wlt/shared";
+import { baseApi, purchaseApi, purchaseIn, type Product, type PurchaseInBill, type PurchaseInDetail } from "@wlt/shared";
 
 import { BillDetailDrawer } from "../components/BillDetailDrawer";
 
 interface Row {
   product_id: number | undefined;
+  product?: Product | null; // 选中材料快照（显示物料编码/名称/规格/单位）
   location_id: number | undefined;
   qty: number;
   price: number;
@@ -22,25 +23,32 @@ interface PrefillItem {
 }
 
 export function PurchaseInPage() {
+  const { message } = App.useApp();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [list, setList] = useState<PurchaseInBill[]>([]);
+  const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState<PurchaseInDetail | null>(null);
   const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
-  const [products, setProducts] = useState<{ id: number; name: string; code: string }[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [locs, setLocs] = useState<{ id: number; code: string }[]>([]);
   const [warehouseId, setWarehouseId] = useState<number | undefined>();
   const [rows, setRows] = useState<Row[]>([]);
   const [prefillHits, setPrefillHits] = useState<Record<number, boolean>>({});
 
   const load = useCallback(async () => {
+    setLoading(true);
+    try {
     const data = await purchaseApi.list(page);
     setList(data.list);
     setTotal(data.total);
+    } finally {
+      setLoading(false);
+    }
   }, [page]);
 
   useEffect(() => {
@@ -73,6 +81,7 @@ export function PurchaseInPage() {
         const p = found.list.find((x) => x.name === it.product_name) ?? found.list[0];
         matched.push({
           product_id: p?.id,
+          product: p ?? null,
           location_id: undefined,
           qty: Number(it.qty ?? 1),
           price: Number(it.price ?? 0),
@@ -82,7 +91,7 @@ export function PurchaseInPage() {
       setRows(matched);
       setPrefillHits(hits);
       if (Object.values(hits).some((h) => !h)) {
-        message.warning("部分商品未匹配到系统资料，请手动选择");
+        message.warning("部分材料未匹配到系统资料，请手动选择");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,7 +165,7 @@ export function PurchaseInPage() {
         <Button type="primary" onClick={() => setOpen(true)}>新建入库</Button>
         <Button onClick={() => navigate("/ocr/delivery")}>送货单 OCR 录入</Button>
       </Space>
-      <Table rowKey="id" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <Table rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
 
       <BillDetailDrawer
         open={detailOpen}
@@ -173,7 +182,7 @@ export function PurchaseInPage() {
           { label: "备注", value: detail?.remark, span: 2 },
         ]}
         columns={[
-          { title: "商品", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
+          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
           { title: "库位", dataIndex: "location_code", width: 120 },
           { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
           { title: "单价", dataIndex: "price", width: 90, align: "right" as const },
@@ -189,25 +198,42 @@ export function PurchaseInPage() {
           <Button size="small" onClick={() => navigate("/ocr/delivery")}>送货单 OCR 识别带入</Button>
         </Space>
         {rows.map((r, i) => (
-          <Space key={i} style={{ marginBottom: 8 }}>
+          <div key={i} style={{ marginBottom: 10, padding: 10, border: "1px solid #f0f1f3", borderRadius: 8, background: "#fafbfc" }}>
+            <Space style={{ marginBottom: 6 }} wrap>
             <Select
-              style={{ width: 200 }}
+              style={{ width: 260 }}
               showSearch
-              placeholder="商品"
-              options={products}
-              fieldNames={{ label: "name", value: "id" }}
-              filterOption={(input, o) => String((o as { name?: string }).name ?? "").includes(input)}
+              placeholder="材料名称 / 物料编码 / 型号规格"
+              options={products.map((p) => ({
+                value: p.id,
+                label: `${p.name}${p.spec ? `（${p.spec}）` : ""}${p.material_code ? ` · ${p.material_code}` : ""}`,
+                name: p.name,
+                code: p.material_code,
+                spec: p.spec,
+              }))}
+              filterOption={(input, o) =>
+                String((o as { name?: string; code?: string; spec?: string }).name ?? "").includes(input) ||
+                String((o as { name?: string; code?: string; spec?: string }).code ?? "").includes(input) ||
+                String((o as { name?: string; code?: string; spec?: string }).spec ?? "").includes(input)
+              }
               value={r.product_id}
-              onChange={(v) => setRow(i, { product_id: v })}
+              onChange={(v) => {
+                const p = products.find((x) => x.id === v);
+                setRow(i, { product_id: v, product: p ?? null });
+              }}
               status={prefillHits[i] === false ? "error" : undefined}
             />
             <Select style={{ width: 130 }} placeholder="库位" options={locs} fieldNames={{ label: "code", value: "id" }} value={r.location_id} onChange={(v) => setRow(i, { location_id: v })} />
             <InputNumber min={0.001} placeholder="数量" value={r.qty} onChange={(v) => setRow(i, { qty: v ?? 0 })} />
             <InputNumber min={0} placeholder="进价" value={r.price} onChange={(v) => setRow(i, { price: v ?? 0 })} />
             <Button size="small" danger onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>删</Button>
-          </Space>
+            </Space>
+            <div style={{ fontSize: 12, color: "#86909c", marginTop: 4 }}>
+              物料编码：{r.product?.material_code || "-"} ｜ 型号规格：{r.product?.spec || "-"} ｜ 单位：{r.product?.unit_name || "-"}
+            </div>
+          </div>
         ))}
-        <Button block onClick={() => setRows((rs) => [...rs, { product_id: undefined, location_id: undefined, qty: 1, price: 0 }])}>+ 添加明细</Button>
+        <Button block onClick={() => setRows((rs) => [...rs, { product_id: undefined, product: null, location_id: undefined, qty: 1, price: 0 }])}>+ 添加明细</Button>
       </Modal>
     </div>
   );

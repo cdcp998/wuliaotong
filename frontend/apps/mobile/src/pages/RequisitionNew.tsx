@@ -53,7 +53,7 @@ export function RequisitionNewPage() {
   const totalQty = rows.reduce((s, r) => s + (Number(r.qty) || 0), 0);
 
   function validateRows(): string | null {
-    if (!rows.length) return "请添加商品";
+    if (!rows.length) return "请添加材料";
     for (const r of rows) {
       if (!r.location) return `请选择 ${r.product.name} 的库位`;
       if (!r.qty || Number(r.qty) <= 0) return `请填写 ${r.product.name} 的数量`;
@@ -107,7 +107,7 @@ export function RequisitionNewPage() {
 
   const StepBar = (
     <div style={{ display: "flex", gap: 0, background: "#fff", border: "1px solid #f0f1f3", borderRadius: 10, padding: 3, marginBottom: 12 }}>
-      {["1 选商品", "2 填信息", "3 确认提交"].map((t, i) => (
+      {["1 选材料", "2 填信息", "3 确认提交"].map((t, i) => (
         <div
           key={t}
           style={{
@@ -195,7 +195,7 @@ export function RequisitionNewPage() {
             }}
             onClick={() => setPickerOpen(true)}
           >
-            ＋ 添加商品（扫码 / 搜索 / 拍照快查）
+            ＋ 添加材料（扫码 / 搜索 / 拍照快查）
           </div>
           {step === 1 && (
             <Button block color="primary" style={{ height: 44, fontSize: 15, borderRadius: 10, marginTop: 4 }} onClick={nextStep}>
@@ -241,7 +241,7 @@ export function RequisitionNewPage() {
           </div>
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#4e5969", margin: "14px 2px 8px" }}>出库拍照留痕（选填）</div>
           <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 10, padding: 12, marginBottom: 8 }}>
-            <div style={{ fontSize: 12, color: "#86909c", marginBottom: 10 }}>拍商品本身，照片随申请提交供仓管员审计核对（不强制）。</div>
+            <div style={{ fontSize: 12, color: "#86909c", marginBottom: 10 }}>拍材料本身，照片随申请提交供仓管员审计核对（不强制）。</div>
             <PhotoUpload bizType="requisition_item" fileId={rows[0]?.photoFileId} onChange={(fid) => rows[0] && updateRow(0, { photoFileId: fid })} />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -304,7 +304,7 @@ export function RequisitionNewPage() {
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onPick={(p) => {
-          if (rows.some((r) => r.product.id === p.id)) return Toast.show("商品已在明细中");
+          if (rows.some((r) => r.product.id === p.id)) return Toast.show("材料已在明细中");
           setRows((rs) => [...rs, { product: p, qty: "1" }]);
         }}
       />

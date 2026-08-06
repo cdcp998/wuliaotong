@@ -9,6 +9,7 @@ const MODULES = ["auth", "base", "stock", "advanced", "requisition", "ocr", "rep
 /** 操作日志（电脑端，超管 sys:log）：写操作审计查询。 */
 export function LogsPage() {
   const [list, setList] = useState<OperationLog[]>([]);
+  const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [username, setUsername] = useState("");
@@ -16,9 +17,14 @@ export function LogsPage() {
   const [method, setMethod] = useState("");
 
   const load = useCallback(async () => {
+    setLoading(true);
+    try {
     const data = await adminApi.logs({ username: username || undefined, module: module || undefined, method: method || undefined, page });
     setList(data.list);
     setTotal(data.total);
+    } finally {
+      setLoading(false);
+    }
   }, [username, module, method, page]);
 
   useEffect(() => {
@@ -57,7 +63,7 @@ export function LogsPage() {
         />
         <Button onClick={() => void load()}>查询</Button>
       </Space>
-      <Table rowKey="id" size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <Table rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
     </div>
   );
 }

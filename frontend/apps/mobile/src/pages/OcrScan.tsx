@@ -19,7 +19,7 @@ export function OcrScanPage() {
       const up = await fileApi.upload(f, "ocr");
       const data = await ocrApi.quick(up.file_id, 2);
       setResult(data);
-      if (!data.matches.length) Toast.show("未匹配到系统商品，可查看识别文本或手动搜索");
+      if (!data.matches.length) Toast.show("未匹配到系统材料，可查看识别文本或手动搜索");
     } catch (e) {
       Toast.show(e instanceof Error ? e.message : "识别失败");
     } finally {
@@ -40,9 +40,9 @@ export function OcrScanPage() {
           onChange={(e) => void handleFile(e.target.files?.[0])}
         />
         <Button block color="primary" loading={loading} onClick={() => inputRef.current?.click()} style={{ height: 48, fontSize: 16 }}>
-          {loading ? "识别中…" : "📷 拍摄商品包装/标签"}
+          {loading ? "识别中…" : "📷 拍摄材料包装/标签"}
         </Button>
-        <p style={{ color: "#999", fontSize: 12, marginTop: 8 }}>识别后自动匹配系统商品，可直接带入入库/出库</p>
+        <p style={{ color: "#999", fontSize: 12, marginTop: 8 }}>识别后自动匹配系统材料，可直接带入入库/出库</p>
       </div>
 
       {result && (
@@ -52,7 +52,7 @@ export function OcrScanPage() {
               <List.Item key={i}>{t}</List.Item>
             ))}
           </List>
-          <List header={`匹配商品（${result.matches.length}）`}>
+          <List header={`匹配材料（${result.matches.length}）`}>
             {result.matches.map((m) => (
               <List.Item
                 key={m.product_id}
@@ -71,7 +71,7 @@ export function OcrScanPage() {
                 {m.name}
               </List.Item>
             ))}
-            {!result.matches.length && <List.Item>未匹配到商品，可去「入库/出库」页手动搜索添加</List.Item>}
+            {!result.matches.length && <List.Item>未匹配到材料，可去「入库/出库」页手动搜索添加</List.Item>}
           </List>
         </>
       )}

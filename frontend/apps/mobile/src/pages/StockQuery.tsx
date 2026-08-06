@@ -32,7 +32,7 @@ export function StockQueryPage() {
       <NavBar onBack={() => navigate("/")}>库存查询</NavBar>
       <div style={{ padding: 12 }}>
         <Input
-          placeholder="商品名称 / 编码 / 条码"
+          placeholder="材料名称 / 编码 / 条码"
           value={keyword}
           onChange={setKeyword}
           onEnterPress={() => void search(keyword)}

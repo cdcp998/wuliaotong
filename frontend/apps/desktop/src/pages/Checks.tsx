@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, message, Modal, Popconfirm, Radio, Select, Space, Table } from "antd";
+import { App, Button, Modal, Popconfirm, Radio, Select, Space, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router-dom";
 
@@ -8,6 +8,7 @@ import { baseApi, checkApi, type CheckBill } from "@wlt/shared";
 const STATUS: Record<number, string> = { 0: "待盘点", 1: "盘点中", 2: "已审核" };
 
 export function ChecksPage() {
+  const { message } = App.useApp();
   const navigate = useNavigate();
   const [status, setStatus] = useState<number | undefined>();
   const [list, setList] = useState<CheckBill[]>([]);
@@ -76,7 +77,7 @@ export function ChecksPage() {
         </Radio.Group>
         <Button type="primary" onClick={() => setOpen(true)}>新建盘点单</Button>
       </Space>
-      <Table rowKey="id" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <Table rowKey="id" locale={{ emptyText: "暂无数据" }} columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
 
       <Modal title="新建盘点单" open={open} onOk={() => void create()} onCancel={() => setOpen(false)}>
         <Select style={{ width: "100%" }} placeholder="选择盘点仓库" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={whId} onChange={setWhId} />
@@ -87,6 +88,7 @@ export function ChecksPage() {
 }
 
 function PopconfirmButton({ id }: { id: number }) {
+  const { message } = App.useApp();
   return (
     <Popconfirm
       title="确认审核？将按盘盈/盘亏生成库存流水"
