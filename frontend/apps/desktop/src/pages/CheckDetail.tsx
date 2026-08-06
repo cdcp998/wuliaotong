@@ -3,7 +3,7 @@ import { Button, InputNumber, message, Space, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { checkApi, type CheckItem } from "@wlt/shared";
+import { checkApi, FileImage, type CheckItem } from "@wlt/shared";
 
 /** 盘点执行（电脑端）：录入实盘 → 提交 → 审核。 */
 export function CheckDetailPage() {
@@ -91,7 +91,7 @@ export function CheckDetailPage() {
       ),
     },
     { title: "差异", render: (_, r) => <span style={{ color: Number(diffText[r.id]) > 0 ? "#f5222d" : Number(diffText[r.id]) < 0 ? "#52c41a" : "#999" }}>{diffText[r.id]}</span> },
-    { title: "照片", render: (_, r) => (r.photo_file_id ? <a href={`/api/v1/files/${r.photo_file_id}`} target="_blank" rel="noreferrer">查看</a> : "-") },
+    { title: "照片", render: (_, r) => (r.photo_file_id ? <FileImage fileId={r.photo_file_id} size={48} /> : "-") },
   ];
 
   return (

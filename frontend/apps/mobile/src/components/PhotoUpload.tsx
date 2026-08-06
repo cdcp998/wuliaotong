@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Button, Toast } from "antd-mobile";
 
-import { fileApi } from "@wlt/shared";
+import { fileApi, FileImage } from "@wlt/shared";
 
 /** 拍照/选图上传（可选）：返回 file_id，展示已拍缩略图。 */
 export function PhotoUpload({
@@ -41,7 +41,7 @@ export function PhotoUpload({
       />
       {preview ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <img src={preview} alt="已拍" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8 }} />
+          <FileImage url={preview} size={56} />
           <Button
             size="mini"
             fill="outline"

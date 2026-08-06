@@ -1,5 +1,7 @@
 export * from "./api/client";
+export * from "./components/FileImage";
 export * from "./api/auth";
+export * from "./api/admin";
 export * from "./api/base";
 export * from "./api/business";
 export * from "./api/system";
