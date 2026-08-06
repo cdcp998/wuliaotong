@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+backend/.venv/
+
+# Node
+node_modules/
+dist/
+*.local
+
+# 环境变量与密钥（禁止提交）
+.env
+.env.*
+
+# 大体积本地资源：OCR 引擎二进制与模型（不入库，部署时单独放置）
+ocr/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+.DS_Store
+
+# 日志与临时文件
+*.log
+tmp/
