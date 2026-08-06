@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, DatePicker, Select, Space, Table, Tabs, Tag } from "antd";
+import { App, Button, DatePicker, Select, Space, Tabs, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
 
 import { baseApi, exportReportUrl, reportApi, type InventorySummaryRow, type StockReportRow, type Warehouse } from "@wlt/shared";
+
+import dayjs from "dayjs";
+
+import { DataTable } from "../components/DataTable";
 
 /** 报表中心（电脑端，管理者）：进销存汇总、库存报表、Excel 导出。 */
 export function ReportsPage() {
@@ -15,6 +19,7 @@ export function ReportsPage() {
           { key: "inventory", label: "进销存汇总", children: <InventorySummaryTab /> },
           { key: "stock", label: "库存报表", children: <StockReportTab /> },
           { key: "flow", label: "库存流水导出", children: <FlowExportTab /> },
+          { key: "ai", label: "AI 月报摘要", children: <AiSummaryTab /> },
         ]}
       />
     </div>
@@ -30,30 +35,33 @@ function useWarehouses(): Warehouse[] {
 }
 
 function InventorySummaryTab() {
+  const { message } = App.useApp();
   const [whs] = [useWarehouses()];
   const [warehouseId, setWarehouseId] = useState(0);
   const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const [list, setList] = useState<InventorySummaryRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const load = useCallback(async () => {
+    setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
     const data = await reportApi.inventorySummary({
       warehouse_id: warehouseId || undefined,
       start: range?.[0]?.format("YYYY-MM-DD") ?? undefined,
       end: range?.[1]?.format("YYYY-MM-DD") ?? undefined,
       page,
+      page_size: pageSize,
     });
     setList(data.list);
     setTotal(data.total);
-  }, [warehouseId, range, page]);
+  }, [warehouseId, range, page, pageSize]);
 
   useEffect(() => {
     void load().catch(() => undefined);
   }, [load]);
 
   const columns: ColumnsType<InventorySummaryRow> = [
-    { title: "编码", dataIndex: "code", width: 120 },
     { title: "材料名称", dataIndex: "name" },
     { title: "规格", dataIndex: "spec", width: 120 },
     { title: "单位", dataIndex: "unit_name", width: 70 },
@@ -92,7 +100,7 @@ function InventorySummaryTab() {
           导出 Excel
         </Button>
       </Space>
-      <Table rowKey="product_id" size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <DataTable rowKey="product_id" size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
     </div>
   );
 }
@@ -100,25 +108,27 @@ function InventorySummaryTab() {
 const SORT_LABELS: Record<string, string> = { qty: "按数量", amount: "按金额", turnover: "按周转（30天出库+呆滞）" };
 
 function StockReportTab() {
+  const { message } = App.useApp();
   const whs = useWarehouses();
   const [warehouseId, setWarehouseId] = useState(0);
   const [sort, setSort] = useState<"qty" | "amount" | "turnover">("qty");
   const [list, setList] = useState<StockReportRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const load = useCallback(async () => {
-    const data = await reportApi.stock({ warehouse_id: warehouseId || undefined, sort, page });
+    setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
+    const data = await reportApi.stock({ warehouse_id: warehouseId || undefined, sort, page, page_size: pageSize });
     setList(data.list);
     setTotal(data.total);
-  }, [warehouseId, sort, page]);
+  }, [warehouseId, sort, page, pageSize]);
 
   useEffect(() => {
     void load().catch(() => undefined);
   }, [load]);
 
   const columns: ColumnsType<StockReportRow> = [
-    { title: "编码", dataIndex: "code", width: 120 },
     { title: "材料名称", dataIndex: "name" },
     { title: "规格", dataIndex: "spec", width: 120 },
     { title: "仓库", dataIndex: "warehouse_name", width: 110 },
@@ -156,7 +166,7 @@ function StockReportTab() {
           导出 Excel
         </Button>
       </Space>
-      <Table rowKey={(r) => `${r.product_id}-${r.warehouse_name}`} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <DataTable rowKey={(r) => `${r.product_id}-${r.warehouse_name}`} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
     </div>
   );
 }
@@ -178,7 +188,7 @@ function FlowExportTab() {
           style={{ padding: "4px 8px", border: "1px solid #d9d9d9", borderRadius: 6 }}
         />
         <input
-          placeholder="变动类型（如：采购入库）"
+          placeholder="变动类型（如：入库）"
           value={changeType}
           onChange={(e) => setChangeType(e.target.value)}
           style={{ padding: "4px 8px", border: "1px solid #d9d9d9", borderRadius: 6 }}
@@ -201,6 +211,51 @@ function FlowExportTab() {
           导出 Excel
         </Button>
       </Space>
+    </div>
+  );
+}
+
+
+/** AI 月报摘要（P9-P1⑦）：选择日期范围 → DeepSeek 生成经营摘要（未配置降级规则版）。 */
+function AiSummaryTab() {
+  const { message } = App.useApp();
+  const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>([dayjs().startOf("month"), dayjs()]);
+  const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState<string>("");
+  const [ai, setAi] = useState(false);
+
+  async function generate() {
+    if (!range?.[0] || !range?.[1]) {
+      message.warning("请选择日期范围（默认本月）");
+      return;
+    }
+    setLoading(true);
+    try {
+      const r = await reportApi.aiSummary(range[0].format("YYYY-MM-DD"), range[1].format("YYYY-MM-DD"));
+      setSummary(r.summary);
+      setAi(r.ai);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "生成失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <Space style={{ marginBottom: 12 }} wrap>
+        <span>日期范围</span>
+        <DatePicker.RangePicker value={range} onChange={(v) => setRange(v as [Dayjs | null, Dayjs | null] | null)} />
+        <Button type="primary" loading={loading} onClick={() => void generate()}>生成 AI 月报摘要</Button>
+      </Space>
+      {summary && (
+        <div style={{ border: "1px solid #e5e6eb", borderRadius: 8, padding: 16, background: "#fafbfc", whiteSpace: "pre-wrap", lineHeight: 1.8 }}>
+          <Typography.Paragraph>{summary}</Typography.Paragraph>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {ai ? "AI 生成，仅供参考" : "规则版摘要（文本模型未配置或生成失败）"} · {range?.[0]?.format("YYYY-MM-DD")} ~ {range?.[1]?.format("YYYY-MM-DD")}
+          </Typography.Text>
+        </div>
+      )}
     </div>
   );
 }

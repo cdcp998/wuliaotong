@@ -74,6 +74,8 @@ export interface LocationStock {
 export const reportApi = {
   stockSummary: () => http.get<StockSummary>("/stock/summary"),
   dashboard: () => http.get<DashboardData>("/reports/dashboard"),
+  /** AI 月报摘要（P9-P1⑦）：服务端聚合+DeepSeek 生成经营摘要。 */
+  aiSummary: (start: string, end: string) => http.post<{ summary: string; ai: boolean }>("/reports/ai-summary", { start, end }),
   inventorySummary: (params: { warehouse_id?: number; product_id?: number; start?: string; end?: string; page?: number; page_size?: number }) => {
     const q = new URLSearchParams();
     if (params.warehouse_id) q.set("warehouse_id", String(params.warehouse_id));

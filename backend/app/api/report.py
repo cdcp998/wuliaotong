@@ -424,3 +424,18 @@ def export_report(
             f"flow_{today}.xlsx",
         )
     raise BizError(E_PARAM, "type 仅支持 inventory-summary|stock|flow")
+
+
+@router.post("/reports/ai-summary", dependencies=[Depends(require_permission("report:view"))])
+def report_ai_summary(body: dict, db: Session = Depends(get_db)) -> dict:
+    """AI 月报摘要（P9-P1⑦）：服务端聚合经营数据 → DeepSeek 生成 200-300 字摘要（未配置降级规则版）。"""
+    try:
+        start = date.fromisoformat(str(body.get("start") or ""))
+        end = date.fromisoformat(str(body.get("end") or ""))
+    except ValueError:
+        raise BizError(E_PARAM, "start/end 必须为 YYYY-MM-DD 日期")
+    if end < start:
+        raise BizError(E_PARAM, "end 不能早于 start")
+    from app.services.ai.report_summary import report_summary
+
+    return ok(report_summary(db, start, end))
