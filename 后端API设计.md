@@ -53,7 +53,8 @@ POST /api/v1/auth/login
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /products?keyword=&category_id=&barcode=&status=&page= | 列表（keyword 匹配名称/编码/物料编码/SKU/条码） |
-| POST | /products | 新增 {code?, material_code?, barcode, sku, name, ...}；**code 纯数字**（留空自动生成 = 当前最大数字编码+1）；material_code=物料编码（公司系统编码，可空，空则提示管理员补录） |
+| POST | /products | 新增 {code?, material_code?, barcode, sku, name, supplier_ids?, ...}；**code 纯数字**（留空自动生成 = 当前最大数字编码+1）；material_code=物料编码（公司系统编码，可空，空则提示管理员补录）；supplier_ids=关联供应商（多对多，编辑时缺省保持/[]清空）；条码非空全局唯一 |
+| GET / PUT | /products/{id} | 详情（含 supplier_ids/supplier_names）/ 修改 |
 | GET / PUT | /products/{id} | 详情 / 修改 |
 | POST | /products/import | Excel 批量导入，返回 {success_count, fail_rows, notice}；公司模板：物料编码→material_code（唯一去重）、商品编码自动纯数字、条码留空，物料编码/条码为空响应 notice 提示管理员补录 |
 | GET | /products/export?keyword= | Excel 导出 |
@@ -140,7 +141,10 @@ POST /api/v1/auth/login
 | GET | /ocr/records?date=&match_status=&page= | 识别历史 |
 | POST | /ai-suggestions/{id}/accept | {name, spec, category_id, purchase_price...} 确认新增商品并回写 |
 | POST | /ai-suggestions/{id}/ignore | 忽略建议 |
-| POST | /barcode/decode | 上传条码图片，zxing-cpp 解码返回条码值（手机端也可前端直接扫） |
+| POST | /barcode/decode | ?file_id= 上传的条码图片，zxing-cpp 解码返回 {barcode}（PIL 先解码图片；识别不到 4006；权限 ocr:use） |
+| GET | /ocr/install-status | PP-OCR 自动安装状态（sys:config）：{status: idle/installing/done/failed, mode: cpu/gpu, log}；paddleocr 实际已安装时按真实环境检测返回 done + mode（paddle 是否启用 CUDA，检测结果缓存 60s） |
+| POST | /ocr/install-paddle | 自动安装 paddlepaddle + paddleocr（sys:config，后台线程执行约 1-5 分钟，前端轮询 install-status；完成后需重启后端生效） |
+| GET | /suppliers/{id}/products | 供应商关联材料列表（含停用材料，供供应商详情页） |
 
 OCR 结果示例（structured）：
 ```json
@@ -158,7 +162,9 @@ OCR 结果示例（structured）：
 
 ## 9. 系统管理
 
-- GET /settings、PUT /settings（公司信息、单据编号规则、OCR 引擎参数、大模型 Key/BaseURL、**注册模式 auth.register_mode（open/closed/review）、找回方式 auth.forgot_method（email/phone/both）、管理员电话 site.contact_phone、SMTP smtp.host/port/user/password/from**）
+- GET /settings、PUT /settings（公司信息、单据编号规则、OCR 引擎参数、大模型 Key/BaseURL、**注册模式 auth.register_mode（open/closed/review）、找回方式 auth.forgot_method（email/phone/both）、管理员电话 site.contact_phone、SMTP smtp.host/port/user/password/from**、水印 watermark.template/position/bg_opaque、视觉模型 llm.siliconflow.enabled/api_key/base_url/model、PP-OCR 版本 ocr.model_version）
+  - **值契约**：所有配置值统一字符串传输（开关用 "1"/"0"、数字用字符串如 "8"）；密钥字段（`*api_key`、`smtp.password`）GET 返回脱敏 `****后四位`，PUT 传掩码/空串表示不修改，传新值才覆盖；**传非字符串（number/null）返回 4006**（前端保存前统一转字符串）
+- POST /llm/siliconflow/models、POST /llm/deepseek/models、POST /llm/doubao/models（sys:config）——用**已保存**的 API Key 调 OpenAI 兼容 `/models` 接口拉取模型列表 → `{models: [{id, owned_by}]}`；对应 enabled=0 → 4006（提示先启用并保存）、未配置 Key → 4006、网络/鉴权失败 → 5002（设置页「获取模型列表」按钮与保存后自动拉取共用）
 - 存储位置管理见 §7（/storages，多存储地址：fill 最空闲 / round 轮询 / manual 手动指定）
 - GET /logs?username=&module=&method=&start=&end=&page= 操作日志（写操作审计查询）
 - GET /notifications?is_read=&page=、PUT /notifications/{id}/read、PUT /notifications/read-all、GET /notifications/unread-count
@@ -186,9 +192,9 @@ OCR 结果示例（structured）：
 
 1. **库存事务**：所有过账接口统一走 `post_stock_change()`：`SELECT ... FOR UPDATE` 锁 stk_stock 行 → 校验充足 → 写 stk_stock_log → 更新 stk_stock → 更新单据状态，单事务提交，防并发超领/超卖（SQLAlchemy + 行锁）。
 2. **OCR 引擎抽象**：定义统一接口 `OCRClient.recognize(图片) -> [{text, box, score}]`，两个实现：
-   - `RapidOCREngine`：Windows 部署，复用 `app/services/ocr/rapidocr_api.py`（OcrAPI 子进程常驻，线程池排队）；
-   - `PaddleOCREngine`：Debian/Linux 部署，paddleocr Python 包（paddlepaddle CPU 推理，中文模型 ch_PP-OCRv4），Python 3.11 兼容；
-   引擎选择存 sys_config（ocr.engine = rapidocr/paddle），启动时按配置加载；`GET /health` 返回当前引擎类型与状态；切换引擎只影响识别层，结构化/匹配/大模型链路不变；引擎初始化失败返回可读错误（5001）并降级为纯人工录入。
+   - `RapidOCREngine`：Windows 本地兜底，复用 `app/services/ocr/rapidocr_api.py`（**非驻留**：每次识别启动一次 RapidOCR-json.exe 进程，stdin/stdout 管道收发指令，结果返回后进程即退出销毁，下次识别重新启动）；
+   - `PaddleOCREngine`：**默认引擎**，paddleocr Python 包（paddlepaddle 固定 3.2.2，3.3.x Windows oneDNN PIR 执行器 bug；GPU 版用 scripts/install_*_gpu.py 安装），CPU/GPU 自适应；模型版本 PP-OCRv4/v5/v6 由 sys_config（ocr.model_version）配置；
+   引擎选择存 sys_config（ocr.engine = paddle 默认 / rapidocr），启动时按配置加载；`GET /health` 返回当前引擎类型与状态；切换引擎只影响识别层，结构化/匹配/大模型链路不变；引擎初始化失败返回可读错误（5001）并降级为纯人工录入；**自动安装**：`POST /ocr/install-paddle` 后台 pip 安装 paddlepaddle+paddleocr，`GET /ocr/install-status` 返回 {status, mode: cpu/gpu, log}（设置页展示并轮询）。
 3. **大模型**：统一 `LLMClient` 抽象（doubao 视觉 / deepseek 文本两个实现），Key/BaseURL 存 sys_config；调用失败不影响主流程，走人工兜底；AI 建议一律人工确认后才新增商品。
 4. **异步任务**：OCR/大模型用 FastAPI BackgroundTasks + 内存任务表；完成后写 sys_notification 通知相关用户。
 5. **外网安全**：正式 HTTPS 证书；Session Cookie HttpOnly+Secure+SameSite=Lax；登录连续失败 3 次/10 分钟要求 4 位数字+字母验证码（4007）；改密/重置后其他会话失效；操作日志留存。
