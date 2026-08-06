@@ -1,19 +1,29 @@
-import { useEffect, useState } from "react";
-import { App, Button, Card, Form, Input, InputNumber, Radio, Space, Spin, Typography } from "antd";
+import { useEffect, useRef, useState } from "react";
+import { App, Alert, Button, Form, Input, InputNumber, Modal, Radio, Select, Space, Spin, Switch, Tabs, Tag, Typography } from "antd";
 
-import { systemApi, type Settings } from "@wlt/shared";
+import { systemApi, type OcrInstallState, type Settings } from "@wlt/shared";
 
 const EMPTY: Settings = {
   "site.name": "",
   "session.expire_hours": "8",
-  "ocr.engine": "rapidocr",
+  "ocr.engine": "paddle",
+  "ocr.model_version": "PP-OCRv6",
+  "llm.doubao.enabled": "1",
+  "llm.deepseek.enabled": "1",
   "bill.rule": "",
+  "watermark.template": "",
+  "watermark.position": "bottom",
+  "watermark.bg_opaque": "1",
   "llm.doubao.api_key": "",
   "llm.doubao.base_url": "",
   "llm.doubao.model": "",
   "llm.deepseek.api_key": "",
   "llm.deepseek.base_url": "",
   "llm.deepseek.model": "",
+  "llm.siliconflow.enabled": "1",
+  "llm.siliconflow.api_key": "",
+  "llm.siliconflow.base_url": "",
+  "llm.siliconflow.model": "",
   "auth.register_mode": "closed",
   "auth.forgot_method": "phone",
   "site.contact_phone": "",
@@ -24,12 +34,47 @@ const EMPTY: Settings = {
   "smtp.from": "",
 };
 
-/** 系统设置（电脑端）：与整体界面一致的 antd 表单风格。 */
+/** 系统设置（电脑端）：按功能分类平铺（Tabs），所有设置项一目了然。 */
 export function SettingsPage() {
   const { message } = App.useApp();
   const [form] = Form.useForm<Settings>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewing, setPreviewing] = useState(false);
+  // PP-OCR 自动安装状态（后台线程安装，前端轮询）
+  const [installState, setInstallState] = useState<OcrInstallState>({ status: "idle", log: "" });
+  const installTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  useEffect(() => {
+    systemApi.installStatus().then(setInstallState).catch(() => undefined);
+    return () => {
+      if (installTimer.current) clearInterval(installTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (installState.status === "installing") {
+      if (installTimer.current) clearInterval(installTimer.current);
+      installTimer.current = setInterval(() => {
+        void systemApi.installStatus().then(setInstallState).catch(() => undefined);
+      }, 3000);
+    } else if (installTimer.current) {
+      clearInterval(installTimer.current);
+      installTimer.current = undefined;
+    }
+  }, [installState.status]);
+
+  async function startInstallPaddle() {
+    try {
+      const s = await systemApi.installPaddle();
+      setInstallState(s);
+      message.success(installState.status === "done" ? "已开始重新安装 PP-OCR（paddlepaddle + paddleocr），请稍候…" : "已开始自动安装 PP-OCR（paddlepaddle + paddleocr），请稍候…");
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "启动安装失败");
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -53,6 +98,24 @@ export function SettingsPage() {
     }
   }
 
+  async function previewWatermark() {
+    const v = form.getFieldsValue();
+    setPreviewing(true);
+    try {
+      const url = await systemApi.previewWatermark({
+        template: v["watermark.template"],
+        position: v["watermark.position"],
+        bg_opaque: v["watermark.bg_opaque"] !== "0",
+      });
+      setPreviewUrl(url);
+      setPreviewOpen(true);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "预览失败");
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
   const keyField = (k: keyof Settings, label: string, opts?: { secret?: boolean; hint?: string; placeholder?: string }) => (
     <Form.Item
       key={k}
@@ -68,93 +131,213 @@ export function SettingsPage() {
     </Form.Item>
   );
 
+  const baseTab = (
+    <>
+      <Form.Item name="site.name" label="系统名称">
+        <Input placeholder="物料通管理系统" />
+      </Form.Item>
+      <Form.Item name="session.expire_hours" label="会话有效期（小时）" extra="登录后无操作多久自动失效，1~720 小时">
+        <InputNumber style={{ width: 200 }} min={1} max={720} />
+      </Form.Item>
+      <Form.Item name="bill.rule" label="单据编号规则" extra="格式：前缀列表，用 | 分隔">
+        <Input placeholder="RK|LL|DB|PD|QT|QCK" />
+      </Form.Item>
+      <Form.Item name="watermark.template" label="完成工作照片水印模板" extra="占位符：{location} 使用地点 / {time} 完成时间 / {gps} 定位坐标；下载照片时动态添加，原始照片不保存水印">
+        <Input placeholder="地点：{location}｜时间：{time}｜坐标：{gps}" />
+      </Form.Item>
+      <Form.Item name="watermark.position" label="水印位置">
+        <Select
+          style={{ width: 240 }}
+          options={[
+            { value: "bottom", label: "底部居中（默认）" },
+            { value: "top", label: "顶部居中" },
+            { value: "bottom-left", label: "左下角" },
+            { value: "bottom-right", label: "右下角" },
+            { value: "top-left", label: "左上角" },
+            { value: "top-right", label: "右上角" },
+          ]}
+        />
+      </Form.Item>
+      <Form.Item name="watermark.bg_opaque" label="水印背景透明" valuePropName="checked" getValueProps={(v) => ({ checked: v === "0" })} normalize={(v) => (v ? "0" : "1")} extra="开启后不绘制黑色背景条，仅保留白字黑描边（不遮挡照片内容）">
+        <Switch />
+      </Form.Item>
+      <Button loading={previewing} onClick={() => void previewWatermark()} style={{ marginBottom: 8 }}>
+        预览水印效果
+      </Button>
+    </>
+  );
+
+  const ocrTab = (
+    <>
+      <Form.Item name="ocr.engine" label="识别引擎">
+        <Radio.Group
+          options={[
+            { value: "rapidocr", label: "RapidOCR-json（Windows 本地）" },
+            { value: "paddle", label: "PP-OCR（PaddleOCR，默认引擎，可自动安装）" },
+          ]}
+        />
+      </Form.Item>
+      <Form.Item name="ocr.model_version" label="PP-OCR 模型版本" tooltip="保存后生效；PP-OCRv6 为最新版本（需 paddleocr 3.4+，首次识别自动下载模型）">
+        <Select
+          options={[
+            { value: "PP-OCRv6", label: "PP-OCRv6（推荐）" },
+            { value: "PP-OCRv5", label: "PP-OCRv5" },
+            { value: "PP-OCRv4", label: "PP-OCRv4" },
+          ]}
+        />
+      </Form.Item>
+      <Space orientation="vertical" style={{ marginBottom: 16 }}>
+        <Space>
+          <span>PP-OCR 运行环境：</span>
+          {installState.status === "installing" && <Tag color="processing">安装中…</Tag>}
+          {installState.status === "done" && (
+            <Tag color="success">已安装（{installState.mode === "gpu" ? "GPU 加速" : "CPU"}）</Tag>
+          )}
+          {installState.status === "failed" && <Tag color="error">安装失败</Tag>}
+          {installState.status === "idle" && <Tag>未安装</Tag>}
+          <Button size="small" loading={installState.status === "installing"} onClick={() => void startInstallPaddle()}>
+            {installState.status === "done" ? "重新安装（paddlepaddle + paddleocr）" : "自动安装（paddlepaddle + paddleocr）"}
+          </Button>
+        </Space>
+        {installState.status === "done" && (
+          <Typography.Text type="success">
+            安装完成（{installState.mode === "gpu" ? "GPU 加速" : "CPU 运行"}），请重启后端生效，然后选择 PP-OCR 引擎并保存。
+          </Typography.Text>
+        )}
+        {installState.status === "failed" && installState.log && (
+          <Alert type="error" showIcon title="自动安装失败" description={<pre style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 12 }}>{installState.log}</pre>} />
+        )}
+        {installState.status === "installing" && (
+          <Spin size="small" description="后台安装中（约 1-5 分钟，视网络）…" />
+        )}
+      </Space>
+      <Form.Item
+        name="llm.doubao.enabled"
+        label="启用豆包大模型"
+        valuePropName="checked"
+        getValueProps={(v) => ({ checked: v !== "0" })}
+        normalize={(v) => (v ? "1" : "0")}
+      >
+        <Switch />
+      </Form.Item>
+      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
+        豆包大模型（拍照识别物品，支持外网/内网 API）；关闭后拍照识别未匹配时不再调用大模型分析，并提示已关闭
+      </Typography.Text>
+      {keyField("llm.doubao.api_key", "豆包 API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
+      <Form.Item name="llm.doubao.base_url" label="豆包 Base URL"><Input placeholder="https://ark.cn-beijing.volces.com/api/v3" /></Form.Item>
+      <Form.Item name="llm.doubao.model" label="豆包模型"><Input placeholder="doubao-1-5-vision-pro-32k-250115" /></Form.Item>
+      <Typography.Text type="secondary" style={{ display: "block", margin: "12px 0 8px" }}>
+        DeepSeek（送货单文字结构化）
+      </Typography.Text>
+      <Form.Item
+        name="llm.deepseek.enabled"
+        label="启用 DeepSeek 大模型"
+        valuePropName="checked"
+        getValueProps={(v) => ({ checked: v !== "0" })}
+        normalize={(v) => (v ? "1" : "0")}
+      >
+        <Switch />
+      </Form.Item>
+      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
+        对 SiliconFlow 视觉识别结果做材料分类（自动分类入库）；未配置时跳过分类
+      </Typography.Text>
+      {keyField("llm.deepseek.api_key", "DeepSeek API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
+      <Form.Item name="llm.deepseek.base_url" label="DeepSeek Base URL"><Input placeholder="https://api.deepseek.com/v1" /></Form.Item>
+      <Form.Item name="llm.deepseek.model" label="DeepSeek 模型"><Input placeholder="deepseek-chat" /></Form.Item>
+      <Typography.Text type="secondary" style={{ display: "block", margin: "12px 0 8px" }}>
+        SiliconFlow（送货单视觉识别，必需）
+      </Typography.Text>
+      <Form.Item
+        name="llm.siliconflow.enabled"
+        label="启用 SiliconFlow 视觉大模型"
+        valuePropName="checked"
+        getValueProps={(v) => ({ checked: v !== "0" })}
+        normalize={(v) => (v ? "1" : "0")}
+      >
+        <Switch />
+      </Form.Item>
+      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
+        送货单识别统一走 SiliconFlow 视觉模型（已移除本地模板识别）；未配置时识别结果为空，可手动录入
+      </Typography.Text>
+      {keyField("llm.siliconflow.api_key", "SiliconFlow API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
+      <Form.Item name="llm.siliconflow.base_url" label="SiliconFlow Base URL"><Input placeholder="https://api.siliconflow.cn/v1" /></Form.Item>
+      <Form.Item name="llm.siliconflow.model" label="SiliconFlow 视觉模型"><Input placeholder="Qwen/Qwen2.5-VL-7B-Instruct" /></Form.Item>
+    </>
+  );
+
+  const authTab = (
+    <>
+      <Form.Item name="auth.register_mode" label="注册模式">
+        <Radio.Group
+          options={[
+            { value: "open", label: "开放注册（注册即开通使用者账号）" },
+            { value: "review", label: "审核注册（管理员审核通过后开通）" },
+            { value: "closed", label: "关闭注册（仅管理员建号）" },
+          ]}
+        />
+      </Form.Item>
+      <Form.Item name="auth.forgot_method" label="忘记密码找回方式">
+        <Radio.Group
+          options={[
+            { value: "email", label: "邮箱找回（发送重置验证码邮件，需配置邮件服务）" },
+            { value: "phone", label: "联系管理员电话找回（展示联系电话）" },
+            { value: "both", label: "两者均可（有邮箱优先邮箱）" },
+          ]}
+        />
+      </Form.Item>
+      <Form.Item name="site.contact_phone" label="管理员联系电话（电话找回时展示给用户）">
+        <Input placeholder="如 13800001111" />
+      </Form.Item>
+    </>
+  );
+
+  const smtpTab = (
+    <>
+      <Form.Item name="smtp.host" label="服务器地址">
+        <Input placeholder="如 smtp.qq.com" />
+      </Form.Item>
+      <Form.Item name="smtp.port" label="端口">
+        <InputNumber style={{ width: 200 }} min={1} max={65535} />
+      </Form.Item>
+      <Form.Item name="smtp.user" label="账号">
+        <Input placeholder="SMTP 账号" />
+      </Form.Item>
+      {keyField("smtp.password", "密码/授权码", { secret: true, placeholder: "填新值覆盖，留空不修改" })}
+      <Form.Item name="smtp.from" label="发件人邮箱（缺省用账号）">
+        <Input placeholder="发件邮箱" />
+      </Form.Item>
+    </>
+  );
+
   return (
-    <div style={{ padding: 24, maxWidth: 760 }}>
+    <div style={{ padding: 24, maxWidth: 820 }}>
       <Typography.Title level={4} style={{ marginTop: 0 }}>系统设置</Typography.Title>
       <Spin spinning={loading}>
-        <Form form={form} layout="vertical" style={{ maxWidth: 640 }}>
-          <Card title="通用" size="small" style={{ marginBottom: 16 }}>
-            <Form.Item name="site.name" label="系统名称">
-              <Input placeholder="物料通管理系统" />
-            </Form.Item>
-            <Form.Item name="session.expire_hours" label="会话有效期（小时）">
-              <InputNumber style={{ width: 200 }} min={1} max={720} />
-            </Form.Item>
-          </Card>
-
-          <Card title="OCR 引擎" size="small" style={{ marginBottom: 16 }}>
-            <Form.Item name="ocr.engine" label="识别引擎">
-              <Radio.Group
-                options={[
-                  { value: "rapidocr", label: "RapidOCR-json（Windows 本地）" },
-                  { value: "paddle", label: "PaddleOCR（Debian/Linux）" },
-                ]}
-              />
-            </Form.Item>
-            <Form.Item name="bill.rule" label="单据编号规则" extra="格式：前缀列表，用 | 分隔">
-              <Input placeholder="RK|LL|DB|PD|QT|QCK" />
-            </Form.Item>
-          </Card>
-
-          <Card title="豆包大模型（视觉识别材料，支持外网/内网 API）" size="small" style={{ marginBottom: 16 }}>
-            {keyField("llm.doubao.api_key", "API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
-            <Form.Item name="llm.doubao.base_url" label="Base URL"><Input placeholder="https://ark.cn-beijing.volces.com/api/v3" /></Form.Item>
-            <Form.Item name="llm.doubao.model" label="模型"><Input placeholder="doubao-1-5-vision-pro-32k-250115" /></Form.Item>
-          </Card>
-
-          <Card title="DeepSeek（送货单文本结构化）" size="small" style={{ marginBottom: 16 }}>
-            {keyField("llm.deepseek.api_key", "API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
-            <Form.Item name="llm.deepseek.base_url" label="Base URL"><Input placeholder="https://api.deepseek.com/v1" /></Form.Item>
-            <Form.Item name="llm.deepseek.model" label="模型"><Input placeholder="deepseek-chat" /></Form.Item>
-          </Card>
-
-          <Card title="注册与找回密码" size="small" style={{ marginBottom: 16 }}>
-            <Form.Item name="auth.register_mode" label="注册模式">
-              <Radio.Group
-                options={[
-                  { value: "open", label: "开放注册（注册即开通使用者账号）" },
-                  { value: "review", label: "审核注册（管理员审核通过后开通）" },
-                  { value: "closed", label: "关闭注册（仅管理员建号）" },
-                ]}
-              />
-            </Form.Item>
-            <Form.Item name="auth.forgot_method" label="忘记密码找回方式">
-              <Radio.Group
-                options={[
-                  { value: "email", label: "邮箱找回（发送重置验证码邮件，需配置下方 SMTP）" },
-                  { value: "phone", label: "联系管理员电话找回（展示联系电话）" },
-                  { value: "both", label: "两者均可（有邮箱优先邮箱）" },
-                ]}
-              />
-            </Form.Item>
-            <Form.Item name="site.contact_phone" label="管理员联系电话（电话找回时展示给用户）">
-              <Input placeholder="如 13800001111" />
-            </Form.Item>
-          </Card>
-
-          <Card title="SMTP 邮件服务（邮箱找回用）" size="small" style={{ marginBottom: 16 }}>
-            <Space direction="vertical" style={{ width: "100%" }}>
-              <Form.Item name="smtp.host" label="服务器地址" style={{ marginBottom: 12 }}>
-                <Input placeholder="如 smtp.qq.com" />
-              </Form.Item>
-              <Form.Item name="smtp.port" label="端口" style={{ marginBottom: 12 }}>
-                <InputNumber style={{ width: 200 }} min={1} max={65535} />
-              </Form.Item>
-              <Form.Item name="smtp.user" label="账号" style={{ marginBottom: 12 }}>
-                <Input placeholder="SMTP 账号" />
-              </Form.Item>
-              {keyField("smtp.password", "密码/授权码", { secret: true, placeholder: "填新值覆盖，留空不修改" })}
-              <Form.Item name="smtp.from" label="发件人邮箱（缺省用账号）" style={{ marginBottom: 12 }}>
-                <Input placeholder="发件邮箱" />
-              </Form.Item>
-            </Space>
-          </Card>
-
-          <Button type="primary" size="large" loading={saving} onClick={() => void save()} style={{ minWidth: 160 }}>
+        <Form form={form} layout="vertical">
+          <Tabs
+            items={[
+              { key: "base", label: "基础设置", children: baseTab },
+              { key: "ocr", label: "OCR 与大模型", children: ocrTab },
+              { key: "auth", label: "账号与安全", children: authTab },
+              { key: "smtp", label: "邮件服务", children: smtpTab },
+            ]}
+          />
+          <Button type="primary" size="large" loading={saving} onClick={() => void save()} style={{ minWidth: 160, marginTop: 8 }}>
             保存设置
           </Button>
         </Form>
       </Spin>
+
+      <Modal
+        title="水印效果预览（示例照片）"
+        open={previewOpen}
+        footer={null}
+        onCancel={() => setPreviewOpen(false)}
+        width={680}
+      >
+        {previewUrl && <img src={previewUrl} alt="水印预览" style={{ width: "100%", borderRadius: 8 }} />}
+        <div style={{ color: "#86909c", fontSize: 12, marginTop: 8 }}>上方为按当前模板与位置生成的示例效果；保存后实际照片下载时按同样规则添加。</div>
+      </Modal>
     </div>
   );
 }
