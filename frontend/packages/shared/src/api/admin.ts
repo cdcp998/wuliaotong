@@ -1,0 +1,93 @@
+/** 系统管理接口（P7）：用户/角色/权限/操作日志/备份。 */
+import { http, type PageData } from "./client";
+
+export interface SysUser {
+  id: number;
+  username: string;
+  real_name: string;
+  phone: string;
+  role_id: number;
+  role_name: string;
+  status: number;
+  last_login_at: string | null;
+  created_at: string;
+}
+
+export interface SysRole {
+  id: number;
+  code: string;
+  name: string;
+  description: string;
+  is_builtin: number;
+  permission_ids: number[];
+  permission_codes: string[];
+}
+
+export interface SysPermission {
+  id: number;
+  parent_id: number;
+  name: string;
+  code: string;
+  type: number;
+}
+
+export interface OperationLog {
+  id: number;
+  username: string;
+  module: string;
+  action: string;
+  method: string;
+  url: string;
+  params: string;
+  ip: string;
+  duration_ms: number;
+  created_at: string;
+}
+
+export interface BackupRecord {
+  id: number;
+  file_path: string;
+  file_size: number;
+  backup_type: string;
+  status: number;
+  created_at: string;
+}
+
+export const adminApi = {
+  users: (params: { keyword?: string; status?: number; role_id?: number; page?: number; page_size?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.keyword) q.set("keyword", params.keyword);
+    if (params.status !== undefined) q.set("status", String(params.status));
+    if (params.role_id) q.set("role_id", String(params.role_id));
+    q.set("page", String(params.page ?? 1));
+    q.set("page_size", String(params.page_size ?? 20));
+    return http.get<PageData<SysUser>>(`/users?${q}`);
+  },
+  createUser: (body: { username: string; password: string; real_name?: string; phone?: string; role_id: number }) =>
+    http.post<{ id: number; username: string }>("/users", body),
+  updateUser: (id: number, body: { real_name?: string; phone?: string; role_id?: number; status?: number; password?: string }) =>
+    http.put<null>(`/users/${id}`, body),
+  deleteUser: (id: number) => http.delete<null>(`/users/${id}`),
+
+  roles: () => http.get<SysRole[]>("/roles"),
+  createRole: (body: { code: string; name: string; description?: string }) => http.post<{ id: number; code: string }>("/roles", body),
+  updateRole: (id: number, body: { name?: string; description?: string }) => http.put<null>(`/roles/${id}`, body),
+  deleteRole: (id: number) => http.delete<null>(`/roles/${id}`),
+  permissions: () => http.get<SysPermission[]>("/permissions"),
+  updateRolePermissions: (id: number, permissionIds: number[]) => http.put<null>(`/roles/${id}/permissions`, { permission_ids: permissionIds }),
+
+  logs: (params: { username?: string; module?: string; method?: string; start?: string; end?: string; page?: number; page_size?: number } = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== "") q.set(k, String(v));
+    }
+    q.set("page", String(params.page ?? 1));
+    q.set("page_size", String(params.page_size ?? 20));
+    return http.get<PageData<OperationLog>>(`/logs?${q}`);
+  },
+
+  backups: (page = 1) => http.get<PageData<BackupRecord>>(`/backups?page=${page}&page_size=20`),
+  createBackup: () => http.post<{ id: number; file_path: string; file_size: number }>("/backups"),
+  deleteBackup: (id: number) => http.delete<null>(`/backups/${id}`),
+  backupDownloadUrl: (id: number) => `/api/v1/backups/${id}/download`,
+};

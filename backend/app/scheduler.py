@@ -15,6 +15,7 @@ from app.db import SessionLocal
 from app.models.base import BaseProduct
 from app.models.stock import StkStock
 from app.models.sys import SysNotification, SysRole, SysUser
+from app.services.backup import cleanup_auto_backups, run_backup
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,25 @@ def scan_stock_alerts() -> dict:
 scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
 
 
+def run_daily_backup() -> dict:
+    """每日凌晨自动备份（sys_backup_log backup_type=auto），保留最近 AUTO_KEEP 份。"""
+    db = SessionLocal()
+    try:
+        run_backup(db, "auto")
+        removed = cleanup_auto_backups(db)
+        logger.info("daily backup done, cleaned=%d", removed)
+        return {"backup": 1, "cleaned": removed}
+    except Exception as exc:  # 备份失败不影响主流程，记录一条失败日志
+        logger.error("daily backup failed: %s", exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return {"backup": 0, "error": str(exc)}
+    finally:
+        db.close()
+
+
 def start_scheduler() -> None:
     """应用启动时调用（lifespan）。"""
     if not scheduler.running:
@@ -85,8 +105,16 @@ def start_scheduler() -> None:
             replace_existing=True,
             next_run_time=datetime.now(),
         )
+        scheduler.add_job(
+            run_daily_backup,
+            "cron",
+            hour=2,
+            minute=0,
+            id="daily_backup",
+            replace_existing=True,
+        )
         scheduler.start()
-        logger.info("scheduler started: stock_alerts(1min)")
+        logger.info("scheduler started: stock_alerts(1min), daily_backup(02:00)")
 
 
 def stop_scheduler() -> None:

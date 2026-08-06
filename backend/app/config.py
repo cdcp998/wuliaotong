@@ -38,5 +38,9 @@ class Settings:
     # OCR 引擎：rapidocr / paddle
     ocr_engine: str = os.getenv("OCR_ENGINE", "rapidocr")
 
+    # 数据库备份：mysqldump 可执行文件路径（phpstudy 等环境需配绝对路径）
+    backup_mysqldump: str = os.getenv("BACKUP_MYSQLDUMP", "mysqldump")
+    backup_dir: str = os.getenv("BACKUP_DIR", str(BASE_DIR / "data" / "backups"))
+
 
 settings = Settings()

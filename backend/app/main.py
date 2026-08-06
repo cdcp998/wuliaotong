@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.api import auth as auth_api
+from app.api import admin as admin_api
 from app.api import advanced as advanced_api
 from app.api import base_data as base_data_api
 from app.api import files as files_api
@@ -117,6 +118,7 @@ app.include_router(base_data_api.static_router, prefix=settings.api_prefix)  # å
 app.include_router(base_data_api.router, prefix=settings.api_prefix)
 app.include_router(stock_api.router, prefix=settings.api_prefix)
 app.include_router(advanced_api.router, prefix=settings.api_prefix)
+app.include_router(admin_api.router, prefix=settings.api_prefix)
 app.include_router(requisition_api.router, prefix=settings.api_prefix)
 app.include_router(report_api.router, prefix=settings.api_prefix)
 app.include_router(ocr_api.router, prefix=settings.api_prefix)

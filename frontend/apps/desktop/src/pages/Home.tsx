@@ -20,6 +20,10 @@ const ENTRIES: Entry[] = [
   { title: "送货单 OCR 录入", path: "/ocr/delivery", perm: "pch:ocr", desc: "拍照识别送货单 → 带入入库" },
   { title: "AI 建议处理", path: "/ai-suggestions", perm: "ocr:manage", desc: "未匹配商品识别建议 · 确认新增" },
   { title: "系统设置", path: "/system/settings", perm: "sys:config", desc: "OCR 引擎 · 大模型 API" },
+  { title: "用户管理", path: "/system/users", perm: "sys:user", desc: "账号 · 角色分配 · 启用停用" },
+  { title: "角色与权限", path: "/system/roles", perm: "sys:role", desc: "角色 · 权限点分配" },
+  { title: "操作日志", path: "/system/logs", perm: "sys:log", desc: "写操作审计查询" },
+  { title: "备份管理", path: "/system/backups", perm: "sys:backup", desc: "手动/自动备份 · 下载" },
 ];
 
 export function HomePage() {
