@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import app
+from app.services.llm import LLMNotConfigured
 
 client = TestClient(app)
 _TAG = uuid.uuid4().hex[:6]
@@ -58,7 +59,6 @@ class _FakeDoubao:
 
 
 def _setup_product(name: str) -> int:
-    client.post("/api/v1/units", json={"name": "OCR件" + uuid.uuid4().hex[:6]})
     unit_id = client.get("/api/v1/units").json()["data"][0]["id"]
     r = client.post("/api/v1/products", json={"code": "9" + str(uuid.uuid4().int % 10**9), "name": name, "unit_id": unit_id})
     return r.json()["data"]["id"]
@@ -78,10 +78,55 @@ def test_ocr_quick_match(monkeypatch):
     assert any(m["product_id"] == pid for m in data["matches"])
 
 
+def test_ocr_quick_fallback_to_vision(monkeypatch):
+    """本地 OCR 关闭（off）时回退视觉模型识别商品文字。"""
+    _login_admin()
+    file_id = _upload_img()
+    monkeypatch.setattr(
+        "app.api.ocr.get_ocr_engine", lambda db: (_ for _ in ()).throw(ValueError("识别引擎已关闭"))
+    )
+    monkeypatch.setattr(
+        "app.api.ocr.get_llm",
+        lambda db, name="deepseek": _FakeDoubao("轴承6204\n数量 10"),
+    )
+    r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
+    assert r.json()["code"] == 0, r.text
+    assert r.json()["data"]["lines"] == ["轴承6204", "数量 10"]
+
+
+def test_ocr_quick_unavailable_when_vision_off(monkeypatch):
+    """本地 OCR 关闭且视觉模型未配置 → 提示「识别功能不可用」。"""
+    _login_admin()
+    file_id = _upload_img()
+    monkeypatch.setattr(
+        "app.api.ocr.get_ocr_engine", lambda db: (_ for _ in ()).throw(ValueError("识别引擎已关闭"))
+    )
+    monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured("未配置")))
+    r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
+    assert r.json()["code"] == 5001
+    assert "不可用" in r.json()["message"]
+
+
 def test_ocr_recognize_task(monkeypatch):
     _login_admin()
     file_id = _upload_img()
-    monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine(["送货单", "轴承 10 8.50"]))
+
+    class _FakeVision:
+        """伪造 SiliconFlow 视觉客户端：返回送货单 JSON；chat_text 用于 DeepSeek 材料分类。"""
+
+        name = "siliconflow"
+
+        def chat_image(self, image_bytes: bytes, prompt: str) -> str:
+            return (
+                '{"ocr_text": "供应商：测试供应商\\n送货单号：X001\\n轴承6204 10 8.50", '
+                '"supplier_name": "测试供应商", "bill_no": "X001", '
+                '"items": [{"product_name": "轴承6204", "qty": "10", "price": "8.50", "amount": "85.00"}]}'
+            )
+
+        def chat_text(self, system: str, user: str) -> str:
+            return '[{"product_name": "轴承6204", "qty": "10", "price": "8.50", "amount": "85.00", "category_name": "轴承类"}]'
+
+    monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": _FakeVision())
 
     r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1")
     assert r.json()["code"] == 0, r.text
@@ -94,13 +139,38 @@ def test_ocr_recognize_task(monkeypatch):
             break
         time.sleep(0.1)
     assert r.json()["data"]["status"] == "done"
-    assert "lines" in r.json()["data"]["structured"]
+    st = r.json()["data"]["structured"]
+    # SiliconFlow 视觉识别 → DeepSeek 材料分类
+    assert st["supplier_name"] == "测试供应商"
+    assert st["bill_no"] == "X001"
+    assert st["items"][0]["product_name"] == "轴承6204"
+    assert st["items"][0]["category_name"] == "轴承类"
+    assert st["_engine"] == "siliconflow+deepseek"
+    assert "lines" in st and len(st["lines"]) >= 1
     # 识别记录落库
     recs = client.get("/api/v1/ocr/records").json()["data"]
     assert recs["total"] >= 1
 
     # 任务不存在 → 4003
     assert client.get("/api/v1/ocr/tasks/nope").json()["code"] == 4003
+
+
+def test_ocr_recognize_unconfigured(monkeypatch):
+    """SiliconFlow 未配置：任务 done 且无结构化（前端人工录入），不报错。"""
+    _login_admin()
+    file_id = _upload_img()
+    monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured()))
+
+    r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1")
+    assert r.json()["code"] == 0, r.text
+    task_id = r.json()["data"]["task_id"]
+    for _ in range(20):
+        r = client.get(f"/api/v1/ocr/tasks/{task_id}")
+        if r.json()["data"]["status"] == "done":
+            break
+        time.sleep(0.1)
+    assert r.json()["data"]["status"] == "done"
+    assert "lines" in r.json()["data"]["structured"]
 
 
 def test_ocr_recognize_failed(monkeypatch):
@@ -112,7 +182,7 @@ def test_ocr_recognize_failed(monkeypatch):
             raise RuntimeError("engine down")
 
     monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _Broken())
-    r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1")
+    r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=2")
     task_id = r.json()["data"]["task_id"]
     for _ in range(20):
         r = client.get(f"/api/v1/ocr/tasks/{task_id}")

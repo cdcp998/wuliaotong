@@ -28,9 +28,10 @@ from app.core.response import (
     ok,
 )
 from app.db import SessionLocal, get_db
-from app.models.base import BaseCategory, BaseProduct, BaseUnit
+from app.models.base import BaseCategory, BaseProduct, BaseSupplier, BaseUnit
 from app.models.ocr import AiSuggestion, OcrRecord
 from app.models.sys import SysFile, SysStorage, SysUser
+from app.schemas.ocr import DeliveryConfirmReq
 from app.services.llm import LLMNotConfigured, get_llm
 from app.services.ocr.client import get_ocr_engine
 from app.services.storage import resolve_storage_path
@@ -79,24 +80,135 @@ def _match_products(db: Session, text: str) -> list[dict]:
     ]
 
 
-def _structured_by_deepseek(db: Session, lines: list[str]) -> dict | None:
-    """DeepSeek 将送货单文本行结构化为 JSON 商品行；未配置/失败返回 None（前端人工录入）。"""
+VISION_DELIVERY_PROMPT = (
+    "你是送货单识别助手。请识别图片中的送货单，只输出一个 JSON 对象，不要解释。"
+    "字段：ocr_text(图片中全部文字，按阅读顺序用换行分隔)、supplier_name(供应商名称，可空字符串)、"
+    "bill_no(送货单号/单据编号，可空字符串)、items(商品明细数组，每项：product_name(商品名)、"
+    "material_code(物料编码，可空)、spec(规格型号，可空)、unit(单位，可空)、qty(数量字符串)、"
+    "price(单价字符串)、amount(金额字符串，可空))。无法判断的项留空或跳过。"
+)
+
+VISION_TEXT_PROMPT = (
+    "你是文字识别助手。识别图片中的所有文字（商品名称、规格、型号、编号等），"
+    "按阅读顺序每行一条输出，只输出识别到的文字行，不要解释。"
+)
+
+
+def _recognize_text(db: Session, data: bytes) -> list[str]:
+    """商品外包装/标签识别：本地 OCR 引擎优先；本地引擎关闭时回退视觉模型。
+
+    两者都不可用（视觉未配置/未启用/调用失败）时抛 BizError，提示「识别功能不可用」。
+    """
+    try:
+        lines = get_ocr_engine(db).recognize(data)
+        return [l.text for l in lines]
+    except ValueError:  # 本地 OCR 引擎已关闭（ocr.engine=off）或配置未知
+        try:
+            vllm = get_llm(db, "siliconflow")
+        except LLMNotConfigured:
+            raise BizError(
+                E_OCR_UNAVAILABLE,
+                "识别功能不可用：本地 OCR 识别引擎已关闭，且视觉模型未配置或未启用（系统设置 → OCR 与大模型）",
+            )
+        try:
+            content = vllm.chat_image(data, VISION_TEXT_PROMPT)
+        except Exception as e:  # noqa: BLE001 视觉调用失败（网络/鉴权/限流等）
+            raise BizError(
+                E_OCR_UNAVAILABLE,
+                f"识别功能不可用：本地 OCR 识别引擎已关闭，视觉模型调用失败：{e}",
+            )
+        return [ln.strip() for ln in content.splitlines() if ln.strip()]
+
+
+def _delivery_by_vision(db: Session, image_bytes: bytes) -> dict | None:
+    """SiliconFlow 视觉模型识别送货单图片 → 结构化（含 OCR 原文行）。未配置/失败返回 None。"""
+    try:
+        vllm = get_llm(db, "siliconflow")
+    except LLMNotConfigured:
+        return None
+    try:
+        content = vllm.chat_image(image_bytes, VISION_DELIVERY_PROMPT)
+        start, end = content.find("{"), content.rfind("}")
+        if start < 0 or end < 0:
+            return None
+        data = json.loads(content[start : end + 1])
+        if not isinstance(data, dict):
+            return None
+        lines = [ln.strip() for ln in str(data.get("ocr_text") or "").splitlines() if ln.strip()]
+        items = (data.get("items") or [])[:50]
+        return {
+            "supplier_name": str(data.get("supplier_name") or "").strip(),
+            "bill_no": str(data.get("bill_no") or "").strip(),
+            "items": items,
+            "lines": lines,
+        }
+    except Exception:
+        return None
+
+
+def _classify_items_by_deepseek(db: Session, items: list) -> list:
+    """DeepSeek 对视觉识别结果做材料分类（补 category_name）；未配置/失败返回原样。"""
+    if not items:
+        return items
     try:
         llm = get_llm(db, "deepseek")
     except LLMNotConfigured:
-        return None
+        return items
+    cats = [c.name for c in db.scalars(select(BaseCategory).order_by(BaseCategory.sort, BaseCategory.id)).all()]
     prompt = (
-        "你是送货单识别助手。将以下OCR识别的文字行整理为商品明细，只输出JSON数组，"
-        "每项字段：product_name(商品名)、qty(数量字符串)、price(单价字符串)、amount(金额字符串，可空)。"
-        "无法判断的项跳过。不要输出其他内容。\n文本行：\n" + "\n".join(lines)
+        "你是材料分类助手。系统材料分类："
+        + (", ".join(cats) if cats else "（暂无分类，全部输出未分类）")
+        + "。为每条材料选择最合适的分类名（都不匹配输出\"未分类\"）。"
+        + "输入与输出均为 JSON items 数组（每项 product_name/qty/price 等原样保留，新增 category_name）。只输出 JSON。"
+        + json.dumps(items, ensure_ascii=False)
     )
     try:
         content = llm.chat_text("只输出JSON，不要解释", prompt)
         start, end = content.find("["), content.rfind("]")
         if start < 0 or end < 0:
+            return items
+        classified = json.loads(content[start : end + 1])
+        if isinstance(classified, list) and len(classified) == len(items):
+            return [
+                {**it, "category_name": str(c.get("category_name") or "未分类").strip()}
+                for it, c in zip(items, classified)
+            ]
+    except Exception:
+        pass
+    return items
+
+
+def _structured_by_deepseek(db: Session, lines: list[str]) -> dict | None:
+    """DeepSeek 将送货单文本行结构化为 JSON；未配置/失败返回 None（前端人工录入）。
+
+    返回：{"supplier_name": 供应商(可空), "bill_no": 送货单号(可空),
+           "items": [{product_name, material_code(可空), spec(可空), qty, price, amount}]}
+    """
+    try:
+        llm = get_llm(db, "deepseek")
+    except LLMNotConfigured:
+        return None
+    prompt = (
+        "你是送货单识别助手。将以下OCR识别的文字行整理为结构化JSON对象，只输出JSON，不要解释。\n"
+        "对象字段：supplier_name(供应商名称，可空字符串)、bill_no(单据编号/订单编号，可空字符串)、"
+        "items(商品明细数组，每项：product_name(商品名)、material_code(物料编码，可空)、"
+        "spec(规格型号，可空)、qty(数量字符串)、price(单价字符串)、amount(金额字符串，可空))。\n"
+        "无法判断的项留空或跳过。\n文本行：\n" + "\n".join(lines)
+    )
+    try:
+        content = llm.chat_text("只输出JSON，不要解释", prompt)
+        start, end = content.find("{"), content.rfind("}")
+        if start < 0 or end < 0:
             return None
-        items = json.loads(content[start : end + 1])
-        return {"items": items[:50]}
+        data = json.loads(content[start : end + 1])
+        if not isinstance(data, dict):
+            return None
+        items = data.get("items") or []
+        return {
+            "supplier_name": str(data.get("supplier_name") or "").strip(),
+            "bill_no": str(data.get("bill_no") or "").strip(),
+            "items": items[:50],
+        }
     except Exception:
         return None
 
@@ -127,9 +239,13 @@ def _save_record(file_id: int, ocr_type: int, texts: list[str], structured: dict
 def ocr_recognize(
     file_id: int,
     ocr_type: int = Query(1, ge=1, le=3, description="1 送货单 / 2 商品外包装 / 3 标签型号"),
+    mode: str = Query("llm", description="llm 视觉识别（SiliconFlow+DeepSeek）；旧值 auto/template 兼容忽略"),
     user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    # 已移除本地模板识别，mode 仅保留兼容（统一走 SiliconFlow 视觉识别 + DeepSeek 分类）
+    if mode not in ("auto", "template", "llm"):
+        raise BizError(E_PARAM, "mode 必须为 auto/template/llm")
     data = _read_file_bytes(db, file_id)
     task_id = uuid.uuid4().hex
     with _task_lock:
@@ -139,17 +255,21 @@ def ocr_recognize(
         try:
             s_eng = SessionLocal()
             try:
-                lines = get_ocr_engine(s_eng).recognize(data)  # 引擎选择读库（后台可切换）
+                texts: list[str] = []
+                structured = None
+                if ocr_type == 1:
+                    # 送货单：SiliconFlow 视觉识别（不再使用本地模板/本地 OCR）→ DeepSeek 材料分类
+                    structured = _delivery_by_vision(s_eng, data)
+                    if structured:
+                        texts = structured.get("lines") or []
+                        structured["items"] = _classify_items_by_deepseek(s_eng, structured.get("items") or [])
+                        structured["lines"] = texts
+                        structured.setdefault("_engine", "siliconflow+deepseek")
+                else:
+                    # 商品外包装/标签型号：本地 OCR 优先，本地关闭时回退视觉模型
+                    texts = _recognize_text(s_eng, data)
             finally:
                 s_eng.close()
-            texts = [l.text for l in lines]
-            structured = None
-            if ocr_type == 1:  # 送货单结构化：后台线程必须用独立会话（不可共享请求级 db）
-                s2 = SessionLocal()
-                try:
-                    structured = _structured_by_deepseek(s2, texts)
-                finally:
-                    s2.close()
             record_id = _save_record(file_id, ocr_type, texts, structured, user.id)
             with _task_lock:
                 _tasks[task_id] = {
@@ -187,13 +307,14 @@ def ocr_quick(
     user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """同步识别商品照片并匹配系统商品（出入库带入用）。"""
+    """同步识别商品照片并匹配系统商品（出入库带入用）。本地 OCR 关闭时回退视觉模型。"""
     data = _read_file_bytes(db, file_id)
     try:
-        lines = get_ocr_engine(db).recognize(data)
+        texts = _recognize_text(db, data)
+    except BizError:
+        raise  # 识别功能不可用等业务错误原样透传
     except Exception as e:
         raise BizError(E_OCR_UNAVAILABLE, f"识别失败：{e}")
-    texts = [l.text for l in lines]
     matches: list[dict] = []
     seen: set[int] = set()
     for t in texts:
@@ -201,8 +322,143 @@ def ocr_quick(
             if m["product_id"] not in seen:
                 seen.add(m["product_id"])
                 matches.append(m)
-    _save_record(file_id, ocr_type, texts, None, user.id)
-    return ok({"lines": texts, "matches": matches})
+    record_id = _save_record(file_id, ocr_type, texts, None, user.id)
+    return ok({"lines": texts, "matches": matches, "record_id": record_id})
+
+
+# ============================ 条形码解码 ============================
+
+
+@router.post("/barcode/decode", dependencies=[Depends(require_permission("ocr:use"))])
+def barcode_decode(
+    file_id: int = Query(..., description="已上传图片文件 id"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """解码图片中的条形码/二维码（zxing-cpp），返回条码值供材料查询。"""
+    from app.services.ocr.barcode import decode_barcode
+
+    data = _read_file_bytes(db, file_id)
+    value = decode_barcode(data)
+    return ok({"barcode": value})
+
+
+# ============================ 送货单确认（供应商落库） ============================
+
+
+@router.post("/ocr/delivery/confirm", dependencies=[Depends(require_permission("pch:in"))])
+def delivery_confirm(
+    req: DeliveryConfirmReq,
+    user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """送货单 OCR 人工确认：供应商落库 + 物料自动匹配/新增 + 识别记录回写。
+
+    - 供应商：同名匹配，无则自动创建（OCR+日期编码）
+    - 物料：物料编码/名称精确匹配系统材料；不存在则用识别数据自动新增（单位自动匹配/创建）
+    - 返回 items（含 product_id）供「新建入库」直接带入，单据通过 ocr_record_id 关联送货单
+    """
+    supplier_id = 0
+    supplier_created = False
+    supplier_name = req.supplier_name.strip()
+    if supplier_name:
+        sup = db.scalar(select(BaseSupplier).where(BaseSupplier.name == supplier_name).order_by(BaseSupplier.id.desc()))
+        if sup is None:
+            # 自动编码：OCR + yyyymmdd + 4 位当日序号（复用序号则递增重试）
+            prefix = "OCR" + datetime.now().strftime("%Y%m%d")
+            codes = db.scalars(select(BaseSupplier.code).where(BaseSupplier.code.like(prefix + "%"))).all()
+            seq = max((int(c[len(prefix):]) for c in codes if c[len(prefix):].isdigit()), default=0)
+            code = f"{prefix}{seq + 1:04d}"
+            while db.scalar(select(BaseSupplier.id).where(BaseSupplier.code == code)):
+                seq += 1
+                code = f"{prefix}{seq + 1:04d}"
+            sup = BaseSupplier(code=code, name=supplier_name, remark="送货单 OCR 自动创建")
+            sup._created = True  # 临时标记（非表字段），用于响应提示
+            db.add(sup)
+            db.flush()
+        supplier_id = sup.id
+        supplier_created = bool(getattr(sup, "_created", False))
+
+    # 物料自动匹配/新增：确认转入入库时，系统不存在的物料自动创建
+    confirmed_items: list[dict] = []
+    for it in req.items:
+        name = (it.product_name or "").strip()
+        if not name:
+            confirmed_items.append(it.model_dump() | {"product_id": 0})
+            continue
+        p = _match_or_create_product(db, it, name)
+        confirmed_items.append(it.model_dump() | {
+            "product_id": p.id if p else 0,
+            "product_name": name,
+            "_created": bool(getattr(p, "_created", False)),
+        })
+
+    if req.record_id:
+        rec = db.get(OcrRecord, req.record_id)
+        if rec is None:
+            raise BizError(E_NOT_FOUND, "识别记录不存在")
+        rec.structured = {
+            "supplier_name": supplier_name,
+            "bill_no": req.bill_no.strip(),
+            "items": confirmed_items,
+        }
+        rec.match_status = 3  # 人工确认
+    db.commit()
+    return ok({
+        "supplier_id": supplier_id,
+        "supplier_name": supplier_name,
+        "supplier_created": supplier_created,
+        "bill_no": req.bill_no.strip(),
+        "record_id": req.record_id,
+        "items": confirmed_items,
+        "created_products": [i for i in confirmed_items if i.get("_created")],
+    })
+
+
+def _match_or_create_product(db: Session, it, name: str) -> BaseProduct | None:
+    """按 物料编码 → 名称 精确匹配系统材料；不存在则用识别数据自动新增（单位自动匹配/创建）。"""
+    if it.material_code:
+        p = db.scalar(select(BaseProduct).where(BaseProduct.material_code == it.material_code.strip()))
+        if p:
+            return p
+    p = db.scalar(select(BaseProduct).where(BaseProduct.name == name))
+    if p:
+        return p
+    try:
+        unit_id = 0
+        unit_name = (it.unit or "").strip()
+        if unit_name and not re.match(r"^.{1,6}[0-9a-f]{6}$", unit_name):
+            u = db.scalar(select(BaseUnit).where(BaseUnit.name == unit_name))
+            if u is None:
+                u = BaseUnit(name=unit_name, remark="送货单 OCR 自动创建")
+                db.add(u)
+                db.flush()
+            unit_id = u.id
+        if not unit_id:
+            unit_id = db.scalar(select(BaseUnit.id).order_by(BaseUnit.id).limit(1)) or 0
+        if not unit_id:
+            return None  # 无单位库无法建材料（前端可稍后在入库页选择）
+        code = str((db.execute(text("SELECT MAX(CAST(code AS UNSIGNED)) FROM base_product WHERE code REGEXP '^[0-9]+$'")).scalar() or 0) + 1)
+        # DeepSeek 材料分类：匹配/自动创建分类后关联（自动分类入库）
+        category_id = 0
+        cat_name = (getattr(it, "category_name", "") or "").strip()
+        if cat_name and cat_name != "未分类":
+            cat = db.scalar(select(BaseCategory).where(BaseCategory.name == cat_name))
+            if cat is None:
+                cat = BaseCategory(name=cat_name, parent_id=0, sort=0, path="/")
+                db.add(cat)
+                db.flush()
+            category_id = cat.id
+        p = BaseProduct(
+            code=code, material_code=it.material_code.strip(), name=name, spec=it.spec.strip(),
+            unit_id=unit_id, category_id=category_id, purchase_price=_parse_price(it.price),
+            remark="送货单 OCR 自动创建",
+        )
+        db.add(p)
+        db.flush()
+        p._created = True  # type: ignore[attr-defined]  # 标记本次新建（响应 created_products）
+        return p
+    except Exception:
+        return None
 
 
 # ============================ 识别记录 ============================

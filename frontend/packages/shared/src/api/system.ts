@@ -42,6 +42,12 @@ export interface OcrInstallState {
 export const systemApi = {
   getSettings: () => http.get<Settings>("/settings"),
   updateSettings: (body: Partial<Settings>) => http.put<null>("/settings", body),
+  /** 用已保存的 SiliconFlow Key 拉取模型列表（保存设置后调用）。 */
+  listSiliconflowModels: () => http.post<{ models: { id: string; owned_by: string }[] }>("/llm/siliconflow/models"),
+  /** 用已保存的 DeepSeek Key 拉取模型列表（保存设置后调用）。 */
+  listDeepseekModels: () => http.post<{ models: { id: string; owned_by: string }[] }>("/llm/deepseek/models"),
+  /** 用已保存的豆包 Key 拉取模型列表（保存设置后调用）。 */
+  listDoubaoModels: () => http.post<{ models: { id: string; owned_by: string }[] }>("/llm/doubao/models"),
   installPaddle: () => http.post<OcrInstallState>("/ocr/install-paddle"),
   installStatus: () => http.get<OcrInstallState>("/ocr/install-status"),
   /** 水印预览（示例底图，未保存也可预览）：返回 blob URL。 */

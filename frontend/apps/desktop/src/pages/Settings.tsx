@@ -22,7 +22,7 @@ const EMPTY: Settings = {
   "llm.deepseek.model": "",
   "llm.siliconflow.enabled": "1",
   "llm.siliconflow.api_key": "",
-  "llm.siliconflow.base_url": "",
+  "llm.siliconflow.base_url": "https://api.siliconflow.cn/v1",
   "llm.siliconflow.model": "",
   "auth.register_mode": "closed",
   "auth.forgot_method": "phone",
@@ -38,11 +38,21 @@ const EMPTY: Settings = {
 export function SettingsPage() {
   const { message } = App.useApp();
   const [form] = Form.useForm<Settings>();
+  const ocrEngine = Form.useWatch("ocr.engine", form);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewing, setPreviewing] = useState(false);
+  // SiliconFlow 模型列表（保存 API Key 后拉取，供选择模型）
+  const [sfModels, setSfModels] = useState<{ id: string; owned_by: string }[]>([]);
+  const [sfLoading, setSfLoading] = useState(false);
+  // DeepSeek（文本模型）模型列表
+  const [dsModels, setDsModels] = useState<{ id: string; owned_by: string }[]>([]);
+  const [dsLoading, setDsLoading] = useState(false);
+  // 豆包模型列表
+  const [doubaoModels, setDoubaoModels] = useState<{ id: string; owned_by: string }[]>([]);
+  const [doubaoLoading, setDoubaoLoading] = useState(false);
   // PP-OCR 自动安装状态（后台线程安装，前端轮询）
   const [installState, setInstallState] = useState<OcrInstallState>({ status: "idle", log: "" });
   const installTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -91,10 +101,53 @@ export function SettingsPage() {
     try {
       await systemApi.updateSettings(values);
       message.success("保存成功（密钥字段留空表示不修改）");
+      // 已配置 Key 时，保存后拉取模型列表供选择
+      if (values["llm.siliconflow.api_key"]) void fetchSfModels();
+      if (values["llm.deepseek.api_key"]) void fetchDsModels();
+      if (values["llm.doubao.api_key"]) void fetchDoubaoModels();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "保存失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function fetchSfModels() {
+    setSfLoading(true);
+    try {
+      const r = await systemApi.listSiliconflowModels();
+      setSfModels(r.models);
+      message.success(`已获取 ${r.models.length} 个模型`);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "获取模型列表失败");
+    } finally {
+      setSfLoading(false);
+    }
+  }
+
+  async function fetchDsModels() {
+    setDsLoading(true);
+    try {
+      const r = await systemApi.listDeepseekModels();
+      setDsModels(r.models);
+      message.success(`已获取 ${r.models.length} 个模型`);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "获取模型列表失败");
+    } finally {
+      setDsLoading(false);
+    }
+  }
+
+  async function fetchDoubaoModels() {
+    setDoubaoLoading(true);
+    try {
+      const r = await systemApi.listDoubaoModels();
+      setDoubaoModels(r.models);
+      message.success(`已获取 ${r.models.length} 个模型`);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "获取模型列表失败");
+    } finally {
+      setDoubaoLoading(false);
     }
   }
 
@@ -115,6 +168,13 @@ export function SettingsPage() {
       setPreviewing(false);
     }
   }
+
+  const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "20px 0 4px" }}>
+      <span style={{ width: 3, height: 14, background: "#1677ff", borderRadius: 2 }} />
+      <Typography.Text strong>{children}</Typography.Text>
+    </div>
+  );
 
   const keyField = (k: keyof Settings, label: string, opts?: { secret?: boolean; hint?: string; placeholder?: string }) => (
     <Form.Item
@@ -169,16 +229,22 @@ export function SettingsPage() {
 
   const ocrTab = (
     <>
-      <Form.Item name="ocr.engine" label="识别引擎">
+      <Form.Item
+        name="ocr.engine"
+        label="本地 OCR 识别引擎"
+        extra="商品外包装/标签识别优先使用本地 OCR；选择「关闭」后自动回退使用视觉模型（下方视觉模型需已配置并启用）；若视觉模型也未启用，相关识别功能将提示「不可用」"
+      >
         <Radio.Group
           options={[
             { value: "rapidocr", label: "RapidOCR-json（Windows 本地）" },
-            { value: "paddle", label: "PP-OCR（PaddleOCR，默认引擎，可自动安装）" },
+            { value: "paddle", label: "PP-OCR（PaddleOCR，本地默认引擎，可自动安装）" },
+            { value: "off", label: "关闭（商品识别回退视觉模型）" },
           ]}
         />
       </Form.Item>
       <Form.Item name="ocr.model_version" label="PP-OCR 模型版本" tooltip="保存后生效；PP-OCRv6 为最新版本（需 paddleocr 3.4+，首次识别自动下载模型）">
         <Select
+          disabled={ocrEngine === "off"}
           options={[
             { value: "PP-OCRv6", label: "PP-OCRv6（推荐）" },
             { value: "PP-OCRv5", label: "PP-OCRv5" },
@@ -211,6 +277,7 @@ export function SettingsPage() {
           <Spin size="small" description="后台安装中（约 1-5 分钟，视网络）…" />
         )}
       </Space>
+      <SectionTitle>豆包（拍照识别物品）</SectionTitle>
       <Form.Item
         name="llm.doubao.enabled"
         label="启用豆包大模型"
@@ -225,13 +292,23 @@ export function SettingsPage() {
       </Typography.Text>
       {keyField("llm.doubao.api_key", "豆包 API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
       <Form.Item name="llm.doubao.base_url" label="豆包 Base URL"><Input placeholder="https://ark.cn-beijing.volces.com/api/v3" /></Form.Item>
-      <Form.Item name="llm.doubao.model" label="豆包模型"><Input placeholder="doubao-1-5-vision-pro-32k-250115" /></Form.Item>
-      <Typography.Text type="secondary" style={{ display: "block", margin: "12px 0 8px" }}>
-        DeepSeek（送货单文字结构化）
-      </Typography.Text>
+      <Form.Item name="llm.doubao.model" label="豆包模型" extra="保存豆包 API Key 后自动获取模型列表，也可点右侧按钮手动刷新">
+        <Space.Compact style={{ width: "100%" }}>
+          <Select
+            style={{ flex: 1 }}
+            showSearch
+            allowClear
+            placeholder="如：doubao-1-5-vision-pro-32k-250115"
+            options={doubaoModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
+            optionFilterProp="label"
+          />
+          <Button loading={doubaoLoading} onClick={() => void fetchDoubaoModels()}>获取模型列表</Button>
+        </Space.Compact>
+      </Form.Item>
+      <SectionTitle>文本模型（文字结构化 / 材料分类）</SectionTitle>
       <Form.Item
         name="llm.deepseek.enabled"
-        label="启用 DeepSeek 大模型"
+        label="启用文本模型"
         valuePropName="checked"
         getValueProps={(v) => ({ checked: v !== "0" })}
         normalize={(v) => (v ? "1" : "0")}
@@ -239,17 +316,27 @@ export function SettingsPage() {
         <Switch />
       </Form.Item>
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
-        对 SiliconFlow 视觉识别结果做材料分类（自动分类入库）；未配置时跳过分类
+        对视觉模型识别结果做材料分类（自动分类入库）；未配置时跳过分类
       </Typography.Text>
-      {keyField("llm.deepseek.api_key", "DeepSeek API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
-      <Form.Item name="llm.deepseek.base_url" label="DeepSeek Base URL"><Input placeholder="https://api.deepseek.com/v1" /></Form.Item>
-      <Form.Item name="llm.deepseek.model" label="DeepSeek 模型"><Input placeholder="deepseek-chat" /></Form.Item>
-      <Typography.Text type="secondary" style={{ display: "block", margin: "12px 0 8px" }}>
-        SiliconFlow（送货单视觉识别，必需）
-      </Typography.Text>
+      {keyField("llm.deepseek.api_key", "文本模型 API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
+      <Form.Item name="llm.deepseek.base_url" label="文本模型 Base URL"><Input placeholder="https://api.deepseek.com/v1" /></Form.Item>
+      <Form.Item name="llm.deepseek.model" label="文本模型名称" extra="保存文本模型 API Key 后自动获取模型列表，也可点右侧按钮手动刷新">
+        <Space.Compact style={{ width: "100%" }}>
+          <Select
+            style={{ flex: 1 }}
+            showSearch
+            allowClear
+            placeholder="如：deepseek-chat"
+            options={dsModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
+            optionFilterProp="label"
+          />
+          <Button loading={dsLoading} onClick={() => void fetchDsModels()}>获取模型列表</Button>
+        </Space.Compact>
+      </Form.Item>
+      <SectionTitle>视觉模型（送货单识别，必需）</SectionTitle>
       <Form.Item
         name="llm.siliconflow.enabled"
-        label="启用 SiliconFlow 视觉大模型"
+        label="启用视觉模型"
         valuePropName="checked"
         getValueProps={(v) => ({ checked: v !== "0" })}
         normalize={(v) => (v ? "1" : "0")}
@@ -257,11 +344,23 @@ export function SettingsPage() {
         <Switch />
       </Form.Item>
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
-        送货单识别统一走 SiliconFlow 视觉模型（已移除本地模板识别）；未配置时识别结果为空，可手动录入
+        送货单识别统一走视觉模型（已移除本地模板识别）；未配置时识别结果为空，可手动录入
       </Typography.Text>
-      {keyField("llm.siliconflow.api_key", "SiliconFlow API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
-      <Form.Item name="llm.siliconflow.base_url" label="SiliconFlow Base URL"><Input placeholder="https://api.siliconflow.cn/v1" /></Form.Item>
-      <Form.Item name="llm.siliconflow.model" label="SiliconFlow 视觉模型"><Input placeholder="Qwen/Qwen2.5-VL-7B-Instruct" /></Form.Item>
+      {keyField("llm.siliconflow.api_key", "视觉模型 API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
+      <Form.Item name="llm.siliconflow.base_url" label="视觉模型 Base URL"><Input placeholder="https://api.siliconflow.cn/v1" /></Form.Item>
+      <Form.Item name="llm.siliconflow.model" label="视觉模型名称" extra="保存视觉模型 API Key 后自动获取模型列表，也可点右侧按钮手动刷新">
+        <Space.Compact style={{ width: "100%" }}>
+          <Select
+            style={{ flex: 1 }}
+            showSearch
+            allowClear
+            placeholder="如：Qwen/Qwen2.5-VL-7B-Instruct"
+            options={sfModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
+            optionFilterProp="label"
+          />
+          <Button loading={sfLoading} onClick={() => void fetchSfModels()}>获取模型列表</Button>
+        </Space.Compact>
+      </Form.Item>
     </>
   );
 
@@ -310,10 +409,21 @@ export function SettingsPage() {
   );
 
   return (
-    <div style={{ padding: 24, maxWidth: 820 }}>
-      <Typography.Title level={4} style={{ marginTop: 0 }}>系统设置</Typography.Title>
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: "16px 24px 48px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <Typography.Title level={4} style={{ margin: 0 }}>系统设置</Typography.Title>
+          <Typography.Text type="secondary">站点信息 · 识别引擎与大模型 · 账号安全 · 邮件服务</Typography.Text>
+        </div>
+        <Button type="primary" size="large" loading={saving} onClick={() => void save()}>保存设置</Button>
+      </div>
       <Spin spinning={loading}>
-        <Form form={form} layout="vertical">
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={() => void save()}
+          style={{ background: "#fff", borderRadius: 12, padding: "8px 24px 16px", boxShadow: "0 1px 3px rgba(0,0,0,.06)" }}
+        >
           <Tabs
             items={[
               { key: "base", label: "基础设置", children: baseTab },
@@ -322,9 +432,6 @@ export function SettingsPage() {
               { key: "smtp", label: "邮件服务", children: smtpTab },
             ]}
           />
-          <Button type="primary" size="large" loading={saving} onClick={() => void save()} style={{ minWidth: 160, marginTop: 8 }}>
-            保存设置
-          </Button>
         </Form>
       </Spin>
 
