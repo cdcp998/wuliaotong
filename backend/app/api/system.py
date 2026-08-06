@@ -1,6 +1,7 @@
 """系统接口：health、系统设置（OCR 引擎/大模型 API 等，管理员后台维护，《后端API设计.md》§9）。"""
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from io import BytesIO
@@ -10,6 +11,8 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger("app.system")
 
 from app.config import settings
 from app.core.deps import require_permission
@@ -60,6 +63,7 @@ SETTINGS_KEYS: dict[str, str] = {
     "watermark.template": "str",  # 完成工作照片水印模板（{location}/{time}/{gps} 占位符）
     "watermark.position": "str",  # 完成工作照片水印位置（bottom/top/bottom-left/bottom-right/top-left/top-right）
     "watermark.bg_opaque": "str",  # 水印背景：1 黑色不透明底（默认）/ 0 透明背景仅文字描边
+    "log.level": "str",  # 运行时日志级别：DEBUG / INFO（默认）/ WARN / ERROR（保存后立即生效）
 }
 
 
@@ -101,6 +105,14 @@ def update_settings(body: dict[str, str], db: Session = Depends(get_db)) -> dict
     for key, value in body.items():
         if key not in SETTINGS_KEYS:
             raise BizError(E_PARAM, f"未知配置项: {key}")
+        if key == "log.level":
+            # 运行时日志级别：校验并立即生效（无需重启）
+            from app.core.logging_config import set_log_level
+
+            try:
+                set_log_level(value)
+            except ValueError as e:
+                raise BizError(E_PARAM, str(e))
         if SETTINGS_KEYS[key] == "secret":
             if not value or value.startswith("****"):
                 continue  # 不修改密钥
@@ -110,6 +122,7 @@ def update_settings(body: dict[str, str], db: Session = Depends(get_db)) -> dict
         else:
             cfg.config_value = str(value)
     db.commit()
+    logger.info("系统设置已更新：%s", ", ".join(body.keys()))
     return ok()
 
 

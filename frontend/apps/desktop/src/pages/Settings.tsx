@@ -14,6 +14,7 @@ const EMPTY: Settings = {
   "watermark.template": "",
   "watermark.position": "bottom",
   "watermark.bg_opaque": "1",
+  "log.level": "INFO",
   "llm.doubao.api_key": "",
   "llm.doubao.base_url": "",
   "llm.doubao.model": "",
@@ -259,6 +260,17 @@ export function SettingsPage() {
       <Button loading={previewing} onClick={() => void previewWatermark()} style={{ marginBottom: 8 }}>
         预览水印效果
       </Button>
+      <Form.Item name="log.level" label="运行时日志级别" extra="后端日志文件 logs/app-YYYY-MM-DD.log；保存后立即生效（无需重启）">
+        <Select
+          style={{ width: 240 }}
+          options={[
+            { value: "DEBUG", label: "DEBUG（最详细，含大模型调用明细）" },
+            { value: "INFO", label: "INFO（默认：请求/登录/OCR任务/备份等关键操作）" },
+            { value: "WARN", label: "WARN（仅警告与错误）" },
+            { value: "ERROR", label: "ERROR（仅错误）" },
+          ]}
+        />
+      </Form.Item>
     </>
   );
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
 import random
 import string
 import threading
@@ -44,6 +45,8 @@ from app.schemas.auth import (
     UserInfo,
 )
 from app.services.mail import send_reset_code
+
+logger = logging.getLogger("app.auth")
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -178,11 +181,14 @@ def login(req: LoginReq, response: Response, db: Session = Depends(get_db)) -> d
     user = db.scalar(select(SysUser).where(SysUser.username == req.username))
     if not user or not verify_password(req.password, user.password_hash):
         _bump_fail(req.username)
+        logger.warning("登录失败：用户名或密码错误 user=%s", req.username)
         raise BizError(E_LOGIN_FAILED, "用户名或密码错误")
     if user.status != 1:
         _bump_fail(req.username)
+        logger.warning("登录失败：账号已停用 user=%s", req.username)
         raise BizError(E_LOGIN_FAILED, "账号已停用")
     _clear_fail(req.username)
+    logger.info("登录成功 user=%s", req.username)
 
     token = generate_session_token()
     db.add(

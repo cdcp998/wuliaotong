@@ -30,6 +30,7 @@ export interface Settings {
   "watermark.template": string;
   "watermark.position": string;
   "watermark.bg_opaque": string;
+  "log.level": string;
 }
 
 /** PP-OCR 自动安装状态（设置页轮询）；done 时 mode 表示 paddle 是否启用 CUDA（cpu/gpu）。 */

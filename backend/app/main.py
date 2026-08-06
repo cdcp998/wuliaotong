@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from contextlib import asynccontextmanager
 
@@ -10,13 +11,14 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.api import auth as auth_api
 from app.api import admin as admin_api
 from app.api import advanced as advanced_api
 from app.api import base_data as base_data_api
 from app.api import files as files_api
+from app.api import geo as geo_api
 from app.api import notification as notification_api
 from app.api import ocr as ocr_api
 from app.api import requisition as requisition_api
@@ -26,16 +28,34 @@ from app.api import storage as storage_api
 from app.api import system as system_api
 from app.config import settings
 from app.core.deps import resolve_session_user
+from app.core.logging_config import configure_logging, set_log_level
 from app.core.response import BizError, E_PARAM, biz_error_handler, err
 from app.db import SessionLocal, engine
+from app.models.sys import SysConfig
 from app.scheduler import start_scheduler, stop_scheduler
+
+logger = logging.getLogger("app.main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动自检：数据库连通性；启动定时任务（库存预警）。"""
+    """启动自检：数据库连通性；初始化运行时日志（环境变量/系统设置级别）；启动定时任务。"""
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
+    # 运行时日志：先按环境变量默认初始化，再以系统设置 log.level 覆盖（管理后台可运行时调整）
+    configure_logging(settings.log_level, settings.log_dir)
+    try:
+        db = SessionLocal()
+        try:
+            cfg = db.scalar(select(SysConfig).where(SysConfig.config_key == "log.level"))
+            if cfg and cfg.config_value:
+                set_log_level(cfg.config_value)
+                logger.info("日志级别已按系统设置应用：%s", cfg.config_value)
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001 日志配置失败不影响启动
+        logger.warning("读取系统设置日志级别失败：%s", exc)
+    logger.info("后端启动完成（日志级别 %s，文件目录 %s）", logging.getLevelName(logging.getLogger().getEffectiveLevel()), settings.log_dir)
     start_scheduler()
     yield
     stop_scheduler()
@@ -98,8 +118,15 @@ def _audit_log(db, request: Request, status_code: int, duration_ms: int) -> None
 @app.middleware("http")
 async def audit_middleware(request: Request, call_next):
     start = time.time()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.error("请求异常 %s %s", request.method, request.url.path, exc_info=True)
+        raise
     duration_ms = int((time.time() - start) * 1000)
+    # 文件日志：关键操作（写方法 + 非 2xx）记录 INFO/WARN，便于按天日志排障
+    level = logging.INFO if response.status_code < 400 else logging.WARNING
+    logger.log(level, "%s %s -> %s (%dms)", request.method, request.url.path, response.status_code, duration_ms)
     if request.method in ("POST", "PUT", "DELETE"):
         # 独立会话异步落库，避免占用请求事务
         def _run() -> None:
@@ -126,3 +153,4 @@ app.include_router(notification_api.router, prefix=settings.api_prefix)
 app.include_router(files_api.router, prefix=settings.api_prefix)
 app.include_router(storage_api.router, prefix=settings.api_prefix)
 app.include_router(system_api.router, prefix=settings.api_prefix)
+app.include_router(geo_api.router, prefix=settings.api_prefix)

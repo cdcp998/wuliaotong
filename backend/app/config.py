@@ -35,12 +35,16 @@ class Settings:
         if o.strip()
     ]
 
-    # OCR 引擎：rapidocr / paddle
-    ocr_engine: str = os.getenv("OCR_ENGINE", "rapidocr")
+    # OCR 引擎：paddle（默认） / rapidocr
+    ocr_engine: str = os.getenv("OCR_ENGINE", "paddle")
 
     # 数据库备份：mysqldump 可执行文件路径（phpstudy 等环境需配绝对路径）
     backup_mysqldump: str = os.getenv("BACKUP_MYSQLDUMP", "mysqldump")
     backup_dir: str = os.getenv("BACKUP_DIR", str(BASE_DIR / "data" / "backups"))
+
+    # 运行时日志：级别（DEBUG/INFO/WARN/ERROR，默认 INFO；可被系统设置 log.level 运行时覆盖）与目录（按天轮转）
+    log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    log_dir: str = os.getenv("LOG_DIR", str(BASE_DIR / "logs"))
 
 
 settings = Settings()

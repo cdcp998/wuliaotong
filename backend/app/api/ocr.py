@@ -7,11 +7,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+
+logger = logging.getLogger("app.ocr")
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_, select, text
@@ -336,10 +339,13 @@ def ocr_recognize(
                     "structured": structured or {"lines": texts},
                     "error": "",
                 }
+            logger.info("OCR 任务完成 task=%s type=%s record_id=%s items=%s lines=%s", task_id, ocr_type, record_id, len((structured or {}).get("items") or []), len(texts))
         except Exception as e:
+            logger.error("OCR 任务失败 task=%s type=%s: %s", task_id, ocr_type, e, exc_info=True)
             with _task_lock:
                 _tasks[task_id] = {"status": "failed", "record_id": 0, "structured": None, "error": str(e)}
 
+    logger.info("OCR 任务开始 task=%s file_id=%s type=%s mode=%s user=%s", task_id, file_id, ocr_type, mode, user.username)
     _executor.submit(_run)
     return ok({"task_id": task_id})
 

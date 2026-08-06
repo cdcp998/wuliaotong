@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import base64
+import logging
+import time
 from typing import Protocol
 
 import httpx
@@ -16,6 +18,8 @@ from sqlalchemy.orm import Session
 
 from app.core.response import BizError, E_LLM_FAILED
 from app.models.sys import SysConfig
+
+logger = logging.getLogger("app.llm")
 
 LLM_TIMEOUT = 60
 
@@ -53,6 +57,7 @@ class _OpenAICompatClient:
         self.vision = vision
 
     def _request(self, messages: list[dict]) -> str:
+        start = time.time()
         try:
             resp = httpx.post(
                 f"{self.base_url}/chat/completions",
@@ -62,8 +67,11 @@ class _OpenAICompatClient:
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
+            content = data["choices"][0]["message"]["content"].strip()
+            logger.debug("大模型调用成功 name=%s model=%s 耗时=%.1fs 输入=%d 输出=%d", self.name, self.model, time.time() - start, len(messages), len(content))
+            return content
         except Exception as e:  # 网络/鉴权/限流等
+            logger.error("大模型调用失败 name=%s model=%s 耗时=%.1fs: %s", self.name, self.model, time.time() - start, e)
             raise BizError(E_LLM_FAILED, f"大模型调用失败：{e}")
 
     def chat_text(self, system: str, user: str) -> str:

@@ -5,6 +5,7 @@ super_admin 角色权限不可改；内置角色不可删；有用户引用的�
 """
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Query
@@ -39,6 +40,8 @@ from app.schemas.admin import (
 )
 from app.schemas.stock import PageData
 from app.services.backup import backup_dir, cleanup_auto_backups, run_backup
+
+logger = logging.getLogger("app.admin")
 
 router = APIRouter(tags=["系统管理"], dependencies=[Depends(get_current_user)])
 
@@ -291,6 +294,10 @@ def list_logs(
 @router.post("/backups", dependencies=[Depends(require_permission("sys:backup"))])
 def create_backup(db: Session = Depends(get_db)) -> dict:
     log = run_backup(db, "manual")
+    if log.status == 1:
+        logger.info("数据库备份成功 id=%s file=%s size=%s", log.id, log.file_path, log.file_size)
+    else:
+        logger.error("数据库备份失败 id=%s", log.id)
     return ok({"id": log.id, "file_path": log.file_path, "file_size": log.file_size})
 
 
