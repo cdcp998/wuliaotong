@@ -1,4 +1,4 @@
-/** 出入库/盘点接口（仓管员手机端）。 */
+/** 出入库/盘点/OCR 接口。 */
 import { http, type PageData } from "./client";
 
 export interface InboundItem {
@@ -153,4 +153,74 @@ export const fileApi = {
     if (json.code !== 0) throw new Error(json.message);
     return json.data;
   },
+};
+
+export interface OcrLine {
+  text: string;
+  score?: number;
+}
+
+export interface OcrTask {
+  status: "running" | "done" | "failed";
+  record_id: number;
+  structured: { lines?: string[]; items?: { product_name: string; qty?: string; price?: string; amount?: string }[] } | null;
+  error?: string;
+}
+
+export interface OcrQuickResult {
+  lines: string[];
+  matches: { product_id: number; code: string; name: string; spec: string }[];
+}
+
+export const ocrApi = {
+  recognize: (fileId: number, ocrType: 1 | 2 | 3) =>
+    http.post<{ task_id: string }>(`/ocr/recognize?file_id=${fileId}&ocr_type=${ocrType}`),
+  taskStatus: (taskId: string) => http.get<OcrTask>(`/ocr/tasks/${taskId}`),
+  quick: (fileId: number, ocrType: 2 | 3) =>
+    http.post<OcrQuickResult>(`/ocr/quick?file_id=${fileId}&ocr_type=${ocrType}`),
+  records: (matchStatus?: number, page = 1) =>
+    http.get<PageData<Record<string, unknown>>>(
+      `/ocr/records${matchStatus !== undefined ? `?match_status=${matchStatus}` : ""}${matchStatus !== undefined ? "&" : "?"}page=${page}&page_size=20`
+    ),
+  match: (recordId: number) =>
+    http.post<{ suggestion_id: number; product_name: string; detail: Record<string, unknown> }>(`/ocr/match?record_id=${recordId}`),
+};
+
+export interface AiSuggestion {
+  id: number;
+  ocr_record_id: number;
+  product_name: string;
+  model: string;
+  suggestion: { spec?: string; category?: string; note?: string } | null;
+  status: number;
+  new_product_id: number;
+  created_at: string;
+}
+
+export const aiApi = {
+  list: (status = 1, page = 1) =>
+    http.get<PageData<AiSuggestion>>(`/ai-suggestions?status=${status}&page=${page}&page_size=20`),
+  accept: (id: number, params: { code?: string; name?: string; category_id?: number; unit_id?: number; purchase_price?: string }) =>
+    http.post<{ product_id: number; code: string }>(
+      `/ai-suggestions/${id}/accept?${new URLSearchParams(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)])
+      )}`
+    ),
+  ignore: (id: number) => http.post<null>(`/ai-suggestions/${id}/ignore`),
+};
+
+export interface PurchaseInBill {
+  id: number;
+  bill_no: string;
+  supplier_name: string;
+  warehouse_name: string;
+  status: number;
+  bill_date: string;
+  total_qty: string;
+  total_amount: string;
+}
+
+export const purchaseApi = {
+  list: (page = 1) => http.get<PageData<PurchaseInBill>>(`/purchase-in?page=${page}&page_size=20`),
+  void: (id: number) => http.post<null>(`/purchase-in/${id}/void`),
 };
