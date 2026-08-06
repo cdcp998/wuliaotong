@@ -410,6 +410,8 @@ def ocr_quick(
             if m["product_id"] not in seen:
                 seen.add(m["product_id"])
                 matches.append(m)
+                # 模板自动学习：同一商品 3 次命中同一行 → 自动生成模板（下次秒级匹配，不调大模型）
+                _maybe_learn_template(db, m["product_id"], t, m.get("spec") or "")
     record_id = _save_record(file_id, ocr_type, texts, None, user.id)
     return ok({"lines": texts, "matches": matches, "record_id": record_id})
 
@@ -462,6 +464,48 @@ def classify_product(req: ClassifyReq, db: Session = Depends(get_db)) -> dict:
 
 
 # ============================ 本地 OCR 商品识别模板（视觉大模型训练） ============================
+
+# 模板自动学习：quick 匹配成功时记录命中行（product_id → 最近 3 次指纹）；同一商品 3 次稳定命中自动生成模板。
+# 内存态（单进程部署足够，重启丢失可重新积累）；每商品生成后清空计数。
+_tpl_learn: dict[int, list[str]] = {}
+
+
+def _maybe_learn_template(db: Session, product_id: int, anchor: str, spec: str = "") -> None:
+    """quick 匹配成功时调用：同一商品累计 3 次命中同一行文本 → 自动生成/更新模板（auto=True）。
+
+    手动训练模板（auto 为空）同锚点时不覆盖（手动优先）。
+    """
+    if not product_id or not anchor:
+        return
+    key = anchor.replace(" ", "").replace("\u3000", "")
+    if len(key) < 4:
+        return
+    hits = _tpl_learn.setdefault(product_id, [])
+    hits.append(key)
+    if len(hits) > 3:
+        hits.pop(0)
+    # 3 次命中且文本稳定（3 次中至少 2 次相同指纹）才自动生成，防抖动误训练
+    if len(hits) < 3 or len(set(hits)) > 2:
+        return
+    p = db.get(BaseProduct, product_id)
+    if p is None:
+        return
+    anchors = [anchor]
+    tpl = {
+        "id": uuid.uuid4().hex[:8],
+        "name": p.name,
+        "brand": "",
+        "product_name": p.name,
+        "spec": spec,
+        "anchors": anchors,
+        "auto": True,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    # 同锚点：仅替换 auto 模板；手动训练模板（auto 为空）保留（手动优先）
+    templates = [t for t in load_templates(db) if not (t.get("anchors") == anchors and t.get("auto"))]
+    templates.append(tpl)
+    save_templates(db, templates)
+    _tpl_learn[product_id] = []  # 已生成，重置计数（后续可再积累新文本）
 
 
 @router.post("/ocr/template/train", dependencies=[Depends(require_permission("ocr:manage"))])
