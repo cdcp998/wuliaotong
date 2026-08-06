@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
+import { App, Button, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type Department, type SysPermission, type SysRole } from "@wlt/shared";
+
+import { DataTable } from "../components/DataTable";
 
 /** 用户权限设置管理（电脑端，超管 sys:role）：角色 CRUD + 权限勾选 + 所属单位。 */
 export function RolesPage() {
@@ -34,7 +36,7 @@ export function RolesPage() {
   async function createRole() {
     const v = await form.validateFields();
     try {
-      await adminApi.createRole({ code: v.code, name: v.name, description: v.description ?? "", department_id: v.department_id ?? 0 });
+      await adminApi.createRole({ code: "role" + Date.now(), name: v.name, description: v.description ?? "", department_id: v.department_id ?? 0 });
       message.success("角色已创建");
       setCreating(false);
       void load();
@@ -56,8 +58,7 @@ export function RolesPage() {
   }
 
   const columns: ColumnsType<SysRole> = [
-    { title: "编码", dataIndex: "code", width: 140 },
-    { title: "名称", dataIndex: "name", width: 120 },
+    { title: "名称", dataIndex: "name", width: 160 },
     { title: "所属单位", width: 120, render: (_, r) => r.department_name || "-" },
     { title: "说明", dataIndex: "description" },
     {
@@ -107,9 +108,9 @@ export function RolesPage() {
     <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}>用户权限设置</h2>
-        <Button type="primary" onClick={() => { setCreating(true); form.resetFields(); }}>新建角色</Button>
+        <Button type="primary" onClick={() => setCreating(true)}>新建角色</Button>
       </div>
-      <Table rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={false} />
+      <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={false} rowSelection onBatchDelete={async (keys) => { for (const k of keys) await adminApi.deleteRole(Number(k)); message.success(`已删除 ${keys.length} 个角色`); void load(); }} />
 
       <Modal
         title="新建角色"
@@ -117,11 +118,9 @@ export function RolesPage() {
         onOk={() => void createRole()}
         onCancel={() => setCreating(false)}
         destroyOnHidden
+        afterOpenChange={(o) => { if (o) form.resetFields(); }}
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="code" label="编码" rules={[{ required: true, pattern: /^[a-z][a-z0-9:_-]*$/, message: "小写字母开头，可含数字/:_-" }]}>
-            <Input placeholder="如：auditor" />
-          </Form.Item>
           <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}>
             <Input placeholder="如：审计员" />
           </Form.Item>

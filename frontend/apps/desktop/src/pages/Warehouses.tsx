@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { App, Button, Card, Empty, Form, Input, InputNumber, Modal, Popconfirm, Space, Spin, Tag, Typography } from "antd";
 
 import { baseApi, type Location, type Shelf, type Warehouse } from "@wlt/shared";
@@ -60,7 +60,7 @@ export function WarehousesPage() {
         await baseApi.updateWarehouse(whModal.editing.id, { name: v.name, address: v.address ?? "", remark: v.remark ?? "" });
         message.success("仓库已保存");
       } else {
-        await baseApi.createWarehouse({ code: v.code, name: v.name, address: v.address ?? "", remark: v.remark ?? "" });
+        await baseApi.createWarehouse({ code: v.code || "WH" + Date.now(), name: v.name, address: v.address ?? "", remark: v.remark ?? "" });
         message.success("仓库已创建");
       }
       setWhModal({ open: false, editing: null });
@@ -122,7 +122,6 @@ export function WarehousesPage() {
           <Button
             type="primary"
             onClick={() => {
-              whForm.resetFields();
               setWhModal({ open: true, editing: null });
             }}
           >
@@ -165,7 +164,7 @@ export function WarehousesPage() {
             <>
               <Space style={{ marginBottom: 12 }} wrap>
                 <span style={{ fontWeight: 600 }}>{selectedWh.name}</span>
-                <Button size="small" onClick={() => { whForm.setFieldsValue(selectedWh); setWhModal({ open: true, editing: selectedWh }); }}>编辑仓库</Button>
+                <Button size="small" onClick={() => { setWhModal({ open: true, editing: selectedWh }); }}>编辑仓库</Button>
                 <Popconfirm
                   title="停用该仓库？"
                   onConfirm={async () => {
@@ -184,7 +183,7 @@ export function WarehousesPage() {
                   size="small"
                   type="primary"
                   ghost
-                  onClick={() => { shelfForm.resetFields(); setShelfModal({ open: true, editing: null }); }}
+                  onClick={() => { setShelfModal({ open: true, editing: null }); }}
                 >
                   + 新建货架
                 </Button>
@@ -198,7 +197,7 @@ export function WarehousesPage() {
                     <Card key={s.id} size="small" title={`${s.code}${s.name ? ` ${s.name}` : ""}`}
                       extra={
                         <Space>
-                          <Button size="small" onClick={() => { shelfForm.setFieldsValue(s); setShelfModal({ open: true, editing: s }); }}>编辑</Button>
+                          <Button size="small" onClick={() => { setShelfModal({ open: true, editing: s }); }}>编辑</Button>
                           <Popconfirm
                             title="删除该货架？"
                             onConfirm={async () => {
@@ -213,7 +212,7 @@ export function WarehousesPage() {
                           >
                             <Button size="small" danger>删除</Button>
                           </Popconfirm>
-                          <Button size="small" type="primary" ghost onClick={() => { locForm.resetFields(); setLocModal({ open: true, shelf: s }); }}>+ 库位</Button>
+                          <Button size="small" type="primary" ghost onClick={() => { setLocModal({ open: true, shelf: s }); }}>+ 库位</Button>
                         </Space>
                       }
                     >
@@ -250,13 +249,16 @@ export function WarehousesPage() {
       </div>
 
       {/* 仓库 Modal */}
-      <Modal title={whModal.editing ? "编辑仓库" : "新建仓库"} open={whModal.open} onOk={() => void saveWarehouse()} onCancel={() => setWhModal({ open: false, editing: null })} confirmLoading={busy} destroyOnHidden>
+      <Modal
+        title={whModal.editing ? "编辑仓库" : "新建仓库"}
+        open={whModal.open}
+        onOk={() => void saveWarehouse()}
+        onCancel={() => setWhModal({ open: false, editing: null })}
+        confirmLoading={busy}
+        destroyOnHidden
+        afterOpenChange={(o) => { if (!o) return; if (whModal.editing) whForm.setFieldsValue(whModal.editing); else whForm.resetFields(); }}
+      >
         <Form form={whForm} layout="vertical">
-          {!whModal.editing && (
-            <Form.Item name="code" label="仓库编码" rules={[{ required: true, message: "请输入编码" }]}>
-              <Input placeholder="如 WH01" />
-            </Form.Item>
-          )}
           <Form.Item name="name" label="仓库名称" rules={[{ required: true, message: "请输入名称" }]}>
             <Input placeholder="如 一号仓" />
           </Form.Item>
@@ -266,10 +268,18 @@ export function WarehousesPage() {
       </Modal>
 
       {/* 货架 Modal */}
-      <Modal title={shelfModal.editing ? "编辑货架" : "新建货架"} open={shelfModal.open} onOk={() => void saveShelf()} onCancel={() => setShelfModal({ open: false, editing: null })} confirmLoading={busy} destroyOnHidden>
+      <Modal
+        title={shelfModal.editing ? "编辑货架" : "新建货架"}
+        open={shelfModal.open}
+        onOk={() => void saveShelf()}
+        onCancel={() => setShelfModal({ open: false, editing: null })}
+        confirmLoading={busy}
+        destroyOnHidden
+        afterOpenChange={(o) => { if (!o) return; if (shelfModal.editing) shelfForm.setFieldsValue(shelfModal.editing); else shelfForm.resetFields(); }}
+      >
         <Form form={shelfForm} layout="vertical">
           {!shelfModal.editing && (
-            <Form.Item name="code" label="货架编码" rules={[{ required: true, message: "请输入编码" }]}>
+            <Form.Item name="code" label="货架编号" rules={[{ required: true, message: "请输入编号" }]}>
               <Input placeholder="如 A01" />
             </Form.Item>
           )}
@@ -279,7 +289,15 @@ export function WarehousesPage() {
       </Modal>
 
       {/* 库位 Modal */}
-      <Modal title={`新建库位（${locModal.shelf?.code ?? ""}）`} open={locModal.open} onOk={() => void saveLocation()} onCancel={() => setLocModal({ open: false, shelf: null })} confirmLoading={busy} destroyOnHidden>
+      <Modal
+        title={`新建库位（${locModal.shelf?.code ?? ""}）`}
+        open={locModal.open}
+        onOk={() => void saveLocation()}
+        onCancel={() => setLocModal({ open: false, shelf: null })}
+        confirmLoading={busy}
+        destroyOnHidden
+        afterOpenChange={(o) => { if (o) locForm.resetFields(); }}
+      >
         <Form form={locForm} layout="vertical">
           <Form.Item name="layer_no" label="层数" rules={[{ required: true, message: "请输入层数" }]}>
             <InputNumber min={1} style={{ width: 160 }} placeholder="如 1" />

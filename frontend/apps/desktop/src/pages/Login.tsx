@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { App, Alert, Button, Checkbox, Form, Input, Modal } from "antd";
 
 import { authApi, BizError, otherEndUrl, useAuthStore, type RegisterStatus } from "@wlt/shared";
@@ -70,7 +70,6 @@ export function LoginPage() {
       setForgotOpen(false);
       setForgotStep("ask");
       setForgotInfo(null);
-      forgotForm.resetFields();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "重置失败");
     }
@@ -88,7 +87,6 @@ export function LoginPage() {
       });
       message.success(r.message);
       setRegisterOpen(false);
-      registerForm.resetFields();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "注册失败");
     }
@@ -184,14 +182,13 @@ export function LoginPage() {
                     setForgotOpen(true);
                     setForgotStep("ask");
                     setForgotInfo(null);
-                    forgotForm.resetFields();
                   }}
                   style={{ marginRight: 10 }}
                 >
                   忘记密码？
                 </a>
                 {regStatus && regStatus.mode !== "closed" && (
-                  <a onClick={() => { setRegisterOpen(true); registerForm.resetFields(); }}>注册账号</a>
+                  <a onClick={() => setRegisterOpen(true)}>注册账号</a>
                 )}
               </span>
             </div>
@@ -212,6 +209,7 @@ export function LoginPage() {
         footer={null}
         onCancel={() => setForgotOpen(false)}
         destroyOnHidden
+        afterOpenChange={(o) => { if (o) forgotForm.resetFields(); }}
       >
         {forgotStep === "ask" && (
           <Form form={forgotForm} layout="vertical">
@@ -226,7 +224,7 @@ export function LoginPage() {
         )}
         {forgotStep === "reset" && forgotInfo && (
           <Form form={forgotForm} layout="vertical">
-            <Alert type="info" showIcon message={forgotInfo.message} style={{ marginBottom: 14 }} />
+            <Alert type="info" showIcon title={forgotInfo.message} style={{ marginBottom: 14 }} />
             <Form.Item name="code" label="邮箱验证码" rules={[{ required: true, message: "请输入邮件中的 6 位验证码" }]}>
               <Input placeholder="6 位验证码" maxLength={6} />
             </Form.Item>
@@ -238,7 +236,7 @@ export function LoginPage() {
         )}
         {forgotStep === "done" && forgotInfo && (
           <div>
-            <Alert type="info" showIcon message={forgotInfo.message} style={{ marginBottom: 14 }} />
+            <Alert type="info" showIcon title={forgotInfo.message} style={{ marginBottom: 14 }} />
             {forgotInfo.contact_phone && (
               <p style={{ fontSize: 15, textAlign: "center" }}>
                 管理员联系电话：<b style={{ color: "#1668dc" }}>{forgotInfo.contact_phone}</b>
@@ -250,7 +248,14 @@ export function LoginPage() {
       </Modal>
 
       {/* 注册账号 */}
-      <Modal title="注册账号" open={registerOpen} onOk={() => void doRegister()} onCancel={() => setRegisterOpen(false)} destroyOnHidden>
+      <Modal
+        title="注册账号"
+        open={registerOpen}
+        onOk={() => void doRegister()}
+        onCancel={() => setRegisterOpen(false)}
+        destroyOnHidden
+        afterOpenChange={(o) => { if (o) registerForm.resetFields(); }}
+      >
         <Form form={registerForm} layout="vertical">
           <Form.Item name="username" label="账号" rules={[{ required: true, min: 2, message: "至少 2 个字符" }]}>
             <Input placeholder="字母/数字/下划线" />

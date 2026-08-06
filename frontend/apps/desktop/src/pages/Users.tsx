@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
+import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type SysRole, type SysUser } from "@wlt/shared";
+
+import { DataTable } from "../components/DataTable";
 
 /** 用户管理（电脑端，超管 sys:user）。 */
 export function UsersPage() {
@@ -11,6 +13,7 @@ export function UsersPage() {
   const [roles, setRoles] = useState<SysRole[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [editing, setEditing] = useState<SysUser | null>(null);
@@ -19,14 +22,15 @@ export function UsersPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
     try {
-    const data = await adminApi.users({ keyword: keyword || undefined, page });
+    const data = await adminApi.users({ keyword: keyword || undefined, page, page_size: pageSize });
     setList(data.list);
     setTotal(data.total);
     } finally {
       setLoading(false);
     }
-  }, [keyword, page]);
+  }, [keyword, page, pageSize]);
 
   useEffect(() => {
     void load().catch((e) => message.error(e instanceof Error ? e.message : "加载失败"));
@@ -78,7 +82,6 @@ export function UsersPage() {
             onClick={() => {
               setEditing(r);
               setCreating(false);
-              form.setFieldsValue({ username: r.username, real_name: r.real_name, phone: r.phone, email: r.email, role_id: r.role_id, password: "" });
             }}
           >
             编辑
@@ -130,12 +133,12 @@ export function UsersPage() {
             style={{ width: 220 }}
             onSearch={(v) => { setKeyword(v); setPage(1); }}
           />
-          <Button type="primary" onClick={() => { setCreating(true); setEditing(null); form.resetFields(); }}>
+          <Button type="primary" onClick={() => { setCreating(true); setEditing(null); }}>
             新建用户
           </Button>
         </Space>
       </div>
-      <Table rowKey="id" loading={loading} locale={{ emptyText: "暂无数据" }} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <DataTable rowKey="id" loading={loading} locale={{ emptyText: "暂无数据" }} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }} rowSelection onBatchDelete={async (keys) => { for (const k of keys) await adminApi.deleteUser(Number(k)); message.success(`已停用 ${keys.length} 个账号`); void load(); }} />
 
       <Modal
         title={creating ? "新建用户" : `编辑用户：${editing?.username ?? ""}`}
@@ -143,6 +146,14 @@ export function UsersPage() {
         onOk={() => void submit()}
         onCancel={() => { setCreating(false); setEditing(null); }}
         destroyOnHidden
+        afterOpenChange={(o) => {
+          if (!o) return;
+          if (editing) {
+            form.setFieldsValue({ username: editing.username, real_name: editing.real_name, phone: editing.phone, email: editing.email, role_id: editing.role_id, password: "" });
+          } else {
+            form.resetFields();
+          }
+        }}
       >
         <Form form={form} layout="vertical" initialValues={{ role_id: roles[0]?.id }}>
           {creating && (
@@ -164,7 +175,7 @@ export function UsersPage() {
           <Form.Item name="phone" label="手机"><Input maxLength={20} /></Form.Item>
           <Form.Item name="email" label="邮箱（找回密码用）"><Input maxLength={100} /></Form.Item>
           <Form.Item name="role_id" label="角色" rules={[{ required: true, message: "请选择角色" }]}>
-            <Select options={roles.map((r) => ({ label: `${r.name}（${r.code}）`, value: r.id }))} />
+            <Select options={roles.map((r) => ({ label: r.name, value: r.id }))} />
           </Form.Item>
         </Form>
       </Modal>
