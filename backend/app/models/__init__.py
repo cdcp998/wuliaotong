@@ -17,6 +17,10 @@ from app.models.base import (
     BaseUnit,
     BaseWarehouse,
 )
+from app.models.ocr import (
+    AiSuggestion,
+    OcrRecord,
+)
 from app.models.requisition import (
     OutRequisition,
     OutRequisitionItem,
@@ -52,6 +56,8 @@ __all__ = [
     "BaseSupplier",
     "BaseUnit",
     "BaseWarehouse",
+    "AiSuggestion",
+    "OcrRecord",
     "StkCheck",
     "StkCheckItem",
     "StkOtherIo",
