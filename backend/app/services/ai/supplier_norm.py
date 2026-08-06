@@ -11,9 +11,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.response import BizError
 from app.models.base import BaseSupplier
-from app.services.llm import LLMNotConfigured, get_llm
 
 SUPPLIER_NORM_PROMPT = (
     "你是供应商数据管理员。判断「识别出的供应商名称」与候选供应商是否为同一实体"
@@ -28,33 +26,26 @@ def _norm(name: str) -> str:
 
 
 def match_supplier_by_llm(db: Session, name: str) -> tuple[int, str]:
-    """识别供应商名 → 库中同一实体（≤5 候选交 DeepSeek 判断）；返回 (supplier_id, matched_name)，未命中 (0, "")。"""
+    """本地供应商别名归一（P9-P1③，纯本地不用 LLM）：识别名与库中启用供应商归一后
+    互相包含（简称/全称/后缀差异，如「海口耐沃」⊆「海口耐沃办公设备有限公司」）
+    或前缀前 4 字一致且长度差≤4 → 视为同一实体；返回 (supplier_id, matched_name)，未命中 (0, "")。
+    """
     norm = _norm(name)
     if len(norm) < 2:
         return 0, ""
-    cands: list[BaseSupplier] = []
+    best: BaseSupplier | None = None
     for s in db.scalars(select(BaseSupplier).where(BaseSupplier.status == 1).order_by(BaseSupplier.id)).all():
         sn = _norm(s.name)
         if not sn:
             continue
-        if (norm in sn or sn in norm) or (len(norm) >= 4 and len(sn) >= 4 and norm[:4] == sn[:4]):
-            cands.append(s)
-            if len(cands) >= 5:
-                break
-    if not cands:
-        return 0, ""
-    try:
-        llm = get_llm(db, "deepseek")
-    except LLMNotConfigured:
-        return 0, ""
-    lines = [f"{i}: {s.name}" for i, s in enumerate(cands)]
-    try:
-        content = llm.chat_text("只输出JSON数组，不要解释", SUPPLIER_NORM_PROMPT + f"识别名：{name}\n候选：\n" + "\n".join(lines), scene="supplier_norm")
-        start, end = content.find("["), content.rfind("]")
-        result = json.loads(content[start : end + 1]) if start >= 0 and end >= 0 else []
-    except (BizError, json.JSONDecodeError):
-        return 0, ""
-    for r in result:
-        if isinstance(r, dict) and r.get("same") and isinstance(r.get("idx"), int) and 0 <= r["idx"] < len(cands):
-            return cands[r["idx"]].id, cands[r["idx"]].name
-    return 0, ""
+        if (norm in sn or sn in norm) and min(len(norm), len(sn)) >= 2 and abs(len(norm) - len(sn)) <= 8:
+            best = s
+            break
+        if (
+            best is None
+            and len(norm) >= 4 and len(sn) >= 4
+            and norm[:4] == sn[:4] and abs(len(norm) - len(sn)) <= 4
+        ):
+            best = s
+            break
+    return (best.id, best.name) if best else (0, "")

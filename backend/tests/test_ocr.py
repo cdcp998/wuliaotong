@@ -51,10 +51,10 @@ class _FakeDoubao:
     def __init__(self, content: str) -> None:
         self._content = content
 
-    def chat_image(self, image_bytes: bytes, prompt: str) -> str:
+    def chat_image(self, image_bytes: bytes, prompt: str, scene: str = "", user_id: int | None = None) -> str:
         return self._content
 
-    def chat_text(self, system: str, user: str) -> str:
+    def chat_text(self, system: str, user: str, scene: str = "", user_id: int | None = None) -> str:
         return self._content
 
 
@@ -117,14 +117,14 @@ def test_ocr_recognize_task(monkeypatch):
 
         name = "siliconflow"
 
-        def chat_image(self, image_bytes: bytes, prompt: str) -> str:
+        def chat_image(self, image_bytes: bytes, prompt: str, scene: str = "", user_id: int | None = None) -> str:
             return (
                 '{"ocr_text": "供应商：测试供应商\\n送货单号：X001\\n轴承6204 10 8.50", '
                 '"supplier_name": "测试供应商", "bill_no": "X001", '
                 '"items": [{"product_name": "轴承6204", "qty": "10", "price": "8.50", "amount": "85.00"}]}'
             )
 
-        def chat_text(self, system: str, user: str) -> str:
+        def chat_text(self, system: str, user: str, scene: str = "", user_id: int | None = None) -> str:
             return '[{"product_name": "轴承6204", "qty": "10", "price": "8.50", "amount": "85.00", "category_name": "轴承类"}]'
 
     monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": _FakeVision())

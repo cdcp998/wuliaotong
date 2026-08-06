@@ -212,7 +212,6 @@ export function RequisitionAuditPage() {
                     风险：{aiSum.risk_level}
                   </Tag>
                 )}
-                {aiSum && !aiSum.ai && <Tag>规则版</Tag>}
               </div>
               {aiSum ? (
                 <>

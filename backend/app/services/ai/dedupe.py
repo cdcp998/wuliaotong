@@ -1,6 +1,6 @@
-"""材料查重/合并建议（P9-P1②）：名称精确重复必查 + 名称相似候选 DeepSeek 判断 → 疑似重复分组。
+"""材料查重/合并建议（P9-P1②，纯本地不用 LLM）：名称精确相同必查 + 名称归一后互相包含/前缀一致的相似分组。
 
-只给建议不落库（除人工「标记重复」写 remark）；DeepSeek 不可用时降级为仅精确分组。
+只给建议不落库（除人工「标记重复」写 remark）；误判由人工过滤。
 """
 from __future__ import annotations
 
@@ -9,15 +9,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.response import BizError
 from app.models.base import BaseProduct, BaseUnit
-from app.services.llm import LLMNotConfigured, get_llm
-
-DEDUPE_PROMPT = (
-    "你是物料管理员。以下候选材料对（名称/规格/物料编码/单位）疑似重复，请判断每一对是否为同一材料"
-    "（同名不同写法、规格描述差异、全半角/标点差异视为同一材料；仅名称相同但规格明显不同不是同一材料）。"
-    "只输出JSON数组，每项 {idx, same(布尔), reason(简短理由)}。\n候选：\n"
-)
 
 
 def _norm(name: str) -> str:
@@ -78,29 +70,12 @@ def dedupe_scan(db: Session, max_pairs: int = 60) -> list[dict]:
     if not pairs:
         return groups
 
-    # DeepSeek 判断候选对
-    try:
-        llm = get_llm(db, "deepseek")
-    except LLMNotConfigured:
-        return groups  # 降级：仅精确分组
-    lines = [
-        f"{i}: A={a.name}(规格:{a.spec or '-'},编码:{a.material_code or '-'},单位:{_item(a)['unit_name'] or '-'}) | "
-        f"B={b.name}(规格:{b.spec or '-'},编码:{b.material_code or '-'},单位:{_item(b)['unit_name'] or '-'})"
-        for i, (a, b) in enumerate(pairs)
-    ]
-    try:
-        content = llm.chat_text("只输出JSON数组，不要解释", DEDUPE_PROMPT + "\n".join(lines), scene="dedupe")
-        start, end = content.find("["), content.rfind("]")
-        result = __import__("json").loads(content[start : end + 1]) if start >= 0 and end >= 0 else []
-    except Exception:  # noqa: BLE001 解析失败降级
-        return groups
-    for idx, r in enumerate(result):
-        if not isinstance(r, dict) or not r.get("same") or idx >= len(pairs):
-            continue
-        a, b = pairs[idx]
+    # 本地相似规则直接分组（P9-P2 确认不用 LLM）：名称归一后互相包含/前缀一致视为疑似重复，
+    # 人工确认后标记（mark-duplicate），误判由人工过滤
+    for a, b in pairs:
         groups.append({
             "group": [_item(a), _item(b)],
-            "reason": f"AI 判断：{str(r.get('reason') or '名称相似')}",
+            "reason": "名称相似（归一后互相包含或前缀一致）",
             "confidence": "medium",
         })
     return groups
