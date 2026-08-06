@@ -28,6 +28,7 @@ class RequisitionReq(BaseModel):
     warehouse_id: int = Field(gt=0)
     use_location: str = Field(min_length=1, max_length=100, description="使用地点（必填）")
     use_reason: str = Field(min_length=1, max_length=255, description="因何使用（必填）")
+    location_photo_file_id: int = 0  # 使用地点照片（不强制）
     remark: str = ""
     items: list[RequisitionItemReq] = Field(min_length=1)
 
@@ -60,6 +61,7 @@ class RequisitionOut(BaseModel):
     applicant_name: str = ""
     use_location: str
     use_reason: str
+    location_photo_file_id: int
     warehouse_id: int
     warehouse_name: str = ""
     total_qty: Decimal

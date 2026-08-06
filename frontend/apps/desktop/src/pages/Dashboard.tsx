@@ -75,7 +75,7 @@ export function DashboardPage() {
               <Card size="small" title="待办事项">
                 {todos && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <a onClick={() => navigate("/app")} style={{ cursor: "pointer" }}>
+                    <a onClick={() => navigate("/requisitions")} style={{ cursor: "pointer" }}>
                       待审计领用单 <Tag color={todos.pending_requisitions > 0 ? "red" : "default"}>{todos.pending_requisitions}</Tag>
                     </a>
                     <a onClick={() => navigate("/transfers")} style={{ cursor: "pointer" }}>

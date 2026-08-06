@@ -35,8 +35,13 @@ def post_stock_change(
     photo_file_id: int = 0,
     operator_id: int = 0,
     remark: str = "",
+    allow_negative: bool = False,
 ) -> StkStockLog:
-    """执行一笔库存变动（必须在调用方事务内）。qty_delta 正入负出，出库校验库存充足。"""
+    """执行一笔库存变动（必须在调用方事务内）。qty_delta 正入负出。
+
+    allow_negative=True 时允许出库后库存为负（领用流程：实物与系统账可能不符，
+    库存不足先出库并提示管理员核对，由 audit 环节把关）。
+    """
     if qty_delta == 0:
         raise BizError(4006, "变动数量不能为 0")
     if db.get(BaseProduct, product_id) is None:
@@ -54,7 +59,7 @@ def post_stock_change(
         .with_for_update()  # 行锁：防并发超卖/超领
     )
     before = stock.qty if stock else Decimal(0)
-    if qty_delta < 0 and before + qty_delta < 0:
+    if qty_delta < 0 and before + qty_delta < 0 and not allow_negative:
         raise BizError(E_STOCK_NOT_ENOUGH, f"库存不足：当前 {format(before, 'f')}，需出库 {format(-qty_delta, 'f')}")
 
     after = (before + qty_delta).quantize(_DEC3)

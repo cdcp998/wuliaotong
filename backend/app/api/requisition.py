@@ -1,7 +1,7 @@
 """领用接口：使用者申请/我的申请、仓管员审计、通知（《后端API设计.md》§4、§9）。
 
-审计通过 = 同一事务：行锁校验库存 → post_stock_change 扣减 → 状态更新 → 站内通知申请人；
-任一明细库存不足 → 整单回滚（4001）。
+流程（2026-08-06 确认）：**提交申请 = 自动出库**（允许负库存：实际与仓库账可能不符，
+库存不足先出库并站内通知管理员核对）；驳回/取消自动回补库存；审计通过仅确认状态。
 """
 from __future__ import annotations
 
@@ -38,6 +38,9 @@ router = APIRouter(tags=["领用"], dependencies=[Depends(get_current_user)])
 
 _DECIMAL_RE = __import__("re").compile(r"^\d+(\.\d+)?$")
 
+# 库存不足提示的接收角色（同库存预警）
+ALERT_RECEIVER_ROLES = ("super_admin", "manager", "storekeeper")
+
 
 def _parse_qty(v: str) -> Decimal:
     if not _DECIMAL_RE.match(v) or Decimal(v) <= 0:
@@ -64,6 +67,7 @@ def _req_out(db: Session, r: OutRequisition) -> dict:
         id=r.id, bill_no=r.bill_no, applicant_id=r.applicant_id,
         applicant_name=_user_name(db, r.applicant_id),
         use_location=r.use_location, use_reason=r.use_reason,
+        location_photo_file_id=r.location_photo_file_id,
         warehouse_id=r.warehouse_id, warehouse_name=wh.name if wh else "",
         total_qty=r.total_qty, status=r.status,
         audit_by=r.audit_by, audit_name=_user_name(db, r.audit_by),
@@ -86,6 +90,54 @@ def _req_out(db: Session, r: OutRequisition) -> dict:
 def _notify(db: Session, user_id: int, title: str, content: str, biz_type: str) -> None:
     """站内通知（调用方事务内）。"""
     db.add(SysNotification(user_id=user_id, title=title, content=content, biz_type=biz_type))
+
+
+def _notify_admins(db: Session, title: str, content: str) -> None:
+    """通知管理员（超管/管理者/仓管员）。"""
+    role_ids = db.scalars(select(SysRole.id).where(SysRole.code.in_(ALERT_RECEIVER_ROLES))).all()
+    uids = db.scalars(
+        select(SysUser.id).where(SysUser.role_id.in_(role_ids), SysUser.status == 1)
+    ).all()
+    for uid in uids:
+        db.add(SysNotification(user_id=uid, title=title, content=content, biz_type="预警"))
+
+
+def _deduct_items(db: Session, r: OutRequisition, operator_id: int) -> list[str]:
+    """逐条自动出库（允许负库存：实物与系统账可能不符），返回库存为负的明细提示。"""
+    db.flush()  # 会话 autoflush=False：先落库刚新增/替换的明细，查询才可见
+    items = db.scalars(
+        select(OutRequisitionItem).where(OutRequisitionItem.requisition_id == r.id).order_by(OutRequisitionItem.sort)
+    ).all()
+    shortages = []
+    for it in items:
+        log = post_stock_change(
+            db,
+            product_id=it.product_id, warehouse_id=r.warehouse_id, location_id=it.location_id,
+            change_type="领用出库", bill_type="out_requisition", bill_no=r.bill_no,
+            bill_item_id=it.id, qty_delta=-it.qty, cost_price=Decimal(0),
+            photo_file_id=it.photo_file_id, operator_id=operator_id,
+            allow_negative=True,
+        )
+        if log.after_qty < 0:
+            p = db.get(BaseProduct, it.product_id)
+            shortages.append(f"{p.name if p else it.product_id}({it.qty}件，出库后库存 {format(log.after_qty, 'f')})")
+    return shortages
+
+
+def _restock_items(db: Session, r: OutRequisition, operator_id: int, change_type: str) -> None:
+    """驳回/取消时回补库存（冲销提交时已自动扣减的库存）。"""
+    db.flush()
+    items = db.scalars(
+        select(OutRequisitionItem).where(OutRequisitionItem.requisition_id == r.id).order_by(OutRequisitionItem.sort)
+    ).all()
+    for it in items:
+        post_stock_change(
+            db,
+            product_id=it.product_id, warehouse_id=r.warehouse_id, location_id=it.location_id,
+            change_type=change_type, bill_type="out_requisition", bill_no=r.bill_no,
+            bill_item_id=it.id, qty_delta=it.qty, cost_price=Decimal(0),
+            photo_file_id=it.photo_file_id, operator_id=operator_id,
+        )
 
 
 def _replace_items(db: Session, req_id: int, items: list) -> Decimal:
@@ -121,6 +173,7 @@ def create_requisition(
         applicant_id=user.id,
         use_location=req.use_location,
         use_reason=req.use_reason,
+        location_photo_file_id=req.location_photo_file_id,
         warehouse_id=req.warehouse_id,
         status=REQ_STATUS_PENDING,
         remark=req.remark,
@@ -128,8 +181,16 @@ def create_requisition(
     db.add(bill)
     db.flush()
     bill.total_qty = _replace_items(db, bill.id, req.items)
+    # 提交即自动出库（允许负库存，不足通知管理员核对）
+    shortages = _deduct_items(db, bill, user.id)
+    if shortages:
+        _notify_admins(
+            db,
+            "领用出库库存不足",
+            f"{bill.bill_no} 领用出库后以下商品库存为负（实际库存与系统不符，请核对）：{'；'.join(shortages)}",
+        )
     db.commit()
-    return ok({"id": bill.id, "bill_no": bill.bill_no, "status": REQ_STATUS_PENDING})
+    return ok({"id": bill.id, "bill_no": bill.bill_no, "status": REQ_STATUS_PENDING, "shortages": shortages})
 
 
 @router.get("/requisitions/my", dependencies=[Depends(require_permission("req:apply"))])
@@ -213,6 +274,7 @@ def update_requisition(
         raise BizError(E_BILL_STATUS, "仅已驳回的申请可修改后重新提交")
     r.use_location = req.use_location
     r.use_reason = req.use_reason
+    r.location_photo_file_id = req.location_photo_file_id
     r.warehouse_id = req.warehouse_id
     r.remark = req.remark
     r.status = REQ_STATUS_PENDING
@@ -220,8 +282,16 @@ def update_requisition(
     r.audit_time = None
     r.audit_remark = ""
     r.total_qty = _replace_items(db, r.id, req.items)
+    # 驳回后重新提交：再次自动出库（驳回时已回补）
+    shortages = _deduct_items(db, r, user.id)
+    if shortages:
+        _notify_admins(
+            db,
+            "领用出库库存不足",
+            f"{r.bill_no} 领用出库后以下商品库存为负（实际库存与系统不符，请核对）：{'；'.join(shortages)}",
+        )
     db.commit()
-    return ok()
+    return ok({"shortages": shortages})
 
 
 @router.post("/requisitions/{req_id}/cancel", dependencies=[Depends(require_permission("req:apply"))])
@@ -237,6 +307,8 @@ def cancel_requisition(
         raise BizError(E_NO_PERMISSION, "只能取消自己的申请", http_status=403)
     if r.status != REQ_STATUS_PENDING:
         raise BizError(E_BILL_STATUS, "仅待审计的申请可取消")
+    # 取消回补库存（提交时已自动出库）
+    _restock_items(db, r, user.id, "领用取消回补")
     r.status = REQ_STATUS_CANCELED
     db.commit()
     return ok()
@@ -259,26 +331,20 @@ def audit_requisition(
         raise BizError(E_BILL_STATUS, "仅待审计的申请可审计")
 
     if body.action == "reject":
+        # 驳回回补库存（提交时已自动出库）
+        _restock_items(db, r, user.id, "领用驳回回补")
         r.status = REQ_STATUS_REJECTED
         r.audit_by = user.id
         r.audit_time = datetime.now()
         r.audit_remark = body.remark
-        _notify(db, r.applicant_id, "领用申请被驳回", f"{r.bill_no} 被驳回：{body.remark or '无'}", "审批")
+        _notify(db, r.applicant_id, "领用申请被驳回", f"{r.bill_no} 被驳回：{body.remark or '无'}，库存已回补", "审批")
         db.commit()
         return ok()
 
-    # approve：逐条扣库存，任一不足整单回滚
+    # approve：库存已在提交时自动扣减，审计通过仅确认状态
     items = db.scalars(select(OutRequisitionItem).where(OutRequisitionItem.requisition_id == r.id).order_by(OutRequisitionItem.sort)).all()
     if not items:
         raise BizError(E_PARAM, "领用单明细为空")
-    for it in items:
-        post_stock_change(
-            db,
-            product_id=it.product_id, warehouse_id=r.warehouse_id, location_id=it.location_id,
-            change_type="领用出库", bill_type="out_requisition", bill_no=r.bill_no,
-            bill_item_id=it.id, qty_delta=-it.qty, cost_price=Decimal(0),
-            photo_file_id=it.photo_file_id, operator_id=user.id,
-        )
     r.status = REQ_STATUS_APPROVED
     r.audit_by = user.id
     r.audit_time = datetime.now()

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Checkbox, Form, Input, message, Modal, Popconfirm, Space, Table, Tag } from "antd";
+import { Button, Checkbox, Form, Input, message, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
-import { adminApi, type SysPermission, type SysRole } from "@wlt/shared";
+import { adminApi, type Department, type SysPermission, type SysRole } from "@wlt/shared";
 
-/** 角色与权限管理（电脑端，超管 sys:role）。 */
+/** 角色与权限管理（电脑端，超管 sys:role）：角色 CRUD + 权限勾选 + 所属单位。 */
 export function RolesPage() {
   const [list, setList] = useState<SysRole[]>([]);
   const [perms, setPerms] = useState<SysPermission[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [editingPerms, setEditingPerms] = useState<SysRole | null>(null);
   const [checked, setChecked] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
@@ -16,6 +17,7 @@ export function RolesPage() {
   const load = useCallback(async () => {
     setList(await adminApi.roles());
     setPerms(await adminApi.permissions());
+    adminApi.departments().then(setDepartments).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -25,7 +27,7 @@ export function RolesPage() {
   async function createRole() {
     const v = await form.validateFields();
     try {
-      await adminApi.createRole({ code: v.code, name: v.name, description: v.description ?? "" });
+      await adminApi.createRole({ code: v.code, name: v.name, description: v.description ?? "", department_id: v.department_id ?? 0 });
       message.success("角色已创建");
       setCreating(false);
       void load();
@@ -49,6 +51,7 @@ export function RolesPage() {
   const columns: ColumnsType<SysRole> = [
     { title: "编码", dataIndex: "code", width: 140 },
     { title: "名称", dataIndex: "name", width: 120 },
+    { title: "所属单位", width: 120, render: (_, r) => r.department_name || "-" },
     { title: "说明", dataIndex: "description" },
     {
       title: "权限数",
@@ -116,6 +119,13 @@ export function RolesPage() {
             <Input placeholder="如：审计员" />
           </Form.Item>
           <Form.Item name="description" label="说明"><Input /></Form.Item>
+          <Form.Item name="department_id" label="所属单位（该单位下的用户仅显示本单位货架）">
+            <Select
+              placeholder="不选则不限货架"
+              allowClear
+              options={departments.map((d) => ({ label: d.name, value: d.id }))}
+            />
+          </Form.Item>
         </Form>
       </Modal>
 

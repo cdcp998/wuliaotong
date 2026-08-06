@@ -17,11 +17,13 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, require_permission
+from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_permission
 from app.core.response import BizError, E_NOT_FOUND, E_PARAM, ok
 from app.db import get_db
 from app.models.base import (
     BaseCategory,
+    BaseDepartment,
+    BaseDepartmentShelf,
     BaseLocation,
     BaseProduct,
     BaseProductUnit,
@@ -30,6 +32,8 @@ from app.models.base import (
     BaseUnit,
     BaseWarehouse,
 )
+from app.models.sys import SysRole, SysUser
+from app.schemas.admin import DeptOut, DeptReq, DeptShelvesReq, DeptUpdateReq
 from app.schemas.base import (
     CategoryNode,
     CategoryReq,
@@ -614,8 +618,17 @@ def delete_warehouse(wh_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/warehouses/{wh_id}/shelves")
-def list_shelves(wh_id: int, db: Session = Depends(get_db)) -> dict:
-    rows = db.scalars(select(BaseShelf).where(BaseShelf.warehouse_id == wh_id).order_by(BaseShelf.code)).all()
+def list_shelves(
+    wh_id: int,
+    user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """仓库货架列表；非超管/管理者角色按所属单位过滤（单位下可用显示的货架）。"""
+    stmt = select(BaseShelf).where(BaseShelf.warehouse_id == wh_id)
+    visible = _visible_shelf_ids(db, user)
+    if visible is not None:
+        stmt = stmt.where(BaseShelf.id.in_(visible) if visible else False)
+    rows = db.scalars(stmt.order_by(BaseShelf.code)).all()
     return ok([ShelfOut.model_validate(s, from_attributes=True).model_dump() for s in rows])
 
 
@@ -710,5 +723,91 @@ def delete_location(loc_id: int, db: Session = Depends(get_db)) -> dict:
     if stock_cnt:
         raise BizError(E_PARAM, "库位存在库存，禁止删除")
     db.delete(loc)
+    db.commit()
+    return ok()
+
+
+# ============================ 组织单位（部门） ============================
+
+
+def _visible_shelf_ids(db: Session, user: SysUser) -> set[int] | None:
+    """当前用户可见货架 id 集合；None 表示全部（超管/管理者/无单位角色不限）。"""
+    role = db.get(SysRole, user.role_id)
+    if role is None or not role.department_id:
+        return None
+    if role.code in (SUPER_ADMIN_ROLE_CODE, "manager"):
+        return None
+    rows = db.scalars(
+        select(BaseDepartmentShelf.shelf_id).where(BaseDepartmentShelf.department_id == role.department_id)
+    ).all()
+    return set(rows)
+
+
+def _dept_out(db: Session, d: BaseDepartment) -> dict:
+    shelf_ids = db.scalars(
+        select(BaseDepartmentShelf.shelf_id).where(BaseDepartmentShelf.department_id == d.id)
+    ).all()
+    return DeptOut(
+        id=d.id, code=d.code, name=d.name, remark=d.remark, status=d.status, shelf_ids=list(shelf_ids),
+    ).model_dump()
+
+
+@router.get("/departments")
+def list_departments(db: Session = Depends(get_db)) -> dict:
+    rows = db.scalars(select(BaseDepartment).order_by(BaseDepartment.id)).all()
+    return ok([_dept_out(db, d) for d in rows])
+
+
+@router.post("/departments", dependencies=[Depends(require_permission("dept:manage"))])
+def create_department(req: DeptReq, db: Session = Depends(get_db)) -> dict:
+    if db.scalar(select(BaseDepartment.id).where(BaseDepartment.code == req.code)):
+        raise BizError(E_PARAM, "单位编码已存在")
+    d = BaseDepartment(code=req.code, name=req.name, remark=req.remark, status=req.status)
+    db.add(d)
+    db.commit()
+    db.refresh(d)
+    return ok({"id": d.id, "code": d.code})
+
+
+@router.put("/departments/{dept_id}", dependencies=[Depends(require_permission("dept:manage"))])
+def update_department(dept_id: int, req: DeptUpdateReq, db: Session = Depends(get_db)) -> dict:
+    d = db.get(BaseDepartment, dept_id)
+    if d is None:
+        raise BizError(E_NOT_FOUND, "单位不存在")
+    if req.name is not None:
+        d.name = req.name
+    if req.remark is not None:
+        d.remark = req.remark
+    if req.status is not None:
+        d.status = req.status
+    db.commit()
+    return ok()
+
+
+@router.delete("/departments/{dept_id}", dependencies=[Depends(require_permission("dept:manage"))])
+def delete_department(dept_id: int, db: Session = Depends(get_db)) -> dict:
+    d = db.get(BaseDepartment, dept_id)
+    if d is None:
+        raise BizError(E_NOT_FOUND, "单位不存在")
+    if db.scalar(select(func.count()).select_from(SysRole).where(SysRole.department_id == dept_id)):
+        raise BizError(E_PARAM, "该单位下还有角色，请先调整角色所属单位")
+    db.execute(BaseDepartmentShelf.__table__.delete().where(BaseDepartmentShelf.department_id == dept_id))
+    db.delete(d)
+    db.commit()
+    return ok()
+
+
+@router.put("/departments/{dept_id}/shelves", dependencies=[Depends(require_permission("dept:manage"))])
+def update_department_shelves(dept_id: int, req: DeptShelvesReq, db: Session = Depends(get_db)) -> dict:
+    """设置单位可用显示的货架（超管/管理者不受限，其余角色仅见本单货架）。"""
+    if db.get(BaseDepartment, dept_id) is None:
+        raise BizError(E_NOT_FOUND, "单位不存在")
+    valid = set(db.scalars(select(BaseShelf.id)).all())
+    bad = [sid for sid in req.shelf_ids if sid not in valid]
+    if bad:
+        raise BizError(E_PARAM, f"货架不存在：{bad}")
+    db.execute(BaseDepartmentShelf.__table__.delete().where(BaseDepartmentShelf.department_id == dept_id))
+    for sid in req.shelf_ids:
+        db.add(BaseDepartmentShelf(department_id=dept_id, shelf_id=sid))
     db.commit()
     return ok()

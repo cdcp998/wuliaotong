@@ -14,6 +14,14 @@ const EMPTY: Settings = {
   "llm.deepseek.api_key": "",
   "llm.deepseek.base_url": "",
   "llm.deepseek.model": "",
+  "auth.register_mode": "closed",
+  "auth.forgot_method": "phone",
+  "site.contact_phone": "",
+  "smtp.host": "",
+  "smtp.port": "465",
+  "smtp.user": "",
+  "smtp.password": "",
+  "smtp.from": "",
 };
 
 function Field({
@@ -85,7 +93,7 @@ export function SettingsPage() {
     <div style={{ padding: 24, maxWidth: 720 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>系统设置</h2>
-        <button onClick={() => navigate("/app")}>返回</button>
+        <button onClick={() => navigate("/dashboard")}>返回</button>
       </div>
 
       {loading && <p>加载中…</p>}
@@ -147,6 +155,50 @@ export function SettingsPage() {
         />
         <Field label="Base URL" value={form["llm.deepseek.base_url"]} onChange={(v) => set("llm.deepseek.base_url", v)} />
         <Field label="模型" value={form["llm.deepseek.model"]} onChange={(v) => set("llm.deepseek.model", v)} />
+      </div>
+
+      <div style={{ background: "#fff", padding: 20, borderRadius: 8, marginTop: 16 }}>
+        <h3>注册与找回密码</h3>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 13, color: "#666", marginBottom: 4 }}>注册模式</label>
+          {[
+            { value: "open", label: "开放注册（注册即开通使用者账号）" },
+            { value: "review", label: "审核注册（管理员审核通过后开通）" },
+            { value: "closed", label: "关闭注册（仅管理员建号）" },
+          ].map((o) => (
+            <label key={o.value} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+              <input type="radio" name="register-mode" checked={form["auth.register_mode"] === o.value} onChange={() => set("auth.register_mode", o.value)} />
+              {o.label}
+            </label>
+          ))}
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 13, color: "#666", marginBottom: 4 }}>忘记密码找回方式</label>
+          {[
+            { value: "email", label: "邮箱找回（发送重置验证码邮件，需配置下方 SMTP）" },
+            { value: "phone", label: "联系管理员电话找回（展示联系电话）" },
+            { value: "both", label: "两者均可（有邮箱优先邮箱）" },
+          ].map((o) => (
+            <label key={o.value} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+              <input type="radio" name="forgot-method" checked={form["auth.forgot_method"] === o.value} onChange={() => set("auth.forgot_method", o.value)} />
+              {o.label}
+            </label>
+          ))}
+        </div>
+        <Field label="管理员联系电话（电话找回时展示给用户）" value={form["site.contact_phone"]} onChange={(v) => set("site.contact_phone", v)} />
+        <h3 style={{ marginTop: 18 }}>SMTP 邮件服务（邮箱找回用）</h3>
+        <Field label="服务器地址（如 smtp.qq.com）" value={form["smtp.host"]} onChange={(v) => set("smtp.host", v)} />
+        <Field label="端口（465 SSL / 587 STARTTLS）" value={form["smtp.port"]} onChange={(v) => set("smtp.port", v)} />
+        <Field label="账号" value={form["smtp.user"]} onChange={(v) => set("smtp.user", v)} />
+        <Field
+          label="密码/授权码"
+          type="password"
+          value={form["smtp.password"]}
+          onChange={(v) => set("smtp.password", v)}
+          placeholder="填新值覆盖，留空不修改"
+          hint={form["smtp.password"] ? `当前已配置（${form["smtp.password"]}）` : "未配置"}
+        />
+        <Field label="发件人邮箱（缺省用账号）" value={form["smtp.from"]} onChange={(v) => set("smtp.from", v)} />
       </div>
 
       <div style={{ marginTop: 20 }}>

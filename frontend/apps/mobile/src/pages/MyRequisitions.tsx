@@ -33,6 +33,7 @@ export function MyRequisitionsPage() {
         {list.map((r) => (
           <List.Item
             key={r.id}
+            onClick={() => navigate(`/requisitions/${r.id}`)}
             description={`${r.warehouse_name} · ${r.use_location} · ${r.created_at.slice(0, 16)} · ${r.items.length} 项`}
             extra={<Tag color={STATUS[r.status]?.color}>{STATUS[r.status]?.text ?? r.status}</Tag>}
           >

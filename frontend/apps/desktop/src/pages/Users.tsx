@@ -33,12 +33,13 @@ export function UsersPage() {
     const v = await form.validateFields();
     try {
       if (creating) {
-        await adminApi.createUser({ username: v.username, password: v.password, real_name: v.real_name ?? "", phone: v.phone ?? "", role_id: v.role_id });
+        await adminApi.createUser({ username: v.username, password: v.password, real_name: v.real_name ?? "", phone: v.phone ?? "", email: v.email ?? "", role_id: v.role_id });
         message.success("用户已创建");
       } else if (editing) {
         await adminApi.updateUser(editing.id, {
           real_name: v.real_name,
           phone: v.phone,
+          email: v.email,
           role_id: v.role_id,
           password: v.password || undefined,
         });
@@ -56,6 +57,7 @@ export function UsersPage() {
     { title: "登录名", dataIndex: "username", width: 120 },
     { title: "姓名", dataIndex: "real_name", width: 120 },
     { title: "手机", dataIndex: "phone", width: 130 },
+    { title: "邮箱", dataIndex: "email", width: 170, render: (v: string) => v || "-" },
     { title: "角色", dataIndex: "role_name", width: 110 },
     { title: "状态", width: 90, render: (_, r) => (r.status === 1 ? <Tag color="green">启用</Tag> : <Tag color="default">停用</Tag>) },
     { title: "最近登录", dataIndex: "last_login_at", width: 160, render: (v: string | null) => v ?? "-" },
@@ -69,7 +71,7 @@ export function UsersPage() {
             onClick={() => {
               setEditing(r);
               setCreating(false);
-              form.setFieldsValue({ username: r.username, real_name: r.real_name, phone: r.phone, role_id: r.role_id, password: "" });
+              form.setFieldsValue({ username: r.username, real_name: r.real_name, phone: r.phone, email: r.email, role_id: r.role_id, password: "" });
             }}
           >
             编辑
@@ -153,6 +155,7 @@ export function UsersPage() {
           )}
           <Form.Item name="real_name" label="姓名"><Input /></Form.Item>
           <Form.Item name="phone" label="手机"><Input maxLength={20} /></Form.Item>
+          <Form.Item name="email" label="邮箱（找回密码用）"><Input maxLength={100} /></Form.Item>
           <Form.Item name="role_id" label="角色" rules={[{ required: true, message: "请选择角色" }]}>
             <Select options={roles.map((r) => ({ label: `${r.name}（${r.code}）`, value: r.id }))} />
           </Form.Item>

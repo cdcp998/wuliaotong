@@ -1,0 +1,90 @@
+import { useCallback, useEffect, useState } from "react";
+import { Button, message, Space, Table, Tag } from "antd";
+import type { ColumnsType } from "antd/es/table";
+
+import { adminApi, type RegisterApply } from "@wlt/shared";
+
+const STATUS: Record<number, { text: string; color: string }> = {
+  0: { text: "待审核", color: "orange" },
+  1: { text: "已通过", color: "green" },
+  2: { text: "已拒绝", color: "default" },
+};
+
+/** 注册审核（电脑端，超管 sys:user）：审核注册模式下的账号开通申请。 */
+export function RegisterAppliesPage() {
+  const [list, setList] = useState<RegisterApply[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [status, setStatus] = useState<number | undefined>(0);
+
+  const load = useCallback(async () => {
+    const data = await adminApi.registerApplies(status, page);
+    setList(data.list);
+    setTotal(data.total);
+  }, [status, page]);
+
+  useEffect(() => {
+    void load().catch((e) => message.error(e instanceof Error ? e.message : "加载失败"));
+  }, [load]);
+
+  async function doApprove(r: RegisterApply) {
+    try {
+      const d = await adminApi.approveRegisterApply(r.id);
+      message.success(d.message);
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "操作失败");
+    }
+  }
+
+  async function doReject(r: RegisterApply) {
+    try {
+      const d = await adminApi.rejectRegisterApply(r.id);
+      message.success(d.message);
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "操作失败");
+    }
+  }
+
+  const columns: ColumnsType<RegisterApply> = [
+    { title: "时间", dataIndex: "created_at", width: 160 },
+    { title: "登录名", dataIndex: "username", width: 120 },
+    { title: "姓名", dataIndex: "real_name", width: 110 },
+    { title: "手机", dataIndex: "phone", width: 130 },
+    { title: "邮箱", dataIndex: "email", width: 180 },
+    { title: "状态", width: 90, render: (_, r) => <Tag color={STATUS[r.status].color}>{STATUS[r.status].text}</Tag> },
+    {
+      title: "操作",
+      width: 160,
+      render: (_, r) =>
+        r.status === 0 ? (
+          <Space>
+            <Button size="small" type="primary" onClick={() => void doApprove(r)}>通过</Button>
+            <Button size="small" danger onClick={() => void doReject(r)}>拒绝</Button>
+          </Space>
+        ) : (
+          "-"
+        ),
+    },
+  ];
+
+  return (
+    <div style={{ padding: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h2 style={{ margin: 0 }}>注册审核</h2>
+        <Space>
+          {[0, 1, 2].map((s) => (
+            <Button key={s} size="small" type={status === s ? "primary" : "default"} onClick={() => { setStatus(s); setPage(1); }}>
+              {STATUS[s].text}
+            </Button>
+          ))}
+        </Space>
+      </div>
+      <p style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>
+        审核注册模式下，新用户提交的注册申请在此处理；通过后账号即为"使用者"角色。
+      </p>
+      <Table rowKey="id" size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+    </div>
+  );
+}

@@ -7,7 +7,7 @@ import { authApi, type UserInfo } from "../api/auth";
 interface AuthState {
   user: UserInfo | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, captchaId?: string, captchaCode?: string) => Promise<void>;
   logout: () => Promise<void>;
   fetchMe: () => Promise<void>;
   hasPerm: (code: string) => boolean;
@@ -17,10 +17,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   loading: false,
 
-  login: async (username, password) => {
+  login: async (username, password, captchaId = "", captchaCode = "") => {
     set({ loading: true });
     try {
-      const resp = await authApi.login(username, password);
+      const resp = await authApi.login(username, password, captchaId, captchaCode);
       set({ user: resp.user });
     } finally {
       set({ loading: false });

@@ -26,6 +26,15 @@ SETTINGS_KEYS: dict[str, str] = {
     "llm.deepseek.api_key": "secret",
     "llm.deepseek.base_url": "str",
     "llm.deepseek.model": "str",
+    # 注册与找回（本轮需求）
+    "auth.register_mode": "str",  # open 开放 / closed 关闭 / review 审核
+    "auth.forgot_method": "str",  # email 邮箱找回 / phone 电话 / both
+    "site.contact_phone": "str",  # 管理员联系电话（电话找回展示）
+    "smtp.host": "str",
+    "smtp.port": "str",
+    "smtp.user": "str",
+    "smtp.password": "secret",
+    "smtp.from": "str",
 }
 
 

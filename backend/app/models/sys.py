@@ -32,9 +32,27 @@ class SysUser(TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     real_name: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     phone: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    email: Mapped[str] = mapped_column(String(100), nullable=False, default="")  # 找回密码用
     role_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     status: Mapped[int] = mapped_column(Integer, nullable=False, default=1)  # 1启用 0停用
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class SysRegisterApply(Base):
+    """注册申请（审核注册模式）：管理员通过后创建 SysUser。"""
+
+    __tablename__ = "sys_register_apply"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(50), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    real_name: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    phone: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    email: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    status: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 0 待审核 / 1 通过 / 2 拒绝
+    handled_by: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
 
 class SysRole(TimestampMixin, Base):
@@ -45,6 +63,7 @@ class SysRole(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     description: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     is_builtin: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 内置角色禁删
+    department_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)  # 所属单位（控制可见货架）
 
 
 class SysPermission(TimestampMixin, Base):

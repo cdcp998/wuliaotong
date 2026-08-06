@@ -24,6 +24,7 @@ E_NOT_FOUND = 4003  # 商品或库位不存在
 E_LOGIN_FAILED = 4004  # 登录失败/未登录/已锁定
 E_NO_PERMISSION = 4005  # 无权限
 E_PARAM = 4006  # 参数校验失败
+E_CAPTCHA = 4007  # 需要验证码（登录连续失败后触发）
 E_OCR_UNAVAILABLE = 5001  # OCR 引擎未初始化
 E_LLM_FAILED = 5002  # 大模型调用失败
 E_FILE_FAILED = 5003  # 文件处理失败

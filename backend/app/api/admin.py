@@ -13,12 +13,14 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_permission
-from app.core.response import BizError, E_NOT_FOUND, E_PARAM, ok
+from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, ok
 from app.core.security import hash_password
 from app.db import get_db
+from app.models.base import BaseDepartment
 from app.models.sys import (
     SysBackupLog,
     SysPermission,
+    SysRegisterApply,
     SysRole,
     SysRolePermission,
     SysOperationLog,
@@ -26,6 +28,7 @@ from app.models.sys import (
 )
 from app.schemas.admin import (
     BackupOut,
+    RegisterApplyOut,
     RoleCreateReq,
     RoleOut,
     RolePermReq,
@@ -43,7 +46,7 @@ router = APIRouter(tags=["系统管理"], dependencies=[Depends(get_current_user
 def _user_out(db: Session, u: SysUser) -> dict:
     role = db.get(SysRole, u.role_id)
     return UserOut(
-        id=u.id, username=u.username, real_name=u.real_name, phone=u.phone,
+        id=u.id, username=u.username, real_name=u.real_name, phone=u.phone, email=u.email,
         role_id=u.role_id, role_name=role.name if role else "",
         status=u.status, last_login_at=u.last_login_at, created_at=u.created_at,
     ).model_dump()
@@ -85,6 +88,7 @@ def create_user(req: UserCreateReq, db: Session = Depends(get_db)) -> dict:
         password_hash=hash_password(req.password),
         real_name=req.real_name,
         phone=req.phone,
+        email=req.email,
         role_id=req.role_id,
         status=1,
     )
@@ -121,6 +125,8 @@ def update_user(
         u.real_name = req.real_name
     if req.phone is not None:
         u.phone = req.phone
+    if req.email is not None:
+        u.email = req.email
     if req.password:
         u.password_hash = hash_password(req.password)
     db.commit()
@@ -153,9 +159,11 @@ def _role_out(db: Session, r: SysRole) -> dict:
         select(SysPermission).join(SysRolePermission, SysRolePermission.permission_id == SysPermission.id)
         .where(SysRolePermission.role_id == r.id).order_by(SysPermission.id)
     ).all()
+    dept = db.get(BaseDepartment, r.department_id)
     return RoleOut(
         id=r.id, code=r.code, name=r.name, description=r.description,
-        is_builtin=r.is_builtin,
+        is_builtin=r.is_builtin, department_id=r.department_id,
+        department_name=dept.name if dept else "",
         permission_ids=[p.id for p in perms],
         permission_codes=[p.code for p in perms],
     ).model_dump()
@@ -178,7 +186,9 @@ def list_permissions(db: Session = Depends(get_db)) -> dict:
 def create_role(req: RoleCreateReq, db: Session = Depends(get_db)) -> dict:
     if db.scalar(select(SysRole.id).where(SysRole.code == req.code)):
         raise BizError(E_PARAM, "角色编码已存在")
-    r = SysRole(code=req.code, name=req.name, description=req.description, is_builtin=0)
+    if req.department_id and db.get(BaseDepartment, req.department_id) is None:
+        raise BizError(E_PARAM, "单位不存在")
+    r = SysRole(code=req.code, name=req.name, description=req.description, is_builtin=0, department_id=req.department_id)
     db.add(r)
     db.commit()
     db.refresh(r)
@@ -194,6 +204,10 @@ def update_role(role_id: int, req: RoleUpdateReq, db: Session = Depends(get_db))
         r.name = req.name
     if req.description is not None:
         r.description = req.description
+    if req.department_id is not None:
+        if req.department_id and db.get(BaseDepartment, req.department_id) is None:
+            raise BizError(E_PARAM, "单位不存在")
+        r.department_id = req.department_id
     db.commit()
     return ok()
 
@@ -315,3 +329,72 @@ def download_backup(backup_id: int, db: Session = Depends(get_db)) -> FileRespon
     if not path.exists():
         raise BizError(E_NOT_FOUND, "备份文件已丢失")
     return FileResponse(path, filename=log.file_path, media_type="application/gzip")
+
+
+# ============================ 注册审核 ============================
+
+
+@router.get("/register-applies", dependencies=[Depends(require_permission("sys:user"))])
+def list_register_applies(
+    status: int | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> dict:
+    stmt = select(SysRegisterApply)
+    if status is not None:
+        stmt = stmt.where(SysRegisterApply.status == status)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.scalars(stmt.order_by(SysRegisterApply.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
+    return ok(PageData(
+        list=[RegisterApplyOut.model_validate(a, from_attributes=True).model_dump() for a in rows],
+        total=total, page=page, page_size=page_size,
+    ).model_dump())
+
+
+@router.post("/register-applies/{apply_id}/approve", dependencies=[Depends(require_permission("sys:user"))])
+def approve_register_apply(
+    apply_id: int,
+    user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    a = db.get(SysRegisterApply, apply_id)
+    if a is None:
+        raise BizError(E_NOT_FOUND, "注册申请不存在")
+    if a.status != 0:
+        raise BizError(E_BILL_STATUS, "仅待审核的申请可审核")
+    if db.scalar(select(SysUser.id).where(SysUser.username == a.username)):
+        raise BizError(E_PARAM, f"用户名 {a.username} 已存在")
+    role = db.scalar(select(SysRole).where(SysRole.code == "user"))
+    db.add(SysUser(
+        username=a.username,
+        password_hash=a.password_hash,
+        real_name=a.real_name,
+        phone=a.phone,
+        email=a.email,
+        role_id=role.id if role else 4,
+        status=1,
+    ))
+    a.status = 1
+    a.handled_by = user.id
+    a.handled_at = datetime.now()
+    db.commit()
+    return ok({"message": f"已通过注册申请，账号 {a.username} 可登录"})
+
+
+@router.post("/register-applies/{apply_id}/reject", dependencies=[Depends(require_permission("sys:user"))])
+def reject_register_apply(
+    apply_id: int,
+    user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    a = db.get(SysRegisterApply, apply_id)
+    if a is None:
+        raise BizError(E_NOT_FOUND, "注册申请不存在")
+    if a.status != 0:
+        raise BizError(E_BILL_STATUS, "仅待审核的申请可审核")
+    a.status = 2
+    a.handled_by = user.id
+    a.handled_at = datetime.now()
+    db.commit()
+    return ok({"message": f"已拒绝注册申请：{a.username}"})

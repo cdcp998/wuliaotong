@@ -82,6 +82,28 @@ class BaseWarehouse(TimestampMixin, Base):
     status: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
+class BaseDepartment(TimestampMixin, Base):
+    """组织单位（部门）：角色所属单位，关联可用货架。"""
+
+    __tablename__ = "base_department"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    remark: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    status: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class BaseDepartmentShelf(Base):
+    """单位-货架关联：单位下可用显示的仓库货架。"""
+
+    __tablename__ = "base_department_shelf"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    department_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    shelf_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
 class BaseShelf(TimestampMixin, Base):
     __tablename__ = "base_shelf"
 

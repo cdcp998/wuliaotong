@@ -110,13 +110,38 @@ export const otherIoApi = {
 export interface RequisitionBill {
   id: number;
   bill_no: string;
+  applicant_name: string;
   warehouse_name: string;
   use_location: string;
   use_reason: string;
+  total_qty: string;
   status: number;
   audit_remark: string;
   created_at: string;
   items: { id: number; product_name: string; qty: string }[];
+}
+
+export interface RequisitionDetail extends RequisitionBill {
+  applicant_id: number;
+  applicant_name: string;
+  location_photo_file_id: number;
+  warehouse_id: number;
+  total_qty: string;
+  audit_by: number;
+  audit_name: string;
+  audit_time: string;
+  remark: string;
+  items: {
+    id: number;
+    product_id: number;
+    product_name: string;
+    code: string;
+    spec: string;
+    location_id: number;
+    location_code: string;
+    qty: string;
+    photo_file_id: number;
+  }[];
 }
 
 export const requisitionApi = {
@@ -138,6 +163,13 @@ export const requisitionApi = {
     http.get<PageData<RequisitionBill>>(
       `/requisitions/my${status ? `?status=${status}` : ""}${status ? "&" : "?"}page=${page}&page_size=20`
     ),
+  list: (status?: number, page = 1) =>
+    http.get<PageData<RequisitionBill>>(
+      `/requisitions${status !== undefined ? `?status=${status}` : ""}${status !== undefined ? "&" : "?"}page=${page}&page_size=20`
+    ),
+  audit: (id: number, action: "approve" | "reject", remark: string) =>
+    http.post<null>(`/requisitions/${id}/audit`, { action, remark }),
+  detail: (id: number) => http.get<RequisitionDetail>(`/requisitions/${id}`),
 };
 
 export const fileApi = {
@@ -223,4 +255,59 @@ export interface PurchaseInBill {
 export const purchaseApi = {
   list: (page = 1) => http.get<PageData<PurchaseInBill>>(`/purchase-in?page=${page}&page_size=20`),
   void: (id: number) => http.post<null>(`/purchase-in/${id}/void`),
+};
+
+/** 库存查询（《后端API设计.md》§6 /stock）。 */
+export interface StockRow {
+  product_id: number;
+  product_name: string;
+  code: string;
+  barcode: string;
+  spec: string;
+  warehouse_id: number;
+  warehouse_name: string;
+  location_id: number;
+  location_code: string;
+  qty: string;
+  cost_price: string;
+  amount: string;
+}
+
+export interface StockFlowRow {
+  id: number;
+  product_id: number;
+  product_name: string;
+  warehouse_name: string;
+  location_code: string;
+  change_type: string;
+  bill_type: string;
+  bill_no: string;
+  before_qty: string;
+  change_qty: string;
+  after_qty: string;
+  operator_name: string;
+  remark: string;
+  created_at: string;
+}
+
+export const stockApi = {
+  query: (params: { keyword?: string; warehouse_id?: number; location_id?: number; product_id?: number; page?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.keyword) qs.set("keyword", params.keyword);
+    if (params.warehouse_id) qs.set("warehouse_id", String(params.warehouse_id));
+    if (params.location_id) qs.set("location_id", String(params.location_id));
+    if (params.product_id) qs.set("product_id", String(params.product_id));
+    qs.set("page", String(params.page ?? 1));
+    qs.set("page_size", "20");
+    return http.get<PageData<StockRow>>(`/stock?${qs}`);
+  },
+  flow: (params: { product_id?: number; bill_no?: string; change_type?: string; page?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.product_id) qs.set("product_id", String(params.product_id));
+    if (params.bill_no) qs.set("bill_no", params.bill_no);
+    if (params.change_type) qs.set("change_type", params.change_type);
+    qs.set("page", String(params.page ?? 1));
+    qs.set("page_size", "20");
+    return http.get<PageData<StockFlowRow>>(`/stock/flow?${qs}`);
+  },
 };

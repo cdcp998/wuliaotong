@@ -6,6 +6,7 @@ export interface SysUser {
   username: string;
   real_name: string;
   phone: string;
+  email: string;
   role_id: number;
   role_name: string;
   status: number;
@@ -19,6 +20,8 @@ export interface SysRole {
   name: string;
   description: string;
   is_builtin: number;
+  department_id: number;
+  department_name: string;
   permission_ids: number[];
   permission_codes: string[];
 }
@@ -53,6 +56,25 @@ export interface BackupRecord {
   created_at: string;
 }
 
+export interface RegisterApply {
+  id: number;
+  username: string;
+  real_name: string;
+  phone: string;
+  email: string;
+  status: number;
+  created_at: string;
+}
+
+export interface Department {
+  id: number;
+  code: string;
+  name: string;
+  remark: string;
+  status: number;
+  shelf_ids: number[];
+}
+
 export const adminApi = {
   users: (params: { keyword?: string; status?: number; role_id?: number; page?: number; page_size?: number } = {}) => {
     const q = new URLSearchParams();
@@ -63,14 +85,14 @@ export const adminApi = {
     q.set("page_size", String(params.page_size ?? 20));
     return http.get<PageData<SysUser>>(`/users?${q}`);
   },
-  createUser: (body: { username: string; password: string; real_name?: string; phone?: string; role_id: number }) =>
+  createUser: (body: { username: string; password: string; real_name?: string; phone?: string; email?: string; role_id: number }) =>
     http.post<{ id: number; username: string }>("/users", body),
-  updateUser: (id: number, body: { real_name?: string; phone?: string; role_id?: number; status?: number; password?: string }) =>
+  updateUser: (id: number, body: { real_name?: string; phone?: string; email?: string; role_id?: number; status?: number; password?: string }) =>
     http.put<null>(`/users/${id}`, body),
   deleteUser: (id: number) => http.delete<null>(`/users/${id}`),
 
   roles: () => http.get<SysRole[]>("/roles"),
-  createRole: (body: { code: string; name: string; description?: string }) => http.post<{ id: number; code: string }>("/roles", body),
+  createRole: (body: { code: string; name: string; description?: string; department_id?: number }) => http.post<{ id: number; code: string }>("/roles", body),
   updateRole: (id: number, body: { name?: string; description?: string }) => http.put<null>(`/roles/${id}`, body),
   deleteRole: (id: number) => http.delete<null>(`/roles/${id}`),
   permissions: () => http.get<SysPermission[]>("/permissions"),
@@ -90,4 +112,20 @@ export const adminApi = {
   createBackup: () => http.post<{ id: number; file_path: string; file_size: number }>("/backups"),
   deleteBackup: (id: number) => http.delete<null>(`/backups/${id}`),
   backupDownloadUrl: (id: number) => `/api/v1/backups/${id}/download`,
+
+  registerApplies: (status?: number, page = 1) =>
+    http.get<PageData<RegisterApply>>(
+      `/register-applies${status !== undefined ? `?status=${status}` : ""}${status !== undefined ? "&" : "?"}page=${page}&page_size=20`
+    ),
+  approveRegisterApply: (id: number) => http.post<{ message: string }>(`/register-applies/${id}/approve`),
+  rejectRegisterApply: (id: number) => http.post<{ message: string }>(`/register-applies/${id}/reject`),
+
+  departments: () => http.get<Department[]>("/departments"),
+  createDepartment: (body: { code: string; name: string; remark?: string }) =>
+    http.post<{ id: number; code: string }>("/departments", body),
+  updateDepartment: (id: number, body: { name?: string; remark?: string; status?: number }) =>
+    http.put<null>(`/departments/${id}`, body),
+  deleteDepartment: (id: number) => http.delete<null>(`/departments/${id}`),
+  updateDepartmentShelves: (id: number, shelfIds: number[]) =>
+    http.put<null>(`/departments/${id}/shelves`, { shelf_ids: shelfIds }),
 };

@@ -27,6 +27,7 @@ class OutRequisition(TimestampMixin, Base):
     applicant_id: Mapped[int] = mapped_column(BigInteger, nullable=False)  # 申请人（使用者）
     use_location: Mapped[str] = mapped_column(String(100), nullable=False)  # 使用地点（必填）
     use_reason: Mapped[str] = mapped_column(String(255), nullable=False)  # 因何使用（必填）
+    location_photo_file_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)  # 使用地点照片（不强制）
     warehouse_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     total_qty: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, default=0)
     status: Mapped[int] = mapped_column(Integer, nullable=False, default=REQ_STATUS_PENDING)

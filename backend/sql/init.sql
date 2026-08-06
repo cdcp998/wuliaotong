@@ -19,6 +19,7 @@ CREATE TABLE sys_user (
   password_hash VARCHAR(255) NOT NULL COMMENT 'bcrypt 哈希',
   real_name     VARCHAR(50)  NOT NULL DEFAULT '' COMMENT '姓名',
   phone         VARCHAR(20)  NOT NULL DEFAULT '' COMMENT '手机号',
+  email         VARCHAR(100) NOT NULL DEFAULT '' COMMENT '邮箱（找回密码用）',
   role_id       BIGINT       NOT NULL COMMENT '角色 → sys_role.id',
   status        TINYINT      NOT NULL DEFAULT 1 COMMENT '1 启用 / 0 停用',
   last_login_at DATETIME     NULL COMMENT '最后登录时间',
@@ -29,6 +30,47 @@ CREATE TABLE sys_user (
   KEY idx_role (role_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户';
 
+
+DROP TABLE IF EXISTS sys_register_apply;
+CREATE TABLE sys_register_apply (
+  id            BIGINT NOT NULL AUTO_INCREMENT,
+  username      VARCHAR(50)  NOT NULL COMMENT '申请登录名',
+  password_hash VARCHAR(255) NOT NULL COMMENT 'bcrypt 哈希（审核通过后建用户）',
+  real_name     VARCHAR(50)  NOT NULL DEFAULT '' COMMENT '姓名',
+  phone         VARCHAR(20)  NOT NULL DEFAULT '' COMMENT '手机号',
+  email         VARCHAR(100) NOT NULL DEFAULT '' COMMENT '邮箱',
+  status        TINYINT      NOT NULL DEFAULT 0 COMMENT '0 待审核 / 1 通过 / 2 拒绝',
+  handled_by    BIGINT       NOT NULL DEFAULT 0 COMMENT '审核人',
+  handled_at    DATETIME     NULL,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_status (status),
+  KEY idx_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='注册申请（审核注册模式）';
+
+DROP TABLE IF EXISTS base_department;
+CREATE TABLE base_department (
+  id         BIGINT NOT NULL AUTO_INCREMENT,
+  code       VARCHAR(30)  NOT NULL COMMENT '单位编码',
+  name       VARCHAR(100) NOT NULL COMMENT '单位名称',
+  remark     VARCHAR(255) NOT NULL DEFAULT '',
+  status     TINYINT      NOT NULL DEFAULT 1 COMMENT '1 启用 / 0 停用',
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='组织单位（部门）';
+
+DROP TABLE IF EXISTS base_department_shelf;
+CREATE TABLE base_department_shelf (
+  id            BIGINT NOT NULL AUTO_INCREMENT,
+  department_id BIGINT NOT NULL COMMENT '→ base_department.id',
+  shelf_id      BIGINT NOT NULL COMMENT '→ base_shelf.id',
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_dept_shelf (department_id, shelf_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='单位-货架关联（单位下可用显示的货架）';
+
 DROP TABLE IF EXISTS sys_role;
 CREATE TABLE sys_role (
   id          BIGINT NOT NULL AUTO_INCREMENT,
@@ -36,6 +78,7 @@ CREATE TABLE sys_role (
   name        VARCHAR(50)  NOT NULL COMMENT '角色名',
   description VARCHAR(200) NOT NULL DEFAULT '',
   is_builtin  TINYINT      NOT NULL DEFAULT 0 COMMENT '1 内置角色（禁删）',
+  department_id BIGINT     NOT NULL DEFAULT 0 COMMENT '所属单位 → base_department.id（控制可见货架）',
   created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -422,6 +465,7 @@ CREATE TABLE out_requisition (
   applicant_id BIGINT       NOT NULL COMMENT '申请人（使用者）→ sys_user.id',
   use_location VARCHAR(100) NOT NULL COMMENT '使用地点（必填）',
   use_reason   VARCHAR(255) NOT NULL COMMENT '因何使用（必填）',
+  location_photo_file_id BIGINT NOT NULL DEFAULT 0 COMMENT '使用地点照片（不强制）',
   warehouse_id BIGINT       NOT NULL COMMENT '出库仓库',
   total_qty    DECIMAL(12,3) NOT NULL DEFAULT 0,
   status       TINYINT      NOT NULL DEFAULT 1 COMMENT '1 待审计 / 2 已通过 / 3 已驳回 / 4 已取消',
@@ -623,7 +667,8 @@ INSERT INTO sys_permission (id, name, code, type, sort) VALUES
   (20, '角色权限',      'sys:role',            2, 71),
   (21, '操作日志',      'sys:log',             2, 72),
   (22, '系统设置',      'sys:config',          2, 73),
-  (23, '备份管理',      'sys:backup',          2, 74);
+  (23, '备份管理',      'sys:backup',          2, 74),
+  (24, '单位管理',      'dept:manage',         2, 75);
 
 -- 角色-权限映射
 -- 超级管理员：全部
@@ -651,7 +696,15 @@ INSERT INTO sys_config (config_key, config_value, remark) VALUES
   ('session.expire_hours', '8',             '会话过期时间（小时，滑动续期）'),
   ('ocr.engine',           'rapidocr',      'OCR 引擎：rapidocr / paddle'),
   ('bill.rule',            'RK|LL|DB|PD|QT|QCK', '单据编号前缀（单据类型|采购入库|领用|调拨|盘点|其他|期初）'),
-  ('storage.round_seq',    '0',             '轮询策略当前序号（勿手动改）');
+  ('storage.round_seq',    '0',             '轮询策略当前序号（勿手动改）'),
+  ('auth.register_mode',   'closed',        '注册模式：open 开放注册 / closed 关闭注册 / review 审核注册'),
+  ('auth.forgot_method',   'phone',         '找回密码方式：email 邮箱找回 / phone 联系管理员电话 / both 两者'),
+  ('site.contact_phone',   '',              '管理员联系电话（电话找回时展示）'),
+  ('smtp.host',            '',              'SMTP 服务器地址（邮箱找回用）'),
+  ('smtp.port',            '465',           'SMTP 端口'),
+  ('smtp.user',            '',              'SMTP 账号'),
+  ('smtp.password',        '',              'SMTP 密码（secret）'),
+  ('smtp.from',            '',              '发件人邮箱');
 
 -- 默认存储位置（相对 backend/ 解析；后续可在后台新增多存储地址）
 INSERT INTO sys_storage (id, name, type, path, policy, is_default, status) VALUES
