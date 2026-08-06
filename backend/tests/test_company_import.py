@@ -48,6 +48,8 @@ def test_product_import_company_template():
     data = r.json()["data"]
     assert data["success_count"] == 1
     assert data["fail_rows"] and data["fail_rows"][0]["row"] == 3
+    # 提示管理员从公司系统抄写条码（公司模板无条码列）
+    assert "抄写条码" in data["notice"]
 
     # 商品字段映射正确
     rows = client.get(f"/api/v1/products?keyword=CM{tag}01").json()["data"]["list"]
@@ -55,9 +57,8 @@ def test_product_import_company_template():
     p = rows[0]
     assert p["name"] == "深沟球轴承" and p["spec"] == "6204-2RS" and p["remark"] == "进口件"
     assert p["unit_name"] == "个"  # 单位自动创建
-    # 条形码为本系统内部使用：物料编码（公司）≠ 条码；导入自动生成 13 位 EAN-13
-    assert p["barcode"] != f"CM{tag}01"
-    assert len(p["barcode"]) == 13 and p["barcode"].isdigit()
+    # 公司模板无条码列：条码留空（不自动生成），待管理员从公司系统抄写后补录
+    assert p["barcode"] == ""
     # 分类两级自动创建：材料大类(一级) → 材料分类(二级)
     cats = client.get("/api/v1/categories").json()["data"]
     big = next((c for c in cats if c["name"] == big_cat), None)

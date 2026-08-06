@@ -19,6 +19,7 @@ from app.api import files as files_api
 from app.api import notification as notification_api
 from app.api import ocr as ocr_api
 from app.api import requisition as requisition_api
+from app.api import report as report_api
 from app.api import stock as stock_api
 from app.api import storage as storage_api
 from app.api import system as system_api
@@ -117,6 +118,7 @@ app.include_router(base_data_api.router, prefix=settings.api_prefix)
 app.include_router(stock_api.router, prefix=settings.api_prefix)
 app.include_router(advanced_api.router, prefix=settings.api_prefix)
 app.include_router(requisition_api.router, prefix=settings.api_prefix)
+app.include_router(report_api.router, prefix=settings.api_prefix)
 app.include_router(ocr_api.router, prefix=settings.api_prefix)
 app.include_router(notification_api.router, prefix=settings.api_prefix)
 app.include_router(files_api.router, prefix=settings.api_prefix)

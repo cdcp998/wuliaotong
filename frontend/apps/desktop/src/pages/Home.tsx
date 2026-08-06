@@ -10,6 +10,9 @@ interface Entry {
 }
 
 const ENTRIES: Entry[] = [
+  { title: "经营看板", path: "/dashboard", perm: "report:view", desc: "出入库统计 · 预警 · 待办 · 7 日趋势" },
+  { title: "报表中心", path: "/reports", perm: "report:view", desc: "进销存汇总 · 库存报表 · Excel 导出" },
+  { title: "仓库货架图", path: "/warehouses", perm: "base:warehouse", desc: "2D 分层货架 · 库位库存与预警" },
   { title: "采购入库", path: "/purchase-in", perm: "pch:in", desc: "入库单 · 送货单 OCR 录入" },
   { title: "库存调拨", path: "/transfers", perm: "stk:transfer", desc: "仓库间调拨 · 审核" },
   { title: "库存盘点", path: "/checks", perm: "stk:check", desc: "盘点单 · 录实盘 · 审核" },

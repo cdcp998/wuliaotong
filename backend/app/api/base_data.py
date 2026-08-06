@@ -54,17 +54,6 @@ static_router = APIRouter(tags=["基础资料"], dependencies=[Depends(get_curre
 
 _DECIMAL_RE = re.compile(r"^\d+(\.\d+)?$")
 
-
-def _gen_internal_barcode(seq: int) -> str:
-    """生成内部条形码（本系统使用）：前缀 200 + 9 位序号 + EAN-13 校验位。
-
-    物料编码是公司系统唯一编码（code），条形码与物料编码相互独立。
-    """
-    body = f"200{seq:09d}"  # 12 位数字
-    total = sum(int(c) * (3 if i % 2 else 1) for i, c in enumerate(body))
-    check = (10 - total % 10) % 10
-    return body + str(check)
-
 # 商品导入列（与模板/导出一致，顺序固定）
 PRODUCT_IMPORT_COLUMNS = ["编码", "条码", "SKU", "名称", "分类", "规格", "单位", "进价", "下限", "上限"]
 
@@ -507,15 +496,18 @@ async def import_products(file: UploadFile = File(...), db: Session = Depends(ge
                 )
                 db.add(p)
                 db.flush()
-                # 物料编码是公司系统唯一编码（code）；条形码为本系统内部使用，自动生成 EAN-13
-                p.barcode = _gen_internal_barcode(p.id)
+                # 公司模板无条码列：条码留空，由管理员从公司系统抄写后补录（响应 notice 提示）
                 db.add(BaseProductUnit(product_id=p.id, unit_id=unit.id, rate=Decimal(1), is_default=1))
                 success += 1
             except IntegrityError:
                 db.rollback()
                 fail_rows.append({"row": idx, "reason": f"编码 {code} 已存在"})
         db.commit()
-        return ok({"success_count": success, "fail_rows": fail_rows})
+        return ok({
+            "success_count": success,
+            "fail_rows": fail_rows,
+            "notice": "公司模板不含条码列：已导入商品的条码留空，请管理员从公司系统抄写条码后补录（商品管理中编辑条码）",
+        })
     if headers[:10] != PRODUCT_IMPORT_COLUMNS:
         raise BizError(E_PARAM, f"表头必须为：{'/'.join(PRODUCT_IMPORT_COLUMNS)}（或公司模板：物料编码/材料名称/型号规格/单位/材料大类/材料分类）")
     success, fail_rows = 0, []

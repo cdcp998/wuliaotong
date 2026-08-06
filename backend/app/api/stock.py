@@ -47,7 +47,14 @@ router = APIRouter(tags=["库存"], dependencies=[Depends(get_current_user)])
 
 _DECIMAL_RE = re.compile(r"^\d+(\.\d+)?$")
 _DEC2 = Decimal("0.01")
+_DEC3 = Decimal("0.001")
 _OPENING_IMPORT_COLUMNS = ["商品编码", "库位编码", "数量", "成本价"]
+
+
+def _fmt_qty(v: Decimal | int | str | None) -> str:
+    """数量统一格式化：保留至 3 位小数并去尾零（30.000 → 30，5.500 → 5.5）。"""
+    d = Decimal(v or 0)
+    return format(d.quantize(_DEC3), "f").rstrip("0").rstrip(".") or "0"
 
 
 def _parse_dec(v: str, field: str) -> Decimal:
@@ -464,3 +471,62 @@ def list_stock_flow(
             remark=log.remark, created_at=log.created_at,
         ).model_dump())
     return ok(PageData(list=out, total=total, page=page, page_size=page_size).model_dump())
+
+
+@router.get("/stock/location-summary")
+def location_summary(
+    warehouse_id: int = Query(0),
+    shelf_id: int = Query(0),
+    db: Session = Depends(get_db),
+) -> dict:
+    """2D 货架图数据源：仓库/货架下每个库位的商品库存 + 预警状态（绿=正常/红=低/黄=高）。
+
+    与 /locations 的区别：本接口一次返回库位上的库存明细（商品+数量+预警），
+    避免货架图 N+1 请求。
+    """
+    stmt = select(BaseLocation)
+    if warehouse_id:
+        stmt = stmt.where(BaseLocation.warehouse_id == warehouse_id)
+    if shelf_id:
+        stmt = stmt.where(BaseLocation.shelf_id == shelf_id)
+    locations = db.scalars(stmt.order_by(BaseLocation.layer_no, BaseLocation.code)).all()
+    if not locations:
+        return ok([])
+    loc_ids = [loc.id for loc in locations]
+
+    stocks = db.scalars(
+        select(StkStock).where(StkStock.location_id.in_(loc_ids), StkStock.qty != 0)
+    ).all()
+    prod_ids = {s.product_id for s in stocks}
+    products = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(prod_ids))).all()}
+
+    by_loc: dict[int, list[dict]] = {}
+    for s in stocks:
+        p = products.get(s.product_id)
+        if p is None:
+            continue
+        if p.min_stock and s.qty < p.min_stock:
+            alert = "low"
+        elif p.max_stock and s.qty > p.max_stock:
+            alert = "high"
+        else:
+            alert = "normal"
+        by_loc.setdefault(s.location_id, []).append({
+            "product_id": s.product_id,
+            "code": p.code,
+            "name": p.name,
+            "spec": p.spec,
+            "qty": _fmt_qty(s.qty),
+            "min_stock": _fmt_qty(p.min_stock),
+            "max_stock": _fmt_qty(p.max_stock),
+            "alert": alert,
+        })
+    return ok([
+        {
+            "location_id": loc.id,
+            "location_code": loc.code,
+            "layer_no": loc.layer_no,
+            "items": by_loc.get(loc.id, []),
+        }
+        for loc in locations
+    ])

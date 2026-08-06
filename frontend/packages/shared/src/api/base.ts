@@ -38,11 +38,19 @@ export interface CategoryNode {
   children?: CategoryNode[];
 }
 
+export interface Shelf {
+  id: number;
+  warehouse_id: number;
+  code: string;
+  name: string;
+}
+
 export const baseApi = {
   products: (keyword: string, page = 1) =>
     http.get<PageData<Product>>(`/products?keyword=${encodeURIComponent(keyword)}&page=${page}&page_size=20`),
   product: (id: number) => http.get<Product>(`/products/${id}`),
   warehouses: () => http.get<Warehouse[]>("/warehouses"),
+  shelves: (warehouseId: number) => http.get<Shelf[]>(`/warehouses/${warehouseId}/shelves`),
   locations: (warehouseId: number) =>
     http.get<Location[]>(`/locations?warehouse_id=${warehouseId}`),
   units: () => http.get<Unit[]>("/units"),
