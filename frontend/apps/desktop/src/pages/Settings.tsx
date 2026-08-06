@@ -119,11 +119,8 @@ export function SettingsPage() {
     try {
       await systemApi.updateSettings(toStrings(values));
       message.success("保存成功（密钥字段留空表示不修改）");
-      // 仅当对应模型已启用且本次填了新 Key（非掩码）时，保存后自动拉取模型列表；
-      // 掩码/未填 Key 时点「获取模型列表」按钮手动刷新（按钮会引导启用/填写并自动保存）
-      if (values["llm.siliconflow.enabled"] === "1" && values["llm.siliconflow.api_key"] && !values["llm.siliconflow.api_key"].startsWith("****")) void fetchModelList("siliconflow", { skipCheck: true });
-      if (values["llm.deepseek.enabled"] === "1" && values["llm.deepseek.api_key"] && !values["llm.deepseek.api_key"].startsWith("****")) void fetchModelList("deepseek", { skipCheck: true });
-      if (values["llm.doubao.enabled"] === "1" && values["llm.doubao.api_key"] && !values["llm.doubao.api_key"].startsWith("****")) void fetchModelList("doubao", { skipCheck: true });
+      // 注意：保存后不再自动获取模型列表——拉取会用已保存 Key 替换下拉 options，
+      // 已选模型不在新列表时会被清空显示（用户反馈 BUG）。模型列表仅在点「获取模型列表」按钮时拉取。
     } catch (e) {
       message.error(e instanceof Error ? e.message : "保存失败");
     } finally {
@@ -171,6 +168,11 @@ export function SettingsPage() {
     setLoading(true);
     try {
       const r = await meta.api();
+      // 已选模型不在新列表时保留在 options 中（防止拉取后已选模型从下拉消失/显示异常）
+      const current = v[`llm.${kind}.model`];
+      if (current && !r.models.some((m) => m.id === current)) {
+        r.models.unshift({ id: current, owned_by: "" });
+      }
       setModels(r.models);
       message.success(`已获取 ${r.models.length} 个模型`);
     } catch (e) {
@@ -382,7 +384,7 @@ export function SettingsPage() {
             style={{ flex: 1 }}
             showSearch
             allowClear
-            placeholder="如：Qwen/Qwen2.5-VL-7B-Instruct"
+            placeholder="如：nex-agi/Nex-N2-Pro"
             options={sfModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
             optionFilterProp="label"
           />

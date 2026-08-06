@@ -101,10 +101,21 @@ class DeepSeekClient(_OpenAICompatClient):
         super().__init__(base_url, api_key, model, vision=False)
 
 
+class SiliconFlowClient(_OpenAICompatClient):
+    """SiliconFlow（硅基流动）视觉/文本模型，OpenAI 兼容接口（https://api.siliconflow.cn/v1）。"""
+
+    name = "siliconflow"
+
+    def __init__(self, api_key: str, base_url: str, model: str) -> None:
+        super().__init__(base_url, api_key, model, vision=True)
+
+
 def get_llm(db: Session, name: str = "") -> LLMClient:
-    """按 sys_config 创建大模型客户端；未配置抛 LLMNotConfigured。"""
+    """按 sys_config 创建大模型客户端；未配置或开关关闭抛 LLMNotConfigured。"""
     name = name or "doubao"
     if name == "doubao":
+        if _get_config(db, "llm.doubao.enabled") == "0":
+            raise LLMNotConfigured("豆包大模型已关闭（系统设置 → OCR 与大模型 → 启用开关）")
         key = _get_config(db, "llm.doubao.api_key")
         if not key:
             raise LLMNotConfigured("豆包大模型未配置（系统设置 → 大模型）")
@@ -113,7 +124,21 @@ def get_llm(db: Session, name: str = "") -> LLMClient:
             base_url=_get_config(db, "llm.doubao.base_url") or "https://ark.cn-beijing.volces.com/api/v3",
             model=_get_config(db, "llm.doubao.model") or "doubao-1-5-vision-pro-32k-250115",
         )
+    if name == "siliconflow":
+        if _get_config(db, "llm.siliconflow.enabled") == "0":
+            raise LLMNotConfigured("SiliconFlow 视觉大模型已关闭（系统设置 → OCR 与大模型 → 启用开关）")
+        key = _get_config(db, "llm.siliconflow.api_key")
+        if not key:
+            raise LLMNotConfigured("SiliconFlow 视觉大模型未配置（系统设置 → OCR 与大模型）")
+        return SiliconFlowClient(
+            api_key=key,
+            base_url=_get_config(db, "llm.siliconflow.base_url") or "https://api.siliconflow.cn/v1",
+            # 默认视觉模型：nex-agi/Nex-N2-Pro（2026-08-07 SiliconFlow 在售；旧默认 Qwen/Qwen2.5-VL-7B-Instruct 已下线导致 400）
+            model=_get_config(db, "llm.siliconflow.model") or "nex-agi/Nex-N2-Pro",
+        )
     if name == "deepseek":
+        if _get_config(db, "llm.deepseek.enabled") == "0":
+            raise LLMNotConfigured("DeepSeek 大模型已关闭（系统设置 → OCR 与大模型 → 启用开关）")
         key = _get_config(db, "llm.deepseek.api_key")
         if not key:
             raise LLMNotConfigured("DeepSeek 大模型未配置（系统设置 → 大模型）")
