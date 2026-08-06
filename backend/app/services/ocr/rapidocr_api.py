@@ -1,4 +1,5 @@
 import os
+from pathlib import Path  # 默认引擎路径解析
 import atexit  # 退出处理
 import threading
 import subprocess  # 进程，管道
@@ -12,13 +13,15 @@ InitTimeout = 15  # 初始化超时时间，秒
 
 class OcrAPI:
     """调用OCR"""
-    exePath = os.getcwd() + "/assets/ocr/RapidOCR-json.exe"
 
-    def __init__(self, argsStr = ""):
+    def __init__(self, exePath = None, argsStr = ""):
         """初始化识别器。\n
-        :exePath: 识别器`PapidOCR_json.exe`的路径。\n
+        :exePath: 识别器`RapidOCR-json.exe`的路径，默认 backend/ocr/RapidOCR-json.exe（相对本文件解析）。\n
         :argsStr: 启动参数，字符串。
         """
+        if exePath is None:  # 本文件位于 backend/app/services/ocr/，父级第 3 层即 backend/
+            exePath = str(Path(__file__).resolve().parents[3] / "ocr" / "RapidOCR-json.exe")
+        self.exePath = exePath
         cwd = os.path.abspath(os.path.join(self.exePath, os.pardir))  # 获取exe父文件夹
         # 处理启动参数
         args = ' '
@@ -153,8 +156,7 @@ class OcrAPI:
 
 if __name__ == "__main__":
     # 使用上下文管理器确保资源清理
-    ocrPath = os.getcwd() + '/assets/ocr/RapidOCR-json.exe'
-    ocr = OcrAPI()
+    ocr = OcrAPI()  # 引擎路径默认 backend/ocr/RapidOCR-json.exe
     result = ocr.run(os.getcwd() + "/ocr.png")
     print(result)
     OcrAPI.printResult(result)

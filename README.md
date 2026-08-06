@@ -5,7 +5,7 @@
 ## 技术栈
 
 - 前端：React 18 + TypeScript + Vite + Zustand + Ant Design（电脑端）/ Ant Design Mobile（手机端），monorepo（apps/mobile、apps/desktop、packages/shared）
-- 后端：Python 3.11 + FastAPI + SQLAlchemy 2.x + MySQL
+- 后端：Python 3.13 + FastAPI + SQLAlchemy 2.x + MySQL
 - OCR：RapidOCR-json（Windows 本地）/ PaddleOCR（Debian/Linux），引擎可配置切换（`OCRClient` 抽象）
 
 ## 设计文档（开发基线，修改须同步代码）
@@ -21,7 +21,7 @@
 
 ## 本地开发环境
 
-- Python 3.11（`D:\Python\Python311\python.exe`）
+- Python 3.13（`G:\Python\Python313`）
 - MySQL 5.7（phpstudy，root/root，端口 3306），生产目标 MySQL 8.0
 - Node 20 + npm workspaces
 
@@ -45,4 +45,4 @@ cd frontend && npm install && npm run dev
 
 ## 本地资源（不入库，需自行放置）
 
-- `ocr/RapidOCR-json.exe` + `ocr/models/`（RapidOCR 引擎，Windows 用）
+- `backend/ocr/RapidOCR-json.exe` + `backend/ocr/models/`（RapidOCR 引擎资产，Windows 用）

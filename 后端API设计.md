@@ -1,6 +1,6 @@
 # 物料通管理系统 —— 后端 API 设计
 
-> FastAPI + Python 3.11 + MySQL；依据《需求大纲.md》《数据库设计.md》（2026-03-31 确认版）
+> FastAPI + Python 3.13 + MySQL；依据《需求大纲.md》《数据库设计.md》（2026-03-31 确认版）
 
 ## 0. 总体约定
 
@@ -166,7 +166,7 @@ OCR 结果示例（structured）：
 
 1. **库存事务**：所有过账接口统一走 `post_stock_change()`：`SELECT ... FOR UPDATE` 锁 stk_stock 行 → 校验充足 → 写 stk_stock_log → 更新 stk_stock → 更新单据状态，单事务提交，防并发超领/超卖（SQLAlchemy + 行锁）。
 2. **OCR 引擎抽象**：定义统一接口 `OCRClient.recognize(图片) -> [{text, box, score}]`，两个实现：
-   - `RapidOCREngine`：Windows 部署，复用现有 `RapidOCR_api.py`（OcrAPI 子进程常驻，线程池排队）；
+   - `RapidOCREngine`：Windows 部署，复用 `app/services/ocr/rapidocr_api.py`（OcrAPI 子进程常驻，线程池排队）；
    - `PaddleOCREngine`：Debian/Linux 部署，paddleocr Python 包（paddlepaddle CPU 推理，中文模型 ch_PP-OCRv4），Python 3.11 兼容；
    引擎选择存 sys_config（ocr.engine = rapidocr/paddle），启动时按配置加载；`GET /health` 返回当前引擎类型与状态；切换引擎只影响识别层，结构化/匹配/大模型链路不变；引擎初始化失败返回可读错误（5001）并降级为纯人工录入。
 3. **大模型**：统一 `LLMClient` 抽象（doubao 视觉 / deepseek 文本两个实现），Key/BaseURL 存 sys_config；调用失败不影响主流程，走人工兜底；AI 建议一律人工确认后才新增商品。

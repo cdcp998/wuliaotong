@@ -14,7 +14,7 @@ dist/
 .env.*
 
 # 大体积本地资源：OCR 引擎二进制与模型（不入库，部署时单独放置）
-ocr/
+backend/ocr/
 
 # IDE / OS
 .idea/
