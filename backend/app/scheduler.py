@@ -16,6 +16,7 @@ from app.models.base import BaseProduct
 from app.models.stock import StkStock
 from app.models.sys import SysNotification, SysRole, SysUser
 from app.services.backup import cleanup_auto_backups, run_backup
+from app.services.ai.alert_text import generate_alert_text
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +46,9 @@ def scan_stock_alerts() -> dict:
         for stock, product in rows:
             alerts: list[tuple[str, str]] = []
             if product.min_stock and stock.qty < product.min_stock:
-                alerts.append(("低库存", f"{product.name}({product.code}) 库存 {format(stock.qty, 'f')} 低于下限 {format(product.min_stock, 'f')}"))
+                alerts.append(("低库存", generate_alert_text(db, product=product, qty=stock.qty, kind="低库存")))
             if product.max_stock and stock.qty > product.max_stock:
-                alerts.append(("高库存", f"{product.name}({product.code}) 库存 {format(stock.qty, 'f')} 高于上限 {format(product.max_stock, 'f')}"))
+                alerts.append(("高库存", generate_alert_text(db, product=product, qty=stock.qty, kind="高库存")))
 
             for title, content in alerts:
                 dup = db.scalar(
