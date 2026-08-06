@@ -114,7 +114,13 @@ POST /api/v1/auth/login
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | /files/upload | multipart(file, biz_type, biz_id?) → {file_id, url}，自动压缩 |
+| POST | /files/upload | multipart(file, biz_type?, biz_id?) → {file_id, url}；按 sys_storage 策略选存储落盘（fill/round/manual），Pillow 压缩（WebP q80，长边≤1600px），永久保存 |
+| GET | /files/{file_id} | 流式读取文件（登录即可，业务图片展示用） |
+| GET | /storages | 存储位置列表（后台管理） |
+| POST | /storages | 新增存储位置 {name, type=local, path, policy, is_default, remark} |
+| PUT | /storages/{id} | 修改存储位置（sys:config） |
+| DELETE | /storages/{id} | 停用（有文件的存储禁止删除） |
+| GET | /storages/health | 各存储空间检测：路径存在/可写/总空间/剩余空间（sys:config） |
 | POST | /ocr/recognize | {file_id, ocr_type: 1送货单/2商品外包装/3标签型号} → {task_id}；按 sys_config 选中的引擎异步识别（rapidocr / paddle） |
 | GET | /ocr/tasks/{task_id} | {status: running/done/failed, structured, record_id} 轮询 |
 | POST | /ocr/confirm | {record_id, structured} 人工修正确认（match_status=3） |
@@ -141,6 +147,7 @@ OCR 结果示例（structured）：
 ## 9. 系统管理
 
 - GET /settings、PUT /settings（公司信息、单据编号规则、OCR 引擎参数、大模型 Key/BaseURL、预警参数）
+- 存储位置管理见 §7（/storages，多存储地址：fill 最空闲 / round 轮询 / manual 手动指定）
 - GET /operation-logs?user_id=&module=&start=&end=&page=
 - GET /notifications?is_read=&page=、PUT /notifications/{id}/read、PUT /notifications/read-all、GET /notifications/unread-count
 - POST /backup（手动备份 mysqldump）、GET /backups

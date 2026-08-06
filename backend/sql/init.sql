@@ -150,16 +150,33 @@ CREATE TABLE sys_file (
   id            BIGINT NOT NULL AUTO_INCREMENT,
   biz_type      VARCHAR(30)  NOT NULL COMMENT 'purchase_bill/purchase_item/requisition_item/product/other',
   biz_id        BIGINT       NOT NULL DEFAULT 0 COMMENT '归属单据或明细 id',
+  storage_id    BIGINT       NOT NULL DEFAULT 0 COMMENT '存储位置 → sys_storage.id（多存储地址）',
   original_name VARCHAR(255) NOT NULL DEFAULT '',
-  file_path     VARCHAR(255) NOT NULL COMMENT '压缩后存储路径',
+  file_path     VARCHAR(255) NOT NULL COMMENT '相对存储根目录的路径',
   file_size     BIGINT       NOT NULL DEFAULT 0,
   md5           CHAR(32)     NOT NULL DEFAULT '',
   uploader_id   BIGINT       NOT NULL DEFAULT 0,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_biz (biz_type, biz_id)
+  KEY idx_biz (biz_type, biz_id),
+  KEY idx_storage (storage_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件/照片（永久保存）';
+
+DROP TABLE IF EXISTS sys_storage;
+CREATE TABLE sys_storage (
+  id         BIGINT NOT NULL AUTO_INCREMENT,
+  name       VARCHAR(50)  NOT NULL COMMENT '存储位置名称',
+  type       VARCHAR(20)  NOT NULL DEFAULT 'local' COMMENT 'local 本地目录（当前仅本地）',
+  path       VARCHAR(500) NOT NULL COMMENT '存储路径：绝对路径或相对 backend/ 的目录',
+  policy     VARCHAR(10)  NOT NULL DEFAULT 'fill' COMMENT '选择策略：fill 最空闲/round 轮询/manual 手动指定',
+  is_default TINYINT      NOT NULL DEFAULT 0 COMMENT '1 默认（manual 未指定时使用）',
+  status     TINYINT      NOT NULL DEFAULT 1 COMMENT '1 启用 / 0 停用',
+  remark     VARCHAR(255) NOT NULL DEFAULT '',
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='存储位置（多存储地址）';
 
 -- ============================ 3. 基础资料 ============================
 
@@ -632,4 +649,9 @@ INSERT INTO sys_config (config_key, config_value, remark) VALUES
   ('site.name',            '物料通管理系统', '系统名称'),
   ('session.expire_hours', '8',             '会话过期时间（小时，滑动续期）'),
   ('ocr.engine',           'rapidocr',      'OCR 引擎：rapidocr / paddle'),
-  ('bill.rule',            'RK|LL|DB|PD|QT|QCK', '单据编号前缀（单据类型|采购入库|领用|调拨|盘点|其他|期初）');
+  ('bill.rule',            'RK|LL|DB|PD|QT|QCK', '单据编号前缀（单据类型|采购入库|领用|调拨|盘点|其他|期初）'),
+  ('storage.round_seq',    '0',             '轮询策略当前序号（勿手动改）');
+
+-- 默认存储位置（相对 backend/ 解析；后续可在后台新增多存储地址）
+INSERT INTO sys_storage (id, name, type, path, policy, is_default, status) VALUES
+  (1, '本地默认存储', 'local', 'data/files', 'fill', 1, 1);

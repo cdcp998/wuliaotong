@@ -138,8 +138,24 @@ class SysFile(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     biz_type: Mapped[str] = mapped_column(String(30), nullable=False)  # purchase_bill/requisition_item/...
     biz_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    storage_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)  # → sys_storage.id
     original_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     file_path: Mapped[str] = mapped_column(String(255), nullable=False)
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     md5: Mapped[str] = mapped_column(String(32), nullable=False, default="")
     uploader_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
+
+class SysStorage(TimestampMixin, Base):
+    """存储位置（多存储地址，后台管理）。"""
+
+    __tablename__ = "sys_storage"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False, default="local")
+    path: Mapped[str] = mapped_column(String(500), nullable=False)
+    policy: Mapped[str] = mapped_column(String(10), nullable=False, default="fill")  # fill/round/manual
+    is_default: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    remark: Mapped[str] = mapped_column(String(255), nullable=False, default="")

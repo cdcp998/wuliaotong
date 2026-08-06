@@ -29,3 +29,9 @@ Thumbs.db
 # 日志与临时文件
 *.log
 tmp/
+
+# 上传文件存储（本地默认存储 data/files）
+backend/data/
+
+# 测试临时存储目录
+backend/tests/_tmp/

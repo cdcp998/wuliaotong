@@ -12,7 +12,9 @@ from sqlalchemy import text
 
 from app.api import auth as auth_api
 from app.api import base_data as base_data_api
+from app.api import files as files_api
 from app.api import stock as stock_api
+from app.api import storage as storage_api
 from app.api import system as system_api
 from app.config import settings
 from app.core.deps import resolve_session_user
@@ -93,4 +95,6 @@ app.include_router(auth_api.router, prefix=settings.api_prefix)
 app.include_router(base_data_api.static_router, prefix=settings.api_prefix)  # 先于动态路由注册（/products/export 等静态路径）
 app.include_router(base_data_api.router, prefix=settings.api_prefix)
 app.include_router(stock_api.router, prefix=settings.api_prefix)
+app.include_router(files_api.router, prefix=settings.api_prefix)
+app.include_router(storage_api.router, prefix=settings.api_prefix)
 app.include_router(system_api.router, prefix=settings.api_prefix)

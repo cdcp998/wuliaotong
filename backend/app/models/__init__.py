@@ -27,6 +27,7 @@ from app.models.sys import (
     SysRole,
     SysRolePermission,
     SysSession,
+    SysStorage,
     SysUser,
 )
 
@@ -54,5 +55,6 @@ __all__ = [
     "SysRole",
     "SysRolePermission",
     "SysSession",
+    "SysStorage",
     "SysUser",
 ]
