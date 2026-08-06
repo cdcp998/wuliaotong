@@ -50,6 +50,13 @@ export const systemApi = {
   /** 用已保存的豆包 Key 拉取模型列表（保存设置后调用）。 */
   listDoubaoModels: () => http.post<{ models: { id: string; owned_by: string }[] }>("/llm/doubao/models"),
   installPaddle: () => http.post<OcrInstallState>("/ocr/install-paddle"),
+  /** 大模型调用日志（P9）：按场景/状态筛选分页查询。 */
+  llmLogs: (scene = "", status = "", page = 1, pageSize = 20) => {
+    const p = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    if (scene) p.set("scene", scene);
+    if (status) p.set("status", status);
+    return http.get<PageData<{ id: number; scene: string; model: string; prompt: string; output: string; status: string; error: string; duration_ms: number; created_at: string }>>(`/llm-logs?${p.toString()}`);
+  },
   installStatus: () => http.get<OcrInstallState>("/ocr/install-status"),
   /** 水印预览（示例底图，未保存也可预览）：返回 blob URL。 */
   previewWatermark: async (body: { template?: string; position?: string; bg_opaque?: boolean; location?: string; time?: string; gps?: string }) => {

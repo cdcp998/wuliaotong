@@ -7,9 +7,9 @@ import time
 from io import BytesIO
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger("app.system")
@@ -18,7 +18,7 @@ from app.config import settings
 from app.core.deps import require_permission
 from app.core.response import BizError, E_LLM_FAILED, E_PARAM, ok
 from app.db import get_db
-from app.models.sys import SysConfig
+from app.models.sys import LlmLog, SysConfig
 from app.schemas.watermark import WatermarkPreviewReq
 from app.services.ocr.client import ocr_engine_available
 from app.services.watermark import (
@@ -304,3 +304,33 @@ def watermark_preview(req: WatermarkPreviewReq, db: Session = Depends(get_db)):
     img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
+
+
+@router.get("/llm-logs", dependencies=[Depends(require_permission("sys:config"))])
+def list_llm_logs(
+    scene: str = "",
+    status: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> dict:
+    """大模型调用日志查询（P9）：按场景/状态筛选，供后期调整与学习（输入输出截断保存）。"""
+    stmt = select(LlmLog).order_by(LlmLog.id.desc())
+    if scene:
+        stmt = stmt.where(LlmLog.scene == scene)
+    if status:
+        stmt = stmt.where(LlmLog.status == status)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.scalars(stmt.offset((page - 1) * page_size).limit(page_size)).all()
+    return ok({
+        "list": [
+            {
+                "id": r.id, "scene": r.scene, "model": r.model,
+                "prompt": r.prompt, "output": r.output,
+                "status": r.status, "error": r.error,
+                "duration_ms": r.duration_ms, "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            for r in rows
+        ],
+        "total": total, "page": page, "page_size": page_size,
+    })

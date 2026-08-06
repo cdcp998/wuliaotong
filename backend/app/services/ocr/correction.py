@@ -36,7 +36,7 @@ def correct_texts(db: Session, lines: list[str]) -> list[str]:
     except LLMNotConfigured:
         return lines
     try:
-        content = llm.chat_text("只输出修正后的文本行，不要解释", CORRECT_PROMPT + "\n".join(lines))
+        content = llm.chat_text("只输出修正后的文本行，不要解释", CORRECT_PROMPT + "\n".join(lines), scene="ocr_correct")
     except BizError:
         return lines
     out = [ln.strip() for ln in content.splitlines() if ln.strip()]

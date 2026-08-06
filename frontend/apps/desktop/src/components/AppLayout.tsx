@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import {
   App,
+  AutoComplete,
   Badge,
   Button,
   Dropdown,
@@ -20,6 +21,7 @@ import {
   BellOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  EditOutlined,
   ExportOutlined,
   FileSearchOutlined,
   FundOutlined,
@@ -32,6 +34,7 @@ import {
   MobileOutlined,
   ProfileOutlined,
   RobotOutlined,
+  SearchOutlined,
   SettingOutlined,
   ShopOutlined,
   SwapOutlined,
@@ -51,80 +54,107 @@ interface MenuNode {
 }
 
 /** 侧边导航分组（《UI设计方案.md》§3.2）：按权限点过滤。 */
-const MENU: MenuNode[] = [
+export const MENU: MenuNode[] = [
   {
     key: "work",
     label: "工作台",
-    children: [{ key: "/dashboard", label: "经营看板", icon: <DashboardOutlined />, perm: "report:view" }],
+    icon: <DashboardOutlined />,
+    children: [{ key: "/dashboard", label: "统计面板", icon: <DashboardOutlined />, perm: "report:view" }],
   },
   {
     key: "base",
     label: "基础资料",
-    children: [{ key: "/warehouses", label: "仓库与货架", icon: <ShopOutlined />, perm: "base:warehouse" }],
+    icon: <ShopOutlined />,
+    children: [
+      { key: "/materials", label: "材料管理", icon: <AppstoreOutlined />, perm: "base:product" },
+      { key: "/categories", label: "分类管理", icon: <AppstoreOutlined />, perm: "base:category" },
+      { key: "/suppliers", label: "供应商管理", icon: <ShopOutlined />, perm: "base:supplier" },
+      { key: "/units", label: "材料单位管理", icon: <ProfileOutlined />, perm: "base:product" },
+      { key: "/warehouses", label: "仓库与货架", icon: <ShopOutlined />, perm: "base:warehouse" },
+    ],
   },
   {
     key: "purchase",
-    label: "采购管理",
+    label: "入库管理",
+    icon: <InboxOutlined />,
     children: [
-      { key: "/purchase-in", label: "采购入库", icon: <InboxOutlined />, perm: "pch:in" },
-      { key: "/ocr/delivery", label: "送货单 OCR 录入", icon: <FileSearchOutlined />, perm: "pch:ocr" },
+      { key: "/purchase-in", label: "材料入库", icon: <InboxOutlined />, perm: "pch:in" },
+      { key: "/ocr/delivery", label: "送货单识别入库", icon: <FileSearchOutlined />, perm: "pch:ocr" },
     ],
   },
   {
     key: "stock",
     label: "库存管理",
+    icon: <DatabaseOutlined />,
     children: [
       { key: "/stock", label: "库存查询", icon: <DatabaseOutlined />, perm: "stk:query" },
-      { key: "/checks", label: "库存盘点", icon: <ProfileOutlined />, perm: "stk:check" },
       { key: "/transfers", label: "库存调拨", icon: <SwapOutlined />, perm: "stk:transfer" },
+      { key: "/history-price", label: "历史价格管理", icon: <DatabaseOutlined />, perm: "stk:query" },
       { key: "/other-io", label: "其他出入库", icon: <ExportOutlined />, perm: "stk:other" },
     ],
   },
   {
-    key: "req",
+    key: "req-manage",
     label: "领用管理",
-    children: [{ key: "/requisitions", label: "领用审计", icon: <AuditOutlined />, perm: "req:audit" }],
+    icon: <EditOutlined />,
+    children: [
+      { key: "/requisitions/apply", label: "领用申请", icon: <EditOutlined />, perm: "req:apply" },
+      { key: "/requisitions/query", label: "领用申请单查询", icon: <SearchOutlined />, perm: "req:audit" },
+      { key: "/requisitions", label: "领用审计", icon: <AuditOutlined />, perm: "req:audit" },
+    ],
   },
   {
     key: "report",
     label: "报表中心",
+    icon: <FundOutlined />,
     children: [
-      { key: "/reports", label: "进销存报表", icon: <FundOutlined />, perm: "report:view" },
+      { key: "/reports", label: "物料通报表", icon: <FundOutlined />, perm: "report:view" },
+      { key: "/checks", label: "盘点", icon: <ProfileOutlined />, perm: "stk:check" },
       { key: "/ai-suggestions", label: "AI 建议处理", icon: <RobotOutlined />, perm: "ocr:manage" },
     ],
   },
   {
     key: "sys",
     label: "系统管理",
+    icon: <SettingOutlined />,
     children: [
-      { key: "/system/settings", label: "系统设置", icon: <SettingOutlined />, perm: "sys:config" },
       { key: "/system/users", label: "用户管理", icon: <UserOutlined />, perm: "sys:user" },
       { key: "/system/roles", label: "用户权限设置", icon: <ShopOutlined />, perm: "sys:role" },
       { key: "/system/register-applies", label: "注册审核", icon: <AuditOutlined />, perm: "sys:user" },
       { key: "/system/departments", label: "单位管理", icon: <ApartmentOutlined />, perm: "dept:manage" },
       { key: "/system/logs", label: "操作日志", icon: <AppstoreOutlined />, perm: "sys:log" },
       { key: "/system/backups", label: "备份管理", icon: <HddOutlined />, perm: "sys:backup" },
+      { key: "/llm-logs", label: "AI 调用日志", icon: <RobotOutlined />, perm: "sys:config" },
+      { key: "/system/settings", label: "系统设置", icon: <SettingOutlined />, perm: "sys:config" },
     ],
   },
 ];
 
 const TITLES: Record<string, string> = {
-  "/dashboard": "经营看板",
+  "/dashboard": "统计面板",
+  "/materials": "材料管理",
+  "/categories": "分类管理",
+  "/suppliers": "供应商管理",
+  "/units": "材料单位管理",
   "/warehouses": "仓库与货架",
-  "/purchase-in": "采购入库",
-  "/ocr/delivery": "送货单 OCR 录入",
+  "/purchase-in": "材料入库",
+  "/ocr/delivery": "送货单识别入库",
   "/stock": "库存查询",
-  "/checks": "库存盘点",
+  "/checks": "盘点",
   "/transfers": "库存调拨",
+  "/history-price": "历史价格管理",
+  "/requisitions/apply": "领用申请",
+  "/requisitions/query": "领用申请单查询",
   "/other-io": "其他出入库",
   "/requisitions": "领用审计",
-  "/reports": "进销存报表",
+  "/reports": "物料通报表",
   "/ai-suggestions": "AI 建议处理",
   "/system/settings": "系统设置",
   "/system/users": "用户管理",
   "/system/roles": "用户权限设置",
   "/system/logs": "操作日志",
   "/system/backups": "备份管理",
+  "/llm-logs": "AI 调用日志",
 };
 
 /** 电脑端应用骨架：侧边导航 + 顶栏（《UI设计方案.md》§3.2/§4）。 */
@@ -155,12 +185,31 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
       .catch(() => undefined);
   }, [location.pathname]);
 
+  // 可折叠导航：主导航分类渲染为内联子菜单（点击标题展开/收起其子项），
+  // 无权限子项过滤、空分类隐藏；展开状态由 antd 内部维护，选中项所在分类自动展开
+  // 导航搜索：匹配菜单项（含权限过滤），选中直接跳转
+  const [navKw, setNavKw] = useState("");
+  const navOptions = useMemo(() => {
+    const kw = navKw.trim().toLowerCase();
+    if (!kw) return [];
+    const out: { value: string; label: string }[] = [];
+    for (const g of MENU) {
+      for (const c of g.children ?? []) {
+        if (c.perm && !hasPerm(c.perm)) continue;
+        if (g.label.toLowerCase().includes(kw) || c.label.toLowerCase().includes(kw)) {
+          out.push({ value: c.key, label: `${g.label} / ${c.label}` });
+        }
+      }
+    }
+    return out.slice(0, 10);
+  }, [navKw, hasPerm]);
+
   const menuItems: MenuProps["items"] = useMemo(
     () =>
       MENU.map((g) => ({
         key: g.key,
+        icon: g.icon,
         label: g.label,
-        type: "group" as const,
         children: g.children
           ?.filter((c) => !c.perm || hasPerm(c.perm))
           .map((c) => ({ key: c.key, icon: c.icon, label: c.label })),
@@ -210,9 +259,26 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
             </div>
           )}
         </div>
+        {!collapsed && (
+          <div style={{ padding: "4px 12px 8px" }}>
+            <AutoComplete
+              style={{ width: "100%" }}
+              value={navKw}
+              options={navOptions}
+              onChange={setNavKw}
+              onSelect={(v) => {
+                navigate(v);
+                setNavKw("");
+              }}
+              placeholder="搜索导航…"
+              allowClear
+            />
+          </div>
+        )}
         <Menu
           mode="inline"
           items={menuItems}
+          defaultOpenKeys={MENU.map((g) => g.key)}
           selectedKeys={[selectedKey]}
           onClick={({ key }) => navigate(key)}
           style={{ borderInlineEnd: "none", padding: "8px 0" }}
@@ -253,10 +319,36 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
                 </div>
                 {notices.length === 0 && <div style={{ padding: 28, textAlign: "center", color: token.colorTextTertiary, fontSize: 13 }}>暂无未读通知</div>}
                 {notices.map((n) => (
-                  <div key={n.id} style={{ padding: "10px 16px", borderBottom: `1px solid ${token.colorBorderSecondary}`, cursor: "pointer" }}>
+                  <div
+                    key={n.id}
+                    style={{ padding: "10px 16px", borderBottom: `1px solid ${token.colorBorderSecondary}`, cursor: "pointer" }}
+                    onClick={() => {
+                      // 点击条目 = 标记已读：本地立即移除并更新徽标，后端持久化
+                      notificationApi.markRead(n.id).then(() => {
+                        setUnread((u) => Math.max(0, u - 1));
+                        setNotices((ns) => ns.filter((x) => x.id !== n.id));
+                      }).catch(() => undefined);
+                    }}
+                  >
                     <div style={{ fontWeight: 500, fontSize: 13 }}>{n.title}</div>
                     <div style={{ fontSize: 12, color: token.colorTextSecondary, marginTop: 2, lineHeight: 1.5 }}>{n.content}</div>
-                    <div style={{ fontSize: 11, color: token.colorTextTertiary, marginTop: 4 }}>{n.created_at.slice(0, 16)}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                      <span style={{ fontSize: 11, color: token.colorTextTertiary }}>{n.created_at.slice(0, 16)}</span>
+                      <Button
+                        type="link"
+                        size="small"
+                        style={{ padding: 0, fontSize: 12 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          notificationApi.markRead(n.id).then(() => {
+                            setUnread((u) => Math.max(0, u - 1));
+                            setNotices((ns) => ns.filter((x) => x.id !== n.id));
+                          }).catch(() => undefined);
+                        }}
+                      >
+                        标记已读
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>

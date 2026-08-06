@@ -127,7 +127,7 @@ def _vision_product(db: Session, image_bytes: bytes) -> dict | None:
         except LLMNotConfigured:
             continue
         try:
-            content = vllm.chat_image(image_bytes, VISION_PRODUCT_PROMPT)
+            content = vllm.chat_image(image_bytes, VISION_PRODUCT_PROMPT, scene="vision_product")
             start, end = content.find("{"), content.rfind("}")
             if start < 0 or end < 0:
                 continue
@@ -153,7 +153,7 @@ def _vision_texts(db: Session, data: bytes) -> list[str]:
         except LLMNotConfigured:
             continue
         try:
-            content = vllm.chat_image(data, VISION_TEXT_PROMPT)
+            content = vllm.chat_image(data, VISION_TEXT_PROMPT, scene="vision_text")
             return [ln.strip() for ln in content.splitlines() if ln.strip()]
         except Exception:  # noqa: BLE001
             continue
@@ -188,7 +188,7 @@ def _delivery_by_vision(db: Session, image_bytes: bytes) -> dict | None:
     except LLMNotConfigured:
         return None
     try:
-        content = vllm.chat_image(image_bytes, VISION_DELIVERY_PROMPT)
+        content = vllm.chat_image(image_bytes, VISION_DELIVERY_PROMPT, scene="vision_delivery")
         start, end = content.find("{"), content.rfind("}")
         if start < 0 or end < 0:
             return None
@@ -226,7 +226,7 @@ def _classify_items_by_deepseek(db: Session, items: list) -> list:
         + json.dumps(items, ensure_ascii=False)
     )
     try:
-        content = llm.chat_text("只输出JSON，不要解释", prompt)
+        content = llm.chat_text("只输出JSON，不要解释", prompt, scene="classify_items")
         start, end = content.find("["), content.rfind("]")
         if start < 0 or end < 0:
             return items
@@ -259,7 +259,7 @@ def _structured_by_deepseek(db: Session, lines: list[str]) -> dict | None:
         "无法判断的项留空或跳过。\n文本行：\n" + "\n".join(lines)
     )
     try:
-        content = llm.chat_text("只输出JSON，不要解释", prompt)
+        content = llm.chat_text("只输出JSON，不要解释", prompt, scene="structured")
         start, end = content.find("{"), content.rfind("}")
         if start < 0 or end < 0:
             return None
@@ -760,7 +760,7 @@ def ocr_match(
         "\"category\": 类别, \"note\": 其他可识别信息}。无法识别时 name 给最可能的名称。只输出JSON。"
     )
     try:
-        content = llm.chat_image(file_bytes, prompt)
+        content = llm.chat_image(file_bytes, prompt, scene="match_vision")
     except Exception as e:
         raise BizError(5002, f"{llm.name} 视觉识别失败：{e}")
     try:

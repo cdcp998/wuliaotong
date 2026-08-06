@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { RouterProvider, createBrowserRouter, Navigate } from "react-router-dom";
+import { RouterProvider, createBrowserRouter, Navigate } from "react-router";
 import { App as AntApp, ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 
@@ -13,19 +13,26 @@ import { ChecksPage } from "./pages/Checks";
 import { DashboardPage } from "./pages/Dashboard";
 import { DeliveryOcrPage } from "./pages/DeliveryOcr";
 import { DepartmentsPage } from "./pages/Departments";
+import { HistoryPricePage } from "./pages/HistoryPrice";
 import { LandingPage } from "./pages/Landing";
 import { LogsPage } from "./pages/Logs";
 import { LoginPage } from "./pages/Login";
+import { CategoriesPage } from "./pages/Categories";
+import { MaterialsPage } from "./pages/Materials";
 import { OtherIoPage } from "./pages/OtherIo";
 import { PurchaseInPage } from "./pages/PurchaseIn";
 import { RegisterAppliesPage } from "./pages/RegisterApplies";
 import { ReportsPage } from "./pages/Reports";
+import { RequisitionApplyPage } from "./pages/RequisitionApply";
 import { RequisitionAuditPage } from "./pages/RequisitionAudit";
+import { RequisitionQueryPage } from "./pages/RequisitionQuery";
 import { RolesPage } from "./pages/Roles";
 import { SettingsPage } from "./pages/Settings";
 import { ShelfMapPage } from "./pages/ShelfMap";
 import { StockQueryPage } from "./pages/StockQuery";
+import { SuppliersPage } from "./pages/Suppliers";
 import { TransfersPage } from "./pages/Transfers";
+import { UnitsPage } from "./pages/Units";
 import { UsersPage } from "./pages/Users";
 import { WarehousesPage } from "./pages/Warehouses";
 
@@ -34,7 +41,8 @@ function withLayout(page: React.ReactNode) {
   return <RequireAuth><AppLayout>{page}</AppLayout></RequireAuth>;
 }
 
-const router = createBrowserRouter([
+const router = createBrowserRouter(
+  [
   { path: "/", element: <LandingPage /> }, // 入口：设备识别自动跳转 + 手动选择
   { path: "/m/*", element: <Navigate to="/" replace /> }, // 手机版入口后缀误入电脑端时回入口
   { path: "/login", element: <LoginPage /> },
@@ -42,6 +50,10 @@ const router = createBrowserRouter([
   { path: "/dashboard", element: withLayout(<DashboardPage />) },
   { path: "/reports", element: withLayout(<ReportsPage />) },
   { path: "/warehouses", element: withLayout(<WarehousesPage />) },
+  { path: "/materials", element: withLayout(<MaterialsPage />) },
+  { path: "/categories", element: withLayout(<CategoriesPage />) },
+  { path: "/suppliers", element: withLayout(<SuppliersPage />) },
+  { path: "/units", element: withLayout(<UnitsPage />) },
   { path: "/warehouses/:id/map", element: withLayout(<ShelfMapPage />) },
   { path: "/system/settings", element: withLayout(<SettingsPage />) },
   { path: "/system/users", element: withLayout(<UsersPage />) },
@@ -54,12 +66,18 @@ const router = createBrowserRouter([
   { path: "/checks", element: withLayout(<ChecksPage />) },
   { path: "/checks/:id", element: withLayout(<CheckDetailPage />) },
   { path: "/other-io", element: withLayout(<OtherIoPage />) },
+  { path: "/history-price", element: withLayout(<HistoryPricePage />) },
+  { path: "/requisitions/apply", element: withLayout(<RequisitionApplyPage />) },
+  { path: "/requisitions/query", element: withLayout(<RequisitionQueryPage />) },
+  { path: "/requisitions", element: withLayout(<RequisitionAuditPage />) },
   { path: "/purchase-in", element: withLayout(<PurchaseInPage />) },
   { path: "/stock", element: withLayout(<StockQueryPage />) },
-  { path: "/requisitions", element: withLayout(<RequisitionAuditPage />) },
   { path: "/ocr/delivery", element: withLayout(<DeliveryOcrPage />) },
   { path: "/ai-suggestions", element: withLayout(<AiSuggestionsPage />) },
-]);
+  ],
+  // v7 future flags：react-router 6.30.4 运行时支持 v7_startTransition（类型声明滞后，故断言）；消除 v7 迁移警告
+  { future: { v7_startTransition: true, v7_relativeSplatPath: true, v7_fetcherPersist: true, v7_normalizeFormMethod: true, v7_partialHydration: true, v7_skipActionErrorRevalidation: true } as Record<string, boolean> }
+);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

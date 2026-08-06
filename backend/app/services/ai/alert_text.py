@@ -74,7 +74,7 @@ def generate_alert_text(db: Session, *, product: BaseProduct, qty: Decimal, kind
     except LLMNotConfigured:
         return fallback
     try:
-        content = llm.chat_text("只输出通知正文，不要解释", ALERT_PROMPT + data)
+        content = llm.chat_text("只输出通知正文，不要解释", ALERT_PROMPT + data, scene="alert_text")
     except BizError:
         return fallback
     text = " ".join(content.split())

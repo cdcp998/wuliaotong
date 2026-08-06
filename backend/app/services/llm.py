@@ -45,6 +45,27 @@ def _get_config(db: Session, key: str) -> str:
     return cfg.config_value if cfg else ""
 
 
+def _log_llm_call(scene: str, model: str, prompt_text: str, output: str, status: str, error: str, duration_ms: int, user_id: int | None = None) -> None:
+    """大模型调用日志（P9）：fire-and-forget 写 sys_llm_log，失败不影响主流程。"""
+    try:
+        from app.db import SessionLocal
+        from app.models.sys import LlmLog
+
+        s = SessionLocal()
+        try:
+            s.add(LlmLog(
+                scene=scene[:50], model=model[:50],
+                prompt=prompt_text[:4000], output=output[:8000],
+                status=status[:10], error=error[:2000],
+                duration_ms=int(duration_ms), user_id=user_id,
+            ))
+            s.commit()
+        finally:
+            s.close()
+    except Exception:  # noqa: BLE001 日志失败绝不能影响业务
+        pass
+
+
 class _OpenAICompatClient:
     """OpenAI 兼容 Chat Completions 客户端（豆包/DeepSeek 均支持）。"""
 
@@ -56,7 +77,23 @@ class _OpenAICompatClient:
         self.model = model
         self.vision = vision
 
-    def _request(self, messages: list[dict]) -> str:
+    def _request(self, messages: list[dict], scene: str = "", user_id: int | None = None) -> str:
+        # 输入记录：图片 base64 省略（只记张数），文本拼接截断
+        parts: list[str] = []
+        img_count = 0
+        for m in messages:
+            c = m.get("content")
+            if isinstance(c, str):
+                parts.append(c)
+            elif isinstance(c, list):
+                for item in c:
+                    if item.get("type") == "text":
+                        parts.append(str(item.get("text") or ""))
+                    elif item.get("type") == "image_url":
+                        img_count += 1
+        prompt_text = "\n".join(parts)
+        if img_count:
+            prompt_text = f"[图片×{img_count}]\n" + prompt_text
         start = time.time()
         try:
             resp = httpx.post(
@@ -68,19 +105,21 @@ class _OpenAICompatClient:
             resp.raise_for_status()
             data = resp.json()
             content = data["choices"][0]["message"]["content"].strip()
+            _log_llm_call(scene, self.name, prompt_text, content, "ok", "", (time.time() - start) * 1000, user_id)
             logger.debug("大模型调用成功 name=%s model=%s 耗时=%.1fs 输入=%d 输出=%d", self.name, self.model, time.time() - start, len(messages), len(content))
             return content
         except Exception as e:  # 网络/鉴权/限流等
+            _log_llm_call(scene, self.name, prompt_text, "", "error", str(e), (time.time() - start) * 1000, user_id)
             logger.error("大模型调用失败 name=%s model=%s 耗时=%.1fs: %s", self.name, self.model, time.time() - start, e)
             raise BizError(E_LLM_FAILED, f"大模型调用失败：{e}")
 
-    def chat_text(self, system: str, user: str) -> str:
+    def chat_text(self, system: str, user: str, scene: str = "", user_id: int | None = None) -> str:
         return self._request([
             {"role": "system", "content": system},
             {"role": "user", "content": user},
-        ])
+        ], scene=scene, user_id=user_id)
 
-    def chat_image(self, image_bytes: bytes, prompt: str) -> str:
+    def chat_image(self, image_bytes: bytes, prompt: str, scene: str = "", user_id: int | None = None) -> str:
         if not self.vision:
             raise BizError(E_LLM_FAILED, "当前模型不支持图像输入（请配置豆包视觉模型）")
         b64 = base64.b64encode(image_bytes).decode()
@@ -92,7 +131,7 @@ class _OpenAICompatClient:
                     {"type": "text", "text": prompt},
                 ],
             }
-        ])
+        ], scene=scene, user_id=user_id)
 
 
 class DoubaoClient(_OpenAICompatClient):

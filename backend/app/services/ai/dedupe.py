@@ -89,7 +89,7 @@ def dedupe_scan(db: Session, max_pairs: int = 60) -> list[dict]:
         for i, (a, b) in enumerate(pairs)
     ]
     try:
-        content = llm.chat_text("只输出JSON数组，不要解释", DEDUPE_PROMPT + "\n".join(lines))
+        content = llm.chat_text("只输出JSON数组，不要解释", DEDUPE_PROMPT + "\n".join(lines), scene="dedupe")
         start, end = content.find("["), content.rfind("]")
         result = __import__("json").loads(content[start : end + 1]) if start >= 0 and end >= 0 else []
     except Exception:  # noqa: BLE001 解析失败降级

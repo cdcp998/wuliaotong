@@ -49,7 +49,7 @@ def match_supplier_by_llm(db: Session, name: str) -> tuple[int, str]:
         return 0, ""
     lines = [f"{i}: {s.name}" for i, s in enumerate(cands)]
     try:
-        content = llm.chat_text("只输出JSON数组，不要解释", SUPPLIER_NORM_PROMPT + f"识别名：{name}\n候选：\n" + "\n".join(lines))
+        content = llm.chat_text("只输出JSON数组，不要解释", SUPPLIER_NORM_PROMPT + f"识别名：{name}\n候选：\n" + "\n".join(lines), scene="supplier_norm")
         start, end = content.find("["), content.rfind("]")
         result = json.loads(content[start : end + 1]) if start >= 0 and end >= 0 else []
     except (BizError, json.JSONDecodeError):

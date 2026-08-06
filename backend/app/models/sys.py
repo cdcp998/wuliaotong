@@ -108,6 +108,23 @@ class SysConfig(Base):
     remark: Mapped[str] = mapped_column(String(255), nullable=False, default="")
 
 
+class LlmLog(Base):
+    """大模型调用日志（P9）：所有 LLM 调用的输入/输出/耗时/成败，供后期调整与学习。"""
+
+    __tablename__ = "sys_llm_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    scene: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    model: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)  # 输入（图片仅记张数）
+    output: Mapped[str] = mapped_column(Text, nullable=False)  # 输出（截断保存）
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="ok")
+    error: Mapped[str] = mapped_column(Text, nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+
 class SysOperationLog(Base):
     __tablename__ = "sys_operation_log"
 

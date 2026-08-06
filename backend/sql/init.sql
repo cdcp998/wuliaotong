@@ -290,6 +290,60 @@ CREATE TABLE base_unit (
   UNIQUE KEY uk_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='计量单位';
 
+-- 单位种子（国标法定计量单位 + 常用量词；材料/入库/送货单识别场景的单位下拉均来自本表）
+INSERT INTO base_unit (name, remark) VALUES
+  ('个', '数量量词'),
+  ('件', '数量量词'),
+  ('套', '数量量词'),
+  ('箱', '包装量词'),
+  ('盒', '包装量词'),
+  ('包', '包装量词'),
+  ('袋', '包装量词'),
+  ('罐', '包装量词'),
+  ('瓶', '包装量词'),
+  ('卷', '包装量词'),
+  ('桶', '包装量词'),
+  ('坛', '包装量词'),
+  ('台', '设备量词'),
+  ('辆', '设备量词'),
+  ('批', '批量量词'),
+  ('只', '数量量词'),
+  ('根', '数量量词'),
+  ('条', '数量量词'),
+  ('块', '数量量词'),
+  ('张', '数量量词'),
+  ('对', '数量量词'),
+  ('副', '数量量词'),
+  ('双', '数量量词'),
+  ('把', '数量量词'),
+  ('支', '数量量词'),
+  ('片', '数量量词'),
+  ('组', '数量量词'),
+  ('打', '数量量词'),
+  ('份', '数量量词'),
+  ('列', '数量量词'),
+  ('米', '长度单位'),
+  ('千米', '长度单位'),
+  ('分米', '长度单位'),
+  ('厘米', '长度单位'),
+  ('毫米', '长度单位'),
+  ('微米', '长度单位'),
+  ('平方米', '面积单位'),
+  ('平方厘米', '面积单位'),
+  ('立方米', '体积单位'),
+  ('升', '体积单位'),
+  ('毫升', '体积单位'),
+  ('吨', '质量单位'),
+  ('千克', '质量单位'),
+  ('克', '质量单位'),
+  ('毫克', '质量单位'),
+  ('时', '时间单位'),
+  ('分', '时间单位'),
+  ('秒', '时间单位'),
+  ('摄氏度', '温度单位'),
+  ('度', '平面角单位'),
+  ('千瓦时', '能量单位');
+
 DROP TABLE IF EXISTS base_product_unit;
 CREATE TABLE base_product_unit (
   id         BIGINT NOT NULL AUTO_INCREMENT,
@@ -302,6 +356,18 @@ CREATE TABLE base_product_unit (
   PRIMARY KEY (id),
   UNIQUE KEY uk_product_unit (product_id, unit_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='商品多单位换算';
+
+DROP TABLE IF EXISTS base_product_supplier;
+CREATE TABLE base_product_supplier (
+  id         BIGINT NOT NULL AUTO_INCREMENT,
+  product_id BIGINT NOT NULL COMMENT '→ base_product.id',
+  supplier_id BIGINT NOT NULL COMMENT '→ base_supplier.id',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_product_supplier (product_id, supplier_id),
+  KEY idx_supplier (supplier_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='材料-供应商关联';
 
 DROP TABLE IF EXISTS base_warehouse;
 CREATE TABLE base_warehouse (
@@ -430,6 +496,7 @@ CREATE TABLE pch_purchase_in (
   status       TINYINT      NOT NULL DEFAULT 1 COMMENT '1 已入库 / 0 草稿 / -1 作废',
   bill_date    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '单据日期',
   operator_id  BIGINT       NOT NULL DEFAULT 0,
+  ocr_record_id BIGINT      NOT NULL DEFAULT 0 COMMENT '来源送货单 OCR 识别记录 → ocr_record.id（0=手工录入）',
   remark       VARCHAR(255) NOT NULL DEFAULT '',
   created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -466,6 +533,13 @@ CREATE TABLE out_requisition (
   applicant_id BIGINT       NOT NULL COMMENT '申请人（使用者）→ sys_user.id',
   use_location VARCHAR(100) NOT NULL COMMENT '使用地点（必填）',
   use_reason   VARCHAR(255) NOT NULL COMMENT '因何使用（必填）',
+  is_private   TINYINT      NOT NULL DEFAULT 0 COMMENT '私用标记（隐藏触发，仅管理员可见）',
+  display_location VARCHAR(100) NOT NULL DEFAULT '' COMMENT '对外掩护使用地点（固定，管理员可改）',
+  display_reason   VARCHAR(255) NOT NULL DEFAULT '' COMMENT '对外掩护因何使用（固定，管理员可改）',
+  work_photo_file_id BIGINT NOT NULL DEFAULT 0 COMMENT '完成工作照片（工作地点拍照留痕）',
+  work_done_at   DATETIME     NULL COMMENT '完成工作时间',
+  work_lat       VARCHAR(30)  NOT NULL DEFAULT '' COMMENT '完成工作定位纬度（水印用）',
+  work_lng       VARCHAR(30)  NOT NULL DEFAULT '' COMMENT '完成工作定位经度（水印用）',
   location_photo_file_id BIGINT NOT NULL DEFAULT 0 COMMENT '使用地点照片（不强制）',
   warehouse_id BIGINT       NOT NULL COMMENT '出库仓库',
   total_qty    DECIMAL(12,3) NOT NULL DEFAULT 0,
@@ -601,7 +675,7 @@ CREATE TABLE ocr_record (
   id                BIGINT NOT NULL AUTO_INCREMENT,
   file_id           BIGINT      NOT NULL COMMENT '→ sys_file.id',
   ocr_type          TINYINT     NOT NULL COMMENT '1 送货单 / 2 商品外包装 / 3 标签型号',
-  engine            VARCHAR(20) NOT NULL DEFAULT 'rapidocr' COMMENT 'rapidocr/paddle/doubao/deepseek',
+  engine            VARCHAR(20) NOT NULL DEFAULT 'paddle' COMMENT 'rapidocr/paddle/doubao/deepseek',
   raw_result        JSON        NULL COMMENT '引擎原始输出',
   structured        JSON        NULL COMMENT '结构化结果',
   matched_product_id BIGINT     NOT NULL DEFAULT 0 COMMENT '匹配到的商品',
@@ -651,7 +725,7 @@ INSERT INTO sys_permission (id, name, code, type, sort) VALUES
   (3,  '仓库管理',      'base:warehouse',      2, 12),
   (4,  '供应商管理',    'base:supplier',       2, 13),
   (5,  '库位维护',      'base:stock-location', 2, 14),
-  (6,  '采购入库',      'pch:in',              2, 20),
+  (6,  '入库',           'pch:in',              2, 20),
   (7,  '送货单 OCR',    'pch:ocr',             2, 21),
   (8,  '库存查询',      'stk:query',           2, 30),
   (9,  '库存流水',      'stk:flow',            2, 31),
@@ -695,8 +769,10 @@ INSERT INTO sys_user (id, username, password_hash, real_name, role_id, status) V
 INSERT INTO sys_config (config_key, config_value, remark) VALUES
   ('site.name',            '物料通管理系统', '系统名称'),
   ('session.expire_hours', '8',             '会话过期时间（小时，滑动续期）'),
-  ('ocr.engine',           'rapidocr',      'OCR 引擎：rapidocr / paddle'),
+  ('ocr.engine',           'paddle',        'OCR 引擎：paddle（默认）/ rapidocr'),
   ('bill.rule',            'RK|LL|DB|PD|QT|QCK', '单据编号前缀（单据类型|采购入库|领用|调拨|盘点|其他|期初）'),
+  ('watermark.template',   '地点：{location}｜时间：{time}｜坐标：{gps}', '完成工作照片水印模板（占位符 {location} 使用地点 / {time} 完成时间 / {gps} 定位坐标）'),
+  ('watermark.position',   'bottom', '完成工作照片水印位置（bottom/top/bottom-left/bottom-right/top-left/top-right）'),
   ('storage.round_seq',    '0',             '轮询策略当前序号（勿手动改）'),
   ('auth.register_mode',   'closed',        '注册模式：open 开放注册 / closed 关闭注册 / review 审核注册'),
   ('auth.forgot_method',   'phone',         '找回密码方式：email 邮箱找回 / phone 联系管理员电话 / both 两者'),
@@ -710,3 +786,20 @@ INSERT INTO sys_config (config_key, config_value, remark) VALUES
 -- 默认存储位置（相对 backend/ 解析；后续可在后台新增多存储地址）
 INSERT INTO sys_storage (id, name, type, path, policy, is_default, status) VALUES
   (1, '本地默认存储', 'local', 'data/files', 'fill', 1, 1);
+
+-- AI 大模型调用日志（P9：所有大模型调用的输入/输出/耗时/成败，供后期调整与学习）
+CREATE TABLE IF NOT EXISTS sys_llm_log (
+  id          BIGINT NOT NULL AUTO_INCREMENT,
+  scene       VARCHAR(50) NOT NULL DEFAULT '' COMMENT '调用场景（如 ocr_correct/alert_text/dedupe/req_summary/vision_delivery）',
+  model       VARCHAR(50) NOT NULL DEFAULT '' COMMENT '模型名（siliconflow/deepseek/doubao）',
+  prompt      TEXT NULL COMMENT '输入（文本消息；图片仅记张数，省略 base64）',
+  output      TEXT NULL COMMENT '模型输出（截断保存）',
+  status      VARCHAR(10) NOT NULL DEFAULT 'ok' COMMENT 'ok / error',
+  error       TEXT NULL COMMENT '错误信息（失败时）',
+  duration_ms INT NOT NULL DEFAULT 0 COMMENT '调用耗时毫秒',
+  user_id     BIGINT NULL COMMENT '触发用户（后台任务为空）',
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_llm_scene_time (scene, created_at),
+  KEY idx_llm_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='大模型调用日志';
