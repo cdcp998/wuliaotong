@@ -143,7 +143,8 @@ export function PurchaseInPage() {
           ...m,
           [key]: ranked.map((p) => ({
             value: p.id,
-            label: `${p.name}${p.material_code ? ` · ${p.material_code}` : ""}${p.spec ? `（${p.spec}）` : ""}`,
+            // label 仅材料名称：选中后显示框不出现物料编码（下拉项完整信息由 optionRender 展示）
+            label: p.name,
             product: p,
           })),
         }));
@@ -242,7 +243,7 @@ export function PurchaseInPage() {
           material_code: p?.material_code ?? it.material_code ?? "",
           spec: it.spec || p?.spec || "",
           unit: it.unit || p?.unit_name || "",
-          barcode: "",
+          barcode: p?.barcode ?? "",
           location_id: undefined,
           qty: Number(it.qty ?? 1),
           price: Number(it.price ?? 0),
@@ -313,7 +314,7 @@ export function PurchaseInPage() {
     try {
       const p = await resolveByBarcode(b);
       if (p) {
-        setRow(key, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name });
+        setRow(key, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode });
         message.success(`条码匹配：${p.name}`);
       } else {
         setMaterialModal({ open: true, rowKey: key, barcode: b, name: "", spec: "" });
@@ -363,7 +364,7 @@ export function PurchaseInPage() {
         unit_id: v.unit_id,
       });
       setProducts((ps) => [...ps, p]);
-      setRow(materialModal.rowKey, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name });
+      setRow(materialModal.rowKey, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode });
       message.success(`材料已新增：${p.name}`);
       setMaterialModal((s) => ({ ...s, open: false }));
       materialForm.resetFields();
@@ -378,7 +379,7 @@ export function PurchaseInPage() {
     try {
       const p = await baseApi.createProduct({ name: llmModal.name.trim(), spec: llmModal.spec.trim(), unit_id: llmModal.unitId ?? units[0]?.id ?? 0 });
       setProducts((ps) => [...ps, p]);
-      setRow(llmModal.rowKey, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name });
+      setRow(llmModal.rowKey, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode });
       message.success(`已按大模型分析新增：${p.name}`);
       setLlmModal(null);
     } catch (e) {
@@ -502,7 +503,7 @@ export function PurchaseInPage() {
             // 候选 value 即物料编码：选中后回填该物料完整信息（材料名称列随之显示对应名称）
             const hit = (matOptions[r.key] ?? []).find((o) => o.value === val);
             const p = hit?.product;
-            if (p) setRow(r.key, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name });
+            if (p) setRow(r.key, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode });
           }}
         />
       ),
@@ -542,12 +543,24 @@ export function PurchaseInPage() {
             allowClear
             onSearch={(kw) => queryByName(r.key, kw)}
             options={[
-              // 当前行材料不在搜索结果里时也回显名称（预填/已选材料）
+              // 当前行材料不在搜索结果里时也回显名称（预填/已选材料；label 仅名称，显示框不出现编码）
               ...(r.product && !(nameOptions[r.key] ?? []).some((o) => o.value === r.product!.id)
-                ? [{ value: r.product.id, label: `${r.product.name}${r.product.material_code ? ` · ${r.product.material_code}` : ""}` }]
+                ? [{ value: r.product.id, label: r.product.name }]
                 : []),
               ...(nameOptions[r.key] ?? []),
             ]}
+            optionRender={(option) => {
+              // 下拉项展示完整信息（名称 · 物料编码（规格）），选中框只显示 label（纯名称）
+              const p = (option.data as { product?: Product }).product;
+              if (!p) return option.label;
+              return (
+                <span>
+                  {p.name}
+                  {p.material_code ? ` · ${p.material_code}` : ""}
+                  {p.spec ? `（${p.spec}）` : ""}
+                </span>
+              );
+            }}
             onChange={(v) => {
               // 清空选择：取消当前材料（同步清空其带入的物料编码/规格/单位）
               if (v === undefined) {
@@ -557,7 +570,7 @@ export function PurchaseInPage() {
               // 优先用服务端搜索结果里的完整材料（可能不在本地前 500 条），兜底本地列表
               const hit = (nameOptions[r.key] ?? []).find((o) => o.value === v);
               const x = hit?.product ?? products.find((it) => it.id === v);
-              if (x) setRow(r.key, { product: x, material_code: x.material_code, spec: x.spec, unit: x.unit_name });
+              if (x) setRow(r.key, { product: x, material_code: x.material_code, spec: x.spec, unit: x.unit_name, barcode: x.barcode });
             }}
           />
           <Button icon={<CameraOutlined />} title="拍照 OCR 识别（未匹配自动大模型分析）" onClick={() => { scanTarget.current = { kind: "name", rowKey: r.key }; fileRef.current?.click(); }} />
@@ -610,7 +623,7 @@ export function PurchaseInPage() {
           value={v}
           status={submitTried && !v ? "error" : undefined}
           onChange={(x) => setRow(r.key, { location_id: x })}
-          dropdownRender={(menu) => (
+          popupRender={(menu) => (
             <>
               {menu}
               <Divider style={{ margin: "6px 0" }} />
