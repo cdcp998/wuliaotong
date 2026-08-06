@@ -49,7 +49,8 @@ def ai_summary(db: Session, req: OutRequisition, items: list[OutRequisitionItem]
         lack = stock < it.qty
         if lack:
             shortage += 1
-        total_amount += float(it.qty) * float(it.price or 0)
+        # 金额按材料进价估算（领用明细无价格字段）
+        total_amount += float(it.qty) * float(p.purchase_price or 0) if p and p.purchase_price else 0
         rows.append({"name": name, "qty": float(it.qty), "stock": float(stock), "lack": lack})
     risk_parts: list[str] = []
     if shortage:

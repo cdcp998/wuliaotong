@@ -237,6 +237,8 @@ export const requisitionApi = {
   audit: (id: number, action: "approve" | "reject", remark: string) =>
     http.post<null>(`/requisitions/${id}/audit`, { action, remark }),
   detail: (id: number) => http.get<RequisitionDetail>(`/requisitions/${id}`),
+  /** 领用审核 AI 辅助摘要（P9-P1⑤）。 */
+  aiSummary: (id: number) => http.get<{ summary: string; risk_level: string; reasons: string[]; ai: boolean }>(`/requisitions/${id}/ai-summary`),
   cancel: (id: number) => http.post<null>(`/requisitions/${id}/cancel`),
   /** 完成工作：在工作地点拍照留痕（手机定位供下载水印），提交后进入待审计。 */
   workDone: (id: number, photoFileId: number, lat = "", lng = "") =>
