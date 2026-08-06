@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useAuthStore } from "@wlt/shared";
+import { otherEndUrl, useAuthStore } from "@wlt/shared";
 
 export function LoginPage() {
   const login = useAuthStore((s) => s.login);
@@ -16,7 +16,7 @@ export function LoginPage() {
     setError("");
     try {
       await login(username, password);
-      navigate("/", { replace: true });
+      navigate("/app", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败");
     }
@@ -44,6 +44,9 @@ export function LoginPage() {
         <button style={styles.button} type="submit" disabled={loading || !username || !password}>
           {loading ? "登录中..." : "登 录"}
         </button>
+        <a href={otherEndUrl("mobile")} style={{ textAlign: "center", color: "#1677ff", fontSize: 13, textDecoration: "none" }}>
+          手机版入口
+        </a>
       </form>
     </div>
   );

@@ -1,7 +1,7 @@
 import { Button, Grid } from "antd-mobile";
 import { useNavigate } from "react-router-dom";
 
-import { useAuthStore } from "@wlt/shared";
+import { otherEndUrl, useAuthStore } from "@wlt/shared";
 
 export function HomePage() {
   const user = useAuthStore((s) => s.user);
@@ -16,7 +16,11 @@ export function HomePage() {
     <div style={{ padding: 16, minHeight: "100vh", background: "#f5f6f8" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>物料通</h2>
-        <button
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <a href={otherEndUrl("desktop")} style={{ color: "#1677ff", fontSize: 13 }}>
+            电脑版
+          </a>
+          <button
           onClick={async () => {
             await logout();
             navigate("/login");
@@ -24,6 +28,7 @@ export function HomePage() {
         >
           退出
         </button>
+        </div>
       </div>
       <p style={{ color: "#666" }}>
         {user?.real_name}（{user?.role?.name}）

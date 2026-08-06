@@ -4,12 +4,14 @@ import { RouterProvider, createBrowserRouter } from "react-router-dom";
 
 import { RequireAuth } from "./components/RequireAuth";
 import { HomePage } from "./pages/Home";
+import { LandingPage } from "./pages/Landing";
 import { LoginPage } from "./pages/Login";
 
 const router = createBrowserRouter([
+  { path: "/", element: <LandingPage /> }, // 入口：设备识别自动跳转 + 手动选择
   { path: "/login", element: <LoginPage /> },
   {
-    path: "/",
+    path: "/app",
     element: (
       <RequireAuth>
         <HomePage />

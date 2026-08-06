@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 
-import { useAuthStore } from "@wlt/shared";
+import { otherEndUrl, useAuthStore } from "@wlt/shared";
 
 export function HomePage() {
   const user = useAuthStore((s) => s.user);
@@ -16,6 +16,9 @@ export function HomePage() {
           <span style={{ marginRight: 12 }}>
             {user?.real_name}（{user?.role?.name}）
           </span>
+          <a href={otherEndUrl("mobile")} style={{ marginRight: 12, color: "#1677ff" }}>
+            手机版
+          </a>
           <button
             onClick={async () => {
               await logout();

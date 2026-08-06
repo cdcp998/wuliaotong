@@ -7,8 +7,10 @@ import { defineConfig } from "vite";
 // 路径基于本文件所在目录解析：apps/mobile → 项目根 → backend/certs/dev
 const CERT_DIR = "../../../backend/certs/dev";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
+  // 生产构建部署在 /m/ 前缀（Nginx 分发：/ → 电脑端，/m → 手机端）；开发端口直跑根路径
+  base: command === "build" ? "/m/" : "/",
   server: {
     port: 5174,
     https: {
@@ -24,4 +26,4 @@ export default defineConfig({
     },
   },
   build: { outDir: "dist" },
-});
+}));
