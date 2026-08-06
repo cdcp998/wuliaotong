@@ -2,7 +2,10 @@
   "name": "wuliaotong-frontend",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev:desktop": "npm run dev -w wlt-desktop",
     "dev:mobile": "npm run dev -w wlt-mobile",
@@ -10,6 +13,7 @@
     "typecheck": "tsc --noEmit -p apps/desktop && tsc --noEmit -p apps/mobile"
   },
   "devDependencies": {
+    "@types/node": "^26.1.2",
     "typescript": "^5.5.0"
   }
 }

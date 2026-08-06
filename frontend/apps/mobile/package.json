@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@wlt/shared": "*",
+    "antd-mobile": "^5.42.3",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-router-dom": "^6.26.0"

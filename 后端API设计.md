@@ -96,7 +96,7 @@ POST /api/v1/auth/login
 - POST /transfers/{id}/audit → 审核过账（同事务：调出仓扣、调入仓加、两条流水）
 - GET /transfers、GET /transfers/{id}、POST /transfers/{id}/void
 - POST /checks {warehouse_id} → 创建盘点单，自动带出账面明细（book_qty）
-- PUT /checks/{id}/items {items:[{check_item_id, real_qty}]} 录入实盘
+- PUT /checks/{id}/items {items:[{check_item_id, real_qty, photo_file_id?}]} 录入实盘（**拍照记录可选**）
 - POST /checks/{id}/audit → 审核：按 diff_qty 生成盘盈/盘亏流水
 - GET /checks、GET /checks/{id}（支持复盘：重新建单）
 - POST /other-io {io_type: 报废/报损/赠品入/赠品出/其他入/其他出, warehouse_id, items:[{product_id, qty, location_id, photo_file_id}]} → 直接过账

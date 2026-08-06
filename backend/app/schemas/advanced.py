@@ -66,6 +66,7 @@ class OtherIoReq(BaseModel):
 class CheckItemReq(BaseModel):
     check_item_id: int = Field(gt=0)
     real_qty: str
+    photo_file_id: int = 0  # 盘点拍照记录（可选）
 
     @field_validator("real_qty")
     @classmethod
@@ -134,6 +135,7 @@ class CheckItemOut(BaseModel):
     book_qty: Decimal
     real_qty: Decimal | None
     diff_qty: Decimal
+    photo_file_id: int = 0  # 盘点拍照记录（可选）
 
     @field_serializer("book_qty", "real_qty", "diff_qty")
     def _ser(self, v: Decimal | None) -> str | None:

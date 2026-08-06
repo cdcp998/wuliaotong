@@ -258,6 +258,7 @@ def _check_out(db: Session, b: StkCheck) -> dict:
                 code=(p.code if (p := db.get(BaseProduct, it.product_id)) else ""),
                 location_id=it.location_id, location_code=_loc_code(db, it.location_id),
                 book_qty=it.book_qty, real_qty=it.real_qty, diff_qty=it.diff_qty,
+                photo_file_id=it.photo_file_id,
             )
             for it in items
         ],
@@ -300,6 +301,7 @@ def update_check_items(bill_id: int, req: CheckItemsReq, db: Session = Depends(g
             raise BizError(E_NOT_FOUND, f"盘点明细 id={item.check_item_id} 不存在")
         ci.real_qty = _parse_qty(item.real_qty)
         ci.diff_qty = (ci.real_qty - ci.book_qty).quantize(Decimal("0.001"))
+        ci.photo_file_id = item.photo_file_id  # 盘点拍照记录（可选）
     if b.status == 0:
         b.status = 1  # 录入实盘后进入"盘点中"
     db.commit()

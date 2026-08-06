@@ -81,3 +81,4 @@ class StkCheckItem(Base):
     book_qty: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     real_qty: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     diff_qty: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, default=0)
+    photo_file_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)  # 盘点拍照记录（可选）

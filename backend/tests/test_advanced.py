@@ -116,10 +116,21 @@ def test_check_flow():
     detail = client.get(f"/api/v1/checks/{c_id}").json()["data"]
     assert detail["items"][0]["book_qty"] == "10.000"
 
-    # 录实盘 12 → 盘盈 2
+    # 录实盘 12 → 盘盈 2（带拍照记录，可选）
+    import io
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (60, 40)).save(buf, format="PNG")
+    up = client.post("/api/v1/files/upload?biz_type=check", files={"file": ("c.png", buf.getvalue(), "image/png")})
+    assert up.json()["code"] == 0, up.text
+    photo_id = up.json()["data"]["file_id"]
     ci_id = detail["items"][0]["id"]
-    r = client.put(f"/api/v1/checks/{c_id}/items", json={"items": [{"check_item_id": ci_id, "real_qty": "12"}]})
+    r = client.put(f"/api/v1/checks/{c_id}/items", json={"items": [{"check_item_id": ci_id, "real_qty": "12", "photo_file_id": photo_id}]})
     assert r.json()["code"] == 0, r.text
+    # 照片已保存
+    saved = client.get(f"/api/v1/checks/{c_id}").json()["data"]["items"][0]
+    assert saved["photo_file_id"] == photo_id
 
     # 审核 → 库存 12、盘盈流水
     assert client.post(f"/api/v1/checks/{c_id}/audit").json()["code"] == 0

@@ -542,6 +542,7 @@ CREATE TABLE stk_check_item (
   book_qty    DECIMAL(12,3) NOT NULL COMMENT '账面数量',
   real_qty    DECIMAL(12,3) NULL COMMENT '实盘数量',
   diff_qty    DECIMAL(12,3) NOT NULL DEFAULT 0 COMMENT '盘盈+ / 盘亏-',
+  photo_file_id BIGINT      NOT NULL DEFAULT 0 COMMENT '盘点拍照记录（可选）→ sys_file.id',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
