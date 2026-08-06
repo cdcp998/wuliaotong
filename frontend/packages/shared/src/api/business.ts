@@ -60,8 +60,51 @@ export const checkApi = {
       `/checks${status ? `?status=${status}` : ""}${status ? "&" : "?"}page=${page}&page_size=20`
     ),
   detail: (id: number) => http.get<CheckBill>(`/checks/${id}`),
+  create: (warehouseId: number, remark = "") => http.post<{ id: number; bill_no: string }>("/checks", { warehouse_id: warehouseId, remark }),
   saveItems: (id: number, items: { check_item_id: number; real_qty: string; photo_file_id?: number }[]) =>
     http.put<null>(`/checks/${id}/items`, { items }),
+  audit: (id: number) => http.post<null>(`/checks/${id}/audit`),
+};
+
+export interface TransferBill {
+  id: number;
+  bill_no: string;
+  from_warehouse_name: string;
+  to_warehouse_name: string;
+  status: number;
+  audit_name: string;
+  created_at: string;
+}
+
+export const transferApi = {
+  list: (status?: number, page = 1) =>
+    http.get<PageData<TransferBill>>(
+      `/transfers${status !== undefined ? `?status=${status}` : ""}${status !== undefined ? "&" : "?"}page=${page}&page_size=20`
+    ),
+  create: (from: number, to: number, items: { product_id: number; qty: string; from_location_id: number; to_location_id: number }[], remark = "") =>
+    http.post<{ id: number; bill_no: string }>("/transfers", { from_warehouse_id: from, to_warehouse_id: to, remark, items }),
+  audit: (id: number) => http.post<null>(`/transfers/${id}/audit`),
+  void: (id: number) => http.post<null>(`/transfers/${id}/void`),
+};
+
+export interface OtherIoBill {
+  id: number;
+  bill_no: string;
+  warehouse_name: string;
+  io_type: string;
+  status: number;
+  operator_name: string;
+  created_at: string;
+}
+
+export const otherIoApi = {
+  list: (ioType?: string, status?: number, page = 1) =>
+    http.get<PageData<OtherIoBill>>(
+      `/other-io?page=${page}&page_size=20${ioType ? `&io_type=${encodeURIComponent(ioType)}` : ""}${status !== undefined ? `&status=${status}` : ""}`
+    ),
+  create: (ioType: string, warehouseId: number, items: { product_id: number; qty: string; location_id: number }[], remark = "") =>
+    http.post<{ id: number; bill_no: string }>("/other-io", { io_type: ioType, warehouse_id: warehouseId, remark, items }),
+  void: (id: number) => http.post<null>(`/other-io/${id}/void`),
 };
 
 export const fileApi = {

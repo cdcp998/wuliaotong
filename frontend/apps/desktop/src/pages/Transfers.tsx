@@ -1,0 +1,129 @@
+import { useCallback, useEffect, useState } from "react";
+import { Button, InputNumber, message, Modal, Popconfirm, Radio, Select, Space, Table } from "antd";
+import type { ColumnsType } from "antd/es/table";
+
+import { baseApi, transferApi, type TransferBill } from "@wlt/shared";
+
+const STATUS: Record<string, string> = { 0: "草稿", 1: "已审核", "-1": "已作废" };
+
+interface Row {
+  product_id: number | undefined;
+  from_location_id: number | undefined;
+  to_location_id: number | undefined;
+  qty: number;
+}
+
+export function TransfersPage() {
+  const [status, setStatus] = useState<number | undefined>();
+  const [list, setList] = useState<TransferBill[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [open, setOpen] = useState(false);
+  const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
+  const [products, setProducts] = useState<{ id: number; name: string; code: string }[]>([]);
+  const [locs, setLocs] = useState<Record<number, { id: number; code: string }[]>>({});
+  const [form, setForm] = useState({ from_warehouse_id: 0, to_warehouse_id: 0, rows: [] as Row[] });
+
+  const load = useCallback(async () => {
+    const data = await transferApi.list(status, page);
+    setList(data.list);
+    setTotal(data.total);
+  }, [status, page]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    baseApi.warehouses().then((ws) => setWarehouses(ws.filter((w) => w.status === 1).map((w) => ({ id: w.id, name: w.name }))));
+    baseApi.products("", 1).then((p) => setProducts(p.list));
+  }, []);
+
+  async function loadLocs(whId: number) {
+    if (locs[whId]) return;
+    const data = await baseApi.locations(whId);
+    setLocs((m) => ({ ...m, [whId]: data.map((l) => ({ id: l.id, code: l.code })) }));
+  }
+
+  function setRow(i: number, patch: Partial<Row>) {
+    setForm((f) => ({ ...f, rows: f.rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) }));
+  }
+
+  async function create() {
+    if (!form.from_warehouse_id || !form.to_warehouse_id) return message.warning("请选择调出/调入仓库");
+    if (form.from_warehouse_id === form.to_warehouse_id) return message.warning("调出与调入仓库不能相同");
+    const items = form.rows
+      .filter((r) => r.product_id && r.from_location_id && r.to_location_id && r.qty > 0)
+      .map((r) => ({ product_id: r.product_id!, qty: String(r.qty), from_location_id: r.from_location_id!, to_location_id: r.to_location_id! }));
+    if (!items.length) return message.warning("请至少添加一条有效明细");
+    try {
+      const data = await transferApi.create(form.from_warehouse_id, form.to_warehouse_id, items);
+      message.success(`调拨单 ${data.bill_no} 已创建`);
+      setOpen(false);
+      setForm({ from_warehouse_id: 0, to_warehouse_id: 0, rows: [] });
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "创建失败");
+    }
+  }
+
+  const columns: ColumnsType<TransferBill> = [
+    { title: "单号", dataIndex: "bill_no" },
+    { title: "调出仓库", dataIndex: "from_warehouse_name" },
+    { title: "调入仓库", dataIndex: "to_warehouse_name" },
+    { title: "状态", dataIndex: "status", render: (s: number) => STATUS[String(s)] ?? s },
+    { title: "审计人", dataIndex: "audit_name" },
+    {
+      title: "操作",
+      render: (_, r) => (
+        <Space>
+          {r.status === 0 && (
+            <Popconfirm title="确认审核过账？" onConfirm={async () => { try { await transferApi.audit(r.id); message.success("已审核"); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
+              <Button size="small" type="primary">审核</Button>
+            </Popconfirm>
+          )}
+          {r.status !== -1 && (
+            <Popconfirm title="确认作废？" onConfirm={async () => { try { await transferApi.void(r.id); message.success("已作废"); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
+              <Button size="small" danger>作废</Button>
+            </Popconfirm>
+          )}
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ padding: 24 }}>
+      <Space style={{ marginBottom: 16 }}>
+        <h2 style={{ margin: 0 }}>库存调拨</h2>
+        <Radio.Group value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} optionType="button" size="small">
+          <Radio.Button value={undefined}>全部</Radio.Button>
+          <Radio.Button value={0}>草稿</Radio.Button>
+          <Radio.Button value={1}>已审核</Radio.Button>
+          <Radio.Button value={-1}>已作废</Radio.Button>
+        </Radio.Group>
+        <Button type="primary" onClick={() => setOpen(true)}>新建调拨</Button>
+      </Space>
+      <Table rowKey="id" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+
+      <Modal title="新建调拨" open={open} onOk={() => void create()} onCancel={() => setOpen(false)} width={720}>
+        <Space style={{ marginBottom: 12 }}>
+          <span>调出仓库</span>
+          <Select style={{ width: 180 }} placeholder="选择" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={form.from_warehouse_id || undefined} onChange={(v) => { setForm((f) => ({ ...f, from_warehouse_id: v })); void loadLocs(v); }} />
+          <span>调入仓库</span>
+          <Select style={{ width: 180 }} placeholder="选择" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={form.to_warehouse_id || undefined} onChange={(v) => { setForm((f) => ({ ...f, to_warehouse_id: v })); void loadLocs(v); }} />
+        </Space>
+        {form.rows.map((r, i) => (
+          <Space key={i} style={{ marginBottom: 8 }}>
+            <Select style={{ width: 200 }} showSearch placeholder="商品" options={products} fieldNames={{ label: "name", value: "id" }} filterOption={(input, o) => String((o as { name?: string }).name ?? "").includes(input)} value={r.product_id} onChange={(v) => setRow(i, { product_id: v })} />
+            <Select style={{ width: 130 }} placeholder="出库位" options={locs[form.from_warehouse_id] ?? []} fieldNames={{ label: "code", value: "id" }} value={r.from_location_id} onChange={(v) => setRow(i, { from_location_id: v })} />
+            <Select style={{ width: 130 }} placeholder="入库位" options={locs[form.to_warehouse_id] ?? []} fieldNames={{ label: "code", value: "id" }} value={r.to_location_id} onChange={(v) => setRow(i, { to_location_id: v })} />
+            <InputNumber min={0.001} placeholder="数量" value={r.qty} onChange={(v) => setRow(i, { qty: v ?? 0 })} />
+            <Button size="small" danger onClick={() => setForm((f) => ({ ...f, rows: f.rows.filter((_, idx) => idx !== i) }))}>删</Button>
+          </Space>
+        ))}
+        <Button block onClick={() => setForm((f) => ({ ...f, rows: [...f.rows, { product_id: undefined, from_location_id: undefined, to_location_id: undefined, qty: 1 }] }))}>+ 添加明细</Button>
+      </Modal>
+    </div>
+  );
+}
