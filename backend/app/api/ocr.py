@@ -31,7 +31,7 @@ from app.db import SessionLocal, get_db
 from app.models.base import BaseCategory, BaseProduct, BaseSupplier, BaseUnit
 from app.models.ocr import AiSuggestion, OcrRecord
 from app.models.sys import SysFile, SysStorage, SysUser
-from app.schemas.ocr import DeliveryConfirmReq
+from app.schemas.ocr import ClassifyReq, DeliveryConfirmReq
 from app.services.llm import LLMNotConfigured, get_llm
 from app.services.ocr.client import get_ocr_engine
 from app.services.storage import resolve_storage_path
@@ -97,27 +97,28 @@ VISION_TEXT_PROMPT = (
 def _recognize_text(db: Session, data: bytes) -> list[str]:
     """商品外包装/标签识别：本地 OCR 引擎优先；本地引擎关闭时回退视觉模型。
 
-    两者都不可用（视觉未配置/未启用/调用失败）时抛 BizError，提示「识别功能不可用」。
+    视觉兜底链：SiliconFlow → 豆包大模型（前一个未配置/未启用/调用失败时尝试下一个）；
+    全部不可用时抛 BizError，提示「识别功能不可用」。
     """
     try:
         lines = get_ocr_engine(db).recognize(data)
         return [l.text for l in lines]
     except ValueError:  # 本地 OCR 引擎已关闭（ocr.engine=off）或配置未知
-        try:
-            vllm = get_llm(db, "siliconflow")
-        except LLMNotConfigured:
-            raise BizError(
-                E_OCR_UNAVAILABLE,
-                "识别功能不可用：本地 OCR 识别引擎已关闭，且视觉模型未配置或未启用（系统设置 → OCR 与大模型）",
-            )
-        try:
-            content = vllm.chat_image(data, VISION_TEXT_PROMPT)
-        except Exception as e:  # noqa: BLE001 视觉调用失败（网络/鉴权/限流等）
-            raise BizError(
-                E_OCR_UNAVAILABLE,
-                f"识别功能不可用：本地 OCR 识别引擎已关闭，视觉模型调用失败：{e}",
-            )
-        return [ln.strip() for ln in content.splitlines() if ln.strip()]
+        reason = "本地 OCR 识别引擎已关闭"
+        for name in ("siliconflow", "doubao"):
+            try:
+                vllm = get_llm(db, name)
+            except LLMNotConfigured:
+                continue
+            try:
+                content = vllm.chat_image(data, VISION_TEXT_PROMPT)
+                return [ln.strip() for ln in content.splitlines() if ln.strip()]
+            except Exception as e:  # noqa: BLE001 视觉调用失败（网络/鉴权/限流等）
+                reason = f"{name} 视觉模型调用失败：{e}"
+        raise BizError(
+            E_OCR_UNAVAILABLE,
+            f"识别功能不可用：{reason}（系统设置 → OCR 与大模型可配置视觉模型）",
+        )
 
 
 def _delivery_by_vision(db: Session, image_bytes: bytes) -> dict | None:
@@ -155,6 +156,8 @@ def _classify_items_by_deepseek(db: Session, items: list) -> list:
     except LLMNotConfigured:
         return items
     cats = [c.name for c in db.scalars(select(BaseCategory).order_by(BaseCategory.sort, BaseCategory.id)).all()]
+    # 过滤测试/乱码分类（带 6 位十六进制随机后缀，如「标准件f9d3ae」），避免干扰大模型分类判断
+    cats = [n for n in cats if not re.match(r"^.{1,6}[0-9a-f]{6}$", n)]
     prompt = (
         "你是材料分类助手。系统材料分类："
         + (", ".join(cats) if cats else "（暂无分类，全部输出未分类）")
@@ -340,6 +343,37 @@ def barcode_decode(
     data = _read_file_bytes(db, file_id)
     value = decode_barcode(data)
     return ok({"barcode": value})
+
+
+# ============================ 材料分类识别（大模型） ============================
+
+
+@router.post("/ocr/classify", dependencies=[Depends(require_permission("pch:in"))])
+def classify_product(req: ClassifyReq, db: Session = Depends(get_db)) -> dict:
+    """根据材料名称+规格用 DeepSeek 判断系统分类（材料入库明细行「分类」自动识别）。
+
+    - 识别成功且命中系统分类：{category_id, category_name, matched: true}
+    - 识别成功但无匹配分类：{category_id: 0, category_name: "", matched: false}（前端提示手动选择）
+    - 大模型未配置/调用失败：4006（前端提示「文本模型未配置/不可用」）
+    """
+    name = req.name.strip()
+    if not name:
+        raise BizError(E_PARAM, "材料名称不能为空")
+    items = [{"product_name": name, "spec": req.spec.strip(), "qty": "", "price": "", "amount": ""}]
+    classified = _classify_items_by_deepseek(db, items)
+    cat_name = ""
+    if classified and isinstance(classified, list):
+        cat_name = str(classified[0].get("category_name") or "").strip()
+    if not cat_name or cat_name == "未分类":
+        # 无 category_name 说明大模型未配置/调用失败；「未分类」说明识别成功但无匹配
+        if not cat_name:
+            raise BizError(E_LLM_FAILED, "大模型分类不可用：请先在系统设置中配置并启用文本模型（DeepSeek），或稍后重试")
+        return ok({"category_id": 0, "category_name": "", "matched": False})
+    cat = db.scalar(select(BaseCategory).where(BaseCategory.name == cat_name).order_by(BaseCategory.id))
+    if cat is None:
+        # 识别成功但系统无该分类：返回建议名供前端提示（category_id=0 表示未命中，用户可手动选择）
+        return ok({"category_id": 0, "category_name": cat_name, "matched": False})
+    return ok({"category_id": cat.id, "category_name": cat.name, "matched": True})
 
 
 # ============================ 送货单确认（供应商落库） ============================

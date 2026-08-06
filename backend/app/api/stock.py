@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, require_permission
 from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, ok
 from app.db import get_db
-from app.models.base import BaseLocation, BaseProduct, BaseSupplier, BaseUnit, BaseWarehouse
+from app.models.base import BaseCategory, BaseLocation, BaseProduct, BaseSupplier, BaseUnit, BaseWarehouse
 from app.models.stock import (
     PchPurchaseIn,
     PchPurchaseInItem,
@@ -29,6 +29,7 @@ from app.models.stock import (
     StkStock,
     StkStockLog,
 )
+from app.models.ocr import OcrRecord
 from app.models.sys import SysUser
 from app.schemas.stock import (
     OpeningItemOut,
@@ -83,6 +84,7 @@ def _purchase_out(db: Session, bill: PchPurchaseIn) -> dict:
         warehouse_id=bill.warehouse_id, warehouse_name=wh.name if wh else "",
         total_qty=bill.total_qty, total_amount=bill.total_amount, status=bill.status,
         bill_date=bill.bill_date, operator_name=_user_name(db, bill.operator_id), remark=bill.remark,
+        ocr_record_id=bill.ocr_record_id,
         items=[
             PurchaseInItemOut(
                 id=it.id, product_id=it.product_id,
@@ -107,11 +109,17 @@ def create_purchase_in(
 ) -> dict:
     if db.get(BaseWarehouse, req.warehouse_id) is None:
         raise BizError(E_PARAM, "仓库不存在")
+    # 供应商可选，但传了就必须存在（避免悬空 supplier_id 入库单）
+    if req.supplier_id and db.get(BaseSupplier, req.supplier_id) is None:
+        raise BizError(E_PARAM, "供应商不存在")
+    if req.ocr_record_id and db.get(OcrRecord, req.ocr_record_id) is None:
+        raise BizError(E_PARAM, "送货单 OCR 记录不存在")
     for attempt in range(5):  # 单号并发冲突重试
         bill_no = generate_bill_no(db, "RK", PchPurchaseIn)
         bill = PchPurchaseIn(
             bill_no=bill_no, supplier_id=req.supplier_id, warehouse_id=req.warehouse_id,
-            status=1, bill_date=req.bill_date or datetime.now(), operator_id=user.id, remark=req.remark,
+            status=1, bill_date=req.bill_date or datetime.now(), operator_id=user.id,
+            ocr_record_id=req.ocr_record_id, remark=req.remark,
         )
         db.add(bill)
         db.flush()
@@ -127,6 +135,14 @@ def create_purchase_in(
                 price = _parse_dec(item.price, "进价")
                 if qty <= 0:
                     raise BizError(E_PARAM, "数量必须大于 0")
+                if price < 0:
+                    raise BizError(E_PARAM, "进价不能为负数")
+                # 明细带分类（大模型识别/人工确认）：校验分类存在并更新材料分类
+                if item.category_id:
+                    cat = db.get(BaseCategory, item.category_id)
+                    if cat is None:
+                        raise BizError(E_PARAM, f"分类 id={item.category_id} 不存在")
+                    product.category_id = item.category_id
                 amount = (qty * price).quantize(_DEC2)
                 unit_name = item.unit_name or (db.get(BaseUnit, product.unit_id).name if product.unit_id else "")
                 item_row = PchPurchaseInItem(
@@ -153,6 +169,66 @@ def create_purchase_in(
             db.rollback()
             continue  # 单号冲突，换号重试
     raise BizError(E_PARAM, "单据编号生成失败，请重试")
+
+
+@router.get("/purchase-in/history-price")
+def purchase_in_history_price(
+    product_id: int = Query(0, description="材料 id（0=全部材料，历史价格管理页用）"),
+    keyword: str = Query("", max_length=100, description="材料名称/编码/物料编码模糊查询"),
+    supplier_id: int = Query(0, description="供应商 id（0=全部供应商）"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> dict:
+    """历史采购价格：按入库日期倒序分页。
+
+    - 入库/OCR 录入参考：传 product_id 查某材料最近价格（可带 supplier_id 过滤）
+    - 历史价格管理页：product_id=0 + keyword/supplier_id 全量查询，展示「谁供的货」
+    """
+    if product_id and db.get(BaseProduct, product_id) is None:
+        raise BizError(E_NOT_FOUND, "材料不存在")
+    stmt = (
+        select(PchPurchaseInItem, PchPurchaseIn)
+        .join(PchPurchaseIn, PchPurchaseIn.id == PchPurchaseInItem.bill_id)
+        .join(BaseProduct, BaseProduct.id == PchPurchaseInItem.product_id)
+        .where(PchPurchaseIn.status == 1)
+    )
+    if product_id:
+        stmt = stmt.where(PchPurchaseInItem.product_id == product_id)
+    if supplier_id:
+        stmt = stmt.where(PchPurchaseIn.supplier_id == supplier_id)
+    if keyword:
+        like = f"%{keyword.strip()}%"
+        stmt = stmt.where(
+            or_(BaseProduct.name.like(like), BaseProduct.code.like(like), BaseProduct.material_code.like(like), BaseProduct.spec.like(like))
+        )
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.execute(
+        stmt.order_by(PchPurchaseIn.bill_date.desc(), PchPurchaseIn.id.desc())
+        .offset((page - 1) * page_size).limit(page_size)
+    ).all()
+    return ok({
+        "list": [
+            {
+                "bill_no": b.bill_no,
+                "bill_date": b.bill_date,
+                "price": format(it.price, "f"),
+                "qty": format(it.qty, "f"),
+                "amount": format(it.amount, "f"),
+                "supplier_id": b.supplier_id,
+                "supplier_name": (s.name if (s := db.get(BaseSupplier, b.supplier_id)) else ""),
+                "unit_name": ((u.name if (u := db.get(BaseUnit, p.unit_id)) else it.unit_name) if (p := db.get(BaseProduct, it.product_id)) else it.unit_name),
+                "product_id": it.product_id,
+                "product_name": (p.name if (p := db.get(BaseProduct, it.product_id)) else ""),
+                "material_code": (p.material_code if (p := db.get(BaseProduct, it.product_id)) else ""),
+                "spec": (p.spec if (p := db.get(BaseProduct, it.product_id)) else ""),
+            }
+            for it, b in rows
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    })
 
 
 @router.get("/purchase-in")

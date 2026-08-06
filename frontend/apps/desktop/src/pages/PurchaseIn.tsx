@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { App, AutoComplete, Button, DatePicker, Divider, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag } from "antd";
-import { CameraOutlined, PlusOutlined } from "@ant-design/icons";
+import { CameraOutlined, PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate, useSearchParams } from "react-router";
 
-import { baseApi, fileApi, ocrApi, purchaseApi, purchaseIn, resolveByBarcode, type HistoryPriceRow, type Product, type PurchaseInBill, type PurchaseInDetail, type Shelf, type Supplier } from "@wlt/shared";
+import { baseApi, fileApi, ocrApi, purchaseApi, purchaseIn, resolveByBarcode, type CategoryNode, type HistoryPriceRow, type Product, type PurchaseInBill, type PurchaseInDetail, type Shelf, type Supplier } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
 
@@ -18,6 +18,8 @@ interface Row {
   spec: string; // 规格型号（可编辑）
   unit: string; // 单位（OCR 识别优先，产品资料兜底）
   barcode: string; // 条形码（可选）：扫码枪/手输/拍照
+  category_id: number | undefined; // 分类（大模型识别/人工选择，提交时更新到材料）
+  category_name: string;
   location_id: number | undefined;
   qty: number;
   price: number; // 金额（进价）
@@ -91,6 +93,44 @@ export function PurchaseInPage() {
   // 材料名称查询：行 → Select 候选（服务端防抖搜索，全库匹配，候选含完整材料）
   const [nameOptions, setNameOptions] = useState<Record<number, { value: number; label: string; product: Product }[]>>({});
   const nameDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // 系统分类（扁平化，供明细「分类」列选择/回显）
+  const [cats, setCats] = useState<{ id: number; name: string }[]>([]);
+  // 分类自动识别中（行 key）
+  const [classifyingKey, setClassifyingKey] = useState<number | undefined>(undefined);
+
+  /** 系统分类树扁平化（含子级）。 */
+  function flattenCats(nodes: CategoryNode[], out: { id: number; name: string }[] = []): { id: number; name: string }[] {
+    for (const n of nodes) {
+      out.push({ id: n.id, name: n.name });
+      if (n.children?.length) flattenCats(n.children, out);
+    }
+    return out;
+  }
+
+  /** 分类自动识别：按材料名称+规格调大模型，命中系统分类则填入当前行（可再手动修改）。 */
+  async function classifyRow(key: number) {
+    const row = rows.find((r) => r.key === key);
+    if (!row?.product) {
+      message.warning("请先在「材料名称」列选择材料，再自动识别分类");
+      return;
+    }
+    setClassifyingKey(key);
+    try {
+      const r = await ocrApi.classifyProduct({ name: row.product.name, spec: row.spec });
+      if (r.matched && r.category_id) {
+        setRow(key, { category_id: r.category_id, category_name: r.category_name });
+        message.success(`已识别分类：${r.category_name}`);
+      } else if (r.category_name) {
+        message.warning(`大模型建议分类「${r.category_name}」（系统中不存在），请手动选择或先创建该分类`);
+      } else {
+        message.warning("未匹配到系统分类，可手动选择或稍后在材料管理中补充分类");
+      }
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "分类识别失败");
+    } finally {
+      setClassifyingKey(undefined);
+    }
+  }
 
   /** 物料编码查询：防抖搜索系统材料（匹配物料编码/名称/编码），选中即填充整行。 */
   function queryByMaterialCode(key: number, keyword: string) {
@@ -174,6 +214,8 @@ export function PurchaseInPage() {
     baseApi.units().then(setUnits).catch(() => undefined);
     // 材料下拉加载更多（前 500 条），避免预填/选择时查不到材料导致单位/规格显示不全
     baseApi.products("", 1, { pageSize: 500 }).then((p) => setProducts(p.list)).catch(() => undefined);
+    // 系统分类（明细「分类」列候选；大模型识别结果需命中系统分类）
+    baseApi.categories().then((nodes) => setCats(flattenCats(nodes))).catch(() => undefined);
     // 送货单 OCR 带入：优先 sessionStorage（消费即删，保证只导入一次），兼容 URL 参数直达。
     // StrictMode（dev）会双执行本 effect：sessionStorage 首次消费后即被删除，若第二次再走
     // else 分支会把 supplierId/ocrRecordId 覆盖回 URL 参数（无参数即 0）→ 用 ref 保证只消费一次。
@@ -244,6 +286,8 @@ export function PurchaseInPage() {
           spec: it.spec || p?.spec || "",
           unit: it.unit || p?.unit_name || "",
           barcode: p?.barcode ?? "",
+          category_id: p?.category_id || undefined,
+          category_name: p?.category_name || "",
           location_id: undefined,
           qty: Number(it.qty ?? 1),
           price: Number(it.price ?? 0),
@@ -303,7 +347,7 @@ export function PurchaseInPage() {
   }
 
   function addEmptyRow() {
-    setRows((rs) => [...rs, { key: nextKey, product: null, material_code: "", spec: "", unit: "", barcode: "", location_id: undefined, qty: 1, price: 0 }]);
+    setRows((rs) => [...rs, { key: nextKey, product: null, material_code: "", spec: "", unit: "", barcode: "", category_id: undefined, category_name: "", location_id: undefined, qty: 1, price: 0 }]);
     setNextKey((k) => k + 1);
   }
 
@@ -314,7 +358,7 @@ export function PurchaseInPage() {
     try {
       const p = await resolveByBarcode(b);
       if (p) {
-        setRow(key, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode });
+        setRow(key, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode, category_id: p.category_id || undefined, category_name: p.category_name || "" });
         message.success(`条码匹配：${p.name}`);
       } else {
         setMaterialModal({ open: true, rowKey: key, barcode: b, name: "", spec: "" });
@@ -364,7 +408,7 @@ export function PurchaseInPage() {
         unit_id: v.unit_id,
       });
       setProducts((ps) => [...ps, p]);
-      setRow(materialModal.rowKey, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode });
+      setRow(materialModal.rowKey, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode, category_id: p.category_id || undefined, category_name: p.category_name || "" });
       message.success(`材料已新增：${p.name}`);
       setMaterialModal((s) => ({ ...s, open: false }));
       materialForm.resetFields();
@@ -379,7 +423,7 @@ export function PurchaseInPage() {
     try {
       const p = await baseApi.createProduct({ name: llmModal.name.trim(), spec: llmModal.spec.trim(), unit_id: llmModal.unitId ?? units[0]?.id ?? 0 });
       setProducts((ps) => [...ps, p]);
-      setRow(llmModal.rowKey, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode });
+      setRow(llmModal.rowKey, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode, category_id: p.category_id || undefined, category_name: p.category_name || "" });
       message.success(`已按大模型分析新增：${p.name}`);
       setLlmModal(null);
     } catch (e) {
@@ -419,7 +463,7 @@ export function PurchaseInPage() {
     }
     const items = rows
       .filter((r) => r.qty > 0)
-      .map((r) => ({ product_id: r.product!.id, qty: String(r.qty), price: String(r.price || 0), location_id: r.location_id! }));
+      .map((r) => ({ product_id: r.product!.id, qty: String(r.qty), price: String(r.price || 0), location_id: r.location_id!, category_id: r.category_id ?? 0 }));
     if (!items.length) return message.warning("请至少填写一条数量大于 0 的明细");
     try {
       const data = await purchaseIn(warehouseId, items, remark, supplierId, billDate || undefined, ocrRecordId);
@@ -495,7 +539,7 @@ export function PurchaseInPage() {
             // 手输/清空：编码与当前已选材料不一致时同步清除材料选择，避免列间显示与实际提交矛盾
             setRow(r.key, { material_code: val });
             if (r.product && r.product.material_code !== val) {
-              setRow(r.key, { product: null, spec: "", unit: "" });
+              setRow(r.key, { product: null, spec: "", unit: "", category_id: undefined, category_name: "" });
             }
           }}
           onSearch={(kw) => queryByMaterialCode(r.key, kw)}
@@ -503,7 +547,7 @@ export function PurchaseInPage() {
             // 候选 value 即物料编码：选中后回填该物料完整信息（材料名称列随之显示对应名称）
             const hit = (matOptions[r.key] ?? []).find((o) => o.value === val);
             const p = hit?.product;
-            if (p) setRow(r.key, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode });
+            if (p) setRow(r.key, { product: p, material_code: p.material_code, spec: p.spec, unit: p.unit_name, barcode: p.barcode, category_id: p.category_id || undefined, category_name: p.category_name || "" });
           }}
         />
       ),
@@ -564,13 +608,13 @@ export function PurchaseInPage() {
             onChange={(v) => {
               // 清空选择：取消当前材料（同步清空其带入的物料编码/规格/单位）
               if (v === undefined) {
-                setRow(r.key, { product: null, material_code: "", spec: "", unit: "" });
+                setRow(r.key, { product: null, material_code: "", spec: "", unit: "", category_id: undefined, category_name: "" });
                 return;
               }
               // 优先用服务端搜索结果里的完整材料（可能不在本地前 500 条），兜底本地列表
               const hit = (nameOptions[r.key] ?? []).find((o) => o.value === v);
               const x = hit?.product ?? products.find((it) => it.id === v);
-              if (x) setRow(r.key, { product: x, material_code: x.material_code, spec: x.spec, unit: x.unit_name, barcode: x.barcode });
+              if (x) setRow(r.key, { product: x, material_code: x.material_code, spec: x.spec, unit: x.unit_name, barcode: x.barcode, category_id: x.category_id || undefined, category_name: x.category_name || "" });
             }}
           />
           <Button icon={<CameraOutlined />} title="拍照 OCR 识别（未匹配自动大模型分析）" onClick={() => { scanTarget.current = { kind: "name", rowKey: r.key }; fileRef.current?.click(); }} />
@@ -593,6 +637,30 @@ export function PurchaseInPage() {
       key: "unit",
       width: 90,
       render: (_, r) => r.unit || r.product?.unit_name || "-",
+    },
+    {
+      title: "分类",
+      dataIndex: "category_name",
+      key: "category_name",
+      width: 200,
+      render: (_v: string, r) => (
+        <Space.Compact style={{ width: "100%" }}>
+          <Select
+            style={{ flex: 1 }}
+            showSearch
+            allowClear
+            placeholder="选择分类 / ⚡自动识别"
+            value={r.category_id}
+            options={cats.map((c) => ({ value: c.id, label: c.name }))}
+            optionFilterProp="label"
+            onChange={(x) => {
+              const c = cats.find((it) => it.id === x);
+              setRow(r.key, { category_id: x, category_name: c?.name ?? "" });
+            }}
+          />
+          <Button icon={<ThunderboltOutlined />} title="按材料名称+规格自动识别分类" loading={classifyingKey === r.key} onClick={() => void classifyRow(r.key)} />
+        </Space.Compact>
+      ),
     },
     {
       title: "金额（进价）",

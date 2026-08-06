@@ -17,6 +17,7 @@ class PurchaseInItemReq(BaseModel):
     price: str = "0"
     location_id: int = Field(gt=0)
     photo_file_id: int = 0
+    category_id: int = 0  # 大模型识别/人工确认的材料分类（>0 时入库同时更新材料分类）
 
     @field_validator("qty", "price")
     @classmethod
@@ -31,6 +32,7 @@ class PurchaseInReq(BaseModel):
     warehouse_id: int = Field(gt=0)
     bill_date: datetime | None = None
     remark: str = ""
+    ocr_record_id: int = 0  # 来源送货单 OCR 识别记录（0=手工录入）
     items: list[PurchaseInItemReq] = Field(min_length=1)
 
 
@@ -63,6 +65,7 @@ class PurchaseInOut(BaseModel):
     status: int
     bill_date: datetime
     operator_name: str = ""
+    ocr_record_id: int = 0
     remark: str
     items: list[PurchaseInItemOut] = []
 
