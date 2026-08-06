@@ -34,6 +34,7 @@ from app.models.sys import SysFile, SysStorage, SysUser
 from app.schemas.ocr import ClassifyReq, DeliveryConfirmReq
 from app.services.llm import LLMNotConfigured, get_llm
 from app.services.ocr.client import get_ocr_engine
+from app.services.ocr.product_template import build_anchors, load_templates, match_template, save_templates
 from app.services.storage import resolve_storage_path
 
 router = APIRouter(tags=["OCR/大模型"], dependencies=[Depends(get_current_user)])
@@ -93,32 +94,86 @@ VISION_TEXT_PROMPT = (
     "按阅读顺序每行一条输出，只输出识别到的文字行，不要解释。"
 )
 
+VISION_PRODUCT_PROMPT = (
+    "你是商品识别助手。识别图片中商品包装/标签上的商品信息，只输出一个 JSON 对象，不要解释。"
+    "字段：product_name(商品名称，如「8口千兆以太网交换机」)、brand(品牌，如「H3C」，可空)、"
+    "spec(规格型号，如「S2G Pro」，可空)、lines(图片中全部文字，按阅读顺序用换行分隔)。"
+    "无法判断的字段留空。"
+)
+
+
+def _local_ocr(db: Session, data: bytes) -> list[str] | None:
+    """本地 OCR 引擎识别；引擎已关闭（ocr.engine=off）或配置未知返回 None。"""
+    try:
+        lines = get_ocr_engine(db).recognize(data)
+        return [l.text for l in lines]
+    except ValueError:
+        return None
+
+
+def _vision_product(db: Session, image_bytes: bytes) -> dict | None:
+    """视觉模型识别商品外包装/标签 → 结构化 {product_name, brand, spec, lines}。
+
+    兜底链 SiliconFlow → 豆包；未配置/未启用/调用失败/解析失败返回 None（调用方回退纯文本）。
+    """
+    for name in ("siliconflow", "doubao"):
+        try:
+            vllm = get_llm(db, name)
+        except LLMNotConfigured:
+            continue
+        try:
+            content = vllm.chat_image(image_bytes, VISION_PRODUCT_PROMPT)
+            start, end = content.find("{"), content.rfind("}")
+            if start < 0 or end < 0:
+                continue
+            obj = json.loads(content[start : end + 1])
+            if not isinstance(obj, dict):
+                continue
+            return {
+                "product_name": str(obj.get("product_name") or "").strip(),
+                "brand": str(obj.get("brand") or "").strip(),
+                "spec": str(obj.get("spec") or "").strip(),
+                "lines": [ln.strip() for ln in str(obj.get("lines") or "").splitlines() if ln.strip()],
+            }
+        except Exception:  # noqa: BLE001 网络/鉴权/解析失败 → 尝试下一个视觉模型
+            continue
+    return None
+
+
+def _vision_texts(db: Session, data: bytes) -> list[str]:
+    """视觉模型纯文本识别兜底（SiliconFlow → 豆包）；全部不可用返回空列表。"""
+    for name in ("siliconflow", "doubao"):
+        try:
+            vllm = get_llm(db, name)
+        except LLMNotConfigured:
+            continue
+        try:
+            content = vllm.chat_image(data, VISION_TEXT_PROMPT)
+            return [ln.strip() for ln in content.splitlines() if ln.strip()]
+        except Exception:  # noqa: BLE001
+            continue
+    return []
+
 
 def _recognize_text(db: Session, data: bytes) -> list[str]:
     """商品外包装/标签识别：本地 OCR 引擎优先；本地引擎关闭时回退视觉模型。
 
-    视觉兜底链：SiliconFlow → 豆包大模型（前一个未配置/未启用/调用失败时尝试下一个）；
+    视觉兜底链：结构化商品识别（product_name/brand/spec，利于匹配）→ 纯文本行；
     全部不可用时抛 BizError，提示「识别功能不可用」。
     """
-    try:
-        lines = get_ocr_engine(db).recognize(data)
-        return [l.text for l in lines]
-    except ValueError:  # 本地 OCR 引擎已关闭（ocr.engine=off）或配置未知
-        reason = "本地 OCR 识别引擎已关闭"
-        for name in ("siliconflow", "doubao"):
-            try:
-                vllm = get_llm(db, name)
-            except LLMNotConfigured:
-                continue
-            try:
-                content = vllm.chat_image(data, VISION_TEXT_PROMPT)
-                return [ln.strip() for ln in content.splitlines() if ln.strip()]
-            except Exception as e:  # noqa: BLE001 视觉调用失败（网络/鉴权/限流等）
-                reason = f"{name} 视觉模型调用失败：{e}"
-        raise BizError(
-            E_OCR_UNAVAILABLE,
-            f"识别功能不可用：{reason}（系统设置 → OCR 与大模型可配置视觉模型）",
-        )
+    local = _local_ocr(db, data)
+    if local is not None:
+        return local
+    prod = _vision_product(db, data)
+    if prod and prod.get("lines"):
+        return prod["lines"]
+    texts = _vision_texts(db, data)
+    if texts:
+        return texts
+    raise BizError(
+        E_OCR_UNAVAILABLE,
+        "识别功能不可用：本地 OCR 识别引擎已关闭，且视觉模型（SiliconFlow/豆包）均不可用（系统设置 → OCR 与大模型）",
+    )
 
 
 def _delivery_by_vision(db: Session, image_bytes: bytes) -> dict | None:
@@ -312,15 +367,37 @@ def ocr_quick(
 ) -> dict:
     """同步识别商品照片并匹配系统商品（出入库带入用）。本地 OCR 关闭时回退视觉模型。"""
     data = _read_file_bytes(db, file_id)
-    try:
-        texts = _recognize_text(db, data)
-    except BizError:
-        raise  # 识别功能不可用等业务错误原样透传
-    except Exception as e:
-        raise BizError(E_OCR_UNAVAILABLE, f"识别失败：{e}")
+    prod: dict | None = None
+    local = _local_ocr(db, data)
+    if local is not None:
+        texts = local
+        # 本地 OCR 模板优先：视觉大模型训练生成的模板命中 → 直接用模板结构化字段（秒级，不调大模型）
+        tpl = match_template(db, texts)
+        if tpl:
+            prod = {
+                "product_name": tpl.get("product_name") or "",
+                "brand": tpl.get("brand") or "",
+                "spec": tpl.get("spec") or "",
+                "lines": texts,
+            }
+    else:
+        # 视觉兜底：结构化商品识别（product_name/brand/spec 匹配更准），失败回退纯文本行
+        prod = _vision_product(db, data)
+        texts = prod["lines"] if prod and prod.get("lines") else _vision_texts(db, data)
+        if not texts:
+            raise BizError(E_OCR_UNAVAILABLE, "识别功能不可用：本地 OCR 识别引擎已关闭，且视觉模型（SiliconFlow/豆包）均不可用（系统设置 → OCR 与大模型）")
     matches: list[dict] = []
     seen: set[int] = set()
-    for t in texts:
+    # 视觉结构化候选优先匹配：商品名 / 品牌+规格 / 规格（比整行宣传文案更易命中）
+    candidates: list[str] = []
+    if prod:
+        if prod.get("product_name"):
+            candidates.append(prod["product_name"])
+        if prod.get("brand") and prod.get("spec"):
+            candidates.append(f"{prod['brand']} {prod['spec']}")
+        if prod.get("spec"):
+            candidates.append(prod["spec"])
+    for t in [*candidates, *texts]:
         for m in _match_products(db, t):
             if m["product_id"] not in seen:
                 seen.add(m["product_id"])
@@ -374,6 +451,54 @@ def classify_product(req: ClassifyReq, db: Session = Depends(get_db)) -> dict:
         # 识别成功但系统无该分类：返回建议名供前端提示（category_id=0 表示未命中，用户可手动选择）
         return ok({"category_id": 0, "category_name": cat_name, "matched": False})
     return ok({"category_id": cat.id, "category_name": cat.name, "matched": True})
+
+
+# ============================ 本地 OCR 商品识别模板（视觉大模型训练） ============================
+
+
+@router.post("/ocr/template/train", dependencies=[Depends(require_permission("ocr:manage"))])
+def train_product_template(file_id: int = Query(...), db: Session = Depends(get_db)) -> dict:
+    """用视觉大模型识别样本图生成本地 OCR 识别模板（锚点=品牌/规格/商品名）。
+
+    之后同类图片走本地 OCR 时按模板秒级结构化匹配，无需再调大模型；锚点完全相同则覆盖旧模板。
+    """
+    data = _read_file_bytes(db, file_id)
+    prod = _vision_product(db, data)
+    if not prod or not (prod.get("product_name") or prod.get("spec")):
+        raise BizError(E_LLM_FAILED, "训练失败：视觉模型未能识别出商品名称/规格，请换一张更清晰的图片")
+    anchors = build_anchors(prod)
+    if not anchors:
+        raise BizError(E_LLM_FAILED, "训练失败：未能提取到有效锚点（品牌/规格/名称）")
+    tpl = {
+        "id": uuid.uuid4().hex[:8],
+        "name": prod.get("product_name") or prod.get("spec") or "未命名模板",
+        "brand": prod.get("brand") or "",
+        "product_name": prod.get("product_name") or "",
+        "spec": prod.get("spec") or "",
+        "anchors": anchors,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    templates = [t for t in load_templates(db) if t.get("anchors") != anchors]
+    templates.append(tpl)
+    save_templates(db, templates)
+    return ok(tpl)
+
+
+@router.get("/ocr/templates", dependencies=[Depends(require_permission("ocr:manage"))])
+def list_product_templates(db: Session = Depends(get_db)) -> dict:
+    """本地 OCR 商品识别模板列表。"""
+    return ok({"templates": load_templates(db)})
+
+
+@router.delete("/ocr/templates/{tpl_id}", dependencies=[Depends(require_permission("ocr:manage"))])
+def delete_product_template(tpl_id: str, db: Session = Depends(get_db)) -> dict:
+    """删除本地 OCR 商品识别模板（按 id）。"""
+    templates = load_templates(db)
+    remain = [t for t in templates if t.get("id") != tpl_id]
+    if len(remain) == len(templates):
+        raise BizError(E_NOT_FOUND, "模板不存在")
+    save_templates(db, remain)
+    return ok()
 
 
 # ============================ 送货单确认（供应商落库） ============================
@@ -532,15 +657,42 @@ def ocr_match(
     user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """未匹配文本 → 豆包视觉识别商品 → 生成 ai_suggestion（人工确认后新增）。"""
+    """未匹配文本 → 商品识别兜底：本地 OCR 模板 → 视觉模型（豆包/SiliconFlow）分析 → 生成 ai_suggestion。
+
+    豆包关闭不影响：模板命中走模板（秒级），否则用 SiliconFlow 视觉模型；两者均不可用才报错。
+    """
     record = db.get(OcrRecord, record_id)
     if record is None:
         raise BizError(E_NOT_FOUND, "识别记录不存在")
+    # 1) 本地 OCR 模板优先：识别记录文本命中模板 → 直接用模板结构化字段（不调大模型）
+    record_texts = [str(r.get("text") or "") for r in (record.raw_result or []) if isinstance(r, dict)]
+    tpl = match_template(db, record_texts)
+    if tpl:
+        name = (tpl.get("product_name") or tpl.get("name") or "未知商品")[:100]
+        suggestion = AiSuggestion(
+            ocr_record_id=record.id, product_name=name, model="ocr-template",
+            suggestion={
+                "spec": str(tpl.get("spec") or "")[:100],
+                "category": "",
+                "note": "本地 OCR 模板匹配（视觉大模型训练生成）",
+            },
+            status=1,  # 待处理
+        )
+        db.add(suggestion)
+        db.commit()
+        db.refresh(suggestion)
+        return ok({"suggestion_id": suggestion.id, "product_name": name, "detail": suggestion.suggestion})
+    # 2) 视觉模型分析链：豆包 → SiliconFlow（豆包关闭/未配置时用 SiliconFlow 视觉模型）
     file_bytes = _read_file_bytes(db, record.file_id)
-    try:
-        llm = get_llm(db, "doubao")
-    except LLMNotConfigured as e:
-        raise BizError(5002, str(e))
+    llm = None
+    for llm_name in ("doubao", "siliconflow"):
+        try:
+            llm = get_llm(db, llm_name)
+            break
+        except LLMNotConfigured:
+            continue
+    if llm is None:
+        raise BizError(5002, "大模型分析不可用：豆包与视觉模型均未配置或未启用（系统设置 → OCR 与大模型）")
     prompt = (
         "识别图片中的商品/物料，输出JSON：{\"name\": 商品名称, \"spec\": 规格型号, "
         "\"category\": 类别, \"note\": 其他可识别信息}。无法识别时 name 给最可能的名称。只输出JSON。"
@@ -548,7 +700,7 @@ def ocr_match(
     try:
         content = llm.chat_image(file_bytes, prompt)
     except Exception as e:
-        raise BizError(5002, f"豆包识别失败：{e}")
+        raise BizError(5002, f"{llm.name} 视觉识别失败：{e}")
     try:
         start, end = content.find("{"), content.rfind("}")
         parsed = json.loads(content[start : end + 1]) if start >= 0 and end >= 0 else {}
@@ -556,7 +708,7 @@ def ocr_match(
         parsed = {}
     name = str(parsed.get("name") or "未知商品")[:100]
     suggestion = AiSuggestion(
-        ocr_record_id=record.id, product_name=name, model="doubao",
+        ocr_record_id=record.id, product_name=name, model=llm.name,
         suggestion={
             "spec": str(parsed.get("spec") or "")[:100],
             "category": str(parsed.get("category") or "")[:50],
