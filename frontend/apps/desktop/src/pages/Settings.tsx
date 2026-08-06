@@ -49,6 +49,11 @@ export function SettingsPage() {
   const { message } = App.useApp();
   const [form] = Form.useForm<Settings>();
   const ocrEngine = Form.useWatch("ocr.engine", form);
+  // 模型字段在 Space.Compact 内，antd v6 Form.Item 只注入 value/onChange 给直接子元素（Space.Compact 不透传），
+  // Select 拿不到表单绑定会变成非受控（选中不写 store、回显失效）→ 显式受控绑定 form
+  const doubaoModel = Form.useWatch("llm.doubao.model", form);
+  const dsModel = Form.useWatch("llm.deepseek.model", form);
+  const sfModel = Form.useWatch("llm.siliconflow.model", form);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -328,6 +333,8 @@ export function SettingsPage() {
             style={{ flex: 1 }}
             showSearch
             allowClear
+            value={doubaoModel}
+            onChange={(v) => form.setFieldValue("llm.doubao.model", v)}
             placeholder="如：doubao-1-5-vision-pro-32k-250115"
             options={doubaoModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
             optionFilterProp="label"
@@ -356,6 +363,8 @@ export function SettingsPage() {
             style={{ flex: 1 }}
             showSearch
             allowClear
+            value={dsModel}
+            onChange={(v) => form.setFieldValue("llm.deepseek.model", v)}
             placeholder="如：deepseek-chat"
             options={dsModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
             optionFilterProp="label"
@@ -384,6 +393,8 @@ export function SettingsPage() {
             style={{ flex: 1 }}
             showSearch
             allowClear
+            value={sfModel}
+            onChange={(v) => form.setFieldValue("llm.siliconflow.model", v)}
             placeholder="如：nex-agi/Nex-N2-Pro"
             options={sfModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
             optionFilterProp="label"
