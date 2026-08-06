@@ -1,10 +1,20 @@
+import fs from "node:fs";
+
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+
+// HTTPS 开发环境（本地 80 被业务占用；复用 backend/certs/dev 自签名证书）
+// 路径基于本文件所在目录解析：apps/desktop → 项目根 → backend/certs/dev
+const CERT_DIR = "../../../backend/certs/dev";
 
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    https: {
+      key: fs.readFileSync(`${CERT_DIR}/key.pem`),
+      cert: fs.readFileSync(`${CERT_DIR}/cert.pem`),
+    },
     proxy: {
       "/api": {
         target: "https://127.0.0.1:8443",

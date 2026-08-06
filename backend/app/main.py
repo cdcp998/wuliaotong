@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.api import auth as auth_api
+from app.api import advanced as advanced_api
 from app.api import base_data as base_data_api
 from app.api import files as files_api
 from app.api import notification as notification_api
@@ -24,14 +25,17 @@ from app.config import settings
 from app.core.deps import resolve_session_user
 from app.core.response import BizError, E_PARAM, biz_error_handler, err
 from app.db import SessionLocal, engine
+from app.scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动自检：数据库连通性。"""
+    """启动自检：数据库连通性；启动定时任务（库存预警）。"""
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
+    start_scheduler()
     yield
+    stop_scheduler()
 
 
 app = FastAPI(
@@ -110,6 +114,7 @@ app.include_router(auth_api.router, prefix=settings.api_prefix)
 app.include_router(base_data_api.static_router, prefix=settings.api_prefix)  # 先于动态路由注册（/products/export 等静态路径）
 app.include_router(base_data_api.router, prefix=settings.api_prefix)
 app.include_router(stock_api.router, prefix=settings.api_prefix)
+app.include_router(advanced_api.router, prefix=settings.api_prefix)
 app.include_router(requisition_api.router, prefix=settings.api_prefix)
 app.include_router(notification_api.router, prefix=settings.api_prefix)
 app.include_router(files_api.router, prefix=settings.api_prefix)

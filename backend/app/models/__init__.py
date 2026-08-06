@@ -1,4 +1,12 @@
 """ORM 模型统一出口。"""
+from app.models.advanced import (
+    StkCheck,
+    StkCheckItem,
+    StkOtherIo,
+    StkOtherIoItem,
+    StkTransfer,
+    StkTransferItem,
+)
 from app.models.base import (
     BaseCategory,
     BaseLocation,
@@ -44,6 +52,12 @@ __all__ = [
     "BaseSupplier",
     "BaseUnit",
     "BaseWarehouse",
+    "StkCheck",
+    "StkCheckItem",
+    "StkOtherIo",
+    "StkOtherIoItem",
+    "StkTransfer",
+    "StkTransferItem",
     "OutRequisition",
     "OutRequisitionItem",
     "PchPurchaseIn",

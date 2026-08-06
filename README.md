@@ -24,7 +24,8 @@
 - Python 3.13（`G:\Python\Python313`）
 - MySQL 5.7（phpstudy，root/root，端口 3306），生产目标 MySQL 8.0
 - Node 20 + npm workspaces
-- ⚠️ 本地 80 端口被 phpstudy 业务占用：后端 dev 端口 **8443（HTTPS）**，部署端口计划 **8080**
+- ⚠️ 本地 80 端口被 phpstudy 业务占用：后端 dev 端口 **8443（HTTPS）**，前端 dev **HTTPS 5173/5174**，部署端口计划 **8080**
+- MySQL 密码：root/cdcp520
 
 ## 快速启动（P0 已就绪）
 
@@ -48,8 +49,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8443 \
 # 3. 接口测试（L2 门禁）
 cd backend && .venv/Scripts/python.exe -m pytest tests -q
 
-# 4. 前端（后续阶段）
-cd frontend && npm install && npm run dev
+# 4. 前端（HTTPS，端口 5173/5174；复用 backend/certs/dev 自签名证书）
+cd frontend && npm install
+npm run dev:desktop   # https://localhost:5173
+npm run dev:mobile    # https://localhost:5174
 ```
 
 ## 默认账号

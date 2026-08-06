@@ -11,3 +11,4 @@ psutil
 openpyxl
 python-multipart
 pillow
+apscheduler
