@@ -38,6 +38,7 @@ from app.schemas.ocr import ClassifyReq, DeliveryConfirmReq
 from app.services.llm import LLMNotConfigured, get_llm
 from app.services.ocr.client import get_ocr_engine
 from app.services.ocr.correction import correct_texts
+from app.services.ai.supplier_norm import match_supplier_by_llm
 from app.services.ocr.product_template import build_anchors, load_templates, match_template, save_templates
 from app.services.storage import resolve_storage_path
 
@@ -570,9 +571,16 @@ def delivery_confirm(
     """
     supplier_id = 0
     supplier_created = False
+    supplier_matched_name = ""  # AI 别名归一命中的已有供应商名（前端提示已关联）
     supplier_name = req.supplier_name.strip()
     if supplier_name:
         sup = db.scalar(select(BaseSupplier).where(BaseSupplier.name == supplier_name).order_by(BaseSupplier.id.desc()))
+        if sup is None:
+            # AI 别名归一：精确匹配失败时用 DeepSeek 判断是否与已有供应商同一实体（简称/全称/错字）
+            matched_id, matched_name = match_supplier_by_llm(db, supplier_name)
+            if matched_id:
+                sup = db.get(BaseSupplier, matched_id)
+                supplier_matched_name = matched_name
         if sup is None:
             # 自动编码：OCR + yyyymmdd + 4 位当日序号（复用序号则递增重试）
             prefix = "OCR" + datetime.now().strftime("%Y%m%d")
@@ -618,6 +626,7 @@ def delivery_confirm(
         "supplier_id": supplier_id,
         "supplier_name": supplier_name,
         "supplier_created": supplier_created,
+        "supplier_matched_name": supplier_matched_name,  # AI 别名归一命中的已有供应商名（空=未命中）
         "bill_no": req.bill_no.strip(),
         "record_id": req.record_id,
         "items": confirmed_items,

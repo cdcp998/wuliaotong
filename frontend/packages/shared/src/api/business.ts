@@ -326,6 +326,7 @@ export interface DeliveryConfirmResult {
   supplier_id: number;
   supplier_name: string;
   supplier_created?: boolean;
+  supplier_matched_name?: string; // AI 别名归一：识别名已关联的已有供应商名（空=未命中）
   bill_no: string;
   record_id: number;
   items: (OcrDeliveryItem & { product_id: number; _created?: boolean })[];

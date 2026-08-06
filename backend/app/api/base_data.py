@@ -14,7 +14,7 @@ from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook, load_workbook
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,7 @@ from app.models.base import (
     BaseUnit,
     BaseWarehouse,
 )
+from app.models.stock import PchPurchaseIn
 from app.models.sys import SysRole, SysUser
 from app.schemas.admin import DeptOut, DeptReq, DeptShelvesReq, DeptUpdateReq
 from app.schemas.base import (
@@ -281,6 +282,35 @@ def delete_supplier(sup_id: int, db: Session = Depends(get_db)) -> dict:
     sup.status = 0  # 软删除：停用
     db.commit()
     return ok()
+
+
+@router.post("/suppliers/merge", dependencies=[Depends(require_permission("base:supplier"))])
+def merge_suppliers(body: dict, db: Session = Depends(get_db)) -> dict:
+    """合并供应商（人工确认）：from 的关联材料/入库单转移至 to，from 停用（不物理删除）。"""
+    from_id = int(body.get("from_id") or 0)
+    to_id = int(body.get("to_id") or 0)
+    if not from_id or not to_id or from_id == to_id:
+        raise BizError(E_PARAM, "合并参数无效（from_id/to_id 必须不同）")
+    a = db.get(BaseSupplier, from_id)
+    b = db.get(BaseSupplier, to_id)
+    if a is None or b is None:
+        raise BizError(E_NOT_FOUND, "供应商不存在")
+    # 材料关联转移（目标已有关联则删除重复）
+    for link in db.scalars(select(BaseProductSupplier).where(BaseProductSupplier.supplier_id == a.id)).all():
+        exists = db.scalar(
+            select(BaseProductSupplier.id).where(
+                BaseProductSupplier.supplier_id == b.id, BaseProductSupplier.product_id == link.product_id
+            )
+        )
+        if exists:
+            db.delete(link)
+        else:
+            link.supplier_id = b.id
+    # 历史入库单归属转移
+    db.execute(update(PchPurchaseIn).where(PchPurchaseIn.supplier_id == a.id).values(supplier_id=b.id))
+    a.status = 0  # 停用被合并的供应商
+    db.commit()
+    return ok({"merged_id": b.id})
 
 
 @router.get("/suppliers/{sup_id}/products")
