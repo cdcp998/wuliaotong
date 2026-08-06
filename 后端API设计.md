@@ -18,27 +18,33 @@
 
 | 方法 | 路径 | 说明 | 权限 |
 |---|---|---|---|
-| POST | /auth/login | {username, password} → 写 session，返回用户信息 | 公开 |
+| POST | /auth/login | {username, password, captcha_id?, captcha_code?} → 写 session，返回用户信息；连续失败 3 次（10 分钟窗口）后必须带验证码（错误码 4007） | 公开 |
+| GET | /auth/captcha | 4 位数字+字母验证码图片（base64）→ {captcha_id, image} | 公开 |
 | POST | /auth/logout | 注销会话 | 登录 |
 | GET | /auth/me | 当前用户 + 角色 + 权限点列表 | 登录 |
-| PUT | /auth/password | 修改自己密码 {old_password, new_password} | 登录 |
-| GET | /users?keyword=&page= | 用户列表 | sys:user |
-| POST | /users | 新增用户（含 role_id、初始密码） | sys:user |
-| PUT | /users/{id} | 修改用户 | sys:user |
-| PUT | /users/{id}/status | 启用/停用 {status} | sys:user |
-| PUT | /users/{id}/password | 重置密码 | sys:user |
-| GET | /roles | 角色列表 | sys:user |
-| POST / PUT / DELETE | /roles, /roles/{id} | 角色维护（内置角色禁删） | sys:user |
-| GET | /roles/{id}/permissions | 角色权限点 id 列表 | sys:user |
-| PUT | /roles/{id}/permissions | 保存角色权限点 {permission_ids: []} | sys:user |
-| GET | /permissions | 权限点树（菜单+按钮） | sys:user |
+| PUT | /auth/password | 修改自己密码 {old_password, new_password}（改密后其他会话失效） | 登录 |
+| POST | /auth/forgot | 找回密码 {username, email?}；按系统配置 auth.forgot_method（email 发 6 位重置码 / phone 返回管理员电话 / both 优先邮箱） | 公开 |
+| POST | /auth/forgot/reset | {username, code, new_password} 用重置码重置密码 | 公开 |
+| POST | /auth/register | 注册 {username, password, real_name?, phone?, email?}；按 auth.register_mode：open 直接建使用者账号 / closed 拒绝 / review 进审核队列 | 公开 |
+| GET | /auth/register/status | 注册模式与联系电话（前端控制注册入口显示） | 公开 |
+| GET | /users?keyword=&status=&role_id=&page= | 用户列表（含 email） | sys:user |
+| POST | /users | 新增用户（含 role_id、初始密码、email） | sys:user |
+| PUT | /users/{id} | 修改用户（姓名/电话/邮箱/角色/状态/重置密码；内置 admin 不可停用、不可改自己的角色与状态） | sys:user |
+| DELETE | /users/{id} | 停用账号（逻辑停用，保留历史数据） | sys:user |
+| GET | /register-applies?status=&page= | 注册申请列表（审核注册模式） | sys:user |
+| POST | /register-applies/{id}/approve / reject | 审核注册申请（通过后创建使用者账号） | sys:user |
+| GET | /roles | 角色列表（含 department_id/department_name 所属单位） | sys:role |
+| POST / PUT / DELETE | /roles, /roles/{id} | 角色维护（code/name/description/department_id；内置角色禁删、super_admin 权限锁、有启用用户引用禁删） | sys:role |
+| PUT | /roles/{id}/permissions | 保存角色权限点 {permission_ids: []}（super_admin 角色不可改） | sys:role |
+| GET | /permissions | 权限点列表 | sys:role |
 
 登录示例：
 ```
 POST /api/v1/auth/login
 {"username": "zhangsan", "password": "******"}
-→ 200 {"code": 0, "data": {"id": 1, "real_name": "张三", "role_code": "storekeeper",
-     "permissions": ["stock:query", "stock:in", ...]}}
+→ 200 {"code": 0, "data": {"user": {"id": 1, "username": "zhangsan", "real_name": "张三",
+     "role": {"id": 3, "code": "storekeeper", "name": "仓管员"},
+     "permissions": ["stk:query", "pch:in", ...]}}}
 ```
 
 ## 2. 基础资料
@@ -46,10 +52,10 @@ POST /api/v1/auth/login
 **商品**
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /products?keyword=&category_id=&barcode=&status=&page= | 列表（keyword 匹配名称/编码/SKU/条码） |
-| POST | /products | 新增 {code, barcode, sku, name, category_id, spec, unit_id, purchase_price, min_stock, max_stock, image_file_id, units:[{unit_id, rate, is_default}]} |
+| GET | /products?keyword=&category_id=&barcode=&status=&page= | 列表（keyword 匹配名称/编码/物料编码/SKU/条码） |
+| POST | /products | 新增 {code?, material_code?, barcode, sku, name, ...}；**code 纯数字**（留空自动生成 = 当前最大数字编码+1）；material_code=物料编码（公司系统编码，可空，空则提示管理员补录） |
 | GET / PUT | /products/{id} | 详情 / 修改 |
-| POST | /products/import | Excel 批量导入，返回 {success_count, fail_rows:[{row, reason}]} |
+| POST | /products/import | Excel 批量导入，返回 {success_count, fail_rows, notice}；公司模板：物料编码→material_code（唯一去重）、商品编码自动纯数字、条码留空，物料编码/条码为空响应 notice 提示管理员补录 |
 | GET | /products/export?keyword= | Excel 导出 |
 
 **分类 / 单位 / 供应商 / 仓库 / 货架 / 库位**（CRUD 同构，不再展开）
@@ -57,8 +63,13 @@ POST /api/v1/auth/login
 - GET /units、POST /units
 - GET/POST /suppliers、PUT/DELETE /suppliers/{id}、POST /suppliers/import
 - GET/POST /warehouses、PUT/DELETE /warehouses/{id}
-- GET /warehouses/{id}/shelves、POST /shelves、PUT/DELETE /shelves/{id}
+- GET /warehouses/{id}/shelves（**非超管/管理者角色按所属单位过滤**：仅见本单位 base_department_shelf 关联货架）、POST /shelves、PUT/DELETE /shelves/{id}
 - GET /locations?warehouse_id=&shelf_id=（2D 货架图数据源）、POST /locations {warehouse_id, shelf_id, layer_no}、PUT/DELETE /locations/{id}
+- GET /stock/location-summary?warehouse_id=&shelf_id=（2D 货架图：库位商品库存+预警绿/红/黄，一次返回避免 N+1）
+
+**组织单位（部门）**（dept:manage）
+- GET /departments（登录即可）、POST /departments、PUT/DELETE /departments/{id}（有角色引用禁删）
+- PUT /departments/{id}/shelves {shelf_ids: []} → 设置单位可用显示的货架；角色 department_id 关联后，该角色用户（非超管/管理者）货架/货架图按单位过滤
 
 **期初库存**
 - POST /opening（草稿，头+明细）、GET /opening、GET/PUT /opening/{id}
@@ -79,16 +90,17 @@ POST /api/v1/auth/login
 ## 4. 领用（使用者手机端核心流程）
 
 - POST /requisitions
-  body: `{warehouse_id, use_location(必填), use_reason(必填), remark, items: [{product_id, qty, location_id, photo_file_id}]}`
-  → 状态=待审计，返回 {bill_no}；出库商品照片不强制
+  body: `{warehouse_id, use_location(必填), use_reason(必填), location_photo_file_id?, remark, items: [{product_id, qty, location_id, photo_file_id}]}`
+  → **提交即自动出库**（同一事务 post_stock_change，`allow_negative=True` 允许负库存——实物与系统账可能不符）；库存为负时站内通知管理员（超管/管理者/仓管员）；返回 {bill_no, shortages:[...]}；出库商品照片/使用地点照片不强制
 - GET /requisitions/my?status=&page= 我的申请（使用者）
 - GET /requisitions?status=1&keyword=&page= 待审计列表（仓管员）
 - GET /requisitions/{id} 详情（含明细+照片+审计记录）
 - PUT /requisitions/{id} 修改（仅"已驳回"状态可改后重新提交）
 - POST /requisitions/{id}/cancel 取消（仅"待审计"状态）
 - POST /requisitions/{id}/audit {action: "approve"|"reject", remark}
-  - approve：事务内 `SELECT ... FOR UPDATE` 锁 stk_stock → 逐条校验库存充足（不足则整单失败并返回明细）→ 扣库存 → 写流水 → 状态=已通过 → 通知申请人
-  - reject：状态=已驳回 → 通知申请人
+  - approve：库存已在提交时自动扣减，审计通过仅确认状态 → 通知申请人
+  - reject：状态=已驳回 + **自动回补库存**（领用驳回回补流水）→ 通知申请人
+- 取消（POST /requisitions/{id}/cancel）：**自动回补库存**（领用取消回补流水）；驳回后修改重提（PUT）会再次自动出库
 
 ## 5. 调拨 / 盘点 / 其他出入库
 
@@ -146,11 +158,11 @@ OCR 结果示例（structured）：
 
 ## 9. 系统管理
 
-- GET /settings、PUT /settings（公司信息、单据编号规则、OCR 引擎参数、大模型 Key/BaseURL、预警参数）
+- GET /settings、PUT /settings（公司信息、单据编号规则、OCR 引擎参数、大模型 Key/BaseURL、**注册模式 auth.register_mode（open/closed/review）、找回方式 auth.forgot_method（email/phone/both）、管理员电话 site.contact_phone、SMTP smtp.host/port/user/password/from**）
 - 存储位置管理见 §7（/storages，多存储地址：fill 最空闲 / round 轮询 / manual 手动指定）
-- GET /operation-logs?user_id=&module=&start=&end=&page=
+- GET /logs?username=&module=&method=&start=&end=&page= 操作日志（写操作审计查询）
 - GET /notifications?is_read=&page=、PUT /notifications/{id}/read、PUT /notifications/read-all、GET /notifications/unread-count
-- POST /backup（手动备份 mysqldump）、GET /backups
+- POST /backups（手动备份 mysqldump→gzip）、GET /backups、DELETE /backups/{id}、GET /backups/{id}/download（备份密码走 MYSQL_PWD 环境变量；每日 02:00 自动备份保留最近 14 份）
 - GET /health（服务 + 当前 OCR 引擎类型与状态，部署/运维用）
 
 ## 10. 权限点 code 清单（sys_permission 初始化数据）
@@ -168,6 +180,7 @@ OCR 结果示例（structured）：
 | ocr:use / ocr:manage | 拍照识别/识别记录管理 | 仓管员 |
 | report:view / report:export | 报表查看/导出 | 管理者/超级管理员 |
 | sys:user / sys:role / sys:log / sys:config / sys:backup | 系统管理 | 超级管理员 |
+| dept:manage | 单位管理（单位 CRUD + 货架关联） | 超级管理员 |
 
 ## 11. 关键实现要点
 
@@ -178,8 +191,9 @@ OCR 结果示例（structured）：
    引擎选择存 sys_config（ocr.engine = rapidocr/paddle），启动时按配置加载；`GET /health` 返回当前引擎类型与状态；切换引擎只影响识别层，结构化/匹配/大模型链路不变；引擎初始化失败返回可读错误（5001）并降级为纯人工录入。
 3. **大模型**：统一 `LLMClient` 抽象（doubao 视觉 / deepseek 文本两个实现），Key/BaseURL 存 sys_config；调用失败不影响主流程，走人工兜底；AI 建议一律人工确认后才新增商品。
 4. **异步任务**：OCR/大模型用 FastAPI BackgroundTasks + 内存任务表；完成后写 sys_notification 通知相关用户。
-5. **外网安全**：正式 HTTPS 证书；Session Cookie HttpOnly+Secure+SameSite=Lax；登录失败 5 次/10 分钟锁定；操作日志留存。
+5. **外网安全**：正式 HTTPS 证书；Session Cookie HttpOnly+Secure+SameSite=Lax；登录连续失败 3 次/10 分钟要求 4 位数字+字母验证码（4007）；改密/重置后其他会话失效；操作日志留存。
 6. **定时任务**：APScheduler —— 库存预警扫描（每分钟）、每日凌晨自动备份（mysqldump → sys_backup_log）、会话过期清理。
 7. **Excel**：openpyxl 导入导出（商品/供应商/期初/报表），导入返回逐行错误信息。
-8. **错误码**：4001 库存不足 / 4002 单据状态不允许 / 4003 商品或库位不存在 / 4004 登录失败或已锁定 / 4005 无权限 / 4006 参数校验失败 / 5001 OCR 引擎未初始化 / 5002 大模型调用失败 / 5003 文件处理失败。
+8. **错误码**：4001 库存不足 / 4002 单据状态不允许 / 4003 商品或库位不存在 / 4004 登录失败或已锁定 / 4005 无权限 / 4006 参数校验失败 / 4007 需要验证码 / 5001 OCR 引擎未初始化 / 5002 大模型调用失败 / 5003 文件处理失败。
 9. **性能**：单据保存走单事务 + 索引（UK product×warehouse×location），百人并发无压力；OCR/大模型异步，不阻塞开单。
+10. **验证码/重置码内存态**（单进程部署）；报表全部基于 stk_stock_log 聚合可对账；数量输出统一去尾零（_fmt_qty）。
