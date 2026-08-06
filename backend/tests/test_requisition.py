@@ -37,7 +37,7 @@ def _setup_stock(qty: str = "50") -> tuple[int, int, int]:
 
     client.post("/api/v1/units", json={"name": "P3件" + tag})
     unit_id = client.get("/api/v1/units").json()["data"][0]["id"]
-    r = client.post("/api/v1/products", json={"code": "P3P" + tag, "name": "P3物料", "unit_id": unit_id})
+    r = client.post("/api/v1/products", json={"code": "9" + str(int(tag, 16) % 10**9), "name": "P3物料", "unit_id": unit_id})
     pid = r.json()["data"]["id"]
 
     r = client.post("/api/v1/purchase-in", json={

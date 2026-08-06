@@ -38,7 +38,7 @@ def _setup(qty: str = "30", min_stock: str = "30") -> tuple[int, int, int]:
     r = client.post("/api/v1/units", json={"name": "RP件" + tag})
     unit_id = r.json()["data"]["id"]
     r = client.post("/api/v1/products", json={
-        "code": "RPP" + tag, "name": "报表物料", "unit_id": unit_id,
+        "code": "9" + str(int(tag, 16) % 10**9), "name": "报表物料", "unit_id": unit_id,
         "purchase_price": "2.00", "min_stock": min_stock,
     })
     pid = r.json()["data"]["id"]

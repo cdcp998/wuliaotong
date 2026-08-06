@@ -29,7 +29,7 @@ def _setup_two_wh(qty: str = "30") -> tuple[int, int, int, int, int]:
 
     client.post("/api/v1/units", json={"name": "P4件" + tag})
     unit_id = client.get("/api/v1/units").json()["data"][0]["id"]
-    r = client.post("/api/v1/products", json={"code": "P4P" + tag, "name": "P4物料", "unit_id": unit_id})
+    r = client.post("/api/v1/products", json={"code": "9" + str(int(tag, 16) % 10**9), "name": "P4物料", "unit_id": unit_id})
     pid = r.json()["data"]["id"]
 
     r = client.post("/api/v1/purchase-in", json={
@@ -102,7 +102,7 @@ def test_check_flow():
     loc_id = r.json()["data"]["id"]
     client.post("/api/v1/units", json={"name": "盘件" + tag})
     unit_id = client.get("/api/v1/units").json()["data"][0]["id"]
-    r = client.post("/api/v1/products", json={"code": "PDP" + tag, "name": "盘点物料", "unit_id": unit_id, "min_stock": "100"})
+    r = client.post("/api/v1/products", json={"code": "9" + str(int(tag, 16) % 10**9), "name": "盘点物料", "unit_id": unit_id, "min_stock": "100"})
     pid = r.json()["data"]["id"]
     r = client.post("/api/v1/purchase-in", json={
         "warehouse_id": wh_id, "items": [{"product_id": pid, "qty": "10", "price": "1.00", "location_id": loc_id}],
@@ -154,7 +154,7 @@ def test_other_io_flow():
     loc_id = r.json()["data"]["id"]
     client.post("/api/v1/units", json={"name": "其件" + tag})
     unit_id = client.get("/api/v1/units").json()["data"][0]["id"]
-    r = client.post("/api/v1/products", json={"code": "QTP" + tag, "name": "其他物料", "unit_id": unit_id})
+    r = client.post("/api/v1/products", json={"code": "9" + str(int(tag, 16) % 10**9), "name": "其他物料", "unit_id": unit_id})
     pid = r.json()["data"]["id"]
     client.post("/api/v1/purchase-in", json={
         "warehouse_id": wh_id, "items": [{"product_id": pid, "qty": "20", "price": "1.00", "location_id": loc_id}],
@@ -206,7 +206,7 @@ def test_stock_alerts():
     loc_id = r.json()["data"]["id"]
     client.post("/api/v1/units", json={"name": "预件" + tag})
     unit_id = client.get("/api/v1/units").json()["data"][0]["id"]
-    r = client.post("/api/v1/products", json={"code": "ALP" + tag, "name": "预警物料", "unit_id": unit_id, "min_stock": "100"})
+    r = client.post("/api/v1/products", json={"code": "9" + str(int(tag, 16) % 10**9), "name": "预警物料", "unit_id": unit_id, "min_stock": "100"})
     pid = r.json()["data"]["id"]
     client.post("/api/v1/purchase-in", json={
         "warehouse_id": wh_id, "items": [{"product_id": pid, "qty": "50", "price": "1.00", "location_id": loc_id}],

@@ -72,7 +72,8 @@ class ProductUnitItem(BaseModel):
 
 
 class ProductReq(BaseModel):
-    code: str = Field(min_length=1, max_length=50)
+    code: str = Field(default="", max_length=50, description="商品编码（纯数字，留空自动生成）")
+    material_code: str = Field(default="", max_length=50, description="物料编码（公司系统编码，空则提示管理员补录）")
     barcode: str = ""
     sku: str = ""
     name: str = Field(min_length=1, max_length=100)
@@ -86,6 +87,14 @@ class ProductReq(BaseModel):
     remark: str = ""
     units: list[ProductUnitItem] = []
 
+    @field_validator("code")
+    @classmethod
+    def _code(cls, v: str) -> str:
+        v = v.strip()
+        if v and not v.isdigit():
+            raise ValueError("商品编码必须是纯数字（留空自动生成）")
+        return v
+
     @field_validator("purchase_price", "min_stock", "max_stock")
     @classmethod
     def _dec(cls, v: str) -> str:
@@ -97,6 +106,7 @@ class ProductReq(BaseModel):
 class ProductOut(BaseModel):
     id: int
     code: str
+    material_code: str
     barcode: str
     sku: str
     name: str

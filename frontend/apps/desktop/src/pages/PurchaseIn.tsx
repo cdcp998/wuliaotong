@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button, InputNumber, message, Modal, Popconfirm, Select, Space, Table } from "antd";
+import { Button, InputNumber, message, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { baseApi, purchaseApi, purchaseIn, type PurchaseInBill } from "@wlt/shared";
+import { baseApi, purchaseApi, purchaseIn, type PurchaseInBill, type PurchaseInDetail } from "@wlt/shared";
+
+import { BillDetailDrawer } from "../components/BillDetailDrawer";
 
 interface Row {
   product_id: number | undefined;
@@ -26,6 +28,8 @@ export function PurchaseInPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detail, setDetail] = useState<PurchaseInDetail | null>(null);
   const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
   const [products, setProducts] = useState<{ id: number; name: string; code: string }[]>([]);
   const [locs, setLocs] = useState<{ id: number; code: string }[]>([]);
@@ -111,7 +115,24 @@ export function PurchaseInPage() {
   }
 
   const columns: ColumnsType<PurchaseInBill> = [
-    { title: "单号", dataIndex: "bill_no" },
+    {
+      title: "单号",
+      dataIndex: "bill_no",
+      render: (v: string, r) => (
+        <a
+          onClick={async () => {
+            try {
+              setDetail(await purchaseApi.detail(r.id));
+              setDetailOpen(true);
+            } catch (e) {
+              message.error(e instanceof Error ? e.message : "加载失败");
+            }
+          }}
+        >
+          {v}
+        </a>
+      ),
+    },
     { title: "仓库", dataIndex: "warehouse_name" },
     { title: "供应商", dataIndex: "supplier_name" },
     { title: "数量", dataIndex: "total_qty" },
@@ -136,6 +157,30 @@ export function PurchaseInPage() {
         <Button onClick={() => navigate("/ocr/delivery")}>送货单 OCR 录入</Button>
       </Space>
       <Table rowKey="id" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+
+      <BillDetailDrawer
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        title="采购入库详情"
+        statusTag={detail ? <Tag color={detail.status === 1 ? "green" : "default"}>{detail.status === 1 ? "已入库" : "已作废"}</Tag> : undefined}
+        fields={[
+          { label: "单号", value: detail?.bill_no },
+          { label: "仓库", value: detail?.warehouse_name },
+          { label: "供应商", value: detail?.supplier_name },
+          { label: "入库日期", value: detail?.bill_date?.slice(0, 16) },
+          { label: "总数量", value: detail?.total_qty },
+          { label: "总金额", value: detail?.total_amount },
+          { label: "备注", value: detail?.remark, span: 2 },
+        ]}
+        columns={[
+          { title: "商品", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
+          { title: "库位", dataIndex: "location_code", width: 120 },
+          { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
+          { title: "单价", dataIndex: "price", width: 90, align: "right" as const },
+          { title: "金额", dataIndex: "amount", width: 100, align: "right" as const },
+        ]}
+        rows={(detail?.items ?? []).map((it) => ({ ...it, key: it.id ?? it.product_id ?? Math.random() }))}
+      />
 
       <Modal title="新建采购入库" open={open} onOk={() => void create()} onCancel={() => setOpen(false)} width={760}>
         <Space style={{ marginBottom: 12 }}>

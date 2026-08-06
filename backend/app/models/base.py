@@ -37,7 +37,8 @@ class BaseProduct(TimestampMixin, Base):
     __tablename__ = "base_product"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)  # 商品编码（纯数字）
+    material_code: Mapped[str] = mapped_column(String(50), nullable=False, default="")  # 物料编码（公司系统编码，可空，空则提示管理员补录）
     barcode: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     sku: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     name: Mapped[str] = mapped_column(String(100), nullable=False)

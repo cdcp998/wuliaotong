@@ -256,7 +256,8 @@ CREATE TABLE base_category (
 DROP TABLE IF EXISTS base_product;
 CREATE TABLE base_product (
   id             BIGINT NOT NULL AUTO_INCREMENT,
-  code           VARCHAR(50)  NOT NULL COMMENT '商品编码',
+  code           VARCHAR(50)  NOT NULL COMMENT '商品编码（纯数字，系统内部）',
+  material_code  VARCHAR(50)  NOT NULL DEFAULT '' COMMENT '物料编码（公司系统编码，空则提示管理员补录）',
   barcode        VARCHAR(50)  NOT NULL DEFAULT '' COMMENT '条码',
   sku            VARCHAR(50)  NOT NULL DEFAULT '',
   name           VARCHAR(100) NOT NULL COMMENT '名称',

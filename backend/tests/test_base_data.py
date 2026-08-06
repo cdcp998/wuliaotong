@@ -137,7 +137,7 @@ def test_product_crud():
     client.post("/api/v1/units", json={"name": unit_name})
     unit_id = client.get("/api/v1/units").json()["data"][0]["id"]
 
-    code = "P1" + _TAG
+    code = "9" + str(int(_TAG, 16) % 10**9)
     payload = {
         "code": code, "barcode": "6900000000001", "sku": "SKU-1", "name": "轴承6204",
         "spec": "20x12", "unit_id": unit_id, "purchase_price": "8.50",
@@ -176,8 +176,8 @@ def test_product_import_export():
     xlsx = _make_xlsx(
         ["编码", "条码", "SKU", "名称", "分类", "规格", "单位", "进价", "下限", "上限"],
         [
-            ["P2" + _TAG, "6900000000002", "", "螺丝M6", cat_name, "30mm", unit_name, "2.50", "100", "5000"],
-            ["P3" + _TAG, "", "", "", cat_name, "", unit_name, "1.00", "0", "0"],  # 名称为空 → 失败行
+            ["9" + str(int(_TAG, 16) % 10**9 + 1), "6900000000002", "", "螺丝M6", cat_name, "30mm", unit_name, "2.50", "100", "5000"],
+            ["9" + str(int(_TAG, 16) % 10**9 + 2), "", "", "", cat_name, "", unit_name, "1.00", "0", "0"],  # 名称为空 → 失败行
         ],
     )
     r = client.post(

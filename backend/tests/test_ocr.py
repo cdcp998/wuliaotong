@@ -60,7 +60,7 @@ class _FakeDoubao:
 def _setup_product(name: str) -> int:
     client.post("/api/v1/units", json={"name": "OCR件" + uuid.uuid4().hex[:6]})
     unit_id = client.get("/api/v1/units").json()["data"][0]["id"]
-    r = client.post("/api/v1/products", json={"code": "OCRP" + uuid.uuid4().hex[:6], "name": name, "unit_id": unit_id})
+    r = client.post("/api/v1/products", json={"code": "9" + str(uuid.uuid4().int % 10**9), "name": name, "unit_id": unit_id})
     return r.json()["data"]["id"]
 
 

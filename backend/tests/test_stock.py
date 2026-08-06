@@ -36,7 +36,7 @@ def _setup_wh_loc_product() -> tuple[int, int, int]:
 
     client.post("/api/v1/units", json={"name": "P2件" + tag})
     unit_id = client.get("/api/v1/units").json()["data"][0]["id"]
-    code = "P2P" + tag
+    code = "9" + str(int(tag, 16) % 10**9)
     r = client.post("/api/v1/products", json={"code": code, "name": "P2商品", "unit_id": unit_id, "purchase_price": "5.00"})
     assert r.json()["code"] == 0, r.text
     pid = r.json()["data"]["id"]

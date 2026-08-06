@@ -81,11 +81,33 @@ export const transferApi = {
     http.get<PageData<TransferBill>>(
       `/transfers${status !== undefined ? `?status=${status}` : ""}${status !== undefined ? "&" : "?"}page=${page}&page_size=20`
     ),
+  detail: (id: number) => http.get<TransferDetail>(`/transfers/${id}`),
   create: (from: number, to: number, items: { product_id: number; qty: string; from_location_id: number; to_location_id: number }[], remark = "") =>
     http.post<{ id: number; bill_no: string }>("/transfers", { from_warehouse_id: from, to_warehouse_id: to, remark, items }),
   audit: (id: number) => http.post<null>(`/transfers/${id}/audit`),
   void: (id: number) => http.post<null>(`/transfers/${id}/void`),
 };
+
+export interface TransferDetail {
+  id: number;
+  bill_no: string;
+  from_warehouse_name: string;
+  to_warehouse_name: string;
+  status: number;
+  audit_name: string;
+  audit_time: string | null;
+  remark: string;
+  created_at: string;
+  items: {
+    id: number;
+    product_id: number;
+    product_name: string;
+    code: string;
+    qty: string;
+    from_location_code: string;
+    to_location_code: string;
+  }[];
+}
 
 export interface OtherIoBill {
   id: number;
@@ -102,10 +124,23 @@ export const otherIoApi = {
     http.get<PageData<OtherIoBill>>(
       `/other-io?page=${page}&page_size=20${ioType ? `&io_type=${encodeURIComponent(ioType)}` : ""}${status !== undefined ? `&status=${status}` : ""}`
     ),
+  detail: (id: number) => http.get<OtherIoDetail>(`/other-io/${id}`),
   create: (ioType: string, warehouseId: number, items: { product_id: number; qty: string; location_id: number }[], remark = "") =>
     http.post<{ id: number; bill_no: string }>("/other-io", { io_type: ioType, warehouse_id: warehouseId, remark, items }),
   void: (id: number) => http.post<null>(`/other-io/${id}/void`),
 };
+
+export interface OtherIoDetail {
+  id: number;
+  bill_no: string;
+  warehouse_name: string;
+  io_type: string;
+  status: number;
+  operator_name: string;
+  remark: string;
+  created_at: string;
+  items: BillItem[];
+}
 
 export interface RequisitionBill {
   id: number;
@@ -252,8 +287,28 @@ export interface PurchaseInBill {
   total_amount: string;
 }
 
+export interface BillItem {
+  id?: number;
+  product_id?: number;
+  product_name: string;
+  code: string;
+  spec: string;
+  location_code: string;
+  qty: string;
+  price?: string;
+  amount?: string;
+  photo_file_id?: number;
+}
+
+export interface PurchaseInDetail extends PurchaseInBill {
+  remark: string;
+  operator_name?: string;
+  items: BillItem[];
+}
+
 export const purchaseApi = {
   list: (page = 1) => http.get<PageData<PurchaseInBill>>(`/purchase-in?page=${page}&page_size=20`),
+  detail: (id: number) => http.get<PurchaseInDetail>(`/purchase-in/${id}`),
   void: (id: number) => http.post<null>(`/purchase-in/${id}/void`),
 };
 

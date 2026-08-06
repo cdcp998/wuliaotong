@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, InputNumber, message, Modal, Popconfirm, Radio, Select, Space, Table } from "antd";
+import { Button, InputNumber, message, Modal, Popconfirm, Radio, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
-import { baseApi, transferApi, type TransferBill } from "@wlt/shared";
+import { baseApi, transferApi, type TransferBill, type TransferDetail } from "@wlt/shared";
+
+import { BillDetailDrawer } from "../components/BillDetailDrawer";
 
 const STATUS: Record<string, string> = { 0: "草稿", 1: "已审核", "-1": "已作废" };
 
@@ -18,6 +20,17 @@ export function TransfersPage() {
   const [list, setList] = useState<TransferBill[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detail, setDetail] = useState<TransferDetail | null>(null);
+
+  async function openDetail(r: TransferBill) {
+    try {
+      setDetail(await transferApi.detail(r.id));
+      setDetailOpen(true);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "加载失败");
+    }
+  }
   const [open, setOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
   const [products, setProducts] = useState<{ id: number; name: string; code: string }[]>([]);
@@ -68,7 +81,7 @@ export function TransfersPage() {
   }
 
   const columns: ColumnsType<TransferBill> = [
-    { title: "单号", dataIndex: "bill_no" },
+    { title: "单号", dataIndex: "bill_no", render: (v: string, r) => <a onClick={() => void openDetail(r)}>{v}</a> },
     { title: "调出仓库", dataIndex: "from_warehouse_name" },
     { title: "调入仓库", dataIndex: "to_warehouse_name" },
     { title: "状态", dataIndex: "status", render: (s: number) => STATUS[String(s)] ?? s },
@@ -105,6 +118,28 @@ export function TransfersPage() {
         <Button type="primary" onClick={() => setOpen(true)}>新建调拨</Button>
       </Space>
       <Table rowKey="id" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+
+      <BillDetailDrawer
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        title="库存调拨详情"
+        statusTag={detail ? <Tag color={detail.status === 1 ? "green" : detail.status === 0 ? "gold" : "default"}>{STATUS[String(detail.status)] ?? detail.status}</Tag> : undefined}
+        fields={[
+          { label: "单号", value: detail?.bill_no },
+          { label: "调出仓库", value: detail?.from_warehouse_name },
+          { label: "调入仓库", value: detail?.to_warehouse_name },
+          { label: "审计人", value: detail?.audit_name },
+          { label: "创建时间", value: detail?.created_at?.slice(0, 16) },
+          { label: "备注", value: detail?.remark, span: 2 },
+        ]}
+        columns={[
+          { title: "商品", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}</div></div> },
+          { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
+          { title: "调出库位", dataIndex: "from_location_code", width: 130 },
+          { title: "调入库位", dataIndex: "to_location_code", width: 130 },
+        ]}
+        rows={(detail?.items ?? []).map((it) => ({ ...it, key: it.id ?? it.product_id ?? Math.random() }))}
+      />
 
       <Modal title="新建调拨" open={open} onOk={() => void create()} onCancel={() => setOpen(false)} width={720}>
         <Space style={{ marginBottom: 12 }}>

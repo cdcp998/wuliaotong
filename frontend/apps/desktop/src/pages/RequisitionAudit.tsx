@@ -69,7 +69,7 @@ export function RequisitionAuditPage() {
   }
 
   const columns: ColumnsType<RequisitionBill> = [
-    { title: "单号", dataIndex: "bill_no", width: 150, render: (v) => <b>{v}</b> },
+    { title: "单号", dataIndex: "bill_no", width: 150, render: (v, r) => <a onClick={() => void openDetail(r)}><b>{v}</b></a> },
     { title: "申请人", dataIndex: "applicant_name", width: 90 },
     { title: "使用地点", dataIndex: "use_location", width: 140 },
     {

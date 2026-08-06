@@ -288,6 +288,12 @@ async def import_suppliers(file: UploadFile = File(...), db: Session = Depends(g
 # ============================ 商品 ============================
 
 
+def _next_numeric_code(db: Session) -> str:
+    """生成下一个纯数字商品编码（当前最大数字编码 + 1，空表从 1 开始）。"""
+    v = db.execute(text("SELECT MAX(CAST(code AS UNSIGNED)) FROM base_product WHERE code REGEXP '^[0-9]+$'")).scalar()
+    return str((v or 0) + 1)
+
+
 def _product_out(db: Session, p: BaseProduct) -> dict:
     cat = db.get(BaseCategory, p.category_id)
     unit = db.get(BaseUnit, p.unit_id)
@@ -295,7 +301,7 @@ def _product_out(db: Session, p: BaseProduct) -> dict:
         select(BaseProductUnit).where(BaseProductUnit.product_id == p.id).order_by(BaseProductUnit.is_default.desc())
     ).all()
     return ProductOut(
-        id=p.id, code=p.code, barcode=p.barcode, sku=p.sku, name=p.name,
+        id=p.id, code=p.code, material_code=p.material_code, barcode=p.barcode, sku=p.sku, name=p.name,
         category_id=p.category_id, category_name=cat.name if cat else "",
         spec=p.spec, unit_id=p.unit_id, unit_name=unit.name if unit else "",
         purchase_price=p.purchase_price, min_stock=p.min_stock, max_stock=p.max_stock,
@@ -340,7 +346,7 @@ def list_products(
     stmt = select(BaseProduct)
     if keyword:
         like = f"%{keyword}%"
-        stmt = stmt.where(or_(BaseProduct.name.like(like), BaseProduct.code.like(like), BaseProduct.sku.like(like), BaseProduct.barcode.like(like)))
+        stmt = stmt.where(or_(BaseProduct.name.like(like), BaseProduct.code.like(like), BaseProduct.material_code.like(like), BaseProduct.sku.like(like), BaseProduct.barcode.like(like)))
     if category_id:
         stmt = stmt.where(BaseProduct.category_id == category_id)
     if barcode:
@@ -357,12 +363,13 @@ def list_products(
 
 @router.post("/products", dependencies=[Depends(require_permission("base:product"))])
 def create_product(req: ProductReq, db: Session = Depends(get_db)) -> dict:
-    if db.scalar(select(BaseProduct.id).where(BaseProduct.code == req.code)):
+    code = req.code or _next_numeric_code(db)  # 商品编码纯数字，留空自动生成
+    if db.scalar(select(BaseProduct.id).where(BaseProduct.code == code)):
         raise BizError(E_PARAM, "商品编码已存在")
     if db.get(BaseUnit, req.unit_id) is None:
         raise BizError(E_PARAM, "基本单位不存在")
     p = BaseProduct(
-        code=req.code, barcode=req.barcode, sku=req.sku, name=req.name,
+        code=code, material_code=req.material_code, barcode=req.barcode, sku=req.sku, name=req.name,
         category_id=req.category_id, spec=req.spec, unit_id=req.unit_id,
         purchase_price=_parse_dec(req.purchase_price, "进价"),
         min_stock=_parse_dec(req.min_stock, "下限"), max_stock=_parse_dec(req.max_stock, "上限"),
@@ -392,9 +399,11 @@ def update_product(product_id: int, req: ProductReq, db: Session = Depends(get_d
     p = db.get(BaseProduct, product_id)
     if p is None:
         raise BizError(E_NOT_FOUND, "商品不存在")
-    if db.scalar(select(BaseProduct.id).where(BaseProduct.code == req.code, BaseProduct.id != product_id)):
+    if req.code and db.scalar(select(BaseProduct.id).where(BaseProduct.code == req.code, BaseProduct.id != product_id)):
         raise BizError(E_PARAM, "商品编码已存在")
-    for k, v in req.model_dump(exclude={"units"}).items():
+    # 编码留空 = 保持原编码（编辑时可不填）
+    data = req.model_dump(exclude={"units", "code"}) if not req.code else req.model_dump(exclude={"units"})
+    for k, v in data.items():
         setattr(p, k, _parse_dec(v, k) if k in ("purchase_price", "min_stock", "max_stock") else v)
     try:
         _apply_units(db, p.id, req.unit_id, [u.model_dump() for u in req.units])
@@ -463,13 +472,14 @@ async def import_products(file: UploadFile = File(...), db: Session = Depends(ge
             return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else default
         success, fail_rows = 0, []
         for idx, row in enumerate(rows[1:], start=2):
-            code, name, spec, unit_name = v(row, "物料编码"), v(row, "材料名称"), v(row, "型号规格"), v(row, "单位")
+            material_code, name, spec, unit_name = v(row, "物料编码"), v(row, "材料名称"), v(row, "型号规格"), v(row, "单位")
             big_cat, sub_cat, remark = v(row, "材料大类"), v(row, "材料分类"), v(row, "备注")
-            if not code or not name:
-                fail_rows.append({"row": idx, "reason": "物料编码或材料名称为空"})
+            if not name:
+                fail_rows.append({"row": idx, "reason": "材料名称为空"})
                 continue
-            if db.scalar(select(BaseProduct.id).where(BaseProduct.code == code)):
-                fail_rows.append({"row": idx, "reason": f"编码 {code} 已存在"})
+            # 物料编码=公司系统唯一编码（存 material_code），可为空（空则提示管理员补录）；商品编码=系统内部纯数字自动生成
+            if material_code and db.scalar(select(BaseProduct.id).where(BaseProduct.material_code == material_code)):
+                fail_rows.append({"row": idx, "reason": f"物料编码 {material_code} 已存在"})
                 continue
             # 单位：不存在自动创建
             unit = db.scalar(select(BaseUnit).where(BaseUnit.name == unit_name)) if unit_name else None
@@ -494,8 +504,11 @@ async def import_products(file: UploadFile = File(...), db: Session = Depends(ge
                         db.flush()
                     cat_id = sub.id
             try:
+                # 商品编码=系统内部纯数字（自动生成）；物料编码=公司系统编码（可能为空，空则提示管理员补录）
+                code = _next_numeric_code(db)
                 p = BaseProduct(
-                    code=code, name=name, spec=spec, category_id=cat_id, unit_id=unit.id,
+                    code=code, material_code=material_code, name=name, spec=spec,
+                    category_id=cat_id, unit_id=unit.id,
                     purchase_price=Decimal(0), remark=remark,
                 )
                 db.add(p)
@@ -507,10 +520,13 @@ async def import_products(file: UploadFile = File(...), db: Session = Depends(ge
                 db.rollback()
                 fail_rows.append({"row": idx, "reason": f"编码 {code} 已存在"})
         db.commit()
+        notice = "公司模板不含条码列：已导入商品的条码留空，请管理员从公司系统抄写条码后补录（商品管理中编辑条码）"
+        if any((v(row, "物料编码") or "").strip() == "" for row in rows[1:]):
+            notice += "；部分商品未填物料编码（公司系统编码），请管理员补充"
         return ok({
             "success_count": success,
             "fail_rows": fail_rows,
-            "notice": "公司模板不含条码列：已导入商品的条码留空，请管理员从公司系统抄写条码后补录（商品管理中编辑条码）",
+            "notice": notice,
         })
     if headers[:10] != PRODUCT_IMPORT_COLUMNS:
         raise BizError(E_PARAM, f"表头必须为：{'/'.join(PRODUCT_IMPORT_COLUMNS)}（或公司模板：物料编码/材料名称/型号规格/单位/材料大类/材料分类）")
@@ -518,9 +534,13 @@ async def import_products(file: UploadFile = File(...), db: Session = Depends(ge
     for idx, row in enumerate(rows[1:], start=2):
         vals = [str(v).strip() if v is not None else "" for v in row] + [""] * 10
         code, name, unit_name = vals[0], vals[3], vals[6]
-        if not code or not name:
-            fail_rows.append({"row": idx, "reason": "编码或名称为空"})
+        if code and not code.isdigit():
+            fail_rows.append({"row": idx, "reason": f"编码 {code} 不是纯数字"})
             continue
+        if not name:
+            fail_rows.append({"row": idx, "reason": "名称为空"})
+            continue
+        code = code or _next_numeric_code(db)  # 编码留空自动生成纯数字
         if db.scalar(select(BaseProduct.id).where(BaseProduct.code == code)):
             fail_rows.append({"row": idx, "reason": f"编码 {code} 已存在"})
             continue

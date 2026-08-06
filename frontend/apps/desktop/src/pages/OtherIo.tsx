@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, InputNumber, message, Modal, Popconfirm, Radio, Select, Space, Table } from "antd";
+import { Button, InputNumber, message, Modal, Popconfirm, Radio, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
-import { baseApi, otherIoApi, type OtherIoBill } from "@wlt/shared";
+import { baseApi, otherIoApi, type OtherIoBill, type OtherIoDetail } from "@wlt/shared";
+
+import { BillDetailDrawer } from "../components/BillDetailDrawer";
 
 const IO_TYPES = ["报废", "报损", "赠品出", "其他出"];
 
@@ -22,6 +24,17 @@ export function OtherIoPage() {
   const [products, setProducts] = useState<{ id: number; name: string; code: string }[]>([]);
   const [locs, setLocs] = useState<{ id: number; code: string }[]>([]);
   const [form, setForm] = useState({ ioType: IO_TYPES[0], warehouse_id: 0, rows: [] as Row[] });
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detail, setDetail] = useState<OtherIoDetail | null>(null);
+
+  async function openDetail(r: OtherIoBill) {
+    try {
+      setDetail(await otherIoApi.detail(r.id));
+      setDetailOpen(true);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "加载失败");
+    }
+  }
 
   const load = useCallback(async () => {
     const data = await otherIoApi.list(ioType, undefined, page);
@@ -63,7 +76,7 @@ export function OtherIoPage() {
   }
 
   const columns: ColumnsType<OtherIoBill> = [
-    { title: "单号", dataIndex: "bill_no" },
+    { title: "单号", dataIndex: "bill_no", render: (v: string, r) => <a onClick={() => void openDetail(r)}>{v}</a> },
     { title: "类型", dataIndex: "io_type" },
     { title: "仓库", dataIndex: "warehouse_name" },
     { title: "操作人", dataIndex: "operator_name" },
@@ -92,6 +105,27 @@ export function OtherIoPage() {
         <Button type="primary" onClick={() => setOpen(true)}>新建</Button>
       </Space>
       <Table rowKey="id" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+
+      <BillDetailDrawer
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        title="其他出入库详情"
+        statusTag={detail ? <Tag color={detail.status === 1 ? "green" : "default"}>{detail.status === 1 ? "已过账" : "已作废"}</Tag> : undefined}
+        fields={[
+          { label: "单号", value: detail?.bill_no },
+          { label: "类型", value: detail?.io_type },
+          { label: "仓库", value: detail?.warehouse_name },
+          { label: "操作人", value: detail?.operator_name },
+          { label: "时间", value: detail?.created_at?.slice(0, 16) },
+          { label: "备注", value: detail?.remark, span: 2 },
+        ]}
+        columns={[
+          { title: "商品", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
+          { title: "库位", dataIndex: "location_code", width: 120 },
+          { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
+        ]}
+        rows={(detail?.items ?? []).map((it) => ({ ...it, key: it.id ?? it.product_id ?? Math.random() }))}
+      />
 
       <Modal title="新建其他出入库" open={open} onOk={() => void create()} onCancel={() => setOpen(false)} width={680}>
         <Space style={{ marginBottom: 12 }}>

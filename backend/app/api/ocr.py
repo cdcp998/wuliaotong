@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_permission
@@ -320,7 +320,10 @@ def ai_suggestion_accept(
         raise BizError(E_NOT_FOUND, "建议不存在")
     if sug.status != 1:
         raise BizError(E_BILL_STATUS, "建议已处理")
-    code = code or f"AI{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    if code and not code.isdigit():
+        raise BizError(E_PARAM, "商品编码必须是纯数字（留空自动生成）")
+    if not code:  # 自动生成：当前最大数字编码 + 1
+        code = str((db.execute(text("SELECT MAX(CAST(code AS UNSIGNED)) FROM base_product WHERE code REGEXP '^[0-9]+$'")).scalar() or 0) + 1)
     if db.scalar(select(BaseProduct.id).where(BaseProduct.code == code)):
         raise BizError(E_PARAM, f"商品编码 {code} 已存在")
     unit_id = unit_id or db.scalar(select(BaseUnit.id).order_by(BaseUnit.id).limit(1)) or 0

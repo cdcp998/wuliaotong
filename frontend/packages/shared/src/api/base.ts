@@ -4,6 +4,7 @@ import { http, type PageData } from "./client";
 export interface Product {
   id: number;
   code: string;
+  material_code: string;
   barcode: string;
   name: string;
   spec: string;
