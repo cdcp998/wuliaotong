@@ -9,6 +9,10 @@ from app.models.base import (
     BaseUnit,
     BaseWarehouse,
 )
+from app.models.requisition import (
+    OutRequisition,
+    OutRequisitionItem,
+)
 from app.models.stock import (
     PchPurchaseIn,
     PchPurchaseInItem,
@@ -40,6 +44,8 @@ __all__ = [
     "BaseSupplier",
     "BaseUnit",
     "BaseWarehouse",
+    "OutRequisition",
+    "OutRequisitionItem",
     "PchPurchaseIn",
     "PchPurchaseInItem",
     "StkOpening",
