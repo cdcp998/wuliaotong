@@ -10,9 +10,12 @@ interface Entry {
 }
 
 const ENTRIES: Entry[] = [
+  { title: "采购入库", path: "/purchase-in", perm: "pch:in", desc: "入库单 · 送货单 OCR 录入" },
   { title: "库存调拨", path: "/transfers", perm: "stk:transfer", desc: "仓库间调拨 · 审核" },
   { title: "库存盘点", path: "/checks", perm: "stk:check", desc: "盘点单 · 录实盘 · 审核" },
   { title: "其他出入库", path: "/other-io", perm: "stk:other", desc: "报废/报损/赠品" },
+  { title: "送货单 OCR 录入", path: "/ocr/delivery", perm: "pch:ocr", desc: "拍照识别送货单 → 带入入库" },
+  { title: "AI 建议处理", path: "/ai-suggestions", perm: "ocr:manage", desc: "未匹配商品识别建议 · 确认新增" },
   { title: "系统设置", path: "/system/settings", perm: "sys:config", desc: "OCR 引擎 · 大模型 API" },
 ];
 

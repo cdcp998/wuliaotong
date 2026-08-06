@@ -9,6 +9,7 @@ import { HomePage } from "./pages/Home";
 import { InboundPage } from "./pages/Inbound";
 import { LoginPage } from "./pages/Login";
 import { MyRequisitionsPage } from "./pages/MyRequisitions";
+import { OcrScanPage } from "./pages/OcrScan";
 import { OutboundPage } from "./pages/Outbound";
 import { RequisitionNewPage } from "./pages/RequisitionNew";
 
@@ -21,6 +22,7 @@ const router = createBrowserRouter([
   { path: "/checks/:id", element: <RequireAuth><CheckRunPage /></RequireAuth> },
   { path: "/requisitions/new", element: <RequireAuth><RequisitionNewPage /></RequireAuth> },
   { path: "/requisitions/list", element: <RequireAuth><MyRequisitionsPage /></RequireAuth> },
+  { path: "/ocr/scan", element: <RequireAuth><OcrScanPage /></RequireAuth> },
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

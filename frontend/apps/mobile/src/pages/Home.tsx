@@ -77,6 +77,13 @@ export function HomePage() {
             </Button>
           </Grid.Item>
         )}
+        {hasPerm("ocr:use") && (
+          <Grid.Item>
+            <Button block fill="outline" color="primary" onClick={() => navigate("/ocr/scan")}>
+              拍照识别
+            </Button>
+          </Grid.Item>
+        )}
       </Grid>
 
       {!isKeeper && !isApplicant && (

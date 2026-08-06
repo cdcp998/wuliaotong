@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button, Input, List, NavBar, Popup, Selector, Tag, Toast } from "antd-mobile";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { baseApi, otherIo, type Location, type Product, type Warehouse } from "@wlt/shared";
 
@@ -18,6 +18,7 @@ interface Row {
 
 export function OutboundPage() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [ioType, setIoType] = useState(IO_TYPES[0]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState<number>(0);
@@ -36,6 +37,15 @@ export function OutboundPage() {
       setWarehouses(enabled);
       if (enabled.length) setWarehouseId(enabled[0].id);
     });
+    // 拍照快查带入：?product_id=xxx 自动加入明细行
+    const pid = Number(params.get("product_id"));
+    if (pid) {
+      baseApi
+        .product(pid)
+        .then((p) => setRows((rs) => (rs.some((r) => r.product.id === p.id) ? rs : [...rs, { product: p, qty: "1" }])))
+        .catch(() => Toast.show("商品不存在"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function pickLocation(rowIndex: number) {

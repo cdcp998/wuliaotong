@@ -3,12 +3,15 @@ import ReactDOM from "react-dom/client";
 import { RouterProvider, createBrowserRouter } from "react-router-dom";
 
 import { RequireAuth } from "./components/RequireAuth";
+import { AiSuggestionsPage } from "./pages/AiSuggestions";
 import { CheckDetailPage } from "./pages/CheckDetail";
 import { ChecksPage } from "./pages/Checks";
+import { DeliveryOcrPage } from "./pages/DeliveryOcr";
 import { HomePage } from "./pages/Home";
 import { LandingPage } from "./pages/Landing";
 import { LoginPage } from "./pages/Login";
 import { OtherIoPage } from "./pages/OtherIo";
+import { PurchaseInPage } from "./pages/PurchaseIn";
 import { SettingsPage } from "./pages/Settings";
 import { TransfersPage } from "./pages/Transfers";
 
@@ -21,6 +24,9 @@ const router = createBrowserRouter([
   { path: "/checks", element: <RequireAuth><ChecksPage /></RequireAuth> },
   { path: "/checks/:id", element: <RequireAuth><CheckDetailPage /></RequireAuth> },
   { path: "/other-io", element: <RequireAuth><OtherIoPage /></RequireAuth> },
+  { path: "/purchase-in", element: <RequireAuth><PurchaseInPage /></RequireAuth> },
+  { path: "/ocr/delivery", element: <RequireAuth><DeliveryOcrPage /></RequireAuth> },
+  { path: "/ai-suggestions", element: <RequireAuth><AiSuggestionsPage /></RequireAuth> },
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
