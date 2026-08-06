@@ -37,6 +37,7 @@ export function MaterialsPage() {
   const [dedupeOpen, setDedupeOpen] = useState(false);
   const [dedupeGroups, setDedupeGroups] = useState<{ group: { product_id: number; name: string; spec: string; material_code: string; unit_name: string }[]; reason: string; confidence: string }[]>([]);
   const [dedupeLoading, setDedupeLoading] = useState(false);
+  const [aiKeywords, setAiKeywords] = useState<string[]>([]); // 语义搜索扩展词提示
   const [editing, setEditing] = useState<Product | null>(null);
   const [form] = Form.useForm();
   // Space.Compact 内的表单控件拿不到 Form.Item 注入的 value/onChange（antd v6 只注入直接子元素）→ 显式受控
@@ -49,9 +50,19 @@ export function MaterialsPage() {
     setLoading(true);
     setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
     try {
-      const data = await baseApi.products(keyword, page, { barcode, status: 1, pageSize });
+      let data = await baseApi.products(keyword, page, { barcode, status: 1, pageSize });
+      // 语义搜索（P9-P2⑧）：关键词无结果时用大模型改写候选词重试
+      let aiKws: string[] = [];
+      if (!data.total && keyword && page === 1) {
+        const expanded = await baseApi.products(keyword, 1, { barcode, status: 1, pageSize, ai: 1 });
+        if (expanded.total) {
+          data = expanded as typeof data & { ai_keywords?: string[] };
+          aiKws = (expanded as { ai_keywords?: string[] }).ai_keywords ?? [];
+        }
+      }
       setList(data.list);
       setTotal(data.total);
+      setAiKeywords(aiKws);
     } finally {
       setLoading(false);
     }
@@ -257,6 +268,7 @@ export function MaterialsPage() {
           onPressEnter={() => setPage(1)}
         />
         <Button type="primary" onClick={openCreate}>新建材料</Button>
+        {aiKeywords.length > 0 && <Tag color="blue">已扩展搜索词：{aiKeywords.join(" / ")}</Tag>}
         <Button loading={dedupeLoading} onClick={() => void runDedupe()}>查重</Button>
       </Space>
       <DataTable

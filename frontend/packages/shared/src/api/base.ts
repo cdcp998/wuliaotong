@@ -77,10 +77,11 @@ export interface Shelf {
 }
 
 export const baseApi = {
-  products: (keyword = "", page = 1, extra?: { barcode?: string; status?: number; pageSize?: number }) => {
+  products: (keyword = "", page = 1, extra?: { barcode?: string; status?: number; pageSize?: number; ai?: number }) => {
     const p = new URLSearchParams({ keyword, page: String(page), page_size: String(extra?.pageSize ?? 20) });
     if (extra?.barcode) p.set("barcode", extra.barcode);
     if (extra?.status !== undefined) p.set("status", String(extra.status));
+    if (extra?.ai !== undefined) p.set("ai", String(extra.ai));
     return http.get<PageData<Product>>(`/products?${p.toString()}`);
   },
   product: (id: number) => http.get<Product>(`/products/${id}`),

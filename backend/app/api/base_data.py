@@ -428,6 +428,27 @@ def _apply_units(db: Session, product_id: int, unit_id: int, units: list) -> Non
         )
 
 
+def _expand_keywords_local(keyword: str, max_kw: int = 25) -> list[str]:
+    """本地语义扩展（P9-P2⑧，不调大模型）：去常见口语修饰词后，取 2-4 字连续子串做宽匹配。
+
+    例：「测网络的工具」→ 去「的」→「测网络工具」→ 子串含「网络」「测试」「工具」→ 命中「网络测试仪」。
+    """
+    k = re.sub(r"[的了我你要买找查哪种给个是么]", "", keyword)
+    if len(k) < 2:
+        return []
+    out: list[str] = []
+    for w in range(min(4, len(k)), 1, -1):  # 优先长串（更可能是有意义词）
+        for i in range(len(k) - w + 1):
+            sub = k[i : i + w]
+            if sub not in out:
+                out.append(sub)
+            if len(out) >= max_kw:
+                break
+        if len(out) >= max_kw:
+            break
+    return out
+
+
 @router.get("/products")
 def list_products(
     keyword: str = Query("", max_length=100),
@@ -436,6 +457,7 @@ def list_products(
     status: int = Query(1, description="1 启用（默认） / 0 停用；全部数据见导出接口"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    ai: int = Query(0, description="1 无结果时用大模型改写关键词重试（语义搜索）"),
     db: Session = Depends(get_db),
 ) -> dict:
     stmt = select(BaseProduct)
@@ -449,11 +471,35 @@ def list_products(
     if status is not None:
         stmt = stmt.where(BaseProduct.status == status)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    ai_keywords: list[str] = []
+    # 语义搜索（P9-P2⑧）：关键词无结果 → 本地子串扩展重查（不调大模型，毫秒级）
+    # 注意：扩展时重建 stmt（去掉原 keyword 条件，否则 AND 叠加原条件仍无结果）
+    if total == 0 and ai == 1 and keyword:
+        ai_keywords = _expand_keywords_local(keyword)
+        if ai_keywords:
+            base = select(BaseProduct)
+            if category_id:
+                base = base.where(BaseProduct.category_id == category_id)
+            if barcode:
+                base = base.where(BaseProduct.barcode == barcode)
+            if status is not None:
+                base = base.where(BaseProduct.status == status)
+            conds = []
+            for k in ai_keywords:
+                like = f"%{k}%"
+                conds.append(or_(BaseProduct.name.like(like), BaseProduct.code.like(like), BaseProduct.material_code.like(like), BaseProduct.spec.like(like), BaseProduct.sku.like(like), BaseProduct.barcode.like(like)))
+            if conds:
+                stmt = base.where(or_(*conds))
+                total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(BaseProduct.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
-    return ok(PageData(
+    data = PageData(
         list=[_product_out(db, p) for p in rows],
         total=total, page=page, page_size=page_size,
-    ).model_dump())
+    ).model_dump()
+    if ai_keywords:
+        data["ai_expanded"] = True
+        data["ai_keywords"] = ai_keywords
+    return ok(data)
 
 
 @router.post("/products", dependencies=[Depends(require_permission("base:product"))])
