@@ -8,50 +8,19 @@ import { ChecksPage } from "./pages/Checks";
 import { HomePage } from "./pages/Home";
 import { InboundPage } from "./pages/Inbound";
 import { LoginPage } from "./pages/Login";
+import { MyRequisitionsPage } from "./pages/MyRequisitions";
 import { OutboundPage } from "./pages/Outbound";
+import { RequisitionNewPage } from "./pages/RequisitionNew";
 
 const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
-  {
-    path: "/",
-    element: (
-      <RequireAuth>
-        <HomePage />
-      </RequireAuth>
-    ),
-  },
-  {
-    path: "/inbound",
-    element: (
-      <RequireAuth>
-        <InboundPage />
-      </RequireAuth>
-    ),
-  },
-  {
-    path: "/outbound",
-    element: (
-      <RequireAuth>
-        <OutboundPage />
-      </RequireAuth>
-    ),
-  },
-  {
-    path: "/checks",
-    element: (
-      <RequireAuth>
-        <ChecksPage />
-      </RequireAuth>
-    ),
-  },
-  {
-    path: "/checks/:id",
-    element: (
-      <RequireAuth>
-        <CheckRunPage />
-      </RequireAuth>
-    ),
-  },
+  { path: "/", element: <RequireAuth><HomePage /></RequireAuth> },
+  { path: "/inbound", element: <RequireAuth><InboundPage /></RequireAuth> },
+  { path: "/outbound", element: <RequireAuth><OutboundPage /></RequireAuth> },
+  { path: "/checks", element: <RequireAuth><ChecksPage /></RequireAuth> },
+  { path: "/checks/:id", element: <RequireAuth><CheckRunPage /></RequireAuth> },
+  { path: "/requisitions/new", element: <RequireAuth><RequisitionNewPage /></RequireAuth> },
+  { path: "/requisitions/list", element: <RequireAuth><MyRequisitionsPage /></RequireAuth> },
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

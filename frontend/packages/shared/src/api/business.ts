@@ -107,6 +107,39 @@ export const otherIoApi = {
   void: (id: number) => http.post<null>(`/other-io/${id}/void`),
 };
 
+export interface RequisitionBill {
+  id: number;
+  bill_no: string;
+  warehouse_name: string;
+  use_location: string;
+  use_reason: string;
+  status: number;
+  audit_remark: string;
+  created_at: string;
+  items: { id: number; product_name: string; qty: string }[];
+}
+
+export const requisitionApi = {
+  create: (
+    warehouseId: number,
+    useLocation: string,
+    useReason: string,
+    items: { product_id: number; qty: string; location_id: number; photo_file_id?: number }[],
+    remark = ""
+  ) =>
+    http.post<{ id: number; bill_no: string }>("/requisitions", {
+      warehouse_id: warehouseId,
+      use_location: useLocation,
+      use_reason: useReason,
+      remark,
+      items,
+    }),
+  my: (status?: number, page = 1) =>
+    http.get<PageData<RequisitionBill>>(
+      `/requisitions/my${status ? `?status=${status}` : ""}${status ? "&" : "?"}page=${page}&page_size=20`
+    ),
+};
+
 export const fileApi = {
   upload: async (file: File, bizType = "other"): Promise<{ file_id: number; url: string }> => {
     const form = new FormData();

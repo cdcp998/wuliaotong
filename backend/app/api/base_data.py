@@ -449,8 +449,62 @@ async def import_products(file: UploadFile = File(...), db: Session = Depends(ge
     if not rows:
         raise BizError(E_PARAM, "文件为空")
     headers = [str(h).strip() if h else "" for h in rows[0]]
+    # 公司系统模板：按列名定位（序号|材料用途|材料大类|材料分类|物料编码|材料名称|型号规格|单位|数量|用途|用量(仅导入使用)|使用单位|备注）
+    is_company = any("物料编码" in h for h in headers) and any("材料名称" in h for h in headers)
+    if is_company:
+        col = {h: i for i, h in enumerate(headers)}
+
+        def v(row, key, default=""):
+            i = col.get(key)
+            return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else default
+        success, fail_rows = 0, []
+        for idx, row in enumerate(rows[1:], start=2):
+            code, name, spec, unit_name = v(row, "物料编码"), v(row, "材料名称"), v(row, "型号规格"), v(row, "单位")
+            big_cat, sub_cat, remark = v(row, "材料大类"), v(row, "材料分类"), v(row, "备注")
+            if not code or not name:
+                fail_rows.append({"row": idx, "reason": "物料编码或材料名称为空"})
+                continue
+            if db.scalar(select(BaseProduct.id).where(BaseProduct.code == code)):
+                fail_rows.append({"row": idx, "reason": f"编码 {code} 已存在"})
+                continue
+            # 单位：不存在自动创建
+            unit = db.scalar(select(BaseUnit).where(BaseUnit.name == unit_name)) if unit_name else None
+            if unit is None:
+                unit = BaseUnit(name=unit_name or "件", remark="导入自动创建")
+                db.add(unit)
+                db.flush()
+            # 分类：材料大类（一级）+ 材料分类（二级）自动创建
+            cat_id = 0
+            if big_cat:
+                big = db.scalar(select(BaseCategory).where(BaseCategory.name == big_cat, BaseCategory.parent_id == 0))
+                if big is None:
+                    big = BaseCategory(parent_id=0, name=big_cat, path="/")
+                    db.add(big)
+                    db.flush()
+                cat_id = big.id
+                if sub_cat:
+                    sub = db.scalar(select(BaseCategory).where(BaseCategory.name == sub_cat, BaseCategory.parent_id == big.id))
+                    if sub is None:
+                        sub = BaseCategory(parent_id=big.id, name=sub_cat, path=f"{big.path}{big.id}/")
+                        db.add(sub)
+                        db.flush()
+                    cat_id = sub.id
+            try:
+                p = BaseProduct(
+                    code=code, name=name, spec=spec, category_id=cat_id, unit_id=unit.id,
+                    purchase_price=Decimal(0), remark=remark,
+                )
+                db.add(p)
+                db.flush()
+                db.add(BaseProductUnit(product_id=p.id, unit_id=unit.id, rate=Decimal(1), is_default=1))
+                success += 1
+            except IntegrityError:
+                db.rollback()
+                fail_rows.append({"row": idx, "reason": f"编码 {code} 已存在"})
+        db.commit()
+        return ok({"success_count": success, "fail_rows": fail_rows})
     if headers[:10] != PRODUCT_IMPORT_COLUMNS:
-        raise BizError(E_PARAM, f"表头必须为：{'/'.join(PRODUCT_IMPORT_COLUMNS)}")
+        raise BizError(E_PARAM, f"表头必须为：{'/'.join(PRODUCT_IMPORT_COLUMNS)}（或公司模板：物料编码/材料名称/型号规格/单位/材料大类/材料分类）")
     success, fail_rows = 0, []
     for idx, row in enumerate(rows[1:], start=2):
         vals = [str(v).strip() if v is not None else "" for v in row] + [""] * 10
