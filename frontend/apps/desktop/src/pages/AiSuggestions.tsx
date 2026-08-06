@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Input, InputNumber, Modal, Popconfirm, Select, Space, Table } from "antd";
+import { App, Button, Input, InputNumber, Modal, Popconfirm, Select, Space } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { aiApi, baseApi, type AiSuggestion, type CategoryNode } from "@wlt/shared";
+
+import { DataTable } from "../components/DataTable";
 
 /** AI 建议处理（电脑端）：未匹配商品 → 豆包识别建议 → 人工确认新增/忽略。 */
 export function AiSuggestionsPage() {
@@ -10,23 +12,30 @@ export function AiSuggestionsPage() {
   const [list, setList] = useState<AiSuggestion[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [accepting, setAccepting] = useState<AiSuggestion | null>(null);
   const [units, setUnits] = useState<{ id: number; name: string }[]>([]);
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
   const [form, setForm] = useState({ code: "", name: "", category_id: 0, unit_id: 0, purchase_price: "0" });
 
   const load = useCallback(async () => {
-    const data = await aiApi.list(1, page);
-    setList(data.list);
-    setTotal(data.total);
-  }, [page]);
+    setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
+    try {
+      const data = await aiApi.list(1, page, pageSize);
+      setList(data.list);
+      setTotal(data.total);
+    } catch {
+      // 加载失败保持空列表（错误已由 request 层转为可读 BizError），避免 unhandled rejection
+      setList([]);
+    }
+  }, [page, pageSize]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    baseApi.units().then((u) => setUnits(u));
+    baseApi.units().then((u) => setUnits(u)).catch(() => undefined);
     baseApi.categories().then((cats) => {
       const flat: { id: number; name: string }[] = [];
       const walk = (nodes: CategoryNode[]) => {
@@ -37,7 +46,7 @@ export function AiSuggestionsPage() {
       };
       walk(cats);
       setCategories(flat);
-    });
+    }).catch(() => undefined);
   }, []);
 
   function openAccept(sug: AiSuggestion) {
@@ -48,14 +57,14 @@ export function AiSuggestionsPage() {
   async function doAccept() {
     if (!accepting) return;
     try {
-      const data = await aiApi.accept(accepting.id, {
+      await aiApi.accept(accepting.id, {
         code: form.code,
         name: form.name,
         category_id: form.category_id || undefined,
         unit_id: form.unit_id || undefined,
         purchase_price: form.purchase_price,
       });
-      message.success(`已新增商品：${data.code}`);
+      message.success("已新增材料");
       setAccepting(null);
       void load();
     } catch (e) {
@@ -91,12 +100,11 @@ export function AiSuggestionsPage() {
       <p style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>
         拍照识别中未匹配到系统资料的材料，由豆包视觉识别后生成建议；**人工确认后才新增材料**（可在系统设置配置豆包 API Key）。
       </p>
-      <Table rowKey="id" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <DataTable rowKey="id" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async (keys) => { for (const k of keys) await aiApi.ignore(Number(k)); message.success(`已忽略 ${keys.length} 条建议`); void load(); }} />
 
       <Modal title="确认新增材料" open={Boolean(accepting)} onOk={() => void doAccept()} onCancel={() => setAccepting(null)}>
-        <Space direction="vertical" style={{ width: "100%" }}>
+        <Space orientation="vertical" style={{ width: "100%" }}>
           <Input placeholder="材料名称（缺省用 AI 建议名）" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-          <Input placeholder="编码（缺省自动生成 AI+时间）" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))} />
           <Space>
             <Select style={{ width: 180 }} placeholder="分类" options={categories} fieldNames={{ label: "name", value: "id" }} value={form.category_id || undefined} onChange={(v) => setForm((f) => ({ ...f, category_id: v }))} allowClear />
             <Select style={{ width: 140 }} placeholder="单位" options={units} fieldNames={{ label: "name", value: "id" }} value={form.unit_id || undefined} onChange={(v) => setForm((f) => ({ ...f, unit_id: v }))} />

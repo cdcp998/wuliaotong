@@ -24,10 +24,26 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (res.status === 401) {
-    window.location.href = "/login";
+    // 已在登录页时不再重复跳转（location.href 赋相同值也会整页刷新，导致登录页无限刷新循环）
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
     throw new BizError(4004, "未登录或会话已过期");
   }
-  const json = (await res.json()) as ApiResponse<T>;
+  // 用 text() 代替 json()：空响应体（204 / Content-Length 0 / 代理空响应）不会抛 SyntaxError
+  const text = await res.text();
+  if (!text) {
+    // 空体：2xx 视为成功（无业务数据）；非 2xx 视为失败并带 HTTP 状态
+    if (!res.ok) throw new BizError(res.status, `请求失败（HTTP ${res.status}）`);
+    return undefined as T;
+  }
+  let json: ApiResponse<T>;
+  try {
+    json = JSON.parse(text) as ApiResponse<T>;
+  } catch {
+    // 非 JSON 响应（网关错误页等）→ 抛可读业务错误，避免原生 SyntaxError 泄漏
+    throw new BizError(res.status, `响应解析失败（HTTP ${res.status}）`);
+  }
   if (json.code !== 0) {
     throw new BizError(json.code, json.message);
   }
