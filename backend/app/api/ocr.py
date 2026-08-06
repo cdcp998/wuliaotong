@@ -37,6 +37,7 @@ from app.models.sys import SysFile, SysStorage, SysUser
 from app.schemas.ocr import ClassifyReq, DeliveryConfirmReq
 from app.services.llm import LLMNotConfigured, get_llm
 from app.services.ocr.client import get_ocr_engine
+from app.services.ocr.correction import correct_texts
 from app.services.ocr.product_template import build_anchors, load_templates, match_template, save_templates
 from app.services.storage import resolve_storage_path
 
@@ -376,7 +377,8 @@ def ocr_quick(
     prod: dict | None = None
     local = _local_ocr(db, data)
     if local is not None:
-        texts = local
+        # 本地 OCR 文本先纠错归一（DeepSeek，错字修正后模板/材料匹配更准；失败原样）
+        texts = correct_texts(db, local)
         # 本地 OCR 模板优先：视觉大模型训练生成的模板命中 → 直接用模板结构化字段（秒级，不调大模型）
         tpl = match_template(db, texts)
         if tpl:
@@ -672,6 +674,7 @@ def ocr_match(
         raise BizError(E_NOT_FOUND, "识别记录不存在")
     # 1) 本地 OCR 模板优先：识别记录文本命中模板 → 直接用模板结构化字段（不调大模型）
     record_texts = [str(r.get("text") or "") for r in (record.raw_result or []) if isinstance(r, dict)]
+    record_texts = correct_texts(db, record_texts)  # 纠错后再匹配模板（失败原样）
     tpl = match_template(db, record_texts)
     if tpl:
         name = (tpl.get("product_name") or tpl.get("name") or "未知商品")[:100]

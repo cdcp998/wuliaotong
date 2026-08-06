@@ -70,6 +70,7 @@ def test_ocr_quick_match(monkeypatch):
     pid = _setup_product(name)
     file_id = _upload_img()
     monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine([name, "数量 10"]))
+    monkeypatch.setattr("app.api.ocr.correct_texts", lambda db, lines: lines)  # 纠错依赖真实 DeepSeek，单测跳过
 
     r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
     assert r.json()["code"] == 0, r.text
