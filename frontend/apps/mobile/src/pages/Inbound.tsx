@@ -75,10 +75,11 @@ export function InboundPage() {
     setRows((rs) => [...rs, { product: p, qty: "1", price: "", barcode: "" }]);
   }
 
-  /** 条码识别：命中材料直接带入明细行；未命中弹「新增材料」确认。 */
+  /** 条码识别：扫码/输入结果先回填条码框（可见可改）；命中材料直接带入明细行；未命中弹「新增材料」确认。 */
   async function scanBarcode(i: number, value: string) {
     const b = value.trim();
     if (!b) return;
+    updateRow(i, { barcode: b }); // 扫码结果自动填入条码输入框，无需手动输入
     try {
       const p = await resolveByBarcode(b);
       if (p) {
