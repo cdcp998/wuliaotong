@@ -20,8 +20,18 @@ const actionPillStyle: React.CSSProperties = {
   WebkitBackdropFilter: "blur(10px)",
 };
 
+/** 识别快查命中商品（服务端 matches 条目：条码命中或大模型识别命中）。 */
+interface OcrMatchProduct {
+  product_id: number;
+  code: string;
+  name: string;
+  spec: string;
+  barcode?: string;
+}
+
 /** 条码扫描模块：摄像头实时扫码（zxing-cpp WASM 解码，与服务端同源，EAN/CODE128/QR 等全格式）。
- * 摄像头不可用/权限拒绝/非 HTTPS → 自动退化为拍照/相册选图 → 服务端解码。 */
+ * 摄像头不可用/权限拒绝/非 HTTPS → 自动退化为拍照/相册选图 → 服务端识别链路（条码优先，无条码则视觉大模型识别物品兜底）。
+ * onScan(code, product?)：product 非空表示识别链路直接命中了商品（含大模型兜底命中）。 */
 export function BarcodeScanner({
   visible,
   onClose,
@@ -30,7 +40,7 @@ export function BarcodeScanner({
 }: {
   visible: boolean;
   onClose: () => void;
-  onScan: (code: string) => void;
+  onScan: (code: string, product?: OcrMatchProduct) => void;
   /** 扫码成功后是否自动关闭（默认 true）；调用方需要异步处理后自行关闭时传 false。 */
   autoClose?: boolean;
 }) {
@@ -58,25 +68,34 @@ export function BarcodeScanner({
     if (videoRef.current) videoRef.current.srcObject = null;
   }
 
-  /** 扫码成功：只回调一次；默认自动关闭，autoClose=false 时由调用方在 onScan 回调中自行关闭。 */
-  function finish(code: string) {
+  /** 识别成功：只回调一次；默认自动关闭，autoClose=false 时由调用方在 onScan 回调中自行关闭。 */
+  function finish(code: string, product?: OcrMatchProduct) {
     if (finishedRef.current) return;
     finishedRef.current = true;
     stopCamera();
-    onScan(code);
+    onScan(code, product);
     if (autoClose) onClose();
   }
 
-  /** 拍照/相册兜底：上传图片 → 服务端解码。 */
+  /** 拍照/相册兜底：上传图片 → 服务端识别链路（①条码解码命中商品库直接返回；②无条码 → 视觉大模型识别物品/文本匹配兜底）。 */
   async function handleFile(f: File | undefined) {
     if (!f || decoding) return;
     setDecoding(true);
     try {
       const up = await fileApi.upload(f, "ocr");
-      const data = await ocrApi.decodeBarcode(up.file_id);
-      finish(data.barcode);
+      const data = await ocrApi.quick(up.file_id, 2);
+      const hit = data.matches[0];
+      if (hit) {
+        finish(hit.barcode ?? "", hit); // 条码命中或大模型识别命中商品
+        return;
+      }
+      if (data.barcode) {
+        finish(data.barcode); // 有条码但未命中商品库：交给调用方走原条码流程
+        return;
+      }
+      Toast.show("未识别到条码或物品，请重试");
     } catch (e) {
-      Toast.show(e instanceof Error ? e.message : "未识别到条码");
+      Toast.show(e instanceof Error ? e.message : "识别失败");
     } finally {
       setDecoding(false);
     }

@@ -75,13 +75,21 @@ export function InboundPage() {
     setRows((rs) => [...rs, { product: p, qty: "1", price: "", barcode: "" }]);
   }
 
-  /** 条码识别：扫码/输入结果先回填条码框（可见可改）；命中材料直接带入明细行；
- * 未命中：扫码路径仅提示不回填「新增材料」弹窗（fromScan=true），手动输入回车路径仍弹确认（保留新增能力）。 */
-  async function scanBarcode(i: number, value: string, fromScan = false) {
+  /** 条码/图片识别：识别结果先回填条码框（可见可改）；命中材料直接带入明细行；
+ * 未命中：扫码路径仅提示不回填「新增材料」弹窗（fromScan=true），手动输入回车路径仍弹确认（保留新增能力）；
+ * matched：识别链路（含大模型兜底）直接命中的商品 → 补全详情带入。 */
+  async function scanBarcode(i: number, value: string, fromScan = false, matched?: { product_id: number; name: string } | null) {
     const b = value.trim();
-    if (!b) return;
-    updateRow(i, { barcode: b }); // 扫码结果自动填入条码输入框，无需手动输入
+    if (!b && !matched) return;
+    updateRow(i, { barcode: b }); // 识别结果自动填入条码输入框，无需手动输入
     try {
+      if (matched) {
+        // 大模型/视觉识别命中商品：补全详情直接带入
+        const p = await baseApi.product(matched.product_id);
+        updateRow(i, { product: p });
+        Toast.show(`识别命中：${p.name}`);
+        return;
+      }
       const p = await resolveByBarcode(b);
       if (p) {
         updateRow(i, { product: p });
@@ -311,7 +319,7 @@ export function InboundPage() {
             <span style={{ fontSize: 15, fontWeight: 600, color: "#1d2129" }}>材料明细</span>
             <span style={{ fontSize: 12, color: "#86909c" }}>{rows.length} 项</span>
           </div>
-          <span style={{ fontSize: 12, color: "#86909c" }}>条码可扫码 / 手输后回车</span>
+          <span style={{ fontSize: 12, color: "#86909c" }}>条码可识别 / 手输后回车</span>
         </div>
         <List>
           {rows.map((r, i) => (
@@ -321,7 +329,7 @@ export function InboundPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Tag color="primary" fill="outline" onClick={() => void pickLocation(i)}>{r.location ? r.location.code : "选库位"}</Tag>
                   <span style={{ flex: 1 }} />
-                  <Tag color="success" fill="outline" onClick={() => { setScanRow(i); setScannerOpen(true); }}>扫码</Tag>
+                  <Tag color="success" fill="outline" onClick={() => { setScanRow(i); setScannerOpen(true); }}>识别</Tag>
                   <Tag color="danger" fill="outline" onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>删除</Tag>
                 </div>
                 {/* 数量 / 价格 */}
@@ -337,7 +345,7 @@ export function InboundPage() {
                 </div>
                 {/* 条码：扫码或手输后回车自动匹配 */}
                 <div>
-                  <div style={{ fontSize: 11, color: "#86909c", marginBottom: 2 }}>条码（扫码或手输后回车自动匹配）</div>
+                  <div style={{ fontSize: 11, color: "#86909c", marginBottom: 2 }}>条码（识别或手输后回车自动匹配）</div>
                   <Input placeholder="未匹配时自动填入条码" value={r.barcode} onChange={(v) => updateRow(i, { barcode: v })} onEnterPress={() => void scanBarcode(i, r.barcode)} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
                 </div>
                 <span style={{ color: "#999", fontSize: 12 }}>{r.product.code}{r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}</span>
@@ -356,7 +364,7 @@ export function InboundPage() {
       <input ref={ocrAlbRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { void startDeliveryOcr(e.target.files?.[0]); e.target.value = ""; }} />
 
       <ProductPicker visible={pickerOpen} onClose={() => setPickerOpen(false)} onPick={(p) => addRow(p)} />
-      <BarcodeScanner visible={scannerOpen} onClose={() => setScannerOpen(false)} onScan={(code) => void scanBarcode(scanRow, code, true)} />
+      <BarcodeScanner visible={scannerOpen} onClose={() => setScannerOpen(false)} onScan={(code, product) => void scanBarcode(scanRow, code, true, product)} />
 
       <Popup visible={locPicker.open} onMaskClick={() => setLocPicker((s) => ({ ...s, open: false }))} bodyStyle={{ height: "50vh" }}>
         <List header="选择库位">

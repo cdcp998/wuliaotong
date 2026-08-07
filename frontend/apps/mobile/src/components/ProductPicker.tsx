@@ -49,8 +49,18 @@ export function ProductPicker({
     }
   }
 
-  /** 扫码命中：直接选中材料并关闭；未命中：条码填入搜索框供二次搜索。 */
-  async function scanBarcode(code: string) {
+  /** 识别命中：直接选中材料并关闭；未命中：条码填入搜索框供二次搜索（识别链路含大模型兜底命中商品）。 */
+  async function scanBarcode(code: string, product?: { product_id: number; name: string }) {
+    if (product) {
+      // 识别链路（含大模型兜底）直接命中商品：补全详情并选中
+      try {
+        const p = await baseApi.product(product.product_id);
+        finish(p);
+      } catch (e) {
+        Toast.show(e instanceof Error ? e.message : "商品查询失败");
+      }
+      return;
+    }
     try {
       const p = await resolveByBarcode(code);
       if (p) {
@@ -130,7 +140,7 @@ export function ProductPicker({
             相册
           </Button>
           <Button fill="outline" style={{ flex: 1 }} onClick={() => setScanOpen(true)}>
-            扫码
+            识别
           </Button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
@@ -189,7 +199,7 @@ export function ProductPicker({
           e.target.value = "";
         }}
       />
-      <BarcodeScanner visible={scanOpen} onClose={() => setScanOpen(false)} onScan={(code) => void scanBarcode(code)} />
+      <BarcodeScanner visible={scanOpen} onClose={() => setScanOpen(false)} onScan={(code, product) => void scanBarcode(code, product)} />
     </Popup>
   );
 }
