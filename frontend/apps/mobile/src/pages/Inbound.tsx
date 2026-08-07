@@ -75,8 +75,9 @@ export function InboundPage() {
     setRows((rs) => [...rs, { product: p, qty: "1", price: "", barcode: "" }]);
   }
 
-  /** 条码识别：扫码/输入结果先回填条码框（可见可改）；命中材料直接带入明细行；未命中弹「新增材料」确认。 */
-  async function scanBarcode(i: number, value: string) {
+  /** 条码识别：扫码/输入结果先回填条码框（可见可改）；命中材料直接带入明细行；
+ * 未命中：扫码路径仅提示不回填「新增材料」弹窗（fromScan=true），手动输入回车路径仍弹确认（保留新增能力）。 */
+  async function scanBarcode(i: number, value: string, fromScan = false) {
     const b = value.trim();
     if (!b) return;
     updateRow(i, { barcode: b }); // 扫码结果自动填入条码输入框，无需手动输入
@@ -85,6 +86,9 @@ export function InboundPage() {
       if (p) {
         updateRow(i, { product: p });
         Toast.show(`条码匹配：${p.name}`);
+      } else if (fromScan) {
+        // 扫码成功但未匹配：不弹「新增材料」打断扫码节奏，条码已填入条码框
+        Toast.show(`未找到条码 ${b} 对应的材料，条码已填入，可手动添加`);
       } else {
         const ok = await Dialog.confirm({ content: `未找到条码 ${b} 对应的材料，是否新增该材料？`, confirmText: "新增材料", cancelText: "取消" });
         if (ok) setNewMaterial({ open: true, rowIndex: i, barcode: b, name: "", spec: "", unitId: units[0]?.id ?? 0 });
@@ -329,7 +333,7 @@ export function InboundPage() {
       <input ref={ocrAlbRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { void startDeliveryOcr(e.target.files?.[0]); e.target.value = ""; }} />
 
       <ProductPicker visible={pickerOpen} onClose={() => setPickerOpen(false)} onPick={(p) => addRow(p)} />
-      <BarcodeScanner visible={scannerOpen} onClose={() => setScannerOpen(false)} onScan={(code) => void scanBarcode(scanRow, code)} />
+      <BarcodeScanner visible={scannerOpen} onClose={() => setScannerOpen(false)} onScan={(code) => void scanBarcode(scanRow, code, true)} />
 
       <Popup visible={locPicker.open} onMaskClick={() => setLocPicker((s) => ({ ...s, open: false }))} bodyStyle={{ height: "50vh" }}>
         <List header="选择库位">
