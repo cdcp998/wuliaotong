@@ -386,7 +386,7 @@ export function MaterialsPage() {
         title="材料查重建议（AI 辅助，仅供参考）"
         open={dedupeOpen}
         onClose={() => setDedupeOpen(false)}
-        width={680}
+        size={680}
       >
         {dedupeGroups.length === 0 && !dedupeLoading && <Typography.Text type="secondary">未发现疑似重复材料</Typography.Text>}
         {dedupeGroups.map((g, gi) => (

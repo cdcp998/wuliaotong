@@ -49,13 +49,21 @@ export function InitPage() {
   }, [form, navigate, fetchMe]);
 
   async function next() {
-    if (step === 0) await form.validateFields(["site_name"]);
-    if (step === 1) await form.validateFields(["admin_username", "admin_password", "confirm_password"]);
-    setStep(step + 1);
+    try {
+      if (step === 0) await form.validateFields(["site_name"]);
+      if (step === 1) await form.validateFields(["admin_username", "admin_password", "confirm_password"]);
+      setStep(step + 1);
+    } catch {
+      /* 校验失败：错误提示由 Form.Item 就地展示，不切换步骤（避免 unhandled rejection） */
+    }
   }
 
   async function onSubmit() {
-    await form.validateFields();
+    try {
+      await form.validateFields();
+    } catch {
+      return; // 校验失败：错误提示由 Form.Item 就地展示
+    }
     const v = form.getFieldsValue();
     setSubmitting(true);
     try {
