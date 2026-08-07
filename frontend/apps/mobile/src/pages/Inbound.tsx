@@ -3,6 +3,7 @@ import { ActionSheet, Button, DatePicker, Dialog, DotLoading, Input, List, NavBa
 import { useNavigate, useSearchParams } from "react-router";
 import { baseApi, fileApi, ocrApi, purchaseIn, resolveByBarcode, type Location, type OcrDeliveryItem, type OcrTask, type Product, type Supplier, type Unit, type Warehouse } from "@wlt/shared";
 import { CameraAlbum } from "../components/CameraAlbum";
+import { BarcodeScanner } from "../components/BarcodeScanner";
 import { ProductPicker } from "../components/ProductPicker";
 
 interface Row {
@@ -31,10 +32,9 @@ export function InboundPage() {
   const [datePicker, setDatePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [scanRow, setScanRow] = useState<number>(-1);
+  const [scannerOpen, setScannerOpen] = useState(false); // 行条码实时扫码弹层（BarcodeScanner）
   // 无材料新增：条码未匹配 → 确认后弹表单，用识别数据建材料并带入明细行
   const [newMaterial, setNewMaterial] = useState<{ open: boolean; rowIndex: number; barcode: string; name: string; spec: string; unitId: number }>({ open: false, rowIndex: -1, barcode: "", name: "", spec: "", unitId: 0 });
-  const scanCamRef = useRef<HTMLInputElement>(null); // 行条码扫码：拍照
-  const scanAlbRef = useRef<HTMLInputElement>(null); // 行条码扫码：相册
   // 送货单识别（拍照/相册 → 视觉识别异步任务 → 轮询 → 确认带入明细）
   const [ocrLoading, setOcrLoading] = useState(false); // 上传/识别/确认中
   const [ocrTask, setOcrTask] = useState<OcrTask | null>(null);
@@ -93,33 +93,6 @@ export function InboundPage() {
     }
   }
 
-  /** 拍照/相册扫码：上传图片 → 后端解码 → 走条码匹配流程。 */
-  async function handleScanFile(f: File | undefined) {
-    if (!f || scanRow < 0) return;
-    try {
-      const up = await fileApi.upload(f, "ocr");
-      const data = await ocrApi.decodeBarcode(up.file_id);
-      await scanBarcode(scanRow, data.barcode);
-    } catch (e) {
-      Toast.show(e instanceof Error ? e.message : "未识别到条码");
-    }
-  }
-
-  /** 行条码扫码入口：拍照 / 相册二选一（相册不带 capture，移动端可正常选图）。 */
-  function openScanSheet(i: number) {
-    setScanRow(i);
-    ActionSheet.show({
-      actions: [
-        { key: "camera", text: "📷 拍照识别" },
-        { key: "album", text: "🖼 从相册选择" },
-      ],
-      cancelText: "取消",
-      onAction: (a) => {
-        if (a.key === "camera") scanCamRef.current?.click();
-        else if (a.key === "album") scanAlbRef.current?.click();
-      },
-    });
-  }
 
   /** 新增材料弹窗：拍照/相册识别材料名称（OCR 快查，命中取系统名，否则取首行识别文本）。 */
   async function ocrNewMaterialName(f: File | undefined) {
@@ -326,7 +299,7 @@ export function InboundPage() {
         </List.Item>
       </List>
 
-      <List header={`材料明细（${rows.length}）——条码可选：输入后回车或拍照识别`}>
+      <List header={`材料明细（${rows.length}）——条码可选：输入后回车或扫码识别`}>
         {rows.map((r, i) => (
           <List.Item key={i} description={
             <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -337,7 +310,7 @@ export function InboundPage() {
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <Input placeholder="条码（可选）" value={r.barcode} onChange={(v) => updateRow(i, { barcode: v })} onEnterPress={() => void scanBarcode(i, r.barcode)} style={{ flex: 1, border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
-                <Tag color="success" fill="outline" onClick={() => openScanSheet(i)}>扫码</Tag>
+                <Tag color="success" fill="outline" onClick={() => { setScanRow(i); setScannerOpen(true); }}>扫码</Tag>
                 <Tag color="danger" fill="outline" onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>删除</Tag>
               </div>
               <span style={{ color: "#999", fontSize: 12 }}>{r.product.code}{r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}</span>
@@ -351,12 +324,11 @@ export function InboundPage() {
         <Button block color="primary" loading={submitting} onClick={() => void submit()}>提交入库</Button>
       </div>
 
-      <input ref={scanCamRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { void handleScanFile(e.target.files?.[0]); e.target.value = ""; }} />
-      <input ref={scanAlbRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { void handleScanFile(e.target.files?.[0]); e.target.value = ""; }} />
       <input ref={ocrCamRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { void startDeliveryOcr(e.target.files?.[0]); e.target.value = ""; }} />
       <input ref={ocrAlbRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { void startDeliveryOcr(e.target.files?.[0]); e.target.value = ""; }} />
 
       <ProductPicker visible={pickerOpen} onClose={() => setPickerOpen(false)} onPick={(p) => addRow(p)} />
+      <BarcodeScanner visible={scannerOpen} onClose={() => setScannerOpen(false)} onScan={(code) => void scanBarcode(scanRow, code)} />
 
       <Popup visible={locPicker.open} onMaskClick={() => setLocPicker((s) => ({ ...s, open: false }))} bodyStyle={{ height: "50vh" }}>
         <List header="选择库位">
