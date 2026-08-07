@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { List, NavBar, Tag, Toast } from "antd-mobile";
-import { useNavigate } from "react-router-dom";
+import { List, NavBar, SpinLoading, Tag, Toast } from "antd-mobile";
+import { useNavigate } from "react-router";
 
 import { notificationApi, type NotificationItem } from "@wlt/shared";
 
@@ -15,6 +15,7 @@ export function NotificationsPage() {
   const navigate = useNavigate();
   const [list, setList] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [marking, setMarking] = useState(false); // 全部已读进行中（防重复点击 + 反馈）
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,11 +34,16 @@ export function NotificationsPage() {
   }, [load]);
 
   async function markAllRead() {
+    if (marking) return;
+    setMarking(true);
     try {
       await notificationApi.markReadAll();
       setList((ls) => ls.map((n) => ({ ...n, is_read: 1 })));
+      Toast.show("已全部标记为已读");
     } catch (e) {
       Toast.show(e instanceof Error ? e.message : "操作失败");
+    } finally {
+      setMarking(false);
     }
   }
 
@@ -45,7 +51,15 @@ export function NotificationsPage() {
     <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
       <NavBar
         onBack={() => navigate("/")}
-        right={<span style={{ fontSize: 12, color: "#1668dc" }} onClick={() => void markAllRead()}>全部已读</span>}
+        right={
+          marking ? (
+            <SpinLoading style={{ "--size": "18px" } as React.CSSProperties} />
+          ) : (
+            <span style={{ fontSize: 12, color: "#1668dc" }} onClick={() => void markAllRead()}>
+              全部已读
+            </span>
+          )
+        }
       >
         通知
       </NavBar>
@@ -82,6 +96,11 @@ export function NotificationsPage() {
             </List.Item>
           );
         })}
+        {loading && (
+          <div style={{ padding: 40, display: "flex", justifyContent: "center" }}>
+            <SpinLoading />
+          </div>
+        )}
         {!loading && list.length === 0 && <List.Item>暂无通知</List.Item>}
       </List>
     </div>
