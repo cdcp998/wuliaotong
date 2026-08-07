@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Dialog, Form, Input, List, NavBar, Toast } from "antd-mobile";
-import { useNavigate } from "react-router-dom";
+import { Button, Dialog, Form, Input, List, NavBar, Popup, Toast } from "antd-mobile";
+import { useNavigate } from "react-router";
 
 import { authApi, otherEndUrl, useAuthStore } from "@wlt/shared";
 
@@ -13,6 +13,7 @@ export function MinePage() {
   const [oldPwd, setOldPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
+  const [showPwd, setShowPwd] = useState(false); // 密码可见性（三字段统一切换）
   const [saving, setSaving] = useState(false);
 
   async function onLogout() {
@@ -97,31 +98,74 @@ export function MinePage() {
         照片永久保存 · 全程操作留痕
       </div>
 
-      <Dialog
-        visible={pwdVisible}
-        title="修改密码"
-        content={
-          <Form layout="vertical" style={{ marginTop: 8 }}>
-            <Form.Item label="原密码">
-              <Input type="password" placeholder="原密码" value={oldPwd} onChange={setOldPwd} />
-            </Form.Item>
-            <Form.Item label="新密码">
-              <Input type="password" placeholder="至少 6 位" value={newPwd} onChange={setNewPwd} />
-            </Form.Item>
-            <Form.Item label="确认新密码">
-              <Input type="password" placeholder="再次输入" value={confirmPwd} onChange={setConfirmPwd} />
-            </Form.Item>
-          </Form>
-        }
-        actions={[
-          { key: "cancel", text: "取消" },
-          { key: "ok", text: saving ? "提交中…" : "确定", onClick: () => void changePwd() },
-        ]}
-        onAction={(a) => {
-          if (a.key === "cancel") setPwdVisible(false);
-        }}
-        onClose={() => setPwdVisible(false)}
-      />
+      {/* 修改密码：全屏弹层界面（标题栏 + 账号提示 + 表单卡片 + 底部主按钮） */}
+      <Popup visible={pwdVisible} onMaskClick={() => setPwdVisible(false)} bodyStyle={{ height: "100vh" }} destroyOnClose>
+        <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#f5f6f8" }}>
+          <NavBar
+            onBack={() => setPwdVisible(false)}
+            right={
+              <span onClick={() => setPwdVisible(false)} style={{ fontSize: 14, color: "#1668dc", padding: "0 12px" }}>
+                关闭
+              </span>
+            }
+            style={{ background: "#fff", borderBottom: "1px solid #f0f1f3" }}
+          >
+            修改密码
+          </NavBar>
+          <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+            {/* 当前账号提示 */}
+            <div
+              style={{
+                background: "#fff",
+                borderRadius: 12,
+                padding: "12px 16px",
+                marginBottom: 12,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <span style={{ fontSize: 13, color: "#86909c" }}>当前账号</span>
+              <span style={{ fontSize: 14, fontWeight: 500 }}>{user?.username}</span>
+            </div>
+            {/* 表单卡片 */}
+            <div style={{ background: "#fff", borderRadius: 12, padding: "4px 16px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0 4px" }}>
+                <span style={{ fontSize: 13, color: "#4e5969" }}>输入新密码</span>
+                <span onClick={() => setShowPwd((v) => !v)} style={{ fontSize: 13, color: "#1668dc", padding: 4 }}>
+                  {showPwd ? "隐藏密码" : "显示密码"}
+                </span>
+              </div>
+              <Form layout="vertical" style={{ marginTop: 4 }}>
+                <Form.Item label="原密码">
+                  <Input type={showPwd ? "text" : "password"} placeholder="请输入原密码" value={oldPwd} onChange={setOldPwd} />
+                </Form.Item>
+                <Form.Item label="新密码" extra={<span style={{ fontSize: 11, color: "#86909c" }}>至少 6 位</span>}>
+                  <Input type={showPwd ? "text" : "password"} placeholder="请输入新密码" value={newPwd} onChange={setNewPwd} />
+                </Form.Item>
+                <Form.Item label="确认新密码">
+                  <Input
+                    type={showPwd ? "text" : "password"}
+                    placeholder="再次输入新密码"
+                    value={confirmPwd}
+                    onChange={setConfirmPwd}
+                    onEnterPress={() => void changePwd()}
+                  />
+                </Form.Item>
+              </Form>
+              <div style={{ fontSize: 11, color: "#c9cdd4", lineHeight: 1.6, marginTop: 4 }}>
+                修改成功后请使用新密码登录；如忘记密码请联系管理员重置。
+              </div>
+            </div>
+          </div>
+          {/* 底部主操作 */}
+          <div style={{ padding: 12, background: "#fff", borderTop: "1px solid #f0f1f3" }}>
+            <Button block color="primary" loading={saving} onClick={() => void changePwd()}>
+              确认修改
+            </Button>
+          </div>
+        </div>
+      </Popup>
     </div>
   );
 }
