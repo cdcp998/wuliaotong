@@ -76,8 +76,12 @@
   .ant-layout-header .ant-input-search {
     width: auto !important;
     flex: 1;
-    min-width: 60px;
-    max-width: 220px;
+    min-width: 100px;
+  }
+  /* 隐藏顶栏右侧 spacer（flex:1），搜索框独占剩余空间，移动端不再被压缩变短 */
+  .ant-layout-header > div[style*="flex: 1"],
+  .ant-layout-header > div[style*="flex:1"] {
+    display: none;
   }
   /* 顶栏用户区只保留头像，隐藏姓名/角色文字，为窄屏让出空间
    * （结构：div.ant-dropdown-trigger > [头像div, 文字块div]） */
@@ -283,12 +287,5 @@
 @media (max-width: 575px) {
   .ant-card-body {
     padding: 14px !important;
-  }
-}
-
-/* ---------- 超窄屏（≤400px，如 iPhone SE 一代）：顶栏只保留核心操作 ---------- */
-@media (max-width: 400px) {
-  .ant-layout-header .ant-input-search {
-    display: none;
   }
 }
