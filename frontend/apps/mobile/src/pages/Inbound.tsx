@@ -324,21 +324,21 @@ export function InboundPage() {
                   <Tag color="success" fill="outline" onClick={() => { setScanRow(i); setScannerOpen(true); }}>扫码</Tag>
                   <Tag color="danger" fill="outline" onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>删除</Tag>
                 </div>
-                {/* 数量 / 进价 */}
+                {/* 数量 / 价格 */}
                 <div style={{ display: "flex", gap: 8 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 11, color: "#86909c", marginBottom: 2 }}>数量</div>
-                    <Input placeholder="必填" type="number" value={r.qty} onChange={(v) => updateRow(i, { qty: v })} style={{ border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
+                    <Input placeholder="必填" type="number" value={r.qty} onChange={(v) => updateRow(i, { qty: v })} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: "#86909c", marginBottom: 2 }}>进价</div>
-                    <Input placeholder="0" type="number" value={r.price} onChange={(v) => updateRow(i, { price: v })} style={{ border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
+                    <div style={{ fontSize: 11, color: "#86909c", marginBottom: 2 }}>价格</div>
+                    <Input placeholder="0" type="number" value={r.price} onChange={(v) => updateRow(i, { price: v })} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
                   </div>
                 </div>
                 {/* 条码：扫码或手输后回车自动匹配 */}
                 <div>
                   <div style={{ fontSize: 11, color: "#86909c", marginBottom: 2 }}>条码（扫码或手输后回车自动匹配）</div>
-                  <Input placeholder="未匹配时自动填入条码" value={r.barcode} onChange={(v) => updateRow(i, { barcode: v })} onEnterPress={() => void scanBarcode(i, r.barcode)} style={{ border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
+                  <Input placeholder="未匹配时自动填入条码" value={r.barcode} onChange={(v) => updateRow(i, { barcode: v })} onEnterPress={() => void scanBarcode(i, r.barcode)} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
                 </div>
                 <span style={{ color: "#999", fontSize: 12 }}>{r.product.code}{r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}</span>
               </div>
