@@ -25,6 +25,9 @@ class Settings:
     session_expire_hours: float = float(os.getenv("SESSION_EXPIRE_HOURS", "8"))
     cookie_secure: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
+    # Redis（缓存加速层；不可用时自动降级直查数据库，不阻塞业务）
+    redis_url: str = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+
     # 跨域（前端 dev）
     cors_origins: list[str] = [
         o.strip()
@@ -45,6 +48,10 @@ class Settings:
     # 运行时日志：级别（DEBUG/INFO/WARN/ERROR，默认 INFO；可被系统设置 log.level 运行时覆盖）与目录（按天轮转）
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
     log_dir: str = os.getenv("LOG_DIR", str(BASE_DIR / "logs"))
+
+    # 初始化完成标记文件：仅以该文件是否存在判断是否已完成初始化（不依赖数据库状态，
+    # 防止数据库重建/备份恢复后被强制重新进入初始化流程）；删除标记文件即重新进入初始化
+    init_mark_file: str = os.getenv("INIT_MARK_FILE", str(BASE_DIR / "data" / ".initialized"))
 
 
 settings = Settings()

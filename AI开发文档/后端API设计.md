@@ -49,16 +49,17 @@ POST /api/v1/auth/login
 
 ## 1.1 系统初始化安装（首次启动引导）
 
-系统以 `sys_config.sys.initialized = "1"` 标记已完成初始化安装；**未初始化时前端（电脑端入口/登录页/受保护路由，手机端登录页）强制跳转 `/init` 初始化安装页**，完成后自动登录进入主页面。
+系统以**文件系统标记文件 `backend/data/.initialized`（路径可用环境变量 `INIT_MARK_FILE` 覆盖）是否存在**判断是否已完成初始化安装——**不依赖数据库状态**（数据库重建/备份恢复不会强制重新进入初始化流程）；**未初始化时前端（电脑端入口/登录页/受保护路由，手机端登录页）强制跳转 `/init` 初始化安装页**，完成后自动登录进入主页面。
 
 | 方法 | 路径 | 说明 | 权限 |
 |---|---|---|---|
-| GET | /init/status | 初始化状态 → `{initialized: bool, site_name: string}`（无 sys.initialized 记录视为未初始化） | 公开 |
-| POST | /init | 执行初始化 `{site_name, admin_username, admin_password, contact_phone?}`：写 site.name/site.contact_phone，重置或创建内置超管账号（admin_username 与现有超管账号不同则改名，冲突报 4006），写 sys.initialized=1；**仅未初始化时可执行，重复执行报 4006** | 公开 |
+| GET | /init/status | 初始化状态 → `{initialized: bool, site_name: string}`；initialized 仅由标记文件存在性判断（不触发任何初始化状态数据库查询），site_name 读 sys_config | 公开 |
+| POST | /init | 执行初始化 `{site_name, admin_username, admin_password, contact_phone?}`：写 site.name/site.contact_phone，重置或创建内置超管账号（admin_username 与现有超管账号不同则改名，冲突报 4006），事务提交成功后**原子写入标记文件**（临时文件 + os.replace，内容含完成时间，目录权限不足报 5003）；**仅未初始化时可执行，重复执行报 4006** | 公开 |
 
 - 校验：site_name 1-50 字符；admin_username 2-50 位（字母/数字/下划线/中划线）；admin_password ≥6 位（与注册规则一致）
-- 安全：接口只在未初始化时可用（防重入）；初始化完成后任何途径（含数据库重放）均拒绝再次初始化；写操作照常进审计日志（user_id=0）
-- 幂等与迁移：init.sql 种子默认 `sys.initialized='0'`；**已有部署库无该记录 → 首次访问进入初始化页，完成初始化后写入 "1"**（等价于把部署库"转正"，无需手工 ALTER）
+- 安全：接口只在未初始化时可用（防重入）；标记文件存在即拒绝再次初始化——**与数据库内容无关**（删库/重建库/备份恢复均不会重新进入初始化页）；写操作照常进审计日志（user_id=0）
+- 可靠性：标记文件在业务事务 commit 成功之后才写入 → **标记文件存在 ⇔ 初始化数据已落库**；写入失败返回 5003 且不谎报成功，可重试
+- 迁移：init.sql 不再含 sys.initialized 配置（该行已移除）；**已有部署库无需任何数据库操作**——删除标记文件即可重新进入初始化页（保留业务数据，仅重置超管密码与站点信息）；`backend/data/` 已 gitignore，标记文件不入库
 
 ## 2. 基础资料
 

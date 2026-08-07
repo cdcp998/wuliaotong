@@ -781,8 +781,11 @@ INSERT INTO sys_config (config_key, config_value, remark) VALUES
   ('smtp.port',            '465',           'SMTP 端口'),
   ('smtp.user',            '',              'SMTP 账号'),
   ('smtp.password',        '',              'SMTP 密码（secret）'),
-  ('smtp.from',            '',              '发件人邮箱'),
-  ('sys.initialized',      '0',             '系统初始化安装状态：0 未初始化（首次访问强制进入初始化安装页）/ 1 已完成');
+  ('smtp.from',            '',              '发件人邮箱');
+
+-- 注：初始化完成状态不再存 sys_config（sys.initialized 已移除）——改为文件系统标记
+-- backend/data/.initialized 判断（见《后端API设计.md》§1.1），数据库重建/备份恢复不会
+-- 强制重新进入初始化流程。首次部署请勿提交该标记文件（backend/data/ 已 gitignore）。
 
 -- 默认存储位置（相对 backend/ 解析；后续可在后台新增多存储地址）
 INSERT INTO sys_storage (id, name, type, path, policy, is_default, status) VALUES
