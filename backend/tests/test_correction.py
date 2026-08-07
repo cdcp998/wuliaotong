@@ -10,7 +10,7 @@ class _FakeLLM:
     def __init__(self, content: str) -> None:
         self.content = content
 
-    def chat_text(self, system: str, user: str) -> str:
+    def chat_text(self, system: str, user: str, scene: str = "", user_id: int | None = None) -> str:
         return self.content
 
 

@@ -11,7 +11,7 @@
 
 ### 库存
 - 采购入库（含作废冲销、移动加权成本、历史采购价、供应商/日期/备注表头）
-- 期初库存（草稿/过账/Excel 导入）、库存查询 / 流水、库存预警（定时任务 + 站内通知，AI 智能生成通知正文）
+- 期初库存（草稿/过账/Excel 导入）、库存查询 / 流水、库存预警（定时任务 + 站内通知，规则生成含消耗/采购价的正文）
 - 调拨、盘点（物品级 + 拍照留痕 + 当场新增账外物料 + 收发存 21 列导出）、其他出入库
 - **统一库存事务**：一切变动走 `post_stock_change()`（行锁 + 单事务，防超领/超卖）
 
@@ -88,13 +88,16 @@
 
 ## 本地开发环境
 
-- Python 3.13、MySQL 5.7（phpstudy，`root/cdcp520`，端口 3306）、Node 20
+- Python 3.13、MySQL 5.7（phpstudy，`root/cdcp520`，端口 3306）、Node 20、Redis 5.x（127.0.0.1:6379；缓存加速层，不可用时自动降级直查数据库）
 - 端口：后端 **8443（HTTPS，自签名）**、电脑端 dev **5174**、手机端 dev **5175**（本地 80 被 phpstudy 业务占用）
 - 后端需配置大模型 Key（系统设置 → OCR 与大模型）：视觉 SiliconFlow + 文本 DeepSeek（豆包可选）
 
 ## 快速启动
 
 ```bash
+# 0. 启动 Redis（缓存层；本机已装为 Windows 服务 RedisWLT 可跳过）
+redis-server.exe redis.conf   # 或 sc start RedisWLT
+
 # 1. 生成开发者自签名证书（已生成则跳过）
 cd backend && mkdir -p certs/dev
 openssl req -x509 -newkey rsa:2048 -keyout certs/dev/key.pem -out certs/dev/cert.pem \
@@ -126,7 +129,8 @@ npm run dev:mobile    # 手机端
 
 1. **数据库**：MySQL 8.0 建库 `wuliaotong`（utf8mb4），导入 `backend/sql/init.sql`（幂等，可重复执行）
 2. **后端**：
-   - 安装 Python 3.13 + `pip install -r requirements.txt`；配置 `backend/.env`（DB_URL、SESSION_COOKIE_NAME、BACKUP_MYSQLDUMP 指向 mysqldump 绝对路径、BACKUP_DIR）
+   - 安装 Python 3.13 + `pip install -r requirements.txt`；配置 `backend/.env`（DB_URL、SESSION_COOKIE_NAME、BACKUP_MYSQLDUMP 指向 mysqldump 绝对路径、BACKUP_DIR、REDIS_URL）
+   - 启动 Redis 并保持运行（缓存加速层；Redis 挂掉时自动降级，业务不受影响）
    - 启动：`uvicorn app.main:app --host 127.0.0.1 --port 8080`（内网端口，由 Nginx 反代；生产 HTTPS 由 Nginx 终止）
    - 建议用 NSSM/任务计划注册为 Windows 服务（开机自启、崩溃重启）
 3. **前端**：`cd frontend && npm ci && npm run build`（产出 desktop/mobile dist）
