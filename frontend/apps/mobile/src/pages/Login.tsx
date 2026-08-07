@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Button, Form, Input, Toast } from "antd-mobile";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
-import { authApi, BizError, otherEndUrl, useAuthStore, type RegisterStatus } from "@wlt/shared";
+import { authApi, BizError, initApi, otherEndInitUrl, otherEndUrl, useAuthStore, type RegisterStatus } from "@wlt/shared";
 
 type Mode = "login" | "forgot" | "reset" | "register";
 
-/** 登录页（手机端）：品牌区 + 表单；已登录直进主页；失败 3 次需验证码；忘记密码/注册。 */
+/** 登录页（手机端）：品牌区 + 表单；未初始化整页跳电脑端初始化安装页；已登录直进主页；失败 3 次需验证码；忘记密码/注册。 */
 export function LoginPage() {
   const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
@@ -21,10 +21,28 @@ export function LoginPage() {
   const [regStatus, setRegStatus] = useState<RegisterStatus | null>(null);
 
   useEffect(() => {
-    fetchMe()
-      .then(() => navigate("/", { replace: true })) // 已登录 → 主页
-      .catch(() => undefined);
-    authApi.registerStatus().then(setRegStatus).catch(() => undefined);
+    let alive = true;
+    (async () => {
+      // 未初始化 → 整页跳电脑端初始化安装页（先于登录流程，避免与 fetchMe 跳转竞争）
+      try {
+        const st = await initApi.status();
+        if (!alive) return;
+        if (!st.initialized) {
+          window.location.replace(otherEndInitUrl());
+          return;
+        }
+      } catch {
+        /* 状态接口异常不阻塞登录 */
+      }
+      if (!alive) return;
+      fetchMe()
+        .then(() => navigate("/", { replace: true })) // 已登录 → 主页
+        .catch(() => undefined);
+      authApi.registerStatus().then(setRegStatus).catch(() => undefined);
+    })();
+    return () => {
+      alive = false;
+    };
   }, [fetchMe, navigate]);
 
   async function refreshCaptcha() {

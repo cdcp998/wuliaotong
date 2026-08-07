@@ -19,6 +19,7 @@ from app.api import advanced as advanced_api
 from app.api import base_data as base_data_api
 from app.api import files as files_api
 from app.api import geo as geo_api
+from app.api import init as init_api
 from app.api import notification as notification_api
 from app.api import ocr as ocr_api
 from app.api import requisition as requisition_api
@@ -141,6 +142,7 @@ async def audit_middleware(request: Request, call_next):
 
 
 app.include_router(auth_api.router, prefix=settings.api_prefix)
+app.include_router(init_api.router, prefix=settings.api_prefix)  # 初始化安装（首次启动引导，公开）
 app.include_router(base_data_api.static_router, prefix=settings.api_prefix)  # 先于动态路由注册（/products/export 等静态路径）
 app.include_router(base_data_api.router, prefix=settings.api_prefix)
 app.include_router(stock_api.router, prefix=settings.api_prefix)

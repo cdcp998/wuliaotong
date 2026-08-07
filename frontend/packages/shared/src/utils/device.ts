@@ -56,8 +56,13 @@ export function detectDevice(): DeviceKind {
 export function otherEndUrl(kind: "desktop" | "mobile"): string {
   const { protocol, hostname } = window.location;
   if (import.meta.env.DEV) {
-    const targetPort = kind === "mobile" ? 5174 : 5173;
+    const targetPort = kind === "mobile" ? 5175 : 5174; // 开发：电脑 5174 / 手机 5175
     return `${protocol}//${hostname}:${targetPort}/login`;
   }
   return kind === "mobile" ? "/m/login" : "/login";
+}
+
+/** 电脑端初始化安装页地址（系统未初始化时手机端整页跳转用）。 */
+export function otherEndInitUrl(): string {
+  return otherEndUrl("desktop").replace(/\/login$/, "/init");
 }

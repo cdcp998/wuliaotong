@@ -7,7 +7,7 @@
 - 路径前缀：`/api/v1`；请求/响应均为 JSON（文件上传除外）
 - 统一响应体：`{"code": 0, "message": "ok", "data": ...}`；`code != 0` 为业务错误
 - 分页：`?page=1&page_size=20`，data 返回 `{list, total, page, page_size}`
-- 认证：Session Cookie（HttpOnly + Secure），登录接口下发；除登录外所有接口校验会话
+- 认证：Session Cookie（HttpOnly + Secure），登录接口下发；除登录外所有接口校验会话（公开例外：/health、/init/status、/init 及 /auth 下公开接口）
 - 权限：依赖注入 `require_permission("权限code")`，权限点清单见第 10 节
 - 审计：所有写操作（POST/PUT/DELETE）由中间件自动记录 `sys_operation_log`
 - 金额/数量：接口传输字符串（如 "12.50"），避免浮点精度问题；服务端 Decimal 计算
@@ -46,6 +46,19 @@ POST /api/v1/auth/login
      "role": {"id": 3, "code": "storekeeper", "name": "仓管员"},
      "permissions": ["stk:query", "pch:in", ...]}}}
 ```
+
+## 1.1 系统初始化安装（首次启动引导）
+
+系统以 `sys_config.sys.initialized = "1"` 标记已完成初始化安装；**未初始化时前端（电脑端入口/登录页/受保护路由，手机端登录页）强制跳转 `/init` 初始化安装页**，完成后自动登录进入主页面。
+
+| 方法 | 路径 | 说明 | 权限 |
+|---|---|---|---|
+| GET | /init/status | 初始化状态 → `{initialized: bool, site_name: string}`（无 sys.initialized 记录视为未初始化） | 公开 |
+| POST | /init | 执行初始化 `{site_name, admin_username, admin_password, contact_phone?}`：写 site.name/site.contact_phone，重置或创建内置超管账号（admin_username 与现有超管账号不同则改名，冲突报 4006），写 sys.initialized=1；**仅未初始化时可执行，重复执行报 4006** | 公开 |
+
+- 校验：site_name 1-50 字符；admin_username 2-50 位（字母/数字/下划线/中划线）；admin_password ≥6 位（与注册规则一致）
+- 安全：接口只在未初始化时可用（防重入）；初始化完成后任何途径（含数据库重放）均拒绝再次初始化；写操作照常进审计日志（user_id=0）
+- 幂等与迁移：init.sql 种子默认 `sys.initialized='0'`；**已有部署库无该记录 → 首次访问进入初始化页，完成初始化后写入 "1"**（等价于把部署库"转正"，无需手工 ALTER）
 
 ## 2. 基础资料
 
@@ -204,3 +217,4 @@ OCR 结果示例（structured）：
 8. **错误码**：4001 库存不足 / 4002 单据状态不允许 / 4003 商品或库位不存在 / 4004 登录失败或已锁定 / 4005 无权限 / 4006 参数校验失败 / 4007 需要验证码 / 5001 OCR 引擎未初始化 / 5002 大模型调用失败 / 5003 文件处理失败。
 9. **性能**：单据保存走单事务 + 索引（UK product×warehouse×location），百人并发无压力；OCR/大模型异步，不阻塞开单。
 10. **验证码/重置码内存态**（单进程部署）；报表全部基于 stk_stock_log 聚合可对账；数量输出统一去尾零（_fmt_qty）。
+11. **Redis 缓存层**（2026-08-07）：统一走 `app/core/cache.py`（key 前缀 `wlt:`，cache-aside，`jsonable_encoder` 序列化；**Redis 不可用静默降级直查库**）。会话 `session:{token}`（TTL=会话时长，登录/登出/改密双写双删，未命中回源 `sys_session` 并回填）；权限 `role:{id}`/`role_perms:{id}`（5 分钟，admin 角色权限写操作失效）；字典 `dict:*` 与商品 `product:{id}`/`product:bc:*`（10 分钟，写时失效）；看板 `dash:*`/货架图 `stock:locsum:*`（60 秒，`post_stock_change()` 统一失效）；未读数 `notify:unread:{uid}`（30 秒，读通知/新通知失效）。

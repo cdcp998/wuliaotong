@@ -14,6 +14,7 @@ import { DashboardPage } from "./pages/Dashboard";
 import { DeliveryOcrPage } from "./pages/DeliveryOcr";
 import { DepartmentsPage } from "./pages/Departments";
 import { HistoryPricePage } from "./pages/HistoryPrice";
+import { InitPage } from "./pages/Init";
 import { LandingPage } from "./pages/Landing";
 import { LogsPage } from "./pages/Logs";
 import { LoginPage } from "./pages/Login";
@@ -43,7 +44,8 @@ function withLayout(page: React.ReactNode) {
 
 const router = createBrowserRouter(
   [
-  { path: "/", element: <LandingPage /> }, // 入口：设备识别自动跳转 + 手动选择
+  { path: "/", element: <LandingPage /> }, // 入口：未初始化跳 /init，否则设备识别自动跳转 + 手动选择
+  { path: "/init", element: <InitPage /> }, // 初始化安装页（未初始化时强制进入；已初始化自动跳回登录/主页）
   { path: "/m/*", element: <Navigate to="/" replace /> }, // 手机版入口后缀误入电脑端时回入口
   { path: "/login", element: <LoginPage /> },
   { path: "/app", element: <Navigate to="/dashboard" replace /> }, // 工作台即经营看板
