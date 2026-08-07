@@ -26,6 +26,31 @@ def test_health():
     assert all(set(v) == {"enabled", "configured", "model"} for v in llm.values())
 
 
+def test_health_db_down(monkeypatch):
+    """数据库不可用时 /health 仍 200（db 标记 down，其余字段用默认值），不阻止部署探活与安装流程。"""
+    from sqlalchemy.exc import OperationalError
+
+    class _BrokenSession:
+        def execute(self, *a, **k):
+            raise OperationalError("SELECT 1", {}, Exception("(2003, Can't connect to MySQL server)"))
+
+        def scalar(self, *a, **k):
+            raise OperationalError("SELECT 1", {}, Exception("(2003, Can't connect to MySQL server)"))
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.db.SessionLocal", _BrokenSession)
+    r = client.get("/api/v1/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["code"] == 0
+    assert body["data"]["status"] == "ok"
+    assert body["data"]["version"] == __version__
+    assert body["data"]["db"] == "down"
+    assert body["data"]["redis"] in ("ok", "down")
+
+
 def test_login_wrong_password():
     r = client.post("/api/v1/auth/login", json={"username": "admin", "password": "wrong"})
     assert r.status_code == 200

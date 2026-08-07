@@ -40,9 +40,15 @@ logger = logging.getLogger("app.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动自检：数据库连通性；初始化运行时日志（环境变量/系统设置级别）；启动定时任务。"""
-    with engine.connect() as conn:
-        conn.execute(text("SELECT 1"))
+    """启动自检：数据库连通性（失败仅告警不阻止启动——数据库未就绪/未安装时仍可进入安装流程）；初始化运行时日志；启动定时任务。"""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:  # noqa: BLE001 数据库不可用不阻止启动
+        logger.warning(
+            "启动时数据库连接不可用（%s）：后端继续运行，安装流程会验证数据库连接，业务接口在数据库可用前不可用",
+            exc,
+        )
     # 运行时日志：先按环境变量默认初始化，再以系统设置 log.level 覆盖（管理后台可运行时调整）
     configure_logging(settings.log_level, settings.log_dir)
     try:

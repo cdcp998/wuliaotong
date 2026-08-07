@@ -83,18 +83,28 @@ def _mask(value: str) -> str:
 
 @router.get("/health")
 def health(db: Session = Depends(get_db)) -> dict:
-    db.execute(text("SELECT 1"))
-    cfg = db.scalar(select(SysConfig).where(SysConfig.config_key == "ocr.engine"))
-    engine = cfg.config_value if cfg and cfg.config_value else settings.ocr_engine
-    ver = db.scalar(select(SysConfig).where(SysConfig.config_key == "ocr.model_version"))
-    # LLM 服务商状态：只读配置（启用开关 + Key 是否已配置 + 模型），不做在线探测（探活不消耗配额）
-    llm_cfg = {
-        k: v
-        for k, v in db.execute(
-            select(SysConfig.config_key, SysConfig.config_value).where(SysConfig.config_key.like("llm.%"))
-        ).all()
-        if v
-    }
+    """健康检查：数据库不可用时不报错（数据库未就绪/未安装时后端仍可启动并进入安装流程），
+    db 字段如实标记 down；安装完成后 db down 即为故障（由部署探活/前端提示暴露）。"""
+    db_ok = True
+    try:
+        db.execute(text("SELECT 1"))
+        cfg = db.scalar(select(SysConfig).where(SysConfig.config_key == "ocr.engine"))
+        engine = cfg.config_value if cfg and cfg.config_value else settings.ocr_engine
+        ver = db.scalar(select(SysConfig).where(SysConfig.config_key == "ocr.model_version"))
+        # LLM 服务商状态：只读配置（启用开关 + Key 是否已配置 + 模型），不做在线探测（探活不消耗配额）
+        llm_cfg = {
+            k: v
+            for k, v in db.execute(
+                select(SysConfig.config_key, SysConfig.config_value).where(SysConfig.config_key.like("llm.%"))
+            ).all()
+            if v
+        }
+    except Exception as exc:  # noqa: BLE001 数据库不可用不阻止健康检查
+        logger.warning("健康检查读取数据库失败：%s", exc)
+        db_ok = False
+        engine = settings.ocr_engine
+        ver = None
+        llm_cfg = {}
     llm_state = {
         name: {
             "enabled": llm_cfg.get(f"llm.{name}.enabled") == "1",
@@ -107,7 +117,7 @@ def health(db: Session = Depends(get_db)) -> dict:
         {
             "status": "ok",
             "version": __version__,
-            "db": "ok",
+            "db": "ok" if db_ok else "down",
             "redis": "ok" if redis_ping() else "down",
             "llm": llm_state,
             "ocr_engine": engine,

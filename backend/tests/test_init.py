@@ -47,11 +47,15 @@ def _mock_env(monkeypatch, tmp_path) -> None:
 
 
 def _mock_conn(monkeypatch, db_err=None, redis_err=None) -> None:
-    """模拟连接验证结果（None=成功）。"""
+    """模拟连接验证结果（None=成功）；同时隔离目标库会话与连接热切换（避免污染全局 engine）。"""
     import app.api.init as init_mod
+    from app.db import SessionLocal
 
     monkeypatch.setattr(init_mod, "_test_db_conn", lambda *a, **k: db_err)
     monkeypatch.setattr(init_mod, "_test_redis_conn", lambda *a, **k: redis_err)
+    engine = SessionLocal.kw["bind"]
+    monkeypatch.setattr(init_mod, "_target_sessionmaker", lambda req: (engine, SessionLocal))
+    monkeypatch.setattr(init_mod, "_apply_runtime_config", lambda *a, **k: None)
 
 
 def _raw_config(key: str) -> str | None:
@@ -354,9 +358,13 @@ def test_init_auto_create_missing_db(monkeypatch, tmp_path):
     """目标库不存在（1049）→ 自动建库并导入 init.sql 表结构，安装成功；测试后清理临时库。"""
     import app.api.init as init_mod
 
+    import app.db as db_mod
+    from app.config import settings as st
+
     state = _save_state()
     creds = _real_db_creds()
     db_name = f"wlt_auto_test_{int(time.time() * 1000)}"
+    original_db_url, original_redis_url = st.db_url, st.redis_url
     try:
         _mock_env(monkeypatch, tmp_path)
         MARK_FILE.unlink(missing_ok=True)
@@ -371,7 +379,13 @@ def test_init_auto_create_missing_db(monkeypatch, tmp_path):
             from app.models.sys import SysRole
 
             assert s.scalar(select(SysRole).where(SysRole.code == "super_admin")) is not None
+        # 进程内连接已热切换到目标库（无需重启后端）
+        assert db_mod.engine.url.database == db_name
+        assert st.db_url.endswith(f"/{db_name}?charset=utf8mb4")
     finally:
+        # 先切回原库再恢复状态/清理临时库（SessionLocal 已随热切换指向临时库）
+        db_mod.reconfigure_db(original_db_url)
+        st.db_url, st.redis_url = original_db_url, original_redis_url
         _restore_state(state)
         _drop_test_db(creds, db_name)
 
@@ -382,9 +396,13 @@ def test_init_existing_empty_db_imports_schema(monkeypatch, tmp_path):
 
     import app.api.init as init_mod
 
+    import app.db as db_mod
+    from app.config import settings as st
+
     state = _save_state()
     creds = _real_db_creds()
     db_name = f"wlt_empty_test_{int(time.time() * 1000)}"
+    original_db_url, original_redis_url = st.db_url, st.redis_url
     try:
         _mock_env(monkeypatch, tmp_path)
         # 先真实创建空库（无任何表）
@@ -406,9 +424,35 @@ def test_init_existing_empty_db_imports_schema(monkeypatch, tmp_path):
             creds["db_host"], creds["db_port"], creds["db_user"], creds["db_password"], db_name
         )
         assert err is None, err
+        assert db_mod.engine.url.database == db_name
+        assert st.db_url.endswith(f"/{db_name}?charset=utf8mb4")
     finally:
+        db_mod.reconfigure_db(original_db_url)
+        st.db_url, st.redis_url = original_db_url, original_redis_url
         _restore_state(state)
         _drop_test_db(creds, db_name)
+
+
+def test_init_reconfigure_fail_blocks(monkeypatch, tmp_path):
+    """热切换失败 → 5003 且不写标记文件（.env 已保存，提示重启后端生效）。"""
+    state = _save_state()
+    try:
+        _mock_env(monkeypatch, tmp_path)
+        _mock_conn(monkeypatch)
+        MARK_FILE.unlink(missing_ok=True)
+        import app.api.init as init_mod
+
+        def _boom(*a, **k):
+            raise ConnectionError("模拟切换失败")
+
+        monkeypatch.setattr(init_mod, "_apply_runtime_config", _boom)
+        r = client.post("/api/v1/init", json=_payload())
+        assert r.json()["code"] == 5003
+        assert "切换失败" in r.json()["message"]
+        assert MARK_FILE.exists() is False
+        assert (tmp_path / ".env").exists()  # .env 已保存，重启后端即可生效
+    finally:
+        _restore_state(state)
 
 
 def test_init_auto_create_fail_blocks(monkeypatch, tmp_path):
@@ -426,3 +470,38 @@ def test_init_auto_create_fail_blocks(monkeypatch, tmp_path):
         assert (tmp_path / ".env").exists() is False
     finally:
         _restore_state(state)
+
+
+def test_init_status_db_down(monkeypatch):
+    """数据库不可用时 /init/status 仍 200（initialized 由标记文件判断，site_name 空串），安装页可正常打开。"""
+    from sqlalchemy.exc import OperationalError
+
+    class _BrokenSession:
+        def scalar(self, *a, **k):
+            raise OperationalError("SELECT 1", {}, Exception("(2003, Can't connect to MySQL server)"))
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.db.SessionLocal", _BrokenSession)
+    r = client.get("/api/v1/init/status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["code"] == 0
+    assert body["data"]["site_name"] == ""
+    assert isinstance(body["data"]["initialized"], bool)
+
+
+def test_lifespan_startup_without_db(monkeypatch):
+    """数据库不可用时后端仍能正常启动（启动自检仅告警不阻止），安装页接口可用。"""
+    from sqlalchemy.exc import OperationalError
+
+    class _BrokenEngine:
+        def connect(self):
+            raise OperationalError("SELECT 1", {}, Exception("(2003, Can't connect to MySQL server)"))
+
+    monkeypatch.setattr("app.main.engine", _BrokenEngine())
+    with TestClient(app) as c:  # lifespan 启动自检失败 → 仅告警，应用正常服务
+        r = c.get("/api/v1/init/status")
+        assert r.status_code == 200
+        assert r.json()["code"] == 0

@@ -30,7 +30,7 @@ from app.config import BASE_DIR, settings
 from app.core.deps import SUPER_ADMIN_ROLE_CODE
 from app.core.response import BizError, E_FILE_FAILED, E_PARAM, ok
 from app.core.security import hash_password
-from app.db import get_db
+from app.db import get_db, reconfigure_db
 from app.models.sys import SysConfig, SysRole, SysUser
 from app.schemas.init import InitReq
 
@@ -224,16 +224,51 @@ def _test_redis_conn(redis_host: str, redis_port: int, redis_password: str, redi
         return str(exc)
 
 
-def _write_env_config(req: InitReq) -> None:
-    """把数据库/Redis 配置写入 .env（set_key：已有键替换、无则追加；密码做 URL 编码）。"""
-    db_url = (
+def _build_db_url(req: InitReq) -> str:
+    """构造目标库 SQLAlchemy 连接串（密码 URL 编码）。"""
+    return (
         f"mysql+pymysql://{quote(req.db_user, safe='')}:{quote(req.db_password, safe='')}"
         f"@{req.db_host}:{req.db_port}/{req.db_name}?charset=utf8mb4"
     )
+
+
+def _build_redis_url(req: InitReq) -> str:
+    """构造目标 Redis 连接串（密码 URL 编码；无密码不带认证段）。"""
     auth = f":{quote(req.redis_password, safe='')}@" if req.redis_password else ""
-    redis_url = f"redis://{auth}{req.redis_host}:{req.redis_port}/{req.redis_db}"
-    set_key(str(ENV_FILE), "DB_URL", db_url)
-    set_key(str(ENV_FILE), "REDIS_URL", redis_url)
+    return f"redis://{auth}{req.redis_host}:{req.redis_port}/{req.redis_db}"
+
+
+def _write_env_config(req: InitReq) -> None:
+    """把数据库/Redis 配置写入 .env（set_key：已有键替换、无则追加；密码做 URL 编码）。"""
+    set_key(str(ENV_FILE), "DB_URL", _build_db_url(req))
+    set_key(str(ENV_FILE), "REDIS_URL", _build_redis_url(req))
+
+
+def _target_sessionmaker(req: InitReq):
+    """为安装目标库创建独立会话工厂（连接验证阶段已保证目标库可用）。
+
+    返回 (engine, sessionmaker)；调用方负责 finally 中 dispose engine。
+    业务写入必须落在用户填写的目标库——绝不能使用启动时旧引擎连接的库，
+    否则安装表单填写的库与后端实际使用的库不一致（曾导致数据写错库）。
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker as _sessionmaker
+
+    target_engine = create_engine(
+        _build_db_url(req),
+        pool_pre_ping=True,
+        pool_recycle=3600,
+    )
+    return target_engine, _sessionmaker(
+        bind=target_engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
+
+
+def _apply_runtime_config(db_url: str, redis_url: str) -> None:
+    """热切换进程内数据库/Redis 配置（无需重启后端；切换失败抛异常由调用方提示）。"""
+    reconfigure_db(db_url)
+    settings.db_url = db_url
+    settings.redis_url = redis_url
 
 
 def _set_config(db: Session, key: str, value: str) -> None:
@@ -246,19 +281,30 @@ def _set_config(db: Session, key: str, value: str) -> None:
 
 @router.get("/status")
 def init_status(db: Session = Depends(get_db)) -> dict:
-    """初始化状态（公开）：{initialized, site_name}。"""
-    site = db.scalar(select(SysConfig).where(SysConfig.config_key == "site.name"))
+    """初始化状态（公开）：{initialized, site_name}。
+
+    initialized 仅由标记文件存在性判断（不触发数据库查询）；数据库不可用时
+    site_name 返回空串且不报错——保证数据库未就绪时安装页仍可正常打开。
+    """
+    site_name = ""
+    try:
+        site = db.scalar(select(SysConfig).where(SysConfig.config_key == "site.name"))
+        site_name = site.config_value if site else ""
+    except Exception as exc:  # noqa: BLE001 数据库不可用不阻塞安装页
+        logger.warning("初始化状态读取站点名称失败（数据库不可用）：%s", exc)
     return ok(
         {
             "initialized": is_initialized(),
-            "site_name": site.config_value if site else "",
+            "site_name": site_name,
         }
     )
 
 
 @router.post("")
-def do_init(req: InitReq, db: Session = Depends(get_db)) -> dict:
-    """执行初始化（公开，仅未初始化时可执行）：验证连接 → 写系统信息 → 保存配置 → 写标记文件。"""
+def do_init(req: InitReq) -> dict:
+    """执行初始化（公开，仅未初始化时可执行）：
+    验证连接（缺失/空库自动建库导入）→ 目标库写系统信息 → 保存配置 → 热切换连接 → 写标记文件。
+    """
     if is_initialized():
         raise BizError(E_PARAM, "系统已完成初始化，不能重复执行")
 
@@ -268,47 +314,66 @@ def do_init(req: InitReq, db: Session = Depends(get_db)) -> dict:
         raise BizError(E_PARAM, f"数据库连接失败：{db_err}")
     redis_err = _test_redis_conn(req.redis_host, req.redis_port, req.redis_password, req.redis_db)
 
-    role = db.scalar(select(SysRole).where(SysRole.code == SUPER_ADMIN_ROLE_CODE))
-    if role is None:
-        raise BizError(E_PARAM, "系统角色数据缺失，无法完成初始化")
-    admin = db.scalar(
-        select(SysUser).where(SysUser.role_id == role.id).order_by(SysUser.id).limit(1)
-    )
-    # 改名冲突校验：目标账号已被其他用户占用（含大小写不敏感的唯一约束由 DB 兜底）
-    conflict = db.scalar(
-        select(SysUser).where(
-            SysUser.username == req.admin_username,
-            SysUser.id != (admin.id if admin else -1),
-        )
-    )
-    if conflict is not None:
-        raise BizError(E_PARAM, f"管理员账号「{req.admin_username}」已被占用，请更换")
-
-    if admin:
-        admin.username = req.admin_username
-        admin.password_hash = hash_password(req.admin_password)
-        admin.real_name = "超级管理员"
-        admin.status = 1
-    else:
-        db.add(
-            SysUser(
-                username=req.admin_username,
-                password_hash=hash_password(req.admin_password),
-                real_name="超级管理员",
-                role_id=role.id,
-                status=1,
+    # 业务写入必须落在目标库（用户填写的库）：用独立会话，不使用启动时旧引擎，
+    # 否则安装表单的库与后端实际使用的库不一致（历史上曾把账号写进旧库）
+    target_engine, target_sm = _target_sessionmaker(req)
+    try:
+        with target_sm() as tdb:
+            role = tdb.scalar(select(SysRole).where(SysRole.code == SUPER_ADMIN_ROLE_CODE))
+            if role is None:
+                raise BizError(E_PARAM, "系统角色数据缺失，无法完成初始化")
+            admin = tdb.scalar(
+                select(SysUser).where(SysUser.role_id == role.id).order_by(SysUser.id).limit(1)
             )
-        )
-    _set_config(db, "site.name", req.site_name)
-    if req.contact_phone:
-        _set_config(db, "site.contact_phone", req.contact_phone)
-    db.commit()
+            # 改名冲突校验：目标账号已被其他用户占用（含大小写不敏感的唯一约束由 DB 兜底）
+            conflict = tdb.scalar(
+                select(SysUser).where(
+                    SysUser.username == req.admin_username,
+                    SysUser.id != (admin.id if admin else -1),
+                )
+            )
+            if conflict is not None:
+                raise BizError(E_PARAM, f"管理员账号「{req.admin_username}」已被占用，请更换")
+
+            if admin:
+                admin.username = req.admin_username
+                admin.password_hash = hash_password(req.admin_password)
+                admin.real_name = "超级管理员"
+                admin.status = 1
+            else:
+                tdb.add(
+                    SysUser(
+                        username=req.admin_username,
+                        password_hash=hash_password(req.admin_password),
+                        real_name="超级管理员",
+                        role_id=role.id,
+                        status=1,
+                    )
+                )
+            _set_config(tdb, "site.name", req.site_name)
+            if req.contact_phone:
+                _set_config(tdb, "site.contact_phone", req.contact_phone)
+            tdb.commit()
+    except BizError:
+        raise
+    except Exception as exc:  # noqa: BLE001 落库失败需返回可读原因
+        logger.error("初始化业务数据写入目标库失败：%s", exc)
+        raise BizError(E_PARAM, f"初始化数据写入目标库失败（{exc}）") from exc
+    finally:
+        target_engine.dispose()
+
     # 业务数据落库后再写 .env 与标记文件：标记文件存在 ⇔ 初始化数据已落库成功
     try:
         _write_env_config(req)
     except OSError as exc:
         logger.error("初始化配置写入 .env 失败：%s", exc)
         raise BizError(E_FILE_FAILED, f"数据库/Redis 配置写入 backend/.env 失败（{exc}），请检查目录写入权限后重试") from exc
+    # 热切换进程内连接到目标库：当前进程立即生效，无需重启后端
+    try:
+        _apply_runtime_config(_build_db_url(req), _build_redis_url(req))
+    except Exception as exc:  # noqa: BLE001 切换失败需给出可操作提示
+        logger.error("初始化后数据库热切换失败：%s", exc)
+        raise BizError(E_FILE_FAILED, f"配置已保存但数据库连接切换失败（{exc}），请重启后端后生效") from exc
     try:
         _write_mark_file()
     except OSError as exc:

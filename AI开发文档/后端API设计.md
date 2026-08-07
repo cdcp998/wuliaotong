@@ -60,6 +60,7 @@ POST /api/v1/auth/login
 - 校验：site_name 1-50 字符；admin_username 2-50 位（字母/数字/下划线/中划线）；admin_password ≥6 位（与注册规则一致）；db_user/db_name 必填（1-100 字符；**db_name 限字母/数字/下划线 `^[A-Za-z0-9_]+$`，防标识符注入，建库时反引号转义双保险**）；db_port/redis_port 1-65535；redis_db 0-15
 - 配置项默认值：db_host=`127.0.0.1`、db_port=`3306`、redis_host=`127.0.0.1`、redis_port=`6379`、redis_db=`0`、redis_password 空=无密码；**密码不回显**（接口不返回已保存配置）；db_password **接口层允许空串**（兼容无密码本地 MySQL，安装页前端必填）
 - 连接验证：DB 必须通过（含库名——**目标库不存在或为空时自动建库/导入 init.sql，无需手工建库；已有表的库仅验证连接，不自动导入表结构，避免破坏已有部署数据**）；Redis 失败仅提示（缓存层已设计优雅降级直查数据库，不阻塞业务）
+- 启动容错：**后端启动时的数据库自检失败仅告警不阻止启动**（数据库未就绪/未安装时仍可启动并进入安装页）；`GET /init/status` 在数据库不可用时返回 `site_name: ""` 不报错（initialized 仅由标记文件判断）；安装完成后数据库不可用即由业务接口/`/health`（`db: "down"`）如实暴露故障
 - 安全：接口只在未初始化时可用（防重入）；标记文件存在即拒绝再次初始化——**与数据库内容无关**（删库/重建库/备份恢复均不会重新进入初始化页）；写操作照常进审计日志（user_id=0）
 - 可靠性：标记文件在业务事务 commit 成功之后才写入 → **标记文件存在 ⇔ 初始化数据已落库**；写入失败返回 5003 且不谎报成功，可重试
 - 迁移：init.sql 不再含 sys.initialized 配置（该行已移除）；**已有部署库无需任何数据库操作**——删除标记文件即可重新进入初始化页（保留业务数据，仅重置超管密码与站点信息）；`backend/data/` 已 gitignore，标记文件不入库
@@ -195,7 +196,7 @@ OCR 结果示例（structured）：
 - GET /logs?username=&module=&method=&start=&end=&page= 操作日志（写操作审计查询）
 - GET /notifications?is_read=&page=、PUT /notifications/{id}/read、PUT /notifications/read-all、GET /notifications/unread-count
 - POST /backups（手动备份 mysqldump→gzip）、GET /backups、DELETE /backups/{id}、GET /backups/{id}/download（备份密码走 MYSQL_PWD 环境变量；每日 02:00 自动备份保留最近 14 份）
-- GET /health（服务 + 数据库/Redis 状态 + LLM 服务商状态 + 当前 OCR 引擎类型与状态，部署/运维用；Redis 不可用时返回 `redis: "down"` 且不影响业务降级直查数据库；`llm` 返回 doubao/deepseek/siliconflow 三家的 `{enabled, configured, model}`——只读 sys_config（启用开关 + Key 是否已配置 + 模型名），不做在线探测以免探活消耗配额）
+- GET /health（服务 + 数据库/Redis 状态 + LLM 服务商状态 + 当前 OCR 引擎类型与状态，部署/运维用；**数据库不可用时不报错——返回 `db: "down"`（安装完成前数据库未就绪属正常态，不阻塞启动与安装流程；安装完成后 db down 即视为故障）；**Redis 不可用时返回 `redis: "down"` 且不影响业务降级直查数据库；`llm` 返回 doubao/deepseek/siliconflow 三家的 `{enabled, configured, model}`——只读 sys_config（启用开关 + Key 是否已配置 + 模型名），不做在线探测以免探活消耗配额）
 
 ## 10. 权限点 code 清单（sys_permission 初始化数据）
 

@@ -97,10 +97,10 @@ export function InitPage() {
       });
       if (data.redis_connected === false) {
         message.warning(
-          `初始化完成，但 Redis 连接失败（${data.redis_warning ?? "未知原因"}），缓存将降级为直查数据库；保存的配置将在重启后端后生效。正在进入系统…`
+          `初始化完成，但 Redis 连接失败（${data.redis_warning ?? "未知原因"}），缓存将降级为直查数据库；数据库连接已切换，无需重启。正在进入系统…`
         );
       } else {
-        message.success("初始化完成！数据库/Redis 配置已保存至 backend/.env，重启后端服务后生效。正在进入系统…");
+        message.success("初始化完成！数据库连接已即时切换至新配置，无需重启后端。正在进入系统…");
       }
       await login(v.admin_username.trim(), v.admin_password);
       navigate("/app", { replace: true });
@@ -237,7 +237,7 @@ export function InitPage() {
               <Alert
                 type="info"
                 showIcon
-                title="Redis 为缓存加速层：连接失败不会阻止安装，系统将自动降级为直查数据库；保存的配置重启后端后生效。"
+                title="Redis 为缓存加速层：连接失败不会阻止安装，系统将自动降级为直查数据库。"
                 style={{ marginBottom: 12 }}
               />
               <Form.Item name="redis_host" label="Redis 地址" rules={[{ required: true, message: "请输入 Redis 地址" }]}>
@@ -303,7 +303,7 @@ export function InitPage() {
               <Alert
                 type="info"
                 showIcon
-                title="提交后将验证数据库/Redis 连接、保存配置并完成初始化，系统即刻可用（数据库/Redis 配置在重启后端后生效）。"
+                title="提交后将验证数据库/Redis 连接、保存配置并完成初始化，系统即刻可用（数据库连接即时生效，无需重启）。"
                 style={{ marginBottom: 8 }}
               />
             </div>
