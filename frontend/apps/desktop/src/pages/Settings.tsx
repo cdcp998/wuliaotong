@@ -58,7 +58,6 @@ const EMPTY: Settings = {
   "llm.doubao.enabled": "1",
   "llm.deepseek.enabled": "1",
   "bill.rule": "",
-  "image_pool.dir": "",
   "watermark.template": "",
   "watermark.position": "bottom",
   "watermark.bg_opaque": "1",
@@ -615,7 +614,7 @@ export function SettingsPage() {
         return <Tag color="green">正常 · 剩 {h.free_gb}G</Tag>;
       },
     },
-    { title: "文件数", dataIndex: "file_count", width: 70 },
+    { title: "已存文件", dataIndex: "file_count", width: 80 },
     {
       title: "操作",
       key: "op",
@@ -664,17 +663,16 @@ export function SettingsPage() {
 
       <Section
         icon={<HddOutlined />}
-        title="图片池与存储"
-        desc="图片池目录与多存储地址：上传文件按选择策略（最空闲 / 轮询 / 手动指定）落到不同存储位置。"
+        title="共用存储池"
+        desc="单据/OCR 图片等文件统一存放于共用存储池：可配置多个存储位置（本地目录/盘符），上传时按选择策略（最空闲 / 轮询 / 手动指定）自动落盘。"
         extra={storages.length > 0 ? <Tag color="blue">{storages.length} 个存储</Tag> : undefined}
       >
-        <Form.Item
-          name="image_pool.dir"
-          label="图片池目录"
-          extra="单据/OCR 图片统一存放目录，支持相对或绝对路径"
-        >
-          <Input style={{ maxWidth: 560 }} placeholder="如 data/files 或 D:\image_pool" />
-        </Form.Item>
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title="存储位置路径支持相对或绝对路径：相对路径以 backend/ 为基准（如 data/files），绝对路径如 D:\image_pool。"
+        />
         <Divider style={{ margin: "8px 0 16px" }} />
         <Space style={{ marginBottom: 12 }} wrap>
           <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => openStorageModal()}>
@@ -708,7 +706,7 @@ export function SettingsPage() {
               name="path"
               label="路径"
               rules={[{ required: true, message: "请输入路径" }]}
-              extra="绝对路径或相对 backend/ 的目录"
+              extra="绝对路径或相对 backend/ 的目录（如 data/files 或 D:\image_pool）"
             >
               <Input maxLength={500} placeholder="如 D:\image_pool 或 data/files" />
             </Form.Item>

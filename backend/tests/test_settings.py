@@ -135,15 +135,12 @@ def test_siliconflow_models_requires_key(monkeypatch):
     assert c.post("/api/v1/llm/deepseek/models").status_code == 403
 
 
-def test_settings_image_pool_dir_roundtrip():
-    """图片池目录设置项：GET 返回当前值（未配置为空串），PUT 保存后可读回；测试后恢复原值。"""
+def test_settings_image_pool_dir_removed():
+    """「图片池目录」配置项已移除（与共用存储池合并）：GET 不含该键、PUT 报未知配置项。"""
     _login_admin()
-    original = _raw_config("image_pool.dir")
-    try:
-        r = client.get("/api/v1/settings")
-        assert r.json()["code"] == 0
-        assert "image_pool.dir" in r.json()["data"]
-        assert client.put("/api/v1/settings", json={"image_pool.dir": "data/files"}).json()["code"] == 0
-        assert client.get("/api/v1/settings").json()["data"]["image_pool.dir"] == "data/files"
-    finally:
-        _restore_config("image_pool.dir", original)
+    r = client.get("/api/v1/settings")
+    assert r.json()["code"] == 0
+    assert "image_pool.dir" not in r.json()["data"]
+    r2 = client.put("/api/v1/settings", json={"image_pool.dir": "data/files"})
+    assert r2.json()["code"] == 4006
+    assert "未知配置项" in r2.json()["message"]

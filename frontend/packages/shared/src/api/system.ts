@@ -9,7 +9,6 @@ export interface Settings {
   "llm.doubao.enabled": string;
   "llm.deepseek.enabled": string;
   "bill.rule": string;
-  "image_pool.dir": string;
   "llm.doubao.api_key": string;
   "llm.doubao.base_url": string;
   "llm.doubao.model": string;

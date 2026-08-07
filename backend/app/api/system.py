@@ -44,7 +44,6 @@ SETTINGS_KEYS: dict[str, str] = {
     "llm.doubao.enabled": "str",  # 1 启用 / 0 关闭（关闭后拍照识别未匹配不再调用豆包分析并提示）
     "llm.deepseek.enabled": "str",  # 1 启用 / 0 关闭（关闭后送货单结构化仅用本地模板并提示）
     "bill.rule": "str",
-    "image_pool.dir": "str",  # 图片池目录（单据/OCR 图片等统一存放目录，可自定义）
     "llm.doubao.api_key": "secret",
     "llm.doubao.base_url": "str",
     "llm.doubao.model": "str",
