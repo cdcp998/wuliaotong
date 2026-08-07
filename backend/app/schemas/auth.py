@@ -9,6 +9,8 @@ class LoginReq(BaseModel):
     password: str = Field(min_length=1, max_length=100)
     captcha_id: str = Field(default="", max_length=64)
     captcha_code: str = Field(default="", max_length=8)
+    # 记住登录状态：True → 会话时长用 session_remember_hours（默认 30 天）；False → session_expire_hours（默认 8 小时）
+    remember: bool = False
 
 
 class PasswordReq(BaseModel):

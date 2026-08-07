@@ -18,7 +18,7 @@
 
 | 方法 | 路径 | 说明 | 权限 |
 |---|---|---|---|
-| POST | /auth/login | {username, password, captcha_id?, captcha_code?} → 写 session，返回用户信息；连续失败 3 次（10 分钟窗口）后必须带验证码（错误码 4007） | 公开 |
+| POST | /auth/login | {username, password, captcha_id?, captcha_code?, remember?} → 写 session，返回用户信息；连续失败 3 次（10 分钟窗口）后必须带验证码（错误码 4007）；**remember=true（勾选「记住登录状态」）时会话时长用 `SESSION_REMEMBER_HOURS`（默认 720 小时=30 天），否则用 `SESSION_EXPIRE_HOURS`（默认 8 小时）**，DB expire_at / Redis TTL / Cookie max-age 三处一致 | 公开 |
 | GET | /auth/captcha | 4 位数字+字母验证码图片（base64）→ {captcha_id, image} | 公开 |
 | POST | /auth/logout | 注销会话 | 登录 |
 | GET | /auth/me | 当前用户 + 角色 + 权限点列表 | 登录 |
@@ -41,10 +41,11 @@
 登录示例：
 ```
 POST /api/v1/auth/login
-{"username": "zhangsan", "password": "******"}
+{"username": "zhangsan", "password": "******", "remember": true}
 → 200 {"code": 0, "data": {"user": {"id": 1, "username": "zhangsan", "real_name": "张三",
      "role": {"id": 3, "code": "storekeeper", "name": "仓管员"},
      "permissions": ["stk:query", "pch:in", ...]}}}
+（remember 省略/为 false 时 Set-Cookie max-age=8h；为 true 时 max-age=720h）
 ```
 
 ## 1.1 系统初始化安装（首次启动引导）
@@ -194,7 +195,7 @@ OCR 结果示例（structured）：
 - GET /logs?username=&module=&method=&start=&end=&page= 操作日志（写操作审计查询）
 - GET /notifications?is_read=&page=、PUT /notifications/{id}/read、PUT /notifications/read-all、GET /notifications/unread-count
 - POST /backups（手动备份 mysqldump→gzip）、GET /backups、DELETE /backups/{id}、GET /backups/{id}/download（备份密码走 MYSQL_PWD 环境变量；每日 02:00 自动备份保留最近 14 份）
-- GET /health（服务 + 当前 OCR 引擎类型与状态，部署/运维用）
+- GET /health（服务 + 数据库/Redis 状态 + LLM 服务商状态 + 当前 OCR 引擎类型与状态，部署/运维用；Redis 不可用时返回 `redis: "down"` 且不影响业务降级直查数据库；`llm` 返回 doubao/deepseek/siliconflow 三家的 `{enabled, configured, model}`——只读 sys_config（启用开关 + Key 是否已配置 + 模型名），不做在线探测以免探活消耗配额）
 
 ## 10. 权限点 code 清单（sys_permission 初始化数据）
 

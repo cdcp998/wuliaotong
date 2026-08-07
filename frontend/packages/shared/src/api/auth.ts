@@ -37,8 +37,8 @@ export interface ForgotResult {
 }
 
 export const authApi = {
-  login: (username: string, password: string, captchaId = "", captchaCode = "") =>
-    http.post<LoginResp>("/auth/login", { username, password, captcha_id: captchaId, captcha_code: captchaCode }),
+  login: (username: string, password: string, captchaId = "", captchaCode = "", remember = false) =>
+    http.post<LoginResp>("/auth/login", { username, password, captcha_id: captchaId, captcha_code: captchaCode, remember }),
   logout: () => http.post<null>("/auth/logout"),
   me: () => http.get<{ user: UserInfo }>("/auth/me"),
   captcha: () => http.get<CaptchaData>("/auth/captcha"),

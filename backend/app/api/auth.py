@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.cache import session_delete, session_delete_all, session_set
 from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user
 from app.core.response import BizError, E_CAPTCHA, E_LOGIN_FAILED, E_PARAM, ok
 from app.core.security import generate_session_token, hash_password, verify_password
@@ -190,16 +191,21 @@ def login(req: LoginReq, response: Response, db: Session = Depends(get_db)) -> d
     _clear_fail(req.username)
     logger.info("登录成功 user=%s", req.username)
 
+    # 记住登录状态：勾选 → 长会话（默认 30 天）；未勾选 → 普通会话（默认 8 小时）
+    session_hours = settings.session_remember_hours if req.remember else settings.session_expire_hours
+
     token = generate_session_token()
     db.add(
         SysSession(
             session_id=token,
             user_id=user.id,
-            expire_at=datetime.now() + timedelta(hours=settings.session_expire_hours),
+            expire_at=datetime.now() + timedelta(hours=session_hours),
         )
     )
     user.last_login_at = datetime.now()
     db.commit()
+    # 双写 Redis：后续请求走缓存快路径（token→user_id，TTL=会话时长）
+    session_set(token, user.id, int(session_hours * 3600))
 
     response.set_cookie(
         settings.session_cookie_name,
@@ -207,7 +213,7 @@ def login(req: LoginReq, response: Response, db: Session = Depends(get_db)) -> d
         httponly=True,
         secure=settings.cookie_secure,
         samesite="lax",
-        max_age=int(settings.session_expire_hours * 3600),
+        max_age=int(session_hours * 3600),
     )
     return ok({"user": build_user_info(db, user)})
 
@@ -222,6 +228,7 @@ def logout(
     if token:
         db.execute(SysSession.__table__.delete().where(SysSession.session_id == token))
         db.commit()
+        session_delete(token)  # 同步删除 Redis 会话
     response.delete_cookie(settings.session_cookie_name)
     return ok()
 
@@ -250,6 +257,7 @@ def change_password(
         SysSession.__table__.delete().where(SysSession.user_id == user.id)
     )
     db.commit()
+    session_delete_all(user.id)  # Redis 同步失效该用户全部会话
     return ok()
 
 
@@ -305,6 +313,7 @@ def forgot_reset(req: ResetReq, db: Session = Depends(get_db)) -> dict:
         _reset_codes.pop(req.username, None)
     db.execute(SysSession.__table__.delete().where(SysSession.user_id == user.id))
     db.commit()
+    session_delete_all(user.id)  # Redis 同步失效该用户全部会话
     return ok({"message": "密码已重置，请使用新密码登录"})
 
 

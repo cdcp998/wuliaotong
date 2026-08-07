@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { Button, Form, Input, Toast } from "antd-mobile";
+import { Button, Checkbox, Form, Input, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
 import { authApi, BizError, initApi, otherEndInitUrl, otherEndUrl, useAuthStore, type RegisterStatus } from "@wlt/shared";
 
 type Mode = "login" | "forgot" | "reset" | "register";
 
-/** 登录页（手机端）：品牌区 + 表单；未初始化整页跳电脑端初始化安装页；已登录直进主页；失败 3 次需验证码；忘记密码/注册。 */
+/** 登录页（手机端）：品牌区 + 表单；未初始化整页跳电脑端初始化安装页；已登录直进主页；失败 3 次需验证码；记住登录状态；忘记密码/注册。 */
 export function LoginPage() {
   const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
@@ -14,6 +14,7 @@ export function LoginPage() {
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<Mode>("login");
+  const [remember, setRemember] = useState(true); // 记住登录状态（默认勾选，与电脑端「记住我」一致）
   const [needCaptcha, setNeedCaptcha] = useState(false);
   const [captchaId, setCaptchaId] = useState("");
   const [captchaImg, setCaptchaImg] = useState("");
@@ -53,7 +54,13 @@ export function LoginPage() {
 
   async function onSubmit(values: { username: string; password: string; captcha?: string }) {
     try {
-      await login(values.username, values.password, needCaptcha ? captchaId : "", needCaptcha ? (values.captcha ?? "") : "");
+      await login(
+        values.username,
+        values.password,
+        needCaptcha ? captchaId : "",
+        needCaptcha ? (values.captcha ?? "") : "",
+        remember,
+      );
       navigate("/", { replace: true });
     } catch (err) {
       if (err instanceof BizError && err.code === 4007) {
@@ -99,7 +106,7 @@ export function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column" }}>
+    <div className="wlt-login" style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column" }}>
       {/* 品牌区 */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "44px 0 8px" }}>
         <div
@@ -147,9 +154,11 @@ export function LoginPage() {
                 </div>
               </Form.Item>
             )}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, color: "#86909c", margin: "2px 2px 0" }}>
-              <span>记住登录状态</span>
-              <span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "2px 2px 0" }}>
+              <Checkbox checked={remember} onChange={(v) => setRemember(v)} style={{ "--icon-size": "18px", fontSize: 12.5, color: "#86909c" }}>
+                记住登录状态
+              </Checkbox>
+              <span style={{ fontSize: 12.5, color: "#86909c" }}>
                 <a onClick={() => setMode("forgot")} style={{ marginRight: 10 }}>忘记密码？</a>
                 {regStatus && regStatus.mode !== "closed" && <a onClick={() => setMode("register")}>注册账号</a>}
               </span>
@@ -173,7 +182,6 @@ export function LoginPage() {
             <Form.Item name="email" label="注册邮箱（邮箱找回时填写）">
               <Input placeholder="邮箱" clearable />
             </Form.Item>
-            <Button block size="small" fill="none" onClick={() => setMode("login")}>返回登录</Button>
           </Form>
         )}
 
@@ -201,7 +209,6 @@ export function LoginPage() {
             <Form.Item name="new_password" rules={[{ required: true, min: 6, message: "至少 6 位" }]}>
               <Input type="password" placeholder="新密码（至少 6 位）" clearable />
             </Form.Item>
-            <Button block size="small" fill="none" onClick={() => setMode("login")}>返回登录</Button>
           </Form>
         )}
 
@@ -227,8 +234,16 @@ export function LoginPage() {
             <div style={{ fontSize: 12, color: "#86909c", textAlign: "center", marginBottom: 10 }}>
               {regStatus?.mode === "review" ? "审核注册模式：提交后需管理员审核通过方可登录。" : "开放注册模式：注册即开通使用者账号。"}
             </div>
-            <Button block size="small" fill="none" onClick={() => setMode("login")}>返回登录</Button>
           </Form>
+        )}
+
+        {mode !== "login" && (
+          <div style={{ textAlign: "center", marginTop: 14 }}>
+            {/* 放在 Form 外，避免被渲染进列表导致左对齐错位；内边距保证触屏目标 ≥44px */}
+            <a onClick={() => setMode("login")} style={{ display: "inline-block", padding: "12px 24px", fontSize: 13, color: "#86909c" }}>
+              返回登录
+            </a>
+          </div>
         )}
 
         {mode === "login" && (

@@ -23,6 +23,8 @@ class Settings:
     # 会话
     session_cookie_name: str = os.getenv("SESSION_COOKIE_NAME", "session_id")
     session_expire_hours: float = float(os.getenv("SESSION_EXPIRE_HOURS", "8"))
+    # 「记住登录状态」勾选后的会话时长（默认 30 天）；不勾选用 session_expire_hours
+    session_remember_hours: float = float(os.getenv("SESSION_REMEMBER_HOURS", "720"))
     cookie_secure: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
     # Redis（缓存加速层；不可用时自动降级直查数据库，不阻塞业务）
