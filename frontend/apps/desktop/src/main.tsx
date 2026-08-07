@@ -7,6 +7,7 @@ import zhCN from "antd/locale/zh_CN";
 import { AppLayout } from "./components/AppLayout";
 import { RequireAuth } from "./components/RequireAuth";
 import { AiSuggestionsPage } from "./pages/AiSuggestions";
+import { AiLogsPage } from "./pages/AiLogs";
 import { BackupsPage } from "./pages/Backups";
 import { CheckDetailPage } from "./pages/CheckDetail";
 import { ChecksPage } from "./pages/Checks";
@@ -76,6 +77,7 @@ const router = createBrowserRouter(
   { path: "/stock", element: withLayout(<StockQueryPage />) },
   { path: "/ocr/delivery", element: withLayout(<DeliveryOcrPage />) },
   { path: "/ai-suggestions", element: withLayout(<AiSuggestionsPage />) },
+  { path: "/llm-logs", element: withLayout(<AiLogsPage />) },
   ],
   // v7 future flags：react-router 6.30.4 运行时支持 v7_startTransition（类型声明滞后，故断言）；消除 v7 迁移警告
   { future: { v7_startTransition: true, v7_relativeSplatPath: true, v7_fetcherPersist: true, v7_normalizeFormMethod: true, v7_partialHydration: true, v7_skipActionErrorRevalidation: true } as Record<string, boolean> }
