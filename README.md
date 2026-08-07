@@ -22,10 +22,12 @@
 ### OCR / 大模型（AI 赋能）
 - 本地 OCR：PaddleOCR（默认，可自动安装）/ RapidOCR-json 可切换；OCR 文本 **DeepSeek 纠错归一**后入匹配链路
 - 送货单识别入库：视觉模型（SiliconFlow `nex-agi/Nex-N2-Pro`）结构化（名称/物料编码/规格/单位/数量/单价/金额）+ DeepSeek 材料分类 → 人工确认 → 供应商落库（**本地别名归一**：简称/全称互相包含或前缀一致）→ 物料自动匹配/新增 → 带入入库
-- 商品拍照识别：本地 OCR → **本地模板匹配（秒级）** → 视觉模型结构化（品牌/名称/规格）→ 未匹配 AI 分析建议；**模板自动学习**（同一商品识别命中 3 次自动生成模板）
+- 商品拍照识别：本地 OCR → **本地模板匹配** → 视觉模型结构化（品牌/名称/规格）→ 未匹配 AI 分析建议；**模板自动学习**（同一商品识别命中 3 次自动生成模板）
 - 材料分类自动识别（`/ocr/classify`，名称+规格 → 系统分类，入库明细「分类」列可编辑）
 - 材料查重（本地相似规则分组 + 人工标记）、供应商名称归一（本地包含规则）+人工合并、领用审核辅助摘要（规则风险等级）、预警 AI 通知、报表 AI 月报摘要（P9）
 - **大模型调用日志**（`sys_llm_log` 全量记录输入/输出/耗时/成败，系统管理「AI 调用日志」页可查）
+- **兼容性标准**：大模型调用遵循 **OpenAI Chat Completions 兼容协议**（`POST {Base URL}/chat/completions` + Bearer 鉴权），视觉/文本/兜底三个模型槽位的 Base URL、API Key、模型名均可自由配置——支持 SiliconFlow、DeepSeek、火山方舟、通义、智谱等任意 OpenAI 兼容云服务商，也支持自建内网服务（vLLM / Ollama / 第三方网关等），不绑定特定供应商（系统设置 → OCR 与大模型）
+- **配额与预警**：配额获取与告警依赖服务商官方余额接口（仅 SiliconFlow / DeepSeek / 火山方舟提供）；其他兼容服务商可正常识别但无法获取配额（界面明确提示，不参与告警），阈值/收件人/获取间隔（默认 60 分钟，1~10080 分钟可自定义）均可配置，定时自动获取并检查，低于阈值自动发邮件
 
 ### 报表
 - 经营看板（今日/本周/本月出入库、预警、待办、7 日趋势）、进销存汇总（期初+入-出=结存）、库存报表（周转/呆滞）、Excel 导出、2D 货架图、盘点收发存导出
@@ -94,14 +96,27 @@
 
 ## 快速启动
 
+**一键启动（推荐）**：双击仓库根目录的 `启动后端.bat`（HTTPS 8443）、`启动桌面端.bat`（5174）、`启动手机端.bat`（5175），或 `一键启动全部.bat` 同时拉起三者（各占一个窗口，自动检查 venv/证书/npm，首次自动 `npm install`）。以下为手动命令（与启动器等价）：
+
 ```bash
 # 0. 启动 Redis（缓存层；本机已装为 Windows 服务 RedisWLT 可跳过）
 redis-server.exe redis.conf   # 或 sc start RedisWLT
 
-# 1. 生成开发者自签名证书（已生成则跳过）
-cd backend && mkdir -p certs/dev
-openssl req -x509 -newkey rsa:2048 -keyout certs/dev/key.pem -out certs/dev/cert.pem \
-  -days 365 -nodes -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+# 1. 生成开发者证书（本地 CA + 服务器证书，SAN 含 localhost/127.0.0.1/LAN IP；已生成则跳过）
+# Git bash 下需先 export MSYS_NO_PATHCONV=1（否则 /CN= 被转成 Windows 路径）
+cd backend && mkdir -p certs/dev && cd certs/dev
+export MSYS_NO_PATHCONV=1
+openssl genrsa -out ca-key.pem 2048
+openssl req -x509 -new -key ca-key.pem -days 3650 -subj "/CN=Wuliaotong Dev CA" -out ca.pem \
+  -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+openssl genrsa -out key.pem 2048
+openssl req -new -key key.pem -subj "/CN=<LAN_IP>" -out dev.csr
+printf '[v3_req]\nsubjectAltName=DNS:localhost,IP:127.0.0.1,IP:<LAN_IP>\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n' > dev-ext.cnf
+openssl x509 -req -in dev.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial -days 825 \
+  -out cert.pem -extfile dev-ext.cnf -extensions v3_req && rm dev.csr dev-ext.cnf ca.srl
+# 本机信任 CA（当前用户级，免管理员）：certutil -user -addstore -f Root ca.pem
+# 内网其他设备访问 https://<LAN_IP>:8443|5174|5175 时，需把 ca.pem 装到该设备受信任根
+# 更换证书后必须重启后端与两端 vite（证书在启动时加载，热替换不生效）
 
 # 2. 后端（HTTPS，端口 8443）
 cd backend
@@ -121,8 +136,9 @@ cd frontend && npm install
 npm run dev:desktop   # 电脑端
 npm run dev:mobile    # 手机端
 
-# 5. 浏览器访问（首次需信任自签名证书）
-# 电脑端 https://localhost:5174  手机端 https://localhost:5175
+# 5. 浏览器访问（首次需信任 ca.pem）
+# 本机：电脑端 https://localhost:5174  手机端 https://localhost:5175
+# 内网设备：https://<内网IP>:5174（电脑端）/ https://<内网IP>:5175（手机端）
 ```
 
 ## 生产部署（Windows + Nginx + HTTPS）
@@ -165,7 +181,7 @@ server { listen 80; server_name 你的域名; return 301 https://$host$request_u
 ## 测试样本（testdata）
 
 按用途分目录存放真实样本（详见《AI开发文档/AI赋能设计.md》样本数据章节）：
-`进货单/`（送货单识别基准）、`物品标签/`（商品识别与模板训练）、`匹配导出表格/`与`匹配导入表格/`（收发存模板对照）、`手写出货单/`（手写评估样本位，待补充）
+`进货单/`（送货单识别基准）、`物品标签/`（商品识别与模板训练）、`匹配导出表格/`与`匹配导入表格/`（收发存模板对照）、`手写出货单/`（手写评估样本位，待补充）、`条码测试/`（条码解码样本：EAN13/Code128/QR、无条码对照、小条码/模糊条码模拟实拍，含用户实拍照片 IMG_3055/3056，均可被服务端 zxing-cpp 解码）
 
 ## 本地资源（不入库，需自行放置）
 
