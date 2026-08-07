@@ -1,19 +1,26 @@
 import { useRef, useState } from "react";
-import { Button, Toast } from "antd-mobile";
+import { ActionSheet, Button, Toast } from "antd-mobile";
 
 import { fileApi, FileImage } from "@wlt/shared";
 
-/** 拍照/选图上传（可选）：返回 file_id，展示已拍缩略图。 */
+import { CameraAlbum } from "./CameraAlbum";
+
+/** 拍照/相册上传（可选）：返回 file_id，展示已拍缩略图。
+ * 拍照走 capture="environment" 直达相机，相册走不带 capture 的 input（移动端可正常选图）。 */
 export function PhotoUpload({
   bizType,
   fileId,
   onChange,
+  translucent,
 }: {
   bizType: string;
   fileId?: number;
   onChange: (fileId: number | undefined) => void;
+  /** 半透明按钮样式（透传给 CameraAlbum，默认 false）。 */
+  translucent?: boolean;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const camRef = useRef<HTMLInputElement>(null);
+  const albRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(
     fileId ? `/api/v1/files/${fileId}` : null
   );
@@ -29,15 +36,37 @@ export function PhotoUpload({
     }
   }
 
+  /** 重拍：拍照 / 相册二选一。 */
+  function retake() {
+    ActionSheet.show({
+      actions: [
+        { key: "camera", text: "📷 拍照" },
+        { key: "album", text: "🖼 从相册选择" },
+      ],
+      cancelText: "取消",
+      onAction: (a) => {
+        if (a.key === "camera") camRef.current?.click();
+        else if (a.key === "album") albRef.current?.click();
+      },
+    });
+  }
+
   return (
     <div>
       <input
-        ref={inputRef}
+        ref={camRef}
         type="file"
         accept="image/*"
         capture="environment"
         style={{ display: "none" }}
-        onChange={(e) => void handleFile(e.target.files?.[0])}
+        onChange={(e) => { void handleFile(e.target.files?.[0]); e.target.value = ""; }}
+      />
+      <input
+        ref={albRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => { void handleFile(e.target.files?.[0]); e.target.value = ""; }}
       />
       {preview ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -51,13 +80,14 @@ export function PhotoUpload({
               onChange(undefined);
             }}
           >
+            删除
+          </Button>
+          <Button size="mini" fill="outline" onClick={retake}>
             重拍
           </Button>
         </div>
       ) : (
-        <Button size="mini" fill="outline" onClick={() => inputRef.current?.click()}>
-          拍照记录(可选)
-        </Button>
+        <CameraAlbum translucent={translucent} onPick={(f) => void handleFile(f)} />
       )}
     </div>
   );
