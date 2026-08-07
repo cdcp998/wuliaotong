@@ -7,6 +7,19 @@ import type { ReaderOptions } from "zxing-wasm/reader";
 // zxing-cpp WASM 以静态资源导入（带 hash、自动 base 前缀，与 JS 同目录，部署必配）
 import zxingWasmUrl from "../assets/zxing_reader.wasm?url";
 
+/** 底部操作按钮：半透明玻璃文字框（blur 需 -webkit- 前缀兼容 iOS Safari；触屏高度 ≥44px）。 */
+const actionPillStyle: React.CSSProperties = {
+  minHeight: 44,
+  padding: "0 18px",
+  background: "rgba(0,0,0,.38)",
+  border: "1px solid rgba(255,255,255,.22)",
+  borderRadius: 999,
+  color: "#fff",
+  fontSize: 14,
+  backdropFilter: "blur(10px)",
+  WebkitBackdropFilter: "blur(10px)",
+};
+
 /** 条码扫描模块：摄像头实时扫码（zxing-cpp WASM 解码，与服务端同源，EAN/CODE128/QR 等全格式）。
  * 摄像头不可用/权限拒绝/非 HTTPS → 自动退化为拍照/相册选图 → 服务端解码。 */
 export function BarcodeScanner({
@@ -175,7 +188,7 @@ export function BarcodeScanner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  /** 手电筒（尽力而为：部分设备/浏览器不支持）。 */
+  /** 闪光灯（torch 约束，尽力而为：部分设备/浏览器不支持）。 */
   async function toggleTorch() {
     const track = streamRef.current?.getVideoTracks()[0];
     if (!track) {
@@ -186,7 +199,7 @@ export function BarcodeScanner({
       await track.applyConstraints({ advanced: [{ torch: !torchOn }] } as unknown as MediaTrackConstraints);
       setTorchOn((v) => !v);
     } catch {
-      Toast.show("当前设备不支持手电筒");
+      Toast.show("当前设备不支持闪光灯");
     }
   }
 
@@ -270,14 +283,22 @@ export function BarcodeScanner({
           </NavBar>
         </div>
         <div style={{ position: "absolute", bottom: 28, left: 0, right: 0, display: "flex", gap: 12, justifyContent: "center" }}>
-          <Button style={{ minWidth: 96 }} disabled={!cameraOk} onClick={() => void toggleTorch()}>
-            {torchOn ? "🔦 关闭" : "🔦 手电筒"}
+          <Button
+            style={{
+              ...actionPillStyle,
+              opacity: cameraOk ? 1 : 0.45, // 摄像头未开启时置灰（保持 disabled 不可点）
+              ...(torchOn ? { background: "rgba(255,255,255,.30)", borderColor: "rgba(255,255,255,.65)" } : {}), // 开启态高亮
+            }}
+            disabled={!cameraOk}
+            onClick={() => void toggleTorch()}
+          >
+            {torchOn ? "关闭闪光灯" : "打开闪光灯"}
           </Button>
-          <Button style={{ minWidth: 96 }} onClick={() => camRef.current?.click()}>
-            📷 拍照
+          <Button style={actionPillStyle} onClick={() => camRef.current?.click()}>
+            拍照
           </Button>
-          <Button style={{ minWidth: 96 }} loading={decoding} onClick={() => albRef.current?.click()}>
-            🖼 相册
+          <Button style={actionPillStyle} loading={decoding} onClick={() => albRef.current?.click()}>
+            相册
           </Button>
         </div>
         <input
