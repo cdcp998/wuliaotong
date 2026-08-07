@@ -1,0 +1,242 @@
+/* ==========================================================================
+ * 物料通电脑端 —— 移动端适配样式（响应式）
+ * 设计依据：《前端设计.md》§2.3 电脑端的移动适配
+ *
+ * 约束与策略：
+ * 1. 本文件【不修改】任何原有桌面端样式：全部规则包裹在 @media 内，
+ *    桌面宽度（>768px）下不产生任何覆盖，切回桌面尺寸自动恢复原效果。
+ * 2. 页面大量使用内联样式（style={{...}}），内联样式优先级高于样式表，
+ *    需要覆盖处使用 !important，且仅在媒体查询内生效。
+ * 3. 仅依赖 Antd 组件稳定类名（.ant-layout-* / .ant-table / .ant-modal 等），
+ *    不依赖任何页面自定义类名；未改动任何 HTML 结构。
+ * ========================================================================== */
+
+/* ---------- 手机 / 小平板竖屏：主适配 ---------- */
+@media (max-width: 768px) {
+  /* 1. 基础兜底：禁止页面级横向滚动；图片/表格内容在各自容器内滚动 */
+  html,
+  body {
+    overflow-x: hidden;
+  }
+  img {
+    max-width: 100% !important;
+  }
+  /* iOS Safari：输入框字号 <16px 聚焦时自动放大页面，统一提为 16px 消除该行为 */
+  .ant-input,
+  .ant-input-affix-wrapper input,
+  .ant-input-number-input,
+  .ant-picker-input input,
+  .ant-select-selection-search-input {
+    font-size: 16px;
+  }
+  .ant-layout-content table {
+    font-size: 12px;
+  }
+
+  /* 2. 应用骨架：侧边导航改为固定浮层（抽屉式），收起时 64px 图标栏，内容区全宽 */
+  .ant-layout-sider {
+    position: fixed !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    height: 100% !important;
+    z-index: 1000;
+    box-shadow: 0 0 24px rgba(31, 35, 41, 0.25) !important;
+  }
+  .ant-layout-sider-children {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  /* 菜单超高时内部滚动，不撑破固定侧栏 */
+  .ant-layout-sider .ant-menu {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* 顶栏：压缩水平间距；搜索框让出弹性宽度 */
+  .ant-layout-header {
+    padding: 0 10px !important;
+    gap: 8px !important;
+  }
+  .ant-layout-header .ant-input-search {
+    width: auto !important;
+    flex: 1;
+    min-width: 60px;
+    max-width: 220px;
+  }
+  /* 顶栏用户区只保留头像，隐藏姓名/角色文字，为窄屏让出空间 */
+  .ant-layout-header .ant-dropdown-trigger > div > div:last-child {
+    display: none;
+  }
+
+  /* 3. 内容区：收窄页面留白，窄屏下内容更宽 */
+  .ant-layout-content {
+    overflow-x: hidden;
+  }
+  .ant-layout-content > div {
+    padding: 12px !important;
+  }
+  .ant-layout-content h2 {
+    font-size: 17px !important;
+  }
+
+  /* 4. 栅格：Row/Col 全部单列（桌面 span 布局在窄屏必然过挤） */
+  .ant-col {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+  }
+  .ant-row {
+    row-gap: 12px !important;
+  }
+
+  /* 5. 表格：内容横向滚动 + 紧凑单元格，保证不撑破屏幕 */
+  .ant-table {
+    font-size: 12px;
+  }
+  .ant-table-container,
+  .ant-table-content,
+  .ant-table-body {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ant-table-thead > tr > th,
+  .ant-table-tbody > tr > td {
+    padding: 8px 6px !important;
+  }
+  .ant-table-tbody > tr > td {
+    word-break: break-word;
+  }
+  /* 分页：窄屏允许换行并居中 */
+  .ant-pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 4px;
+  }
+
+  /* 6. 表单：表单项强制全宽（覆盖内联固定宽度），避免窄屏溢出 */
+  .ant-form-item {
+    width: 100% !important;
+    margin-bottom: 14px !important;
+  }
+  .ant-form-item-label > label {
+    font-size: 13px;
+  }
+  /* 输入控件窄屏宽度兜底（工具栏固定宽度搜索/选择器等） */
+  .ant-layout-content .ant-input-search,
+  .ant-layout-content .ant-input-affix-wrapper,
+  .ant-layout-content .ant-select,
+  .ant-layout-content .ant-picker,
+  .ant-layout-content .ant-input-number {
+    max-width: 100% !important;
+  }
+
+  /* 7. 弹窗 / 抽屉：全宽自适应（覆盖内联 width，如 620/640 弹窗） */
+  .ant-modal {
+    max-width: calc(100vw - 20px) !important;
+    margin: 0 auto !important;
+    top: 16px;
+    padding-bottom: 16px;
+  }
+  .ant-modal-content {
+    padding: 16px !important;
+  }
+  .ant-modal-header {
+    margin-bottom: 12px !important;
+  }
+  .ant-drawer-content-wrapper {
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+
+  /* 8. 详情描述 / 统计卡片：窄屏字号与内边距收紧 */
+  .ant-descriptions-item-label,
+  .ant-descriptions-item-content {
+    padding: 6px 8px !important;
+    font-size: 12.5px !important;
+  }
+  .ant-statistic-content {
+    font-size: 20px !important;
+  }
+  .ant-statistic-title {
+    font-size: 12px !important;
+  }
+
+  /* 9. 触屏目标：主按钮加高（开发规范 §5.6 触屏目标 ≥44px；
+   *    表格内小按钮 / 文字按钮 / 搜索按钮保持原尺寸以免破坏紧凑布局） */
+  .ant-btn:not(.ant-btn-sm):not(.ant-btn-text):not(.ant-btn-link):not(.ant-input-search-button) {
+    min-height: 44px;
+  }
+
+  /* 10. 工具条兜底：内联 flex 容器允许换行（覆盖"搜索框+按钮"挤一行的场景） */
+  .ant-layout-content [style*="display:flex"],
+  .ant-layout-content [style*="display: flex"] {
+    flex-wrap: wrap !important;
+  }
+  .ant-space {
+    flex-wrap: wrap !important;
+  }
+
+  /* 11. 下拉弹层（站内通知等固定宽度面板）窄屏收窄 */
+  .ant-dropdown {
+    max-width: calc(100vw - 16px) !important;
+  }
+  .ant-dropdown div[style*="width:340px"] {
+    width: calc(100vw - 32px) !important;
+  }
+
+  /* 12. 登录 / 初始化安装页（双栏：品牌区 + 表单区）：改为上下布局。
+   * 注意：不依赖 #root 的直接子层级（React Router 的 RouterProvider 会在
+   * #root 下再包一层无 class 的 div），统一用"渐变品牌区"定位：
+   * - 登录根 = 品牌区的父容器（:has 直接子匹配）
+   * - 表单区 = 品牌区的兄弟 */
+  #root div:has(> div[style*="linear-gradient"]) {
+    flex-direction: column;
+  }
+  /* 品牌区：压缩为顶部条带 */
+  #root div[style*="linear-gradient"] {
+    flex: none !important;
+    padding: 20px 20px 12px !important;
+  }
+  #root div[style*="linear-gradient"] > div:first-child {
+    margin-bottom: 10px !important;
+  }
+  #root div[style*="linear-gradient"] h1 {
+    font-size: 19px !important;
+    line-height: 1.5 !important;
+  }
+  #root div[style*="linear-gradient"] p {
+    display: none;
+  }
+  /* 表单区（品牌区的兄弟）：占满剩余宽度 */
+  #root div[style*="linear-gradient"] + div {
+    flex: none !important;
+    padding: 20px 16px 28px !important;
+  }
+  #root div[style*="linear-gradient"] + div > div {
+    width: 100% !important;
+    max-width: 420px;
+  }
+
+  /* 13. 入口选择页（Landing）：居中内容防贴边（兼容包装层级） */
+  #root > div:has(> h2),
+  #root > div > div:has(> h2) {
+    padding: 24px 16px;
+    text-align: center;
+  }
+}
+
+/* ---------- 小屏手机微调 ---------- */
+@media (max-width: 575px) {
+  .ant-card-body {
+    padding: 14px !important;
+  }
+}
+
+/* ---------- 超窄屏（≤400px，如 iPhone SE 一代）：顶栏只保留核心操作 ---------- */
+@media (max-width: 400px) {
+  .ant-layout-header .ant-input-search {
+    display: none;
+  }
+}

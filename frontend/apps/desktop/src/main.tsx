@@ -4,6 +4,9 @@ import { RouterProvider, createBrowserRouter, Navigate } from "react-router";
 import { App as AntApp, ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 
+// 移动端适配（响应式）样式：全部规则位于 @media 内，桌面宽度下不生效（《前端设计.md》§2.3）
+import "./mobile.css";
+
 import { AppLayout } from "./components/AppLayout";
 import { RequireAuth } from "./components/RequireAuth";
 import { AiSuggestionsPage } from "./pages/AiSuggestions";
