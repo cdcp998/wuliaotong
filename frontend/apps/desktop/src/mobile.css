@@ -131,10 +131,19 @@
     row-gap: 4px;
   }
 
-  /* 6. 表单：表单项强制全宽（覆盖内联固定宽度），避免窄屏溢出 */
+  /* 6. 表单：表单项强制全宽（覆盖内联固定宽度），避免窄屏溢出。
+   * 表单用 <Space> 包裹表单项时 Space 是 flex 容器，内联 width 会被
+   * shrink 压缩成窄轨道（如 320→267、120→79），需让 Space 纵向单列 */
   .ant-form-item {
     width: 100% !important;
     margin-bottom: 14px !important;
+  }
+  .ant-form > .ant-space {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .ant-form > .ant-space > .ant-space-item {
+    width: 100% !important;
   }
   .ant-form-item-label > label {
     font-size: 13px;
@@ -161,6 +170,12 @@
   .ant-modal-header {
     margin-bottom: 12px !important;
   }
+  /* 弹窗内容区限高滚动：表单弹窗在手机上不再超高，底部操作按钮始终可见 */
+  .ant-modal-body {
+    max-height: calc(100vh - 150px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   .ant-drawer-content-wrapper {
     width: 100% !important;
     max-width: 100vw !important;
@@ -180,9 +195,18 @@
   }
 
   /* 9. 触屏目标：主按钮加高（开发规范 §5.6 触屏目标 ≥44px；
-   *    表格内小按钮 / 文字按钮 / 搜索按钮保持原尺寸以免破坏紧凑布局） */
+   *    表格内小按钮 / 文字按钮 / 搜索按钮保持原尺寸以免破坏紧凑布局）。
+   *    输入控件（输入框/选择器/日期/数字）同步统一 44px 高度，与按钮对齐不参差 */
   .ant-btn:not(.ant-btn-sm):not(.ant-btn-text):not(.ant-btn-link):not(.ant-input-search-button) {
     min-height: 44px;
+  }
+  .ant-layout-content .ant-input:not(.ant-input-sm),
+  .ant-layout-content .ant-input-affix-wrapper:not(.ant-input-affix-wrapper-sm),
+  .ant-layout-content .ant-select:not(.ant-select-sm) .ant-select-selector,
+  .ant-layout-content .ant-picker:not(.ant-picker-sm),
+  .ant-layout-content .ant-input-number:not(.ant-input-number-sm),
+  .ant-layout-content .ant-input-number:not(.ant-input-number-sm) .ant-input-number-input {
+    min-height: 44px !important;
   }
 
   /* 10. 工具条兜底：内联 flex 容器允许换行（覆盖"搜索框+按钮"挤一行的场景） */
