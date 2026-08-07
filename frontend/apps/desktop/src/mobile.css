@@ -55,8 +55,10 @@
     flex-direction: column;
     height: 100%;
   }
-  /* 菜单超高时内部滚动，不撑破固定侧栏 */
-  .ant-layout-sider .ant-menu {
+  /* 菜单超高时内部滚动，不撑破固定侧栏；仅展开态需要滚动——
+   * 折叠态（垂直图标模式）子菜单弹层 absolute 定位在菜单容器内，
+   * 若设 overflow 会被裁剪导致弹层无法显示/选择 */
+  .ant-layout-sider:not(.ant-layout-sider-collapsed) .ant-menu {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -73,8 +75,9 @@
     min-width: 60px;
     max-width: 220px;
   }
-  /* 顶栏用户区只保留头像，隐藏姓名/角色文字，为窄屏让出空间 */
-  .ant-layout-header .ant-dropdown-trigger > div > div:last-child {
+  /* 顶栏用户区只保留头像，隐藏姓名/角色文字，为窄屏让出空间
+   * （结构：div.ant-dropdown-trigger > [头像div, 文字块div]） */
+  .ant-layout-header .ant-dropdown-trigger > div:last-child {
     display: none;
   }
 
@@ -98,7 +101,9 @@
     row-gap: 12px !important;
   }
 
-  /* 5. 表格：内容横向滚动 + 紧凑单元格，保证不撑破屏幕 */
+  /* 5. 表格：内容横向滚动 + 紧凑单元格，保证不撑破屏幕。
+   * antd Table 未传 scroll.x 时列宽仅作建议（auto 布局），窄容器下列会被压缩；
+   * 移动端改用 fixed 布局让列宽（colgroup/th width）真正生效，超出容器即可横向滚动 */
   .ant-table {
     font-size: 12px;
   }
@@ -107,6 +112,10 @@
   .ant-table-body {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
+  }
+  .ant-table-content table,
+  .ant-table-container table {
+    table-layout: fixed !important;
   }
   .ant-table-thead > tr > th,
   .ant-table-tbody > tr > td {
@@ -185,12 +194,20 @@
     flex-wrap: wrap !important;
   }
 
-  /* 11. 下拉弹层（站内通知等固定宽度面板）窄屏收窄 */
+  /* 11. 下拉弹层（站内通知等固定宽度面板）窄屏收窄。
+   * - 弹层强制贴视口右缘（覆盖 antd 内联定位），340px 固定宽面板不再左缘出屏；
+   * - React 序列化内联 style 为 "width: 340px"（冒号后有空格），
+   *   属性选择器需用带空格的变体才能匹配 */
   .ant-dropdown {
     max-width: calc(100vw - 16px) !important;
+    left: auto !important;
+    right: 8px !important;
   }
+  .ant-dropdown div[style*="width: 340px"],
   .ant-dropdown div[style*="width:340px"] {
-    width: calc(100vw - 32px) !important;
+    width: min(340px, calc(100vw - 24px)) !important;
+    max-height: min(70vh, 560px);
+    overflow-y: auto;
   }
 
   /* 12. 登录 / 初始化安装页（双栏：品牌区 + 表单区）：改为上下布局。

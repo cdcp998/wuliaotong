@@ -224,6 +224,31 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
     return hit ?? "/dashboard";
   }, [location.pathname]);
 
+  // 当前路由所属分类 key（移动端只展开当前分类，避免全部分类铺开）
+  const currentGroupKey = useMemo(
+    () => MENU.find((g) => (g.children ?? []).some((c) => c.key === selectedKey))?.key,
+    [selectedKey]
+  );
+
+  // 菜单展开状态（受控）：桌面默认全部分类展开（原设计）；移动端只展开当前分类，
+  // 路径切换时跟随（收起侧栏再展开不会回到"全部展开"）
+  const [openKeys, setOpenKeys] = useState<string[]>(() => {
+    const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
+    if (isMobile && currentGroupKey) return [currentGroupKey];
+    return MENU.map((g) => g.key);
+  });
+
+  useEffect(() => {
+    if (window.innerWidth <= 768 && currentGroupKey) {
+      setOpenKeys((prev) => (prev.includes(currentGroupKey) ? prev : [...prev, currentGroupKey]));
+    }
+  }, [currentGroupKey]);
+
+  /** 移动端（≤768px）：跳转后自动收起侧栏，避免展开态遮住目标页面。 */
+  function collapseOnMobile() {
+    if (window.innerWidth <= 768) setCollapsed(true);
+  }
+
   return (
     <>
       <Layout style={{ minHeight: "100vh" }}>
@@ -271,6 +296,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
               onSelect={(v) => {
                 navigate(v);
                 setNavKw("");
+                collapseOnMobile();
               }}
               placeholder="搜索导航…"
               allowClear
@@ -280,12 +306,12 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
         <Menu
           mode="inline"
           items={menuItems}
-          defaultOpenKeys={MENU.map((g) => g.key)}
+          openKeys={openKeys}
+          onOpenChange={setOpenKeys}
           selectedKeys={[selectedKey]}
           onClick={({ key }) => {
             navigate(key);
-            // 移动端点击导航后自动收起侧栏（抽屉式交互），避免展开态遮住新页面内容
-            if (window.innerWidth <= 768) setCollapsed(true);
+            collapseOnMobile();
           }}
           style={{ borderInlineEnd: "none", padding: "8px 0" }}
         />
@@ -309,7 +335,10 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
             allowClear
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onSearch={(v) => navigate(`/stock?keyword=${encodeURIComponent(v)}`)}
+            onSearch={(v) => {
+              navigate(`/stock?keyword=${encodeURIComponent(v)}`);
+              collapseOnMobile();
+            }}
             style={{ width: 260, marginLeft: 8 }}
           />
           <div style={{ flex: 1 }} />
