@@ -249,6 +249,10 @@ def test_notification_flow():
         db.commit()
     finally:
         db.close()
+    # 直接 DB 插入不走 API 写路径，需显式失效 unread 缓存（30s TTL），否则接口读到旧值
+    from app.core.cache import cache_delete
+
+    cache_delete(f"notify:unread:{uid}")
     # 未读数 + 已读标记
     cnt = c.get("/api/v1/notifications/unread-count").json()["data"]["unread_count"]
     assert cnt >= 1

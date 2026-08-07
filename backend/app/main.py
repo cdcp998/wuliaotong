@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api import auth as auth_api
 from app.api import admin as admin_api
@@ -30,6 +31,8 @@ from app.api import system as system_api
 from app.config import settings
 from app.core.deps import resolve_session_user
 from app.core.logging_config import configure_logging, set_log_level
+from app.core.loop_guard import install_loop_guard, install_proactor_accept_patch
+from app.core.ratelimit import RateLimitMiddleware
 from app.core.response import BizError, E_PARAM, biz_error_handler, err
 from app.db import SessionLocal, engine
 from app.models.sys import SysConfig
@@ -41,6 +44,12 @@ logger = logging.getLogger("app.main")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """启动自检：数据库连通性（失败仅告警不阻止启动——数据库未就绪/未安装时仍可进入安装流程）；初始化运行时日志；启动定时任务。"""
+    # Windows Proactor：客户端强制断开时 asyncio 回调抛 ConnectionResetError(10054) 会冒泡为
+    # 未处理异常（Python 3.13 stdlib 未捕获 OSError），安装过滤器仅静默该良性模式（app/core/loop_guard.py）
+    install_loop_guard()
+    # Proactor accept 加固：客户端在 accept 完成前断开时 stdlib 会关闭监听 socket、服务停止
+    # 接受新连接，补丁改为短暂退避后重挂 accept（app/core/loop_guard.py）
+    install_proactor_accept_patch()
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -74,14 +83,6 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 app.add_exception_handler(BizError, biz_error_handler)
@@ -122,7 +123,6 @@ def _audit_log(db, request: Request, status_code: int, duration_ms: int) -> None
         db.rollback()
 
 
-@app.middleware("http")
 async def audit_middleware(request: Request, call_next):
     start = time.time()
     try:
@@ -145,6 +145,19 @@ async def audit_middleware(request: Request, call_next):
 
         asyncio.get_event_loop().run_in_executor(None, _run)
     return response
+
+
+# 中间件注册顺序决定执行顺序（后注册者更靠外层）：CORS（跨域头）→ 限流（反刷屏）→ 审计（最内层）。
+# 被限请求在审计之前直接 429 返回：不写操作日志，避免洪泛放大审计 DB 写；/health 豁免见 app/core/ratelimit.py
+app.add_middleware(BaseHTTPMiddleware, dispatch=audit_middleware)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 app.include_router(auth_api.router, prefix=settings.api_prefix)

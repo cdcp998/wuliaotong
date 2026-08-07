@@ -1,15 +1,29 @@
 """预警通知正文测试（P9-P0④ 本地规则版，L2 门禁）：规则拼接含关键数据，不调大模型。"""
+import uuid
 from decimal import Decimal
 
 from sqlalchemy import select
 
 from app.db import SessionLocal
-from app.models.base import BaseProduct
+from app.models.base import BaseProduct, BaseUnit
 from app.services.ai import alert_text
 
 
 def _any_product(db) -> BaseProduct:
-    return db.scalar(select(BaseProduct).limit(1))
+    p = db.scalar(select(BaseProduct).limit(1))
+    if p is not None:
+        return p
+    # 库为空（测试自动清理后）时自建一个，避免依赖其他测试的残留数据；测试后由清理器移除
+    unit = db.scalar(select(BaseUnit).limit(1))
+    p = BaseProduct(
+        code="9" + str(uuid.uuid4().int % 10**9),
+        name="预警文案测试物料",
+        unit_id=unit.id if unit else 1,
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
 
 
 def test_alert_text_rule_based():

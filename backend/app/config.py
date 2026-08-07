@@ -27,6 +27,11 @@ class Settings:
     session_remember_hours: float = float(os.getenv("SESSION_REMEMBER_HOURS", "720"))
     cookie_secure: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
+    # 接口限流（反刷屏/反垃圾）：每 IP 滑动窗口；超限返回 HTTP 429 + 错误码 4008（《后端API设计.md》§11.12）
+    rate_limit_enabled: bool = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
+    rate_limit_requests: int = int(os.getenv("RATE_LIMIT_REQUESTS", "300"))
+    rate_limit_window_seconds: float = float(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+
     # Redis（缓存加速层；不可用时自动降级直查数据库，不阻塞业务）
     redis_url: str = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 

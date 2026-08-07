@@ -26,3 +26,12 @@ def ensure_tester_user():
     finally:
         db.close()
     yield
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """每个用例前重置限流计数：限流按 IP 计数，跨用例累计会误伤全量测试。"""
+    from app.core import ratelimit
+
+    ratelimit.limiter.clear()
+    yield

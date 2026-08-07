@@ -4,14 +4,14 @@ import uuid
 from sqlalchemy import select
 
 from app.db import SessionLocal
-from app.models.base import BaseProduct
+from app.models.base import BaseProduct, BaseUnit
 from app.services.ai import dedupe
 
 
 def test_exact_name_group():
     tag = uuid.uuid4().hex[:6]
     with SessionLocal() as db:
-        unit = db.scalar(select(BaseProduct).limit(1)).unit_id
+        unit = db.scalar(select(BaseUnit).limit(1)).id  # 单位是种子数据，不依赖其他测试的商品残留
         p1 = BaseProduct(code="9" + str(int(tag, 16) % 10**9), name=f"查重材料{tag}", unit_id=unit)
         p2 = BaseProduct(code="9" + str(int(tag, 16) % 10**9 + 1), name=f"查重材料{tag}", unit_id=unit)
         db.add_all([p1, p2])

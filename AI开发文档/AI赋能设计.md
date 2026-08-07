@@ -194,6 +194,59 @@
 
 ---
 
+## P9-⑪ 识图/生图模型辅助本地 OCR 模板训练（AI 合成训练流水线，2026-08-08 追加）
+
+**需求**：当前模板训练依赖「真实样本图 + 视觉模型识别」——商品模板需人工上传样本调用 `/ocr/template/train`；送货单为固定规则模板 + 通用解析；训练样本虽有归档（`data/ocr_training/送货单/`）但无自动标注/校验/扩充手段。要求：调用**识图模型**与**生图模型**作为**训练辅助**，自动化生成、标注、校验训练数据并喂入本地 OCR 模板训练；**本地 OCR 仍是唯一识别执行体**（不替换为云端 OCR，外部模型只参与训练环节）。
+
+### 现状分析（本地 OCR 模板训练链路）
+
+| 环节 | 现状 | 瓶颈 |
+|---|---|---|
+| 商品识别模板 | `/ocr/template/train`：上传 1 张样本 → SiliconFlow/豆包视觉识别 {name/brand/spec} → `build_anchors` 生成锚点模板存 `sys_config(ocr.product_templates)` → 本地 OCR 文本命中全部锚点即匹配（秒级、离线）| ① 依赖人工提供样本图，样本量=模板量，无数据扩充；② 单样本训练、无校验——锚点若含本地 OCR 读不出的文本，模板形同虚设 |
+| 送货单模板 | 固定版式规则 `template.py`（9~15 位物料编码锚点）+ 新格式通用解析 `generic_parser.py`（利用 OCR 行坐标）+ 视觉/DeepSeek 兜底（四级回退链）| 规则由人工从真实样本归纳，改版式需人工改代码；无自动评估/回归手段 |
+| 样本归档 | `sample_archive.py` 归档真实送货单原图 + 结构化结果（best-effort）| 只收集不利用：无自动标注、无质量筛选、无合成扩充 |
+
+### 识图/生图模型能力评估
+
+**识图模型（已接入：SiliconFlow → 豆包，OpenAI 兼容 chat/completions，可复用）**：
+1. **自动标注**：对归档/合成样本输出结构化 JSON（供应商/单号/明细；品牌/规格/名称），作为模板训练的标注数据；
+2. **样本校验与校正**：与 ground-truth/本地 OCR 对比，纠正 OCR 错字、剔除低质量样本（数据清洗，防污染训练集）；
+3. **锚点提取**：从合成标签图提取品牌/规格/名称 → 生成/更新商品模板锚点。
+
+**生图模型（新增：SiliconFlow images/generations，默认 `Kwai-Kolors/Kolors`，可配 FLUX 等）**——能力边界（必须说明）：
+- **不可行**：直接让文生图模型生成「带准确文字的票据图」。当前文生图模型对**密集中文表格文字**渲染不可控（错字/乱码/漏字），且无法保证与标注一致，会污染训练集——本项目票据为 8 列表格，远超文生图模型文字渲染能力。
+- **可行（采用）**：生图模型生成**纸张纹理/背景（无文字）**，程序化渲染器叠加**精确文字**——文字内容 = 标注 = ground-truth 三方一致，兼顾「生图模型参与」与「文字 100% 可控」。
+
+### 方案：AI 合成训练流水线（`backend/scripts/ocr_ai_train.py`，开发/训练工具，不参与运行时链路）
+
+```
+① 合成渲染器（程序化精确文字 + 随机变体）→ 每张图自带 ground-truth JSON
+② 生图模型（--gen-bg 可选）：生成纸张纹理背景 → 叠加进合成图（文字仍程序化渲染）
+③ 识图模型（--vision）：自动标注/校验每张合成图（结构化 JSON）→ 与 ground-truth 字段级对比
+     准确率 < 阈值 → 剔除（防低质量样本入训练集）
+④ 本地 OCR（--engine rapidocr|paddle）：识别合成图 → 文本行+坐标（核心执行体不变）
+⑤ 模板训练：
+   - 商品模式：视觉标注（校正后）+ 本地 OCR 文本 → build_anchors 生成/更新模板
+     （写入现有 sys_config 模板库，source=ai_train；锚点须被本地 OCR 实际读到，否则丢弃并告警）
+   - 送货单模式：parse_delivery / parse_delivery_generic 跑本地解析 → 字段级评测报告；
+     合格合成样本（图+标注+OCR 结果）归档 data/ocr_training/送货单-合成/ 供后续训练/回归
+```
+
+**变体维度**（合成数据集多样性）：字体（微软雅黑/黑体/宋体/楷体/等线）、字号、行距、表格线样式、纸张底色、噪点/模糊、整体轻微旋转（±2°）、单元格微抖动、版式（标准 9~15 位物料编码 / 新格式无编码）、明细条数 1~8、供应商/单号/品名/规格随机组合。
+
+**接口**：无新 HTTP 接口（独立 CLI 脚本，运行时链路零改动）；脚本参数见其 docstring，关键项：`--mode delivery|product|self-test`、`--count`、`--engine`、`--vision`、`--gen-bg`、`--gen-model`、`--threshold`、`--no-db`、`--seed`、`--out`。
+
+**配置与依赖**：
+- 依赖：复用项目已有 `pillow`（渲染）、`httpx`（生图/识图请求）、`app.services.llm`（识图客户端）、`app.services.ocr.*`（本地 OCR/模板/解析）；**无新增第三方库**。
+- 识图模型：复用系统设置 `llm.siliconflow.*`（DB sys_config），未配置时回退环境变量 `SILICONFLOW_*`；`--vision doubao` 可切豆包。
+- 生图模型：`--gen-bg` 启用，模型默认 `Kwai-Kolors/Kolors`（`--gen-model` 覆盖）；Base URL/Key 同 SiliconFlow 配置；失败自动降级为程序化纹理，不阻断流水线。
+- 中文字体：自动探测 Windows 字体目录（msyh/simhei/simsun/simkai/Deng）与 Linux Noto CJK。
+- 数据库：默认经 `app.db.SessionLocal` 读写模板库（开发库，项目惯例允许）；`--no-db` 或库不可用时降级为本地文件（模板存 `--out/templates_product.json`），全链路不报错。
+
+**验证**：`--self-test` 零外部依赖跑通（渲染+本地 OCR，L1 门禁可跑）；有 Key 环境 `--mode delivery --count 8`：合成图本地 OCR 文本召回率 + 模板/通用解析字段准确率报告；商品模式合成标签 → 模板库新增条目且锚点可被本地 OCR 命中；无 Key/无库时全链路降级不报错。pytest 不涉及（独立脚本，不改运行时代码）。
+
+---
+
 ## 验收标准（P9 整体）
 
 - 每项：pytest 用例通过 + 前端 typecheck/build + 真实链路冒烟（P3 除外，评估报告为准）

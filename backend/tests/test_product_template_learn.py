@@ -1,14 +1,29 @@
 """模板自动学习测试（P9-P0 模板自动学习，L2 门禁）：3 次命中自动生成/手动模板不被覆盖。"""
+import uuid
+
 from sqlalchemy import select
 
 from app.api.ocr import _maybe_learn_template
 from app.db import SessionLocal
-from app.models.base import BaseProduct
+from app.models.base import BaseProduct, BaseUnit
 from app.services.ocr import product_template
 
 
 def _any_product(db):
-    return db.scalar(select(BaseProduct).limit(1))
+    p = db.scalar(select(BaseProduct).limit(1))
+    if p is not None:
+        return p
+    # 库为空（测试自动清理后）时自建一个，避免依赖其他测试的残留数据；测试后由清理器移除
+    unit = db.scalar(select(BaseUnit).limit(1))
+    p = BaseProduct(
+        code="9" + str(uuid.uuid4().int % 10**9),
+        name="模板学习测试物料",
+        unit_id=unit.id if unit else 1,
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
 
 
 def test_auto_learn_after_three_hits():
