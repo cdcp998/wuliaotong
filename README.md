@@ -82,8 +82,8 @@
 2. **小步提交**：每功能一个提交，格式 `类型(范围): 描述`（feat/fix/docs/refactor/test/chore）
 3. **验证门禁**（提交前必须）：
    - L1 语法/类型：`python -m compileall app`；`npm run typecheck`（零错误）
-   - L2 接口：`cd backend && .venv/Scripts/python.exe -m pytest tests -q`（全部通过）
-   - L4 前端：`npm run build -w wlt-desktop`、`npm run build -w wlt-mobile`
+   - L2 接口：`scripts/run_tests.sh`——普通改动自动跑**针对性测试**（按 git diff 映射）；发布/关键变更用 `scripts/run_tests.sh --full` 跑全量（详见《开发规范.md》§6.1 分层策略）
+   - L4 前端：`npm run build -w wlt-desktop`、`npm run build -w wlt-mobile`（发布/关键变更时）
    - 测试/构建失败**不允许提交**
 4. **文档同步**：每项完成后回写《开发进度记录.md》（交付/验证/遗留/提交）；接口/表结构变更同步《后端API设计.md》《数据库设计.md》
 5. **数据红线**：禁止物理删除业务数据（用状态位）；库存变动必须走 `post_stock_change()`；API Key 只存 sys_config 并脱敏；.env 不入库
@@ -129,8 +129,10 @@ mysql -uroot -p wuliaotong < sql/init.sql   # 全量建表+种子（幂等）
 ./.venv/Scripts/python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8443 \
   --ssl-keyfile certs/dev/key.pem --ssl-certfile certs/dev/cert.pem
 
-# 3. 接口测试（L2 门禁）
-cd backend && ./.venv/Scripts/python.exe -m pytest tests -q
+# 3. 接口测试（L2 门禁，分层执行）
+scripts/run_tests.sh              # 普通改动：按 git diff 自动跑针对性测试
+scripts/run_tests.sh --full       # 发布/主干/关键变更：后端全量 + 前端 typecheck + build
+scripts/run_tests.sh --dry-run    # 预览本次将执行的测试范围
 
 # 4. 前端（dev，端口 5174/5175）
 cd frontend && npm install

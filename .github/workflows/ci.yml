@@ -1,0 +1,146 @@
+name: CI
+
+# 测试分层执行（《开发规范.md》§6）：
+# - PR：针对性测试（按与目标分支的差异自动映射相关测试，scripts/run_tests.sh）
+# - main 推送 / 版本 tag / 手动触发：全量测试（pytest 全量 + 前端 typecheck + build）
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  # ==================== 针对性测试（PR）====================
+  targeted:
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    services:
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: test123
+          MYSQL_DATABASE: wuliaotong
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h127.0.0.1 -ptest123"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 后端环境
+        shell: bash
+        run: |
+          cd backend
+          python -m pip install -r requirements.txt
+          cat > .env <<'EOF'
+          DB_URL=mysql+pymysql://root:test123@127.0.0.1:3306/wuliaotong?charset=utf8mb4
+          SESSION_COOKIE_NAME=session_id
+          SESSION_EXPIRE_HOURS=8
+          COOKIE_SECURE=false
+          OCR_ENGINE=rapidocr
+          EOF
+      - name: 等待 MySQL 并导入 init.sql
+        shell: bash
+        run: |
+          cd backend
+          PYTHONPATH=. python - <<'EOF'
+          import time
+          import pymysql
+          from app.api.init import _split_sql
+          for _ in range(30):
+              try:
+                  conn = pymysql.connect(host="127.0.0.1", user="root", password="test123", connect_timeout=3)
+                  break
+              except Exception:
+                  time.sleep(2)
+          else:
+              raise SystemExit("MySQL 未就绪")
+          sql = open("sql/init.sql", encoding="utf-8").read()
+          cur = conn.cursor()
+          for stmt in _split_sql(sql):
+              cur.execute(stmt)
+          conn.commit()
+          conn.close()
+          print("init.sql imported")
+          EOF
+      - name: 针对性测试（PR 变更相关）
+        shell: bash
+        run: |
+          git fetch origin main --depth=1 || true
+          CHANGED="$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1 || true)"
+          bash scripts/run_tests.sh --changed="$CHANGED"
+
+  # ==================== 全量测试（main / tag / 手动）====================
+  full:
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    services:
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: test123
+          MYSQL_DATABASE: wuliaotong
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h127.0.0.1 -ptest123"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 后端环境
+        shell: bash
+        run: |
+          cd backend
+          python -m pip install -r requirements.txt
+          cat > .env <<'EOF'
+          DB_URL=mysql+pymysql://root:test123@127.0.0.1:3306/wuliaotong?charset=utf8mb4
+          SESSION_COOKIE_NAME=session_id
+          SESSION_EXPIRE_HOURS=8
+          COOKIE_SECURE=false
+          OCR_ENGINE=rapidocr
+          EOF
+      - name: 等待 MySQL 并导入 init.sql
+        shell: bash
+        run: |
+          cd backend
+          PYTHONPATH=. python - <<'EOF'
+          import time
+          import pymysql
+          from app.api.init import _split_sql
+          for _ in range(30):
+              try:
+                  conn = pymysql.connect(host="127.0.0.1", user="root", password="test123", connect_timeout=3)
+                  break
+              except Exception:
+                  time.sleep(2)
+          else:
+              raise SystemExit("MySQL 未就绪")
+          sql = open("sql/init.sql", encoding="utf-8").read()
+          cur = conn.cursor()
+          for stmt in _split_sql(sql):
+              cur.execute(stmt)
+          conn.commit()
+          conn.close()
+          print("init.sql imported")
+          EOF
+      - name: 前端依赖
+        shell: bash
+        run: cd frontend && npm ci
+      - name: 全量测试（发布/主干/手动触发）
+        shell: bash
+        run: bash scripts/run_tests.sh --full
