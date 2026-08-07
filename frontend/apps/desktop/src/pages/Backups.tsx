@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Popconfirm, Space, Table, Tag } from "antd";
+import { App, Button, Popconfirm, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type BackupRecord } from "@wlt/shared";
+
+import { DataTable } from "../components/DataTable";
 
 function fmtSize(n: number): string {
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
@@ -17,18 +19,20 @@ export function BackupsPage() {
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
     try {
-    const data = await adminApi.backups(page);
+    const data = await adminApi.backups(page, pageSize);
     setList(data.list);
     setTotal(data.total);
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, pageSize]);
 
   useEffect(() => {
     void load().catch((e) => message.error(e instanceof Error ? e.message : "加载失败"));
@@ -88,7 +92,7 @@ export function BackupsPage() {
       <p style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>
         每日 02:00 自动备份（保留最近 14 份，更早自动清理）；备份文件为 gzip 压缩的 mysqldump 导出。
       </p>
-      <Table rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }} rowSelection onBatchDelete={async (keys) => { for (const k of keys) await adminApi.deleteBackup(Number(k)); message.success(`已删除 ${keys.length} 个备份`); void load(); }} />
     </div>
   );
 }

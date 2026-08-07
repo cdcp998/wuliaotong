@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Badge, List, NavBar, Tabs, Tag, Toast } from "antd-mobile";
-import { useNavigate } from "react-router-dom";
+import { Badge, Button, List, Modal, NavBar, Selector, Tabs, Tag, Toast } from "antd-mobile";
+import { useNavigate } from "react-router";
 
-import { checkApi, type CheckBill } from "@wlt/shared";
+import { baseApi, checkApi, type CheckBill } from "@wlt/shared";
 
 const STATUS_TABS = [
   { key: "all", title: "全部" },
@@ -22,6 +22,9 @@ export function ChecksPage() {
   const [tab, setTab] = useState("all");
   const [list, setList] = useState<CheckBill[]>([]);
   const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
+  const [whId, setWhId] = useState<number>();
 
   async function load(status: string) {
     setLoading(true);
@@ -39,9 +42,39 @@ export function ChecksPage() {
     void load(tab);
   }, [tab]);
 
+  function openCreate() {
+    baseApi
+      .warehouses()
+      .then((ws) => setWarehouses(ws.filter((w) => w.status === 1).map((w) => ({ id: w.id, name: w.name }))))
+      .catch(() => undefined);
+    setWhId(undefined);
+    setOpen(true);
+  }
+
+  async function create() {
+    if (!whId) return Toast.show("请选择盘点仓库");
+    try {
+      const data = await checkApi.create(whId);
+      Toast.show(`盘点单 ${data.bill_no} 已创建`);
+      setOpen(false);
+      navigate(`/checks/${data.id}`);
+    } catch (e) {
+      Toast.show(e instanceof Error ? e.message : "创建失败");
+    }
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
-      <NavBar onBack={() => navigate("/")}>库存盘点</NavBar>
+      <NavBar
+        onBack={() => navigate("/")}
+        right={
+          <Button size="mini" color="primary" onClick={openCreate}>
+            发起盘点
+          </Button>
+        }
+      >
+        库存盘点
+      </NavBar>
       <Tabs activeKey={tab} onChange={setTab}>
         {STATUS_TABS.map((t) => (
           <Tabs.Tab key={t.key} title={t.title} />
@@ -63,6 +96,28 @@ export function ChecksPage() {
         ))}
         {!loading && !list.length && <List.Item>暂无盘点单</List.Item>}
       </List>
+
+      <Modal
+        visible={open}
+        title="发起盘点"
+        content={
+          <div>
+            <div style={{ fontSize: 13, color: "#86909c", marginBottom: 10 }}>
+              选择要盘点的仓库，创建后自动带出该仓库全部库存物品（按物品汇总账面数量），手机/电脑均可录入实盘。
+            </div>
+            <Selector
+              options={warehouses.map((w) => ({ label: w.name, value: w.id }))}
+              value={whId ? [whId] : []}
+              onChange={(arr) => setWhId(arr[0] as number | undefined)}
+            />
+          </div>
+        }
+        onClose={() => setOpen(false)}
+        actions={[
+          { key: "cancel", text: "取消", onClick: () => setOpen(false) },
+          { key: "create", text: "创建盘点单", primary: true, onClick: () => void create() },
+        ]}
+      />
     </div>
   );
 }

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Space, Table, Tag } from "antd";
+import { App, Button, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type RegisterApply } from "@wlt/shared";
+
+import { DataTable } from "../components/DataTable";
 
 const STATUS: Record<number, { text: string; color: string }> = {
   0: { text: "待审核", color: "orange" },
@@ -17,18 +19,20 @@ export function RegisterAppliesPage() {
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [status, setStatus] = useState<number | undefined>(0);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
     try {
-    const data = await adminApi.registerApplies(status, page);
+    const data = await adminApi.registerApplies(status, page, pageSize);
     setList(data.list);
     setTotal(data.total);
     } finally {
       setLoading(false);
     }
-  }, [status, page]);
+  }, [status, page, pageSize]);
 
   useEffect(() => {
     void load().catch((e) => message.error(e instanceof Error ? e.message : "加载失败"));
@@ -91,7 +95,11 @@ export function RegisterAppliesPage() {
       <p style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>
         审核注册模式下，新用户提交的注册申请在此处理；通过后账号即为"使用者"角色。
       </p>
-      <Table rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection
+        batchActions={[
+          { label: "批量通过", onClick: async (keys) => { for (const k of keys) await adminApi.approveRegisterApply(Number(k)); message.success(`已通过 ${keys.length} 条申请`); void load(); } },
+          { label: "批量拒绝", danger: true, confirm: "确定拒绝选中的注册申请吗？", onClick: async (keys) => { for (const k of keys) await adminApi.rejectRegisterApply(Number(k)); message.success(`已拒绝 ${keys.length} 条申请`); void load(); } },
+        ]} />
     </div>
   );
 }

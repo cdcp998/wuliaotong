@@ -12,7 +12,8 @@ export default defineConfig(({ command }) => ({
   // 生产构建部署在 /m/ 前缀（Nginx 分发：/ → 电脑端，/m → 手机端）；开发端口直跑根路径
   base: command === "build" ? "/m/" : "/",
   server: {
-    port: 5174,
+    host: true, // 监听 0.0.0.0，内网其他设备可访问（访问者需信任自签名证书）
+    port: 5175, // 手机端
     https: {
       key: fs.readFileSync(`${CERT_DIR}/key.pem`),
       cert: fs.readFileSync(`${CERT_DIR}/cert.pem`),

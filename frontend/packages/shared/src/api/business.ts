@@ -312,7 +312,9 @@ export interface OcrTask {
 export interface OcrQuickResult {
   lines: string[];
   record_id: number;
-  matches: { product_id: number; code: string; name: string; spec: string }[];
+  /** 识别链路①条码解码结果（无条码/未识别到为空串）；条码命中商品库时 matches 直接为该商品。 */
+  barcode?: string;
+  matches: { product_id: number; code: string; name: string; spec: string; barcode?: string }[];
 }
 
 /** 送货单确认：供应商落库 + 物料自动匹配/新增 + 识别记录回写（《后端API设计.md》§7）。 */
@@ -341,8 +343,11 @@ export const ocrApi = {
     http.post<{ task_id: string }>(`/ocr/recognize?file_id=${fileId}&ocr_type=${ocrType}&mode=${mode}`),
   taskStatus: (taskId: string) => http.get<OcrTask>(`/ocr/tasks/${taskId}`),
   quick: (fileId: number, ocrType: 2 | 3) =>
-    http.post<OcrQuickResult>(`/ocr/quick?file_id=${fileId}&ocr_type=${ocrType}`),
-  decodeBarcode: (fileId: number) => http.post<{ barcode: string }>(`/barcode/decode?file_id=${fileId}`),
+    // 同步识别链路含引擎+纠错大模型，服务端最坏可达 60s+；客户端 60s 超时兜底，避免无限等待（卡死）
+    http.post<OcrQuickResult>(`/ocr/quick?file_id=${fileId}&ocr_type=${ocrType}`, undefined, 60_000),
+  decodeBarcode: (fileId: number) =>
+    // 条码解码走本地 zxing，正常秒级；30s 超时兜底
+    http.post<{ barcode: string }>(`/barcode/decode?file_id=${fileId}`, undefined, 30_000),
   /** 材料分类识别：根据名称+规格用大模型判断系统分类（入库明细行「分类」自动识别）。 */
   classifyProduct: (body: { name: string; spec: string }) =>
     http.post<{ category_id: number; category_name: string; matched: boolean }>("/ocr/classify", body),

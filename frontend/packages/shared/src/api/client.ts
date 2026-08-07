@@ -16,13 +16,25 @@ export class BizError extends Error {
 
 const API_BASE = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE ?? "/api/v1";
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    credentials: "include", // Session Cookie
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+async function request<T>(method: string, path: string, body?: unknown, timeoutMs?: number): Promise<T> {
+  // 超时兜底：OCR 等同步识别接口若服务端挂起，客户端不能无限等待（拍照识别卡死）
+  const ctrl = timeoutMs ? new AbortController() : undefined;
+  const timer = timeoutMs ? setTimeout(() => ctrl!.abort(), timeoutMs) : undefined;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      credentials: "include", // Session Cookie
+      headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: ctrl?.signal,
+    });
+  } catch (e) {
+    if (ctrl?.signal.aborted) throw new BizError(408, "请求超时，请重试");
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (res.status === 401) {
     // 已在登录页时不再重复跳转（location.href 赋相同值也会整页刷新，导致登录页无限刷新循环）
     if (window.location.pathname !== "/login") {
@@ -51,10 +63,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const http = {
-  get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
-  put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
-  delete: <T>(path: string) => request<T>("DELETE", path),
+  get: <T>(path: string, timeoutMs?: number) => request<T>("GET", path, undefined, timeoutMs),
+  post: <T>(path: string, body?: unknown, timeoutMs?: number) => request<T>("POST", path, body, timeoutMs),
+  put: <T>(path: string, body?: unknown, timeoutMs?: number) => request<T>("PUT", path, body, timeoutMs),
+  delete: <T>(path: string, body?: unknown, timeoutMs?: number) => request<T>("DELETE", path, body, timeoutMs),
 };
 
 export interface PageData<T> {

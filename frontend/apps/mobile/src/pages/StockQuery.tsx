@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Input, List, NavBar, Tag, Toast } from "antd-mobile";
-import { useNavigate } from "react-router-dom";
+import { Button, Input, List, NavBar, Tag, Toast } from "antd-mobile";
+import { useNavigate } from "react-router";
 
 import { stockApi, type StockRow } from "@wlt/shared";
+
+import { BarcodeScanner } from "../components/BarcodeScanner";
 
 /** 库存查询（手机端）：关键词/条码 → 商品库存位置列表（《UI设计方案.md》§5.7）。 */
 export function StockQueryPage() {
@@ -10,6 +12,7 @@ export function StockQueryPage() {
   const [keyword, setKeyword] = useState("");
   const [list, setList] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
 
   useEffect(() => {
     void search("");
@@ -31,22 +34,31 @@ export function StockQueryPage() {
     <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate("/")}>库存查询</NavBar>
       <div style={{ padding: 12 }}>
-        <Input
-          placeholder="材料名称 / 编码 / 条码"
-          value={keyword}
-          onChange={setKeyword}
-          onEnterPress={() => void search(keyword)}
-          style={{
-            height: 42,
-            background: "#fff",
-            borderRadius: 9,
-            border: "1px solid #e5e6eb",
-            padding: "0 12px",
-            fontSize: 14,
-            marginBottom: 12,
-          }}
-        />
-        <div style={{ fontSize: 11.5, color: "#86909c", marginBottom: 8, padding: "0 2px" }}>扫码 / 条码查询更快捷，可在「扫码」Tab 使用摄像头</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <Input
+            placeholder="材料名称 / 物料编码 / 条码"
+            value={keyword}
+            onChange={setKeyword}
+            onEnterPress={() => void search(keyword)}
+            style={{
+              flex: 1,
+              height: 42,
+              background: "#fff",
+              borderRadius: 9,
+              border: "1px solid #e5e6eb",
+              padding: "0 12px",
+              fontSize: 14,
+            }}
+          />
+          <Button
+            fill="outline"
+            onClick={() => setScanOpen(true)}
+            style={{ height: 42, minWidth: 88, borderRadius: 9, fontSize: 13 }}
+          >
+            📷 扫码
+          </Button>
+        </div>
+        <div style={{ fontSize: 11.5, color: "#86909c", marginBottom: 8, padding: "0 2px" }}>扫码 / 条码查询更快捷，也可点击「扫码」按钮调用摄像头</div>
         <List style={{ "--border-top": "0" } as React.CSSProperties}>
           {list.map((r) => (
             <List.Item
@@ -90,6 +102,14 @@ export function StockQueryPage() {
           {!loading && list.length === 0 && <List.Item>未找到库存记录</List.Item>}
         </List>
       </div>
+      <BarcodeScanner
+        visible={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onScan={(code) => {
+          setKeyword(code);
+          void search(code);
+        }}
+      />
     </div>
   );
 }

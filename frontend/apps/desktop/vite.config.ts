@@ -10,7 +10,8 @@ const CERT_DIR = "../../../backend/certs/dev";
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    host: true, // 监听 0.0.0.0，内网其他设备可访问（访问者需信任自签名证书）
+    port: 5174, // 电脑端
     https: {
       key: fs.readFileSync(`${CERT_DIR}/key.pem`),
       cert: fs.readFileSync(`${CERT_DIR}/cert.pem`),

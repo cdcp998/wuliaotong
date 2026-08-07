@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Modal, Popconfirm, Radio, Select, Space, Table } from "antd";
+import { App, Button, Modal, Popconfirm, Radio, Select, Space } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { baseApi, checkApi, type CheckBill } from "@wlt/shared";
+
+import { DataTable } from "../components/DataTable";
 
 const STATUS: Record<number, string> = { 0: "待盘点", 1: "盘点中", 2: "已审核" };
 
@@ -14,15 +16,17 @@ export function ChecksPage() {
   const [list, setList] = useState<CheckBill[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [open, setOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
   const [whId, setWhId] = useState<number | undefined>();
 
   const load = useCallback(async () => {
-    const data = await checkApi.list(status, page);
+    setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
+    const data = await checkApi.list(status, page, pageSize);
     setList(data.list);
     setTotal(data.total);
-  }, [status, page]);
+  }, [status, page, pageSize]);
 
   useEffect(() => {
     void load();
@@ -45,7 +49,7 @@ export function ChecksPage() {
   }
 
   const columns: ColumnsType<CheckBill> = [
-    { title: "单号", dataIndex: "bill_no" },
+    { title: "单号", dataIndex: "bill_no", render: (v: string, r) => <a onClick={() => navigate(`/checks/${r.id}`)}>{v}</a> },
     { title: "仓库", dataIndex: "warehouse_name" },
     { title: "状态", dataIndex: "status", render: (s: number) => STATUS[s] ?? s },
     { title: "明细数", render: (_, r) => r.items.length },
@@ -68,7 +72,7 @@ export function ChecksPage() {
   return (
     <div style={{ padding: 24 }}>
       <Space style={{ marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>库存盘点</h2>
+        <h2 style={{ margin: 0 }}>盘点</h2>
         <Radio.Group value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} optionType="button" size="small">
           <Radio.Button value={undefined}>全部</Radio.Button>
           <Radio.Button value={0}>待盘点</Radio.Button>
@@ -77,11 +81,11 @@ export function ChecksPage() {
         </Radio.Group>
         <Button type="primary" onClick={() => setOpen(true)}>新建盘点单</Button>
       </Space>
-      <Table rowKey="id" locale={{ emptyText: "暂无数据" }} columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <DataTable rowKey="id" locale={{ emptyText: "暂无数据" }} columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
 
       <Modal title="新建盘点单" open={open} onOk={() => void create()} onCancel={() => setOpen(false)}>
         <Select style={{ width: "100%" }} placeholder="选择盘点仓库" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={whId} onChange={setWhId} />
-        <p style={{ color: "#999", fontSize: 12 }}>创建后自动带出该仓库全部账面库存明细，进入盘点执行。</p>
+        <p style={{ color: "#999", fontSize: 12 }}>创建后自动带出该仓库全部库存物品（按物品汇总账面数量），逐项录入实盘数量。</p>
       </Modal>
     </div>
   );

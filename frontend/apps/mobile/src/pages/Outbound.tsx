@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button, Input, List, NavBar, Popup, Selector, Tag, Toast } from "antd-mobile";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router";
 
 import { baseApi, otherIo, type Location, type Product, type Warehouse } from "@wlt/shared";
 

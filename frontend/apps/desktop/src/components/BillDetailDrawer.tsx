@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
-import { Drawer, Table, Tag } from "antd";
+import { Drawer, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
+
+import { DataTable } from "./DataTable";
 
 export interface DetailField {
   label: string;
@@ -42,7 +44,7 @@ export function BillDetailDrawer({
           {title} {statusTag}
         </span>
       }
-      width={width}
+      size={width}
       open={open}
       onClose={onClose}
       destroyOnHidden
@@ -57,7 +59,7 @@ export function BillDetailDrawer({
       </div>
 
       <div style={{ fontWeight: 600, fontSize: 13, margin: "16px 0 8px" }}>明细（{rows.length} 项）</div>
-      <Table rowKey={(r) => String(r.key ?? JSON.stringify(r))} size="small" pagination={false} dataSource={rows} columns={columns} />
+      <DataTable rowKey={(r) => String(r.key ?? JSON.stringify(r))} size="small" pagination={false} dataSource={rows} columns={columns} />
 
       {footer && <div style={{ marginTop: 14 }}>{footer}</div>}
     </Drawer>

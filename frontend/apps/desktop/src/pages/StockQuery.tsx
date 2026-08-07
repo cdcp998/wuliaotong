@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Button, Input, Select, Space, Table, Tag } from "antd";
+import { useSearchParams } from "react-router";
+import { App, Button, Input, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, stockApi, type StockRow, type Warehouse } from "@wlt/shared";
 
+import { DataTable } from "../components/DataTable";
+
 /** 库存查询（电脑端）：多条件查询 + 预警标识 + 导出（《UI设计方案.md》§4.6）。 */
 export function StockQueryPage() {
+  const { message } = App.useApp();
   const [params] = useSearchParams();
   const [whs, setWhs] = useState<Warehouse[]>([]);
   const [keyword, setKeyword] = useState(params.get("keyword") ?? "");
@@ -14,6 +17,7 @@ export function StockQueryPage() {
   const [list, setList] = useState<StockRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -23,26 +27,26 @@ export function StockQueryPage() {
   const load = useCallback(
     async (kw: string, wh: number, pg: number) => {
       setLoading(true);
+      setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
       try {
-        const data = await stockApi.query({ keyword: kw || undefined, warehouse_id: wh || undefined, page: pg });
+        const data = await stockApi.query({ keyword: kw || undefined, warehouse_id: wh || undefined, page: pg, page_size: pageSize });
         setList(data.list);
         setTotal(data.total);
       } finally {
         setLoading(false);
       }
     },
-    []
+    [pageSize]
   );
 
   useEffect(() => {
     void load(keyword, warehouseId, page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, pageSize]);
 
   const columns = useMemo<ColumnsType<StockRow>>(
     () => [
-      { title: "材料编码", dataIndex: "code", width: 100 },
-      { title: "物料编码", dataIndex: "material_code", width: 120, render: (v: string) => v || "-" },
+      { title: "物料编码", dataIndex: "material_code", width: 130, render: (v: string) => v || "-" },
       { title: "材料名称", dataIndex: "product_name", render: (v) => <b>{v}</b> },
       { title: "条码", dataIndex: "barcode", width: 140 },
       { title: "规格", dataIndex: "spec", width: 110 },
@@ -65,7 +69,7 @@ export function StockQueryPage() {
       <h2 style={{ margin: 0, marginBottom: 16 }}>库存查询</h2>
       <Space wrap style={{ marginBottom: 16 }}>
         <Input.Search
-          placeholder="材料名称 / 编码 / 条码"
+          placeholder="材料名称 / 物料编码 / 条码"
           allowClear
           defaultValue={keyword}
           onSearch={(v) => {
@@ -97,7 +101,7 @@ export function StockQueryPage() {
           导出 Excel
         </Button>
       </Space>
-      <Table
+      <DataTable
         rowKey={(r) => `${r.product_id}-${r.location_id}`}
         columns={columns}
         dataSource={list}
@@ -105,12 +109,19 @@ export function StockQueryPage() {
         size="middle"
         pagination={{
           current: page,
-          pageSize: 20,
+          pageSize,
           total,
-          onChange: setPage,
+          onChange: (p: number, ps: number) => {
+            if (ps !== pageSize) {
+              setPage(1);
+              setPageSize(ps);
+            } else {
+              setPage(p);
+            }
+          },
           showTotal: (t) => `共 ${t} 条`,
         }}
-      />
+       rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
     </div>
   );
 }

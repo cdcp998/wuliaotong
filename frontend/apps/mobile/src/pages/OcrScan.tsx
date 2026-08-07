@@ -1,80 +1,106 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button, List, NavBar, Tag, Toast } from "antd-mobile";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
-import { fileApi, ocrApi, type OcrQuickResult } from "@wlt/shared";
+import { resolveByBarcode, type Product } from "@wlt/shared";
 
-/** 拍照快查：拍商品外包装/标签 → 识别 → 匹配系统商品 → 带入入库/出库。 */
+import { BarcodeScanner } from "../components/BarcodeScanner";
+
+/** 扫码页（扫码 Tab / 首页扫码入口）：进入页面即直接全屏相机扫码（无中间选择页、无确认弹窗）。
+ * 扫码/拍照识别到条码 → 自动查材料：命中展示结果（可直接带入入库/出库），未命中提示重新扫码。 */
 export function OcrScanPage() {
   const navigate = useNavigate();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<OcrQuickResult | null>(null);
+  const [scanOpen, setScanOpen] = useState(true); // 挂载即打开全屏扫码界面
+  const [hit, setHit] = useState<Product | null>(null);
+  const [missCode, setMissCode] = useState("");
 
-  async function handleFile(f: File | undefined) {
-    if (!f) return;
-    setLoading(true);
-    setResult(null);
+  /** 扫码/拍照识别结果：查材料。命中/未命中都关闭扫码界面展示对应状态（autoClose=false 由本页控制关闭）。 */
+  async function onScan(code: string) {
     try {
-      const up = await fileApi.upload(f, "ocr");
-      const data = await ocrApi.quick(up.file_id, 2);
-      setResult(data);
-      if (!data.matches.length) Toast.show("未匹配到系统材料，可查看识别文本或手动搜索");
+      const p = await resolveByBarcode(code);
+      if (p) {
+        setHit(p);
+        setMissCode("");
+      } else {
+        setHit(null);
+        setMissCode(code);
+        Toast.show(`未找到条码 ${code} 对应的材料`);
+      }
     } catch (e) {
-      Toast.show(e instanceof Error ? e.message : "识别失败");
+      Toast.show(e instanceof Error ? e.message : "条码查询失败");
+      setHit(null);
+      setMissCode(code);
     } finally {
-      setLoading(false);
+      setScanOpen(false);
     }
+  }
+
+  function rescan() {
+    setHit(null);
+    setMissCode("");
+    setScanOpen(true); // 重新打开全屏扫码
   }
 
   return (
     <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
-      <NavBar onBack={() => navigate("/")}>拍照识别</NavBar>
-      <div style={{ padding: 24, textAlign: "center" }}>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          style={{ display: "none" }}
-          onChange={(e) => void handleFile(e.target.files?.[0])}
-        />
-        <Button block color="primary" loading={loading} onClick={() => inputRef.current?.click()} style={{ height: 48, fontSize: 16 }}>
-          {loading ? "识别中…" : "📷 拍摄材料包装/标签"}
-        </Button>
-        <p style={{ color: "#999", fontSize: 12, marginTop: 8 }}>识别后自动匹配系统材料，可直接带入入库/出库</p>
-      </div>
+      <NavBar onBack={() => navigate("/")}>扫码</NavBar>
 
-      {result && (
-        <>
-          <List header={`识别文本（${result.lines.length} 行）`}>
-            {result.lines.map((t, i) => (
-              <List.Item key={i}>{t}</List.Item>
-            ))}
+      {hit && (
+        <div style={{ padding: 12 }}>
+          <List header="识别结果（已匹配材料）">
+            <List.Item
+              description={
+                <div style={{ fontSize: 11.5, color: "#86909c", marginTop: 2 }}>
+                  {hit.code}
+                  {hit.spec ? ` / ${hit.spec}` : ""}
+                  {hit.barcode ? ` / 条码 ${hit.barcode}` : ""}
+                </div>
+              }
+              extra={<Tag color="success">已匹配</Tag>}
+            >
+              {hit.name}
+            </List.Item>
           </List>
-          <List header={`匹配材料（${result.matches.length}）`}>
-            {result.matches.map((m) => (
-              <List.Item
-                key={m.product_id}
-                description={`${m.code}${m.spec ? ` / ${m.spec}` : ""}`}
-                extra={
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <Tag color="success" fill="outline" onClick={() => navigate(`/inbound?product_id=${m.product_id}`)}>
-                      入库
-                    </Tag>
-                    <Tag color="warning" fill="outline" onClick={() => navigate(`/outbound?product_id=${m.product_id}`)}>
-                      出库
-                    </Tag>
-                  </div>
-                }
-              >
-                {m.name}
-              </List.Item>
-            ))}
-            {!result.matches.length && <List.Item>未匹配到材料，可去「入库/出库」页手动搜索添加</List.Item>}
-          </List>
-        </>
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+            <Button block color="primary" onClick={() => navigate(`/inbound?product_id=${hit.id}`)}>
+              入库
+            </Button>
+            <Button block color="warning" onClick={() => navigate(`/outbound?product_id=${hit.id}`)}>
+              出库
+            </Button>
+            <Button block fill="outline" onClick={rescan}>
+              重新扫码
+            </Button>
+          </div>
+        </div>
       )}
+
+      {!hit && missCode && (
+        <div style={{ padding: 40, textAlign: "center" }}>
+          <div style={{ fontSize: 14, color: "#4e5969" }}>未找到条码 {missCode} 对应的材料</div>
+          <p style={{ color: "#86909c", fontSize: 12, margin: "8px 0 20px" }}>
+            可在「入库」页扫码后直接新增材料，或点击下方重新扫码
+          </p>
+          <Button block color="primary" onClick={rescan} style={{ height: 44 }}>
+            📷 重新扫码 / 拍照识别
+          </Button>
+        </div>
+      )}
+
+      {!hit && !missCode && (
+        <div style={{ padding: 40, textAlign: "center", color: "#86909c", fontSize: 13 }}>
+          正在打开相机…
+        </div>
+      )}
+
+      {/* 全屏相机扫码界面：实时扫码 + 拍照/相册识别（挂载即打开，无中间选择页）
+       * autoClose=false：扫码成功后等本页查材料再关闭，避免查询未完成就跳走 */}
+      <BarcodeScanner
+        visible={scanOpen}
+        autoClose={false}
+        onClose={() => navigate("/")}
+        onScan={(code) => void onScan(code)}
+      />
     </div>
   );
 }

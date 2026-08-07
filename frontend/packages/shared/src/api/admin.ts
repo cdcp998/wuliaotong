@@ -108,20 +108,20 @@ export const adminApi = {
     return http.get<PageData<OperationLog>>(`/logs?${q}`);
   },
 
-  backups: (page = 1) => http.get<PageData<BackupRecord>>(`/backups?page=${page}&page_size=20`),
+  backups: (page = 1, pageSize = 20) => http.get<PageData<BackupRecord>>(`/backups?page=${page}&page_size=${pageSize}`),
   createBackup: () => http.post<{ id: number; file_path: string; file_size: number }>("/backups"),
   deleteBackup: (id: number) => http.delete<null>(`/backups/${id}`),
   backupDownloadUrl: (id: number) => `/api/v1/backups/${id}/download`,
 
-  registerApplies: (status?: number, page = 1) =>
+  registerApplies: (status?: number, page = 1, pageSize = 20) =>
     http.get<PageData<RegisterApply>>(
-      `/register-applies${status !== undefined ? `?status=${status}` : ""}${status !== undefined ? "&" : "?"}page=${page}&page_size=20`
+      `/register-applies${status !== undefined ? `?status=${status}` : ""}${status !== undefined ? "&" : "?"}page=${page}&page_size=${pageSize}`
     ),
   approveRegisterApply: (id: number) => http.post<{ message: string }>(`/register-applies/${id}/approve`),
   rejectRegisterApply: (id: number) => http.post<{ message: string }>(`/register-applies/${id}/reject`),
 
   departments: () => http.get<Department[]>("/departments"),
-  createDepartment: (body: { code: string; name: string; remark?: string }) =>
+  createDepartment: (body: { name: string; remark?: string }) =>
     http.post<{ id: number; code: string }>("/departments", body),
   updateDepartment: (id: number, body: { name?: string; remark?: string; status?: number }) =>
     http.put<null>(`/departments/${id}`, body),

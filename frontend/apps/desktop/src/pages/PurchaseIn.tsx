@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { App, AutoComplete, Button, DatePicker, Divider, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag } from "antd";
-import { CameraOutlined, PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { CameraOutlined, PictureOutlined, PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -76,7 +76,8 @@ export function PurchaseInPage() {
   const [nextKey, setNextKey] = useState(1);
   // 相机输入目标列：barcode=条码列 / name=材料名称列
   const scanTarget = useRef<{ kind: "barcode" | "name"; rowKey: number } | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null); // 拍照输入（capture 直达相机）
+  const albumRef = useRef<HTMLInputElement>(null); // 相册输入（不带 capture，可选图）
   // 无材料新增（条码/OCR 未匹配 → 新增材料弹窗，预填识别数据）
   const [materialModal, setMaterialModal] = useState<{ open: boolean; rowKey: number; barcode: string; name: string; spec: string }>({ open: false, rowKey: -1, barcode: "", name: "", spec: "" });
   const [materialForm] = Form.useForm();
@@ -566,6 +567,7 @@ export function PurchaseInPage() {
             onPressEnter={(e) => void scanBarcode(r.key, (e.target as HTMLInputElement).value)}
           />
           <Button icon={<CameraOutlined />} title="拍照识别条码" onClick={() => { scanTarget.current = { kind: "barcode", rowKey: r.key }; fileRef.current?.click(); }} />
+          <Button icon={<PictureOutlined />} title="相册选图识别条码" onClick={() => { scanTarget.current = { kind: "barcode", rowKey: r.key }; albumRef.current?.click(); }} />
         </Space.Compact>
       ),
     },
@@ -618,6 +620,7 @@ export function PurchaseInPage() {
             }}
           />
           <Button icon={<CameraOutlined />} title="拍照 OCR 识别（未匹配自动大模型分析）" onClick={() => { scanTarget.current = { kind: "name", rowKey: r.key }; fileRef.current?.click(); }} />
+          <Button icon={<PictureOutlined />} title="相册选图 OCR 识别" onClick={() => { scanTarget.current = { kind: "name", rowKey: r.key }; albumRef.current?.click(); }} />
           {r.product && (
             <Button size="small" type="link" style={{ padding: "0 6px" }} onClick={() => void openHistory(r.product!)}>历史价</Button>
           )}
@@ -784,12 +787,13 @@ export function PurchaseInPage() {
             <Space wrap>
               <Button size="small" onClick={addEmptyRow}>+ 添加明细</Button>
               <span style={{ color: "#86909c", fontSize: 12 }}>
-                表头右侧可拖拽调整列宽；条码/名称列支持相机识别；名称未匹配自动大模型兜底分析；合计金额：{rows.reduce((s, r) => s + (r.qty > 0 ? r.qty * (r.price || 0) : 0), 0).toFixed(2)}
+                表头右侧可拖拽调整列宽；条码/名称列支持拍照/相册识别；名称未匹配自动大模型兜底分析；合计金额：{rows.reduce((s, r) => s + (r.qty > 0 ? r.qty * (r.price || 0) : 0), 0).toFixed(2)}
               </span>
             </Space>
           )}
         />
         <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { void handleCameraFile(e.target.files?.[0]); e.target.value = ""; }} />
+        <input ref={albumRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { void handleCameraFile(e.target.files?.[0]); e.target.value = ""; }} />
       </Modal>
 
       {/* 创建新仓位：库位下拉找不到目标仓位时直接新增并选中 */}

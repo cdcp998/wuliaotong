@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { App, Button, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag, Typography } from "antd";
-import { CameraOutlined } from "@ant-design/icons";
+import { CameraOutlined, PictureOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, fileApi, ocrApi, type CategoryNode, type Product, type ProductInput } from "@wlt/shared";
@@ -45,6 +45,8 @@ export function MaterialsPage() {
   const barcodeValue = Form.useWatch("barcode", form);
   const nameFileRef = useRef<HTMLInputElement>(null); // 材料名称：相机 OCR 识别
   const barcodeFileRef = useRef<HTMLInputElement>(null); // 条码：相机扫码解码
+  const nameAlbumRef = useRef<HTMLInputElement>(null); // 材料名称：相册选图 OCR
+  const barcodeAlbumRef = useRef<HTMLInputElement>(null); // 条码：相册选图解码
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -303,12 +305,22 @@ export function MaterialsPage() {
         width={560}
         forceRender
       >
-        {/* 相机输入：材料名称 OCR / 条码解码（桌面浏览器退化为选文件） */}
+        {/* 相机/相册输入：材料名称 OCR / 条码解码（相册 input 不带 capture，移动端浏览器访问时可选图） */}
         <input
           ref={nameFileRef}
           type="file"
           accept="image/*"
           capture="environment"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            void ocrName(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={nameAlbumRef}
+          type="file"
+          accept="image/*"
           style={{ display: "none" }}
           onChange={(e) => {
             void ocrName(e.target.files?.[0]);
@@ -326,12 +338,23 @@ export function MaterialsPage() {
             e.target.value = "";
           }}
         />
+        <input
+          ref={barcodeAlbumRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            void scanBarcode(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
         <Form form={form} layout="vertical">
           <Space style={{ display: "flex" }} wrap>
             <Form.Item name="name" label="材料名称" rules={[{ required: true, message: "请输入材料名称" }]} style={{ width: 320 }}>
               <Space.Compact style={{ width: "100%" }}>
                 <Input placeholder="如：轴承6204" maxLength={100} value={nameValue} onChange={(e) => form.setFieldValue("name", e.target.value)} />
                 <Button icon={<CameraOutlined style={{ color: "#1668dc" }} />} title="拍照识别名称" onClick={() => nameFileRef.current?.click()} />
+                <Button icon={<PictureOutlined style={{ color: "#1668dc" }} />} title="相册选图识别名称" onClick={() => nameAlbumRef.current?.click()} />
               </Space.Compact>
             </Form.Item>
             <Form.Item name="unit_id" label="基本单位" rules={[{ required: true, message: "请选择单位" }]} style={{ width: 120 }}>
@@ -341,6 +364,7 @@ export function MaterialsPage() {
               <Space.Compact style={{ width: "100%" }}>
                 <Input placeholder="扫码枪/手输，或拍照扫码" maxLength={50} value={barcodeValue} onChange={(e) => form.setFieldValue("barcode", e.target.value)} />
                 <Button icon={<CameraOutlined style={{ color: "#1668dc" }} />} title="拍照识别条码" onClick={() => barcodeFileRef.current?.click()} />
+                <Button icon={<PictureOutlined style={{ color: "#1668dc" }} />} title="相册选图识别条码" onClick={() => barcodeAlbumRef.current?.click()} />
               </Space.Compact>
             </Form.Item>
             <Form.Item name="material_code" label="物料编码（公司系统编码，可选）" style={{ width: 240 }}>
@@ -383,7 +407,7 @@ export function MaterialsPage() {
 
       {/* 材料查重结果（P9-P1②）：AI 建议分组，人工确认后标记 */ }
       <Drawer
-        title="材料查重建议（AI 辅助，仅供参考）"
+        title="材料查重建议（仅供参考）"
         open={dedupeOpen}
         onClose={() => setDedupeOpen(false)}
         size={680}

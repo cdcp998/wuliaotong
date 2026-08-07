@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, InputNumber, Modal, Popconfirm, Radio, Select, Space, Table, Tag } from "antd";
+import { App, Button, InputNumber, Modal, Popconfirm, Radio, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, transferApi, type TransferBill, type TransferDetail } from "@wlt/shared";
 
+import { DataTable } from "../components/DataTable";
+
 import { BillDetailDrawer } from "../components/BillDetailDrawer";
 
-const STATUS: Record<string, string> = { 0: "草稿", 1: "已审核", "-1": "已作废" };
+const STATUS: Record<string, string> = { 0: "草稿", 1: "已审核", "-1": "已作废", "-2": "已驳回" };
 
 interface Row {
   product_id: number | undefined;
@@ -22,6 +24,7 @@ export function TransfersPage() {
   const [list, setList] = useState<TransferBill[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState<TransferDetail | null>(null);
 
@@ -41,14 +44,15 @@ export function TransfersPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
     try {
-    const data = await transferApi.list(status, page);
+    const data = await transferApi.list(status, page, pageSize);
     setList(data.list);
     setTotal(data.total);
     } finally {
       setLoading(false);
     }
-  }, [status, page]);
+  }, [status, page, pageSize]);
 
   useEffect(() => {
     void load();
@@ -98,9 +102,14 @@ export function TransfersPage() {
       render: (_, r) => (
         <Space>
           {r.status === 0 && (
-            <Popconfirm title="确认审核过账？" onConfirm={async () => { try { await transferApi.audit(r.id); message.success("已审核"); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
-              <Button size="small" type="primary">审核</Button>
-            </Popconfirm>
+            <>
+              <Popconfirm title="确认审核过账？" onConfirm={async () => { try { await transferApi.audit(r.id); message.success("已审核"); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
+                <Button size="small" type="primary">通过</Button>
+              </Popconfirm>
+              <Popconfirm title="确认驳回该调拨单？" onConfirm={async () => { try { await transferApi.reject(r.id); message.success("已驳回"); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
+                <Button size="small" danger>驳回</Button>
+              </Popconfirm>
+            </>
           )}
           {r.status !== -1 && (
             <Popconfirm title="确认作废？" onConfirm={async () => { try { await transferApi.void(r.id); message.success("已作废"); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
@@ -121,10 +130,16 @@ export function TransfersPage() {
           <Radio.Button value={0}>草稿</Radio.Button>
           <Radio.Button value={1}>已审核</Radio.Button>
           <Radio.Button value={-1}>已作废</Radio.Button>
+          <Radio.Button value={-2}>已驳回</Radio.Button>
         </Radio.Group>
         <Button type="primary" onClick={() => setOpen(true)}>新建调拨</Button>
       </Space>
-      <Table rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <DataTable rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection
+        batchActions={[
+          { label: "批量通过", onClick: async (keys) => { for (const k of keys) await transferApi.audit(Number(k)); message.success(`已通过 ${keys.length} 张调拨单`); void load(); } },
+          { label: "批量拒绝", danger: true, confirm: "确定驳回选中的调拨单吗？", onClick: async (keys) => { for (const k of keys) await transferApi.reject(Number(k)); message.success(`已驳回 ${keys.length} 张调拨单`); void load(); } },
+          { label: "批量删除", danger: true, confirm: "确定作废选中的调拨单吗？（已审核单将反向冲销库存）", onClick: async (keys) => { for (const k of keys) await transferApi.void(Number(k)); message.success(`已作废 ${keys.length} 张调拨单`); void load(); } },
+        ]} />
 
       <BillDetailDrawer
         open={detailOpen}

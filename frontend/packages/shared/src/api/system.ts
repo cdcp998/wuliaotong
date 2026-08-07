@@ -31,6 +31,12 @@ export interface Settings {
   "watermark.position": string;
   "watermark.bg_opaque": string;
   "log.level": string;
+  "quota.warning.enabled": string;
+  "quota.warning.recipients": string;
+  "quota.refresh.interval_minutes": string;
+  "quota.warning.threshold.siliconflow": string;
+  "quota.warning.threshold.deepseek": string;
+  "quota.warning.threshold.doubao": string;
 }
 
 /** PP-OCR 自动安装状态（设置页轮询）；done 时 mode 表示 paddle 是否启用 CUDA（cpu/gpu）。 */
@@ -38,6 +44,32 @@ export interface OcrInstallState {
   status: "idle" | "installing" | "done" | "failed";
   mode?: "cpu" | "gpu";
   log: string;
+}
+
+/** 单个服务商配额项（余额/资源包等）。 */
+export interface QuotaItem {
+  name: string;
+  value: number | null;
+  unit: string;
+  remaining: number | null;
+  status: string | null;
+}
+
+/** 一次配额获取结果（成功或失败都返回，失败带 error）。 */
+export interface QuotaPayload {
+  provider: string;
+  ok: boolean;
+  fetched_at: string;
+  items?: QuotaItem[];
+  error?: string;
+}
+
+/** 模型参与的工作任务（含启用状态）。 */
+export interface ModelSceneInfo {
+  name: string;
+  label: string;
+  enabled: boolean;
+  scenes: { scene: string; role: string; label: string; desc: string }[];
 }
 
 export const systemApi = {
@@ -57,6 +89,14 @@ export const systemApi = {
     if (status) p.set("status", status);
     return http.get<PageData<{ id: number; scene: string; model: string; prompt: string; output: string; status: string; error: string; duration_ms: number; created_at: string }>>(`/llm-logs?${p.toString()}`);
   },
+  /** 批量删除大模型调用日志（勾选多条后删除）。 */
+  deleteLlmLogs: (ids: number[]) => http.delete<{ deleted: number }>("/llm-logs", { ids }),
+  /** 读取最近一次获取的各服务商配额快照（含失败信息）。 */
+  getQuota: () => http.get<{ providers: Record<string, QuotaPayload> }>("/llm/quota"),
+  /** 立即从服务商获取配额/余额（失败返回 ok=false + error，不抛异常）。 */
+  fetchQuota: (provider: string) => http.post<QuotaPayload>(`/llm/quota/${provider}`),
+  /** 模型参与的工作任务映射（含启用状态）。 */
+  getModelScenes: () => http.get<{ models: ModelSceneInfo[] }>("/llm/model-scenes"),
   installStatus: () => http.get<OcrInstallState>("/ocr/install-status"),
   /** 水印预览（示例底图，未保存也可预览）：返回 blob URL。 */
   previewWatermark: async (body: { template?: string; position?: string; bg_opaque?: boolean; location?: string; time?: string; gps?: string }) => {

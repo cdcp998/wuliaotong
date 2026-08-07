@@ -1,31 +1,36 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Input, Select, Space, Table, Tag } from "antd";
+import { App, Button, Input, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type OperationLog } from "@wlt/shared";
+
+import { DataTable } from "../components/DataTable";
 
 const MODULES = ["auth", "base", "stock", "advanced", "requisition", "ocr", "report", "files", "storage", "system", "admin", "-"];
 
 /** 操作日志（电脑端，超管 sys:log）：写操作审计查询。 */
 export function LogsPage() {
+  const { message } = App.useApp();
   const [list, setList] = useState<OperationLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [username, setUsername] = useState("");
   const [module, setModule] = useState("");
   const [method, setMethod] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
+    setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
     try {
-    const data = await adminApi.logs({ username: username || undefined, module: module || undefined, method: method || undefined, page });
+    const data = await adminApi.logs({ username: username || undefined, module: module || undefined, method: method || undefined, page, page_size: pageSize });
     setList(data.list);
     setTotal(data.total);
     } finally {
       setLoading(false);
     }
-  }, [username, module, method, page]);
+  }, [username, module, method, page, pageSize]);
 
   useEffect(() => {
     void load().catch((e) => messageError(e));
@@ -63,7 +68,7 @@ export function LogsPage() {
         />
         <Button onClick={() => void load()}>查询</Button>
       </Space>
-      <Table rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Button, Card, Col, Row, Statistic, Tag } from "antd";
 
 import { reportApi, type DashboardData } from "@wlt/shared";
@@ -51,7 +51,7 @@ export function DashboardPage() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>经营看板</h2>
+        <h2 style={{ margin: 0 }}>统计面板</h2>
         <Button onClick={() => void load()}>刷新</Button>
       </div>
       {err && <p style={{ color: "#f5222d" }}>{err}</p>}
@@ -65,7 +65,7 @@ export function DashboardPage() {
             <Col span={4}><Card size="small"><Statistic title="本周入库/出库" value={`${data.week.in_qty}/${data.week.out_qty}`} /></Card></Col>
             <Col span={4}>
               <Card size="small" style={data.alert_count > 0 ? { borderColor: "#f5222d" } : undefined}>
-                <Statistic title="库存预警" value={data.alert_count} valueStyle={{ color: data.alert_count > 0 ? "#f5222d" : undefined }} />
+                <Statistic title="库存预警" value={data.alert_count} styles={{ content: { color: data.alert_count > 0 ? "#f5222d" : undefined } }} />
               </Card>
             </Col>
           </Row>

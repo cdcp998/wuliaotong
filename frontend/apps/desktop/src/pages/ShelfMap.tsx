@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { Button, Modal, Select, Tag } from "antd";
 
 import { baseApi, reportApi, type LocationStock, type Shelf } from "@wlt/shared";
@@ -137,7 +137,7 @@ export function ShelfMapPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: "#fafafa" }}>
-                <th style={thStyle}>材料名称</th><th style={thStyle}>编码</th><th style={thStyle}>数量</th><th style={thStyle}>状态</th>
+                <th style={thStyle}>材料名称</th><th style={thStyle}>数量</th><th style={thStyle}>状态</th>
               </tr>
             </thead>
             <tbody>

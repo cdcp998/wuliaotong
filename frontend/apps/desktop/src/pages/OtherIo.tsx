@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, InputNumber, Modal, Popconfirm, Radio, Select, Space, Table, Tag } from "antd";
+import { App, Button, InputNumber, Modal, Popconfirm, Radio, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, otherIoApi, type OtherIoBill, type OtherIoDetail } from "@wlt/shared";
+
+import { DataTable } from "../components/DataTable";
 
 import { BillDetailDrawer } from "../components/BillDetailDrawer";
 
@@ -21,6 +23,7 @@ export function OtherIoPage() {
   const [list, setList] = useState<OtherIoBill[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [open, setOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
   const [products, setProducts] = useState<{ id: number; name: string; code: string }[]>([]);
@@ -40,14 +43,15 @@ export function OtherIoPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
     try {
-    const data = await otherIoApi.list(ioType, undefined, page);
+    const data = await otherIoApi.list(ioType, undefined, page, pageSize);
     setList(data.list);
     setTotal(data.total);
     } finally {
       setLoading(false);
     }
-  }, [ioType, page]);
+  }, [ioType, page, pageSize]);
 
   useEffect(() => {
     void load();
@@ -111,7 +115,7 @@ export function OtherIoPage() {
         </Radio.Group>
         <Button type="primary" onClick={() => setOpen(true)}>新建</Button>
       </Space>
-      <Table rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ current: page, pageSize: 20, total, onChange: setPage }} />
+      <DataTable rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async (keys) => { for (const k of keys) await otherIoApi.void(Number(k)); message.success(`已作废 ${keys.length} 张单据`); void load(); }} />
 
       <BillDetailDrawer
         open={detailOpen}
@@ -127,7 +131,7 @@ export function OtherIoPage() {
           { label: "备注", value: detail?.remark, span: 2 },
         ]}
         columns={[
-          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
+          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.spec || "-"}</div></div> },
           { title: "库位", dataIndex: "location_code", width: 120 },
           { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
         ]}

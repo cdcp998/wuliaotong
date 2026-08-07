@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Select, Space, Tag, Typography } from "antd";
+import { App, Button, Descriptions, Drawer, Select, Space, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { EyeOutlined } from "@ant-design/icons";
 
 import { systemApi } from "@wlt/shared";
 
@@ -18,6 +19,49 @@ interface LlmLogRow {
   created_at: string;
 }
 
+/** 详情抽屉：完整展示输入/输出/错误（不受列表截断影响）。 */
+function LogDetailDrawer({ record, onClose }: { record: LlmLogRow | null; onClose: () => void }) {
+  return (
+    <Drawer
+      title={`日志详情 #${record?.id ?? ""}`}
+      size={760}
+      open={!!record}
+      onClose={onClose}
+      destroyOnHidden
+    >
+      {record && (
+        <>
+          <Descriptions size="small" column={2} bordered style={{ marginBottom: 16 }}>
+            <Descriptions.Item label="时间">{record.created_at}</Descriptions.Item>
+            <Descriptions.Item label="场景">{record.scene || "-"}</Descriptions.Item>
+            <Descriptions.Item label="模型">{record.model || "-"}</Descriptions.Item>
+            <Descriptions.Item label="状态">
+              <Tag color={record.status === "ok" ? "green" : "red"}>{record.status === "ok" ? "成功" : "失败"}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="耗时">{record.duration_ms} ms</Descriptions.Item>
+          </Descriptions>
+          <Typography.Title level={5} style={{ marginTop: 0 }}>输入</Typography.Title>
+          <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: 12, lineHeight: 1.6, maxHeight: 320, overflow: "auto", padding: 12, background: "#f7f8fa", borderRadius: 6, marginTop: 0 }}>
+            {record.prompt || "（无）"}
+          </pre>
+          <Typography.Title level={5}>输出</Typography.Title>
+          <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: 12, lineHeight: 1.6, maxHeight: 320, overflow: "auto", padding: 12, background: "#f7f8fa", borderRadius: 6 }}>
+            {record.output || "（无）"}
+          </pre>
+          {record.error && (
+            <>
+              <Typography.Title level={5} type="danger">错误信息</Typography.Title>
+              <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: 12, lineHeight: 1.6, maxHeight: 200, overflow: "auto", padding: 12, background: "#fff2f0", borderRadius: 6, color: "#cf1322" }}>
+                {record.error}
+              </pre>
+            </>
+          )}
+        </>
+      )}
+    </Drawer>
+  );
+}
+
 /** AI 调用日志（P9）：大模型输入/输出/耗时/成败记录，供后期调整与学习。 */
 export function AiLogsPage() {
   const { message } = App.useApp();
@@ -28,6 +72,7 @@ export function AiLogsPage() {
   const [loading, setLoading] = useState(false);
   const [scene, setScene] = useState("");
   const [status, setStatus] = useState("");
+  const [detail, setDetail] = useState<LlmLogRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,7 +126,7 @@ export function AiLogsPage() {
   return (
     <div style={{ padding: 24 }}>
       <Typography.Title level={4} style={{ marginTop: 0 }}>AI 调用日志</Typography.Title>
-      <Typography.Text type="secondary">大模型调用输入/输出/耗时/成败全部记录（输入输出截断保存），供后期调整提示词与学习。</Typography.Text>
+      <Typography.Text type="secondary">大模型调用输入/输出/耗时/成败全部记录，供后期调整提示词与学习；点击行「详情」可查看完整输入/输出内容。</Typography.Text>
       <Space style={{ margin: "12px 0" }} wrap>
         <Select
           style={{ width: 200 }}
@@ -106,8 +151,22 @@ export function AiLogsPage() {
         columns={columns}
         dataSource={list}
         scroll={{ x: 1400 }}
+        rowSelection
+        batchDeleteConfirm="确定删除选中的日志吗？删除后不可恢复。"
+        onBatchDelete={async (keys) => {
+          await systemApi.deleteLlmLogs(keys.map(Number));
+          message.success(`已删除 ${keys.length} 条日志`);
+          void load();
+        }}
+        actions={(r) => (
+          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => setDetail(r)}>
+            详情
+          </Button>
+        )}
+        actionsWidth={80}
         pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
       />
+      <LogDetailDrawer record={detail} onClose={() => setDetail(null)} />
     </div>
   );
 }
