@@ -58,11 +58,11 @@ _NUM_ROLES = {ROLE_QTY, ROLE_PRICE, ROLE_AMOUNT, ROLE_QP}
 
 
 def _box_bounds(box) -> tuple[float, float, float, float] | None:
-    """box → (x0, y0, x1, y1)。兼容 4 点坐标 [[x,y]×4] 与 (x0,y0,x1,y1) 两种形式。"""
+    """box → (x0, y0, x1, y1)。兼容 4 点坐标 [[x,y]×4]（含 Paddle 的 numpy 数组）与 (x0,y0,x1,y1) 两种形式。"""
     if not box:
         return None
     try:
-        if len(box) == 4 and all(isinstance(p, (list, tuple)) for p in box):
+        if len(box) == 4 and all(hasattr(p, "__getitem__") and len(p) >= 2 for p in box):
             xs = [float(p[0]) for p in box]
             ys = [float(p[1]) for p in box]
             return min(xs), min(ys), max(xs), max(ys)
@@ -184,13 +184,15 @@ def parse_delivery_generic(lines: list[str], boxes: list | None = None) -> dict 
     """
     supplier_name, bill_no = _extract_header_fields(lines)
     texts = [(t or "").strip() for t in lines]
+    if boxes is None:
+        return _fallback_text_parse(texts, supplier_name, bill_no)
     cells: list[dict] = []
     for i, t in enumerate(texts):
         if not t:
             continue
-        b = _box_bounds(boxes[i] if boxes and i < len(boxes) else None) if boxes else None
+        b = _box_bounds(boxes[i]) if i < len(boxes) else None
         if b is None:
-            return _fallback_text_parse(texts, supplier_name, bill_no)
+            continue  # 个别行无有效坐标：跳过该行，不整体退化（避免误入文本启发式）
         x0, y0, x1, y1 = b
         cells.append({"x0": x0, "y0": y0, "x1": x1, "y1": y1, "xc": (x0 + x1) / 2, "yc": (y0 + y1) / 2, "text": t})
     if len(cells) < 6:

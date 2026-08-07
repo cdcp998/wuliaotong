@@ -137,3 +137,17 @@ def test_is_footer_text():
     assert is_footer_text("货物名称")
     assert not is_footer_text("硬盘录像机")
     assert not is_footer_text("DS-8580N-KS24 R")
+
+
+def test_numpy_boxes():
+    """PaddleOCR 的 box 是 numpy 数组：坐标解析兼容，几何解析正常（e2e 回归）。"""
+    import numpy as np
+
+    boxes = []
+    for _, x0, y0, x1, y1 in NEW_FORMAT:
+        boxes.append([np.array([x0, y0]), np.array([x1, y0]), np.array([x1, y1]), np.array([x0, y1])])
+    res = parse_delivery_generic(LINES, boxes)
+    assert res is not None
+    assert len(res["items"]) == 4
+    assert res["items"][0]["product_name"] == "容量型硬盘录像机"
+    assert not res["warnings"]
