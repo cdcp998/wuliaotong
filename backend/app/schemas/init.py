@@ -10,12 +10,14 @@ class InitReq(BaseModel):
     admin_password: str = Field(min_length=6, max_length=64)
     contact_phone: str = Field(default="", max_length=20)
 
-    # 数据库连接（提交时自动验证，失败阻止安装）
+    # 数据库连接（提交时自动验证，失败阻止安装；目标库不存在自动建库+导入 init.sql）
     db_host: str = Field(default="127.0.0.1", min_length=1, max_length=100)
     db_port: int = Field(default=3306, ge=1, le=65535)
     db_user: str = Field(min_length=1, max_length=100)
+    # 接口层允许空串（兼容无密码本地 MySQL）；安装页前端必填
     db_password: str = Field(default="", max_length=200)
-    db_name: str = Field(min_length=1, max_length=100)
+    # 限字母/数字/下划线：建库时作为标识符拼接（防注入），非法库名直接 4006
+    db_name: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_]+$")
 
     # Redis 配置（连接失败降级不阻止，提示重启后生效）
     redis_host: str = Field(default="127.0.0.1", min_length=1, max_length=100)

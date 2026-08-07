@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -57,25 +58,150 @@ def _write_mark_file() -> None:
     os.replace(tmp, MARK_FILE)
 
 
-def _test_db_conn(db_host: str, db_port: int, db_user: str, db_password: str, db_name: str) -> str | None:
-    """试连目标数据库（含库名）；成功返回 None，失败返回可读错误信息。"""
-    try:
-        import pymysql
+def _pymysql_connect(host: str, port: int, user: str, password: str, database: str | None):
+    """按统一超时参数连接 MySQL（database=None 为服务器级连接，用于建库）。"""
+    import pymysql
 
-        conn = pymysql.connect(
-            host=db_host,
-            port=db_port,
-            user=db_user,
-            password=db_password,
-            database=db_name,
-            connect_timeout=5,
-            read_timeout=5,
-        )
+    return pymysql.connect(
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database,
+        connect_timeout=5,
+        read_timeout=5,
+    )
+
+
+def _try_connect(host: str, port: int, user: str, password: str, db_name: str | None) -> Exception | None:
+    """试连 MySQL（含库名）；成功返回 None，失败返回异常对象（供 errno 识别与可读化）。"""
+    try:
+        conn = _pymysql_connect(host, port, user, password, db_name)
         conn.close()
         return None
     except Exception as exc:  # noqa: BLE001 连接失败需返回具体原因给用户
-        logger.warning("初始化数据库连接验证失败：%s", exc)
-        return str(exc)
+        logger.warning("数据库连接验证失败：%s", exc)
+        return exc
+
+
+def _errno_of(exc: Exception) -> int | None:
+    """从 pymysql 异常文本提取 MySQL errno（形如 (1049, "...")）；非连接错误返回 None。"""
+    m = re.match(r"^\((\d+),", str(exc))
+    return int(m.group(1)) if m else None
+
+
+def _friendly_db_error(exc: Exception | None) -> str:
+    """把常见 MySQL 错误码映射为中文可读信息（其余保留原始信息）。"""
+    if exc is None:
+        return ""
+    errno = _errno_of(exc)
+    if errno == 1045:
+        return "用户名或密码错误（Access denied），请核对数据库账号密码"
+    if errno == 1044:
+        return "当前数据库用户无权访问目标库，请检查授权"
+    if errno in (2002, 2003):
+        return "无法连接数据库服务器，请检查地址/端口是否正确、MySQL 服务是否已启动"
+    return str(exc)
+
+
+def _split_sql(text: str) -> list[str]:
+    """把 init.sql 按分号拆成可逐条执行的语句（跳过注释行与空行）。"""
+    stmts: list[str] = []
+    buf: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("--"):
+            continue
+        buf.append(line)
+        if line.endswith(";"):
+            stmts.append(" ".join(buf))
+            buf = []
+    if buf:
+        stmts.append(" ".join(buf))
+    return stmts
+
+
+def _db_has_tables(host: str, port: int, user: str, password: str, db_name: str) -> bool:
+    """目标库是否已有表（存在部署数据的判据；空库可安全导入 init.sql）。"""
+    conn = _pymysql_connect(host, port, user, password, db_name)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = %s",
+                (db_name,),
+            )
+            return cur.fetchone()[0] > 0
+    finally:
+        conn.close()
+
+
+def _ensure_db_schema(host: str, port: int, user: str, password: str, db_name: str) -> str | None:
+    """建库（不存在时）+ 导入 backend/sql/init.sql（utf8mb4 建表+种子）。
+
+    仅对全新库/空库调用——无数据可破坏；失败返回可读错误信息。
+    库名已由 schema 限定 ^[A-Za-z0-9_]+$，此处仍做反引号转义双保险防标识符注入。
+    """
+    safe_name = db_name.replace("`", "``")
+    try:
+        conn = _pymysql_connect(host, port, user, password, None)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"CREATE DATABASE IF NOT EXISTS `{safe_name}` "
+                    "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 建库失败需返回可读原因
+        logger.warning("自动创建数据库失败：%s", exc)
+        return (
+            f"数据库「{db_name}」不存在且自动创建失败（{_friendly_db_error(exc)}），"
+            f"请手动创建后重试：mysql -u{user} -p -e \"CREATE DATABASE {db_name} "
+            "CHARACTER SET utf8mb4\""
+        )
+    sql_path = BASE_DIR / "sql" / "init.sql"
+    if not sql_path.exists():
+        return f"未找到建表脚本 {sql_path}，请检查安装包完整性"
+    try:
+        statements = _split_sql(sql_path.read_text(encoding="utf-8"))
+        conn = _pymysql_connect(host, port, user, password, db_name)
+        try:
+            with conn.cursor() as cur:
+                for stmt in statements:
+                    cur.execute(stmt)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 导入失败需返回可读原因
+        logger.error("自动导入表结构失败：%s", exc)
+        return (
+            f"数据库已创建但表结构导入失败（{exc}），"
+            f"请手动执行：mysql -u{user} -p {db_name} < backend/sql/init.sql"
+        )
+    return None
+
+
+def _test_db_conn(host: str, port: int, user: str, password: str, db_name: str) -> str | None:
+    """验证数据库连接（含库名）并保证表结构就绪。
+
+    - 目标库不存在（1049）→ 自动建库并导入 init.sql（全新库，无数据可破坏）
+    - 目标库存在但无任何表 → 自动导入 init.sql（空库无数据可破坏）
+    - 目标库存在且有表 → 仅验证连接（已有部署数据，不动表结构）
+    失败返回可读错误信息（常见错误码映射中文提示）。
+    """
+    err = _try_connect(host, port, user, password, db_name)
+    if err is None:
+        try:
+            if not _db_has_tables(host, port, user, password, db_name):
+                return _ensure_db_schema(host, port, user, password, db_name)
+            return None
+        except Exception as exc:  # noqa: BLE001 表检查失败需返回可读原因
+            logger.warning("检查目标库表结构失败：%s", exc)
+            return _friendly_db_error(exc)
+    if _errno_of(err) != 1049:
+        return _friendly_db_error(err)
+    return _ensure_db_schema(host, port, user, password, db_name)
 
 
 def _test_redis_conn(redis_host: str, redis_port: int, redis_password: str, redis_db: int) -> str | None:

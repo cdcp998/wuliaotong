@@ -4,6 +4,8 @@
 数据库/Redis 连接验证与 .env 写入通过 monkeypatch 隔离（ENV_FILE 指向临时文件、
 连接函数模拟成功/失败），避免污染开发环境 .env 与真实网络依赖（沿用 test_settings.py 模式）。
 """
+import time
+
 from dotenv import dotenv_values
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -115,6 +117,8 @@ def test_init_validation():
         {"site_name": "x", "admin_username": "admin", "admin_password": "123456"},  # 缺 db_user/db_name
         _payload(db_user=""),
         _payload(db_name=""),
+        _payload(db_name="wlt-1"),  # db_name 限字母/数字/下划线（防标识符注入）
+        _payload(db_name="a b"),
         _payload(db_port=0),
         _payload(redis_db=16),
         _payload(admin_username="a!", admin_password="123456"),
@@ -280,3 +284,145 @@ def test_env_url_encoding(monkeypatch, tmp_path):
     env_values = dotenv_values(tmp_path / ".env")
     assert env_values["DB_URL"] == "mysql+pymysql://my%20user:p%40ss%3Aw%2Frd%3F%23@db.example.com:3307/wlt_db?charset=utf8mb4"
     assert env_values["REDIS_URL"] == "redis://:r%40pass@r.example.com:6380/3"
+
+
+def test_split_sql_skips_comments():
+    """init.sql 分句：跳过注释行与空行，多行语句合并为一条。"""
+    from app.api.init import _split_sql
+
+    sql = "-- 注释行\n\nSET NAMES utf8mb4;\nDROP TABLE IF EXISTS a;\nCREATE TABLE a (\n  id INT\n);\n"
+    assert _split_sql(sql) == ["SET NAMES utf8mb4;", "DROP TABLE IF EXISTS a;", "CREATE TABLE a ( id INT );"]
+
+
+def test_db_error_mapping():
+    """常见 MySQL 错误码映射为中文可读提示（1045 密码错 / 1044 无权限 / 2003 连不上 / 其余原文）。"""
+    from app.api.init import _errno_of, _friendly_db_error
+
+    class _FakeExc(Exception):
+        pass
+
+    unknown = _FakeExc("(1049, \"Unknown database 'wuliaotong1'\")")
+    assert _errno_of(unknown) == 1049
+    assert _friendly_db_error(_FakeExc("(1045, \"Access denied for user\")")) == (
+        "用户名或密码错误（Access denied），请核对数据库账号密码"
+    )
+    assert _friendly_db_error(_FakeExc("(1044, \"Access denied\")")) == (
+        "当前数据库用户无权访问目标库，请检查授权"
+    )
+    assert _friendly_db_error(_FakeExc("(2003, \"Can't connect\")")) == (
+        "无法连接数据库服务器，请检查地址/端口是否正确、MySQL 服务是否已启动"
+    )
+    assert _friendly_db_error(unknown) == str(unknown)
+
+
+def _real_db_creds() -> dict:
+    """从当前 .env 解析真实 MySQL 凭据（真实集成测试用）。"""
+    from urllib.parse import unquote, urlparse
+
+    from app.config import settings
+
+    u = urlparse(settings.db_url)
+    return {
+        "db_host": u.hostname or "127.0.0.1",
+        "db_port": u.port or 3306,
+        "db_user": u.username or "root",
+        "db_password": unquote(u.password or ""),
+    }
+
+
+def _drop_test_db(creds: dict, db_name: str) -> None:
+    """清理自动建库测试创建的临时库（失败不阻塞测试）。"""
+    import pymysql
+
+    try:
+        conn = pymysql.connect(
+            host=creds["db_host"],
+            port=creds["db_port"],
+            user=creds["db_user"],
+            password=creds["db_password"],
+            connect_timeout=5,
+        )
+        with conn.cursor() as cur:
+            cur.execute(f"DROP DATABASE IF EXISTS `{db_name}`")
+        conn.commit()
+        conn.close()
+    except Exception:  # noqa: BLE001 清理失败仅告警
+        pass
+
+
+def test_init_auto_create_missing_db(monkeypatch, tmp_path):
+    """目标库不存在（1049）→ 自动建库并导入 init.sql 表结构，安装成功；测试后清理临时库。"""
+    import app.api.init as init_mod
+
+    state = _save_state()
+    creds = _real_db_creds()
+    db_name = f"wlt_auto_test_{int(time.time() * 1000)}"
+    try:
+        _mock_env(monkeypatch, tmp_path)
+        MARK_FILE.unlink(missing_ok=True)
+        r = client.post("/api/v1/init", json=_payload(db_name=db_name, **creds))
+        assert r.json()["code"] == 0, r.text
+        # 临时库已创建且表结构完整（复验连接 + 角色种子可查）
+        err = init_mod._test_db_conn(
+            creds["db_host"], creds["db_port"], creds["db_user"], creds["db_password"], db_name
+        )
+        assert err is None, err
+        with SessionLocal() as s:
+            from app.models.sys import SysRole
+
+            assert s.scalar(select(SysRole).where(SysRole.code == "super_admin")) is not None
+    finally:
+        _restore_state(state)
+        _drop_test_db(creds, db_name)
+
+
+def test_init_existing_empty_db_imports_schema(monkeypatch, tmp_path):
+    """目标库已存在但为空 → 自动导入 init.sql 表结构，安装成功；测试后清理临时库。"""
+    import pymysql
+
+    import app.api.init as init_mod
+
+    state = _save_state()
+    creds = _real_db_creds()
+    db_name = f"wlt_empty_test_{int(time.time() * 1000)}"
+    try:
+        _mock_env(monkeypatch, tmp_path)
+        # 先真实创建空库（无任何表）
+        conn = pymysql.connect(
+            host=creds["db_host"],
+            port=creds["db_port"],
+            user=creds["db_user"],
+            password=creds["db_password"],
+            connect_timeout=5,
+        )
+        with conn.cursor() as cur:
+            cur.execute(f"CREATE DATABASE `{db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+        conn.commit()
+        conn.close()
+        MARK_FILE.unlink(missing_ok=True)
+        r = client.post("/api/v1/init", json=_payload(db_name=db_name, **creds))
+        assert r.json()["code"] == 0, r.text
+        err = init_mod._test_db_conn(
+            creds["db_host"], creds["db_port"], creds["db_user"], creds["db_password"], db_name
+        )
+        assert err is None, err
+    finally:
+        _restore_state(state)
+        _drop_test_db(creds, db_name)
+
+
+def test_init_auto_create_fail_blocks(monkeypatch, tmp_path):
+    """自动建库失败 → 4006 阻止安装（提示含手动建库指引），不写 .env 与标记文件。"""
+    state = _save_state()
+    try:
+        _mock_env(monkeypatch, tmp_path)
+        _mock_conn(monkeypatch, db_err="数据库「x」不存在且自动创建失败（无法连接数据库服务器…），请手动创建后重试")
+        MARK_FILE.unlink(missing_ok=True)
+        r = client.post("/api/v1/init", json=_payload())
+        assert r.json()["code"] == 4006
+        assert "数据库连接失败" in r.json()["message"]
+        assert "自动创建失败" in r.json()["message"]
+        assert MARK_FILE.exists() is False
+        assert (tmp_path / ".env").exists() is False
+    finally:
+        _restore_state(state)

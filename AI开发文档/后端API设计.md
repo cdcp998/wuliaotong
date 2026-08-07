@@ -55,11 +55,11 @@ POST /api/v1/auth/login
 | 方法 | 路径 | 说明 | 权限 |
 |---|---|---|---|
 | GET | /init/status | 初始化状态 → `{initialized: bool, site_name: string}`；initialized 仅由标记文件存在性判断（不触发任何初始化状态数据库查询），site_name 读 sys_config | 公开 |
-| POST | /init | 执行初始化 `{site_name, admin_username, admin_password, contact_phone?, db_host, db_port, db_user, db_password, db_name, redis_host, redis_port, redis_password, redis_db}`：**提交时自动验证数据库连接（pymysql 试连，失败 4006 阻止安装）与 Redis 连接（失败不阻止，响应带 redis_connected 提示降级）**；写 site.name/site.contact_phone，重置或创建内置超管账号（admin_username 与现有超管账号不同则改名，冲突报 4006）；数据库/Redis 配置写入 `backend/.env`（`DB_URL`/`REDIS_URL`，URL 编码密码，重启后端后生效，.env 已 gitignore 不入库）；事务提交成功后**原子写入标记文件**（临时文件 + os.replace，内容含完成时间，目录权限不足报 5003）；**仅未初始化时可执行，重复执行报 4006** | 公开 |
+| POST | /init | 执行初始化 `{site_name, admin_username, admin_password, contact_phone?, db_host, db_port, db_user, db_password, db_name, redis_host, redis_port, redis_password, redis_db}`：**提交时自动验证数据库连接（pymysql 试连，失败 4006 阻止安装；目标库不存在（MySQL 1049）时自动建库 utf8mb4 并导入 `backend/sql/init.sql` 建表+种子，目标库存在但为空时同样自动导入，已有表的库只验证连接、不动表结构；常见错误码映射中文提示：1045 账号/密码错误、1044 无权限、2003/2002 无法连接服务器）与 Redis 连接（失败不阻止，响应带 redis_connected 提示降级）**；写 site.name/site.contact_phone，重置或创建内置超管账号（admin_username 与现有超管账号不同则改名，冲突报 4006）；数据库/Redis 配置写入 `backend/.env`（`DB_URL`/`REDIS_URL`，URL 编码密码，重启后端后生效，.env 已 gitignore 不入库）；事务提交成功后**原子写入标记文件**（临时文件 + os.replace，内容含完成时间，目录权限不足报 5003）；**仅未初始化时可执行，重复执行报 4006** | 公开 |
 
-- 校验：site_name 1-50 字符；admin_username 2-50 位（字母/数字/下划线/中划线）；admin_password ≥6 位（与注册规则一致）；db_user/db_name 必填（1-100 字符）；db_port/redis_port 1-65535；redis_db 0-15
-- 配置项默认值：db_host=`127.0.0.1`、db_port=`3306`、redis_host=`127.0.0.1`、redis_port=`6379`、redis_db=`0`、redis_password 空=无密码；**密码不回显**（接口不返回已保存配置）
-- 连接验证：DB 必须通过（含库名——目标库需已存在，README 部署流程 `mysql < init.sql` 建库建表）；Redis 失败仅提示（缓存层已设计优雅降级直查数据库，不阻塞业务）
+- 校验：site_name 1-50 字符；admin_username 2-50 位（字母/数字/下划线/中划线）；admin_password ≥6 位（与注册规则一致）；db_user/db_name 必填（1-100 字符；**db_name 限字母/数字/下划线 `^[A-Za-z0-9_]+$`，防标识符注入，建库时反引号转义双保险**）；db_port/redis_port 1-65535；redis_db 0-15
+- 配置项默认值：db_host=`127.0.0.1`、db_port=`3306`、redis_host=`127.0.0.1`、redis_port=`6379`、redis_db=`0`、redis_password 空=无密码；**密码不回显**（接口不返回已保存配置）；db_password **接口层允许空串**（兼容无密码本地 MySQL，安装页前端必填）
+- 连接验证：DB 必须通过（含库名——**目标库不存在或为空时自动建库/导入 init.sql，无需手工建库；已有表的库仅验证连接，不自动导入表结构，避免破坏已有部署数据**）；Redis 失败仅提示（缓存层已设计优雅降级直查数据库，不阻塞业务）
 - 安全：接口只在未初始化时可用（防重入）；标记文件存在即拒绝再次初始化——**与数据库内容无关**（删库/重建库/备份恢复均不会重新进入初始化页）；写操作照常进审计日志（user_id=0）
 - 可靠性：标记文件在业务事务 commit 成功之后才写入 → **标记文件存在 ⇔ 初始化数据已落库**；写入失败返回 5003 且不谎报成功，可重试
 - 迁移：init.sql 不再含 sys.initialized 配置（该行已移除）；**已有部署库无需任何数据库操作**——删除标记文件即可重新进入初始化页（保留业务数据，仅重置超管密码与站点信息）；`backend/data/` 已 gitignore，标记文件不入库

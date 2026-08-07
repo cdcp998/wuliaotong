@@ -207,7 +207,7 @@ export function InitPage() {
               <Alert
                 type="info"
                 showIcon
-                title="提交时将自动验证数据库连接，失败会阻止安装。目标库需已存在（部署流程：mysql &lt; sql/init.sql 建库建表）。"
+                title="提交时将自动验证数据库连接：目标库不存在会自动创建并导入表结构（backend/sql/init.sql），已存在的库仅验证连接、不会改动表结构。"
                 style={{ marginBottom: 12 }}
               />
               <Form.Item name="db_host" label="数据库地址" rules={[{ required: true, message: "请输入数据库地址" }]}>
@@ -222,14 +222,14 @@ export function InitPage() {
                 >
                   <InputNumber min={1} max={65535} size="large" style={{ width: "100%" }} />
                 </Form.Item>
-                <Form.Item name="db_name" label="数据库名" rules={[{ required: true, message: "请输入数据库名" }]} style={{ flex: 1 }}>
+                <Form.Item name="db_name" label="数据库名" rules={[{ required: true, message: "请输入数据库名" }, { pattern: /^[A-Za-z0-9_]+$/, message: "仅支持字母/数字/下划线" }]} style={{ flex: 1 }}>
                   <Input placeholder="如 wuliaotong" size="large" />
                 </Form.Item>
               </div>
               <Form.Item name="db_user" label="数据库用户名" rules={[{ required: true, message: "请输入数据库用户名" }]}>
                 <Input placeholder="如 root" size="large" />
               </Form.Item>
-              <Form.Item name="db_password" label="数据库密码">
+              <Form.Item name="db_password" label="数据库密码" rules={[{ required: true, message: "请输入数据库密码" }]}>
                 <Input.Password placeholder="数据库密码" size="large" />
               </Form.Item>
             </div>

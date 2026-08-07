@@ -123,6 +123,7 @@ cd backend
 python -m venv .venv && .venv/Scripts/activate
 pip install -r requirements.txt
 cp .env.example .env   # 按需改 DB_URL 等
+# 数据库可手动预建（可选）：安装页会自动建库+导入表结构，无需手工执行
 mysql -uroot -p -e "CREATE DATABASE IF NOT EXISTS wuliaotong DEFAULT CHARACTER SET utf8mb4;"
 mysql -uroot -p wuliaotong < sql/init.sql   # 全量建表+种子（幂等）
 ./.venv/Scripts/python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8443 \
