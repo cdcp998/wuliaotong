@@ -110,7 +110,7 @@ export const MENU: MenuNode[] = [
     children: [
       { key: "/reports", label: "物料通报表", icon: <FundOutlined />, perm: "report:view" },
       { key: "/checks", label: "盘点", icon: <ProfileOutlined />, perm: "stk:check" },
-      { key: "/ai-suggestions", label: "AI 建议处理", icon: <RobotOutlined />, perm: "ocr:manage" },
+      { key: "/ai-suggestions", label: "AI 建议处理", icon: <RobotOutlined />, perm: "ai:suggestion" },
     ],
   },
   {
@@ -124,7 +124,7 @@ export const MENU: MenuNode[] = [
       { key: "/system/departments", label: "单位管理", icon: <ApartmentOutlined />, perm: "dept:manage" },
       { key: "/system/logs", label: "操作日志", icon: <AppstoreOutlined />, perm: "sys:log" },
       { key: "/system/backups", label: "备份管理", icon: <HddOutlined />, perm: "sys:backup" },
-      { key: "/llm-logs", label: "AI 调用日志", icon: <RobotOutlined />, perm: "sys:config" },
+      { key: "/llm-logs", label: "AI 调用日志", icon: <RobotOutlined />, perm: "sys:llm-log" },
       { key: "/system/settings", label: "系统设置", icon: <SettingOutlined />, perm: "sys:config" },
     ],
   },
@@ -160,7 +160,9 @@ const TITLES: Record<string, string> = {
 /** 电脑端应用骨架：侧边导航 + 顶栏（《UI设计方案.md》§3.2/§4）。 */
 export function AppLayout({ children }: { children?: React.ReactNode }) {
   const { message } = App.useApp();
-  const [collapsed, setCollapsed] = useState(false);
+  // 移动端（≤768px，与 mobile.css 断点一致）默认折叠为 64px 图标栏，避免展开导航遮住内容；
+  // 桌面端保持默认展开。折叠状态切换仍由顶栏按钮控制。
+  const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth <= 768);
   const [notices, setNotices] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [search, setSearch] = useState("");
@@ -280,7 +282,11 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
           items={menuItems}
           defaultOpenKeys={MENU.map((g) => g.key)}
           selectedKeys={[selectedKey]}
-          onClick={({ key }) => navigate(key)}
+          onClick={({ key }) => {
+            navigate(key);
+            // 移动端点击导航后自动收起侧栏（抽屉式交互），避免展开态遮住新页面内容
+            if (window.innerWidth <= 768) setCollapsed(true);
+          }}
           style={{ borderInlineEnd: "none", padding: "8px 0" }}
         />
       </Sider>

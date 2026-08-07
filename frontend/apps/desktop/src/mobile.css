@@ -33,7 +33,11 @@
     font-size: 12px;
   }
 
-  /* 2. 应用骨架：侧边导航改为固定浮层（抽屉式），收起时 64px 图标栏，内容区全宽 */
+  /* 2. 应用骨架：侧边导航改为固定浮层（抽屉式）。
+   * - 移动端默认折叠（AppLayout 按视口初始化 collapsed），折叠态 64px 图标栏占位，
+   *   内容区让出 64px，不遮内容；
+   * - 展开态（点顶栏按钮）为浮层覆盖，点击菜单跳转后自动收起（AppLayout），
+   *   因此浏览内容时侧栏不会遮挡。 */
   .ant-layout-sider {
     position: fixed !important;
     top: 0 !important;
@@ -42,6 +46,9 @@
     height: 100% !important;
     z-index: 1000;
     box-shadow: 0 0 24px rgba(31, 35, 41, 0.25) !important;
+  }
+  .ant-layout-sider-collapsed + .ant-layout {
+    margin-left: 64px !important;
   }
   .ant-layout-sider-children {
     display: flex;
