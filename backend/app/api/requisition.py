@@ -64,16 +64,6 @@ def _parse_qty(v: str) -> Decimal:
     return Decimal(v)
 
 
-def _user_name(db: Session, uid: int) -> str:
-    u = db.get(SysUser, uid)
-    return u.real_name if u else ""
-
-
-def _loc_code(db: Session, loc_id: int) -> str:
-    loc = db.get(BaseLocation, loc_id)
-    return loc.code if loc else ""
-
-
 def _is_admin_user(db: Session, user: SysUser) -> bool:
     """管理员 = 超级管理员或拥有领用审计权限（仓管员等）；私用状态仅管理员可见。"""
     role = db.get(SysRole, user.role_id)
@@ -108,45 +98,87 @@ def _apply_private(db: Session, bill: OutRequisition, is_private: int) -> None:
             bill.display_location = bill.display_location or location
 
 
-def _req_out(db: Session, r: OutRequisition, viewer: SysUser | None = None) -> dict:
+def _req_out_batch(db: Session, rows: list[OutRequisition], viewer: SysUser | None = None) -> list[dict]:
+    """批量组装领用单输出（替代逐行 _req_out 的 N+1 查询）。
+
+    一次查询取全部明细/仓库/用户/产品/库位，内存分组映射；
+    列表每页 20 单时查询次数从 200+ 降到 6 次左右（我的申请/领用列表慢的根因）。
+    """
+    if not rows:
+        return []
+    ids = [r.id for r in rows]
+
     items = db.scalars(
-        select(OutRequisitionItem).where(OutRequisitionItem.requisition_id == r.id).order_by(OutRequisitionItem.sort)
+        select(OutRequisitionItem)
+        .where(OutRequisitionItem.requisition_id.in_(ids))
+        .order_by(OutRequisitionItem.requisition_id, OutRequisitionItem.sort)
     ).all()
-    wh = db.get(BaseWarehouse, r.warehouse_id)
-    # 私用脱敏：非管理员只能看到固定的掩护值（最近 30 天内未盘点领用单中取）；管理员见真实状态 + 可编辑掩护值
-    if r.is_private and not (viewer and _is_admin_user(db, viewer)):
-        use_location, use_reason = r.display_location or r.use_location, r.display_reason or r.use_reason
-        is_private, display_reason, display_location = 0, "", ""
-    else:
-        use_location, use_reason = r.use_location, r.use_reason
-        is_private, display_reason, display_location = r.is_private, r.display_reason, r.display_location
-    return RequisitionOut(
-        id=r.id, bill_no=r.bill_no, applicant_id=r.applicant_id,
-        applicant_name=_user_name(db, r.applicant_id),
-        use_location=use_location, use_reason=use_reason,
-        is_private=is_private, display_reason=display_reason, display_location=display_location,
-        location_photo_file_id=r.location_photo_file_id,
-        work_photo_file_id=r.work_photo_file_id,
-        work_done_at=r.work_done_at,
-        work_lat=r.work_lat,
-        work_lng=r.work_lng,
-        warehouse_id=r.warehouse_id, warehouse_name=wh.name if wh else "",
-        total_qty=r.total_qty, status=r.status,
-        audit_by=r.audit_by, audit_name=_user_name(db, r.audit_by),
-        audit_time=r.audit_time, audit_remark=r.audit_remark,
-        remark=r.remark, created_at=r.created_at,
-        items=[
-            RequisitionItemOut(
-                id=it.id, product_id=it.product_id,
-                product_name=(p.name if (p := db.get(BaseProduct, it.product_id)) else ""),
-                code=(p.code if (p := db.get(BaseProduct, it.product_id)) else ""),
-                spec=(p.spec if (p := db.get(BaseProduct, it.product_id)) else ""),
-                location_id=it.location_id, location_code=_loc_code(db, it.location_id),
-                qty=it.qty, photo_file_id=it.photo_file_id,
-            )
-            for it in items
-        ],
-    ).model_dump()
+    items_by_req: dict[int, list[OutRequisitionItem]] = {}
+    for it in items:
+        items_by_req.setdefault(it.requisition_id, []).append(it)
+
+    wh_ids = {r.warehouse_id for r in rows}
+    wh_map = {w.id: w for w in db.scalars(select(BaseWarehouse).where(BaseWarehouse.id.in_(wh_ids)))} if wh_ids else {}
+
+    uid_ids = {r.applicant_id for r in rows} | {r.audit_by for r in rows if r.audit_by}
+    user_map = {u.id: u for u in db.scalars(select(SysUser).where(SysUser.id.in_(uid_ids)))} if uid_ids else {}
+
+    item_list = [it for its in items_by_req.values() for it in its]
+    product_ids = {it.product_id for it in item_list}
+    prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(product_ids)))} if product_ids else {}
+    loc_ids = {it.location_id for it in item_list}
+    loc_map = {l.id: l for l in db.scalars(select(BaseLocation).where(BaseLocation.id.in_(loc_ids)))} if loc_ids else {}
+
+    # 私用脱敏：管理员判断整批只做一次（原逐行 _is_admin_user 每行都查库）
+    viewer_is_admin = viewer is not None and _is_admin_user(db, viewer)
+
+    out: list[dict] = []
+    for r in rows:
+        its = items_by_req.get(r.id, [])
+        wh = wh_map.get(r.warehouse_id)
+        if r.is_private and not viewer_is_admin:
+            use_location, use_reason = r.display_location or r.use_location, r.display_reason or r.use_reason
+            is_private, display_reason, display_location = 0, "", ""
+        else:
+            use_location, use_reason = r.use_location, r.use_reason
+            is_private, display_reason, display_location = r.is_private, r.display_reason, r.display_location
+        applicant = user_map.get(r.applicant_id)
+        auditor = user_map.get(r.audit_by)
+        out.append(
+            RequisitionOut(
+                id=r.id, bill_no=r.bill_no, applicant_id=r.applicant_id,
+                applicant_name=applicant.real_name if applicant else "",
+                use_location=use_location, use_reason=use_reason,
+                is_private=is_private, display_reason=display_reason, display_location=display_location,
+                location_photo_file_id=r.location_photo_file_id,
+                work_photo_file_id=r.work_photo_file_id,
+                work_done_at=r.work_done_at,
+                work_lat=r.work_lat,
+                work_lng=r.work_lng,
+                warehouse_id=r.warehouse_id, warehouse_name=wh.name if wh else "",
+                total_qty=r.total_qty, status=r.status,
+                audit_by=r.audit_by, audit_name=auditor.real_name if auditor else "",
+                audit_time=r.audit_time, audit_remark=r.audit_remark,
+                remark=r.remark, created_at=r.created_at,
+                items=[
+                    RequisitionItemOut(
+                        id=it.id, product_id=it.product_id,
+                        product_name=(p.name if (p := prod_map.get(it.product_id)) else ""),
+                        code=(p.code if (p := prod_map.get(it.product_id)) else ""),
+                        spec=(p.spec if (p := prod_map.get(it.product_id)) else ""),
+                        location_id=it.location_id, location_code=(loc.code if (loc := loc_map.get(it.location_id)) else ""),
+                        qty=it.qty, photo_file_id=it.photo_file_id,
+                    )
+                    for it in its
+                ],
+            ).model_dump()
+        )
+    return out
+
+
+def _req_out(db: Session, r: OutRequisition, viewer: SysUser | None = None) -> dict:
+    """单条组装（详情接口用）；列表批量场景请用 _req_out_batch。"""
+    return _req_out_batch(db, [r], viewer)[0]
 
 
 def _notify(db: Session, user_id: int, title: str, content: str, biz_type: str) -> None:
@@ -327,7 +359,7 @@ def my_requisitions(
         stmt = stmt.where(OutRequisition.status == status)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(OutRequisition.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
-    return ok(PageData(list=[_req_out(db, r, user) for r in rows], total=total, page=page, page_size=page_size).model_dump())
+    return ok(PageData(list=_req_out_batch(db, list(rows), user), total=total, page=page, page_size=page_size).model_dump())
 
 
 @router.get("/requisitions", dependencies=[Depends(require_permission("req:audit"))])
@@ -351,7 +383,7 @@ def list_requisitions(
         )
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(OutRequisition.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
-    return ok(PageData(list=[_req_out(db, r, user) for r in rows], total=total, page=page, page_size=page_size).model_dump())
+    return ok(PageData(list=_req_out_batch(db, list(rows), user), total=total, page=page, page_size=page_size).model_dump())
 
 
 @router.get("/requisitions/{req_id}")
