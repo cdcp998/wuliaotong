@@ -159,7 +159,7 @@ export function InboundPage() {
     setOcrLoading(true);
     try {
       const up = await fileApi.upload(f, "purchase_bill");
-      const t = await ocrApi.recognize(up.file_id, 1, "llm");
+      const t = await ocrApi.recognize(up.file_id, 1, "auto");
       pollOcr(t.task_id);
     } catch (e) {
       setOcrLoading(false);

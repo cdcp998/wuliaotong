@@ -63,6 +63,45 @@
 
 ---
 
+## P0-送货单未知格式通用识别（回退解析 + 容错）
+
+**需求**：新供应商/新版式送货单（无 9~15 位物料编码锚点、不属于固定模板）识别错误率高（实测 `testdata/进货单/新格式进货单.JPG`「货物采购签收单」：列结构为 货物名称/厂家品牌/规格型号/数量单价/金额/备注，无物料编码列）。根因：① 识别链单点依赖视觉大模型，无本地兜底（规则模板 `template.py` 已移出主流程且只认固定版式，新格式返回 None）；② 未利用 OCR 行坐标，表格列错位、合计行被当成明细（84460.00 合计误作第 5 条）；③ 无结果校验（表头词/无名称行/异常数值直接透传）。
+
+**方案（纯本地规则 + 大模型兜底，延续「模板/规则优先 → 大模型兜底 → 人工确认」总原则）**：
+
+- 后端新文件 `services/ocr/generic_parser.py`：`parse_delivery_generic(lines, boxes) -> dict | None`——**通用字段提取**：
+  - 全文正则提取 供应商（供货单位/供应商/供方/销售方/开票单位 + 盖章）、单号（送货单号/单据编号/订单号…）、大写金额行；
+  - 利用 OCR 行坐标（Paddle/RapidOCR 均返回 box）：按 y 聚行带（表格行）→ 行带内按 x 聚类单元格 → 由表头行（货物名称/厂家品牌/规格型号/数量单价/金额…）确定列原型 → 明细行按列分配（名称/品牌/规格碎片拼接去重；数字列按 qty/price/amount 分配，「数量单价」合列按 x 分裂；qty×price≈amount 校验）；
+  - 合计行（合计/总计/大写）与无名称行剔除；box 缺失时退化为行文本启发式拆分；
+  - `sanitize_items(items) -> items` **容错校验**（所有来源通用）：剔除表头词/无名称行、qty 非正数或超界（>10⁶）剔除、price/amount 缺失按 qty×amount 互推、数值归一去尾零、金额与 qty×price 偏差 >2% 时保留单据原值并记 warning。
+- `/ocr/recognize`（ocr_type=1）识别链改为**四级回退**（mode=auto）：
+  ① 本地 OCR（Paddle/Rapid，带坐标）→ 规则模板 `parse_delivery`（**已知格式兼容不变**，命中即返回 engine=template）；
+  ② 通用字段提取 `parse_delivery_generic`（新格式，毫秒级、无 LLM，engine=generic）；
+  ③ SiliconFlow 视觉结构化（提示词增强：合计行/大写金额不得作为明细、按行输出；engine=siliconflow+deepseek）；
+  ④ DeepSeek 文本结构化（对本地 OCR 文本行，engine=deepseek）。
+  各级结果统一过 `sanitize_items`；全部失败返回 {lines}（人工录入，与现状一致）。
+- `mode` 参数恢复语义：auto=完整四级链（默认）/ template=仅本地（①+②，不调 LLM）/ llm=仅大模型（③+④）；desktop/mobile 送货单识别调用改传 auto。
+- 确认链路容错：`/ocr/delivery/confirm` 名称含表头词/合计词的行跳过自动建料（product_id=0），防脏数据落库。
+
+**接口**：无新接口（内部函数 + 原 mode 参数语义恢复）；structured 响应新增 `_engine: template|generic|siliconflow+deepseek|deepseek` 与 `warnings: [提示]`（前端可展示，不展示不阻塞）。
+
+**验证**：pytest 用例（mock 引擎返回真实新格式 OCR 输出（含坐标）→ 4 条明细/供应商/金额正确；无坐标退化；合计行剔除；模板命中优先不调 LLM；容错清洗）；真实图端到端（`新格式进货单.JPG` → /ocr/recognize → 4 条明细）；既有 88 用例回归。
+
+---
+
+## P0-送货单样本归档（训练数据收集）
+
+**需求（用户 2026-08-07 追加）**：送货单识别入库上传的图片/送货单按时间保存，供后期训练使用。
+
+**方案（best-effort，不阻断主流程）**：
+- 后端新文件 `services/ocr/sample_archive.py`：`archive_delivery_sample(data, file_id, original_name, uploader_id)`——上传（`/files/upload`，biz_type=purchase_bill）时把**原始图片字节**（压缩前，训练用最佳质量）写入 `backend/data/ocr_training/送货单/YYYY-MM-DD/<HHMMSS>_f{file_id}_{uuid8>.<ext>`（按上传日期分目录），并写同名 .json 元信息（file_id/uploader/时间）；
+- 识别任务（/ocr/recognize ocr_type=1）完成后由识别线程调 `write_delivery_sample_result(file_id, structured)` 补写结构化结果到该文件最新归档的 .json——图片 + 识别结果成对保存，供后期训练/评测直接使用；
+- 归档失败（磁盘满/权限）一律静默降级，不影响上传/识别；无专门管理接口（训练样本属内部资产，随备份策略走 data 目录）。
+
+**验证**：上传 purchase_bill 图片 → data/ocr_training/送货单/当日目录出现原图 + json；识别任务完成后 json 含 structured。
+
+---
+
 ## P1-② 材料查重/合并建议
 
 **需求**：材料库存在大量重复/相似材料（同名不同规格写法、一物多码），人工难以发现。
@@ -170,7 +209,7 @@
 
 | 目录 | 文件 | 用途说明 |
 |---|---|---|
-| `testdata/进货单/` | `OCR进货单测试.jpg`（海南矿业采购订单，4 条明细，单号 POAB2025120071，供应商「海口耐沃办公设备有限公司」）；`OCR进货单测试2.png`（5 条明细，单号 POAB2026050018，供应商「海南工友商贸有限公司」） | **送货单识别**（P5/P9 视觉识别 `vision_delivery` + DeepSeek 结构化）基准样本：字段级正确率、`/ocr/delivery/confirm` 供应商/物料匹配回归 |
+| `testdata/进货单/` | `OCR进货单测试.jpg`（海南矿业采购订单，4 条明细，单号 POAB2025120071，供应商「海口耐沃办公设备有限公司」）；`OCR进货单测试2.png`（5 条明细，单号 POAB2026050018，供应商「海南工友商贸有限公司」）；`新格式进货单.JPG`（「货物采购签收单」：**无物料编码列**，列=货物名称/厂家品牌/规格型号/数量单价/金额/备注，4 条明细，合计 84460.00，供应商「海口耐沃办公设备有限公司」） | **送货单识别**（P5/P9 视觉识别 `vision_delivery` + DeepSeek 结构化）基准样本：字段级正确率、`/ocr/delivery/confirm` 供应商/物料匹配回归；`新格式进货单.JPG` 为**未知格式通用识别**（generic_parser 四级回退链）回归样本 |
 | `testdata/物品标签/` | `IMG_2609~IMG_2889.JPG` 共 11 张（实物物品标签/包装照片）+ `QQ20260807-023516.png`（H3C 8口千兆以太网交换机 S2G Pro 包装图） | **商品识别与模板训练**（`vision_product`/`/ocr/quick`/`/ocr/template/train`）：H3C 图已用于生成本地 OCR 模板并保留在开发库；其余 JPG 供批量识别实测与模板自动学习验证 |
 | `testdata/匹配导出表格/` | `库存金额收发存（2026.06）.xlsx`（公司月度收发存模板，21 列） | **盘点导出**参考模板（P8 盘点导出格式对照） |
 | `testdata/匹配导入表格/` | `库存金额收发存（2026.06）.xlsx`（同文件副本） | **期初/收发存导入**模板对照（与导出同源，导入字段映射验证） |

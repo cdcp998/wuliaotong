@@ -44,7 +44,7 @@ export function DeliveryOcrPage() {
     try {
       const up = await fileApi.upload(file, "purchase_bill");
       setUploadUrl(up.url);
-      const t = await ocrApi.recognize(up.file_id, 1, "llm");
+      const t = await ocrApi.recognize(up.file_id, 1, "auto");
       setTask(null);
       setRows([]);
       setLines([]);

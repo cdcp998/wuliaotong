@@ -150,8 +150,9 @@ POST /api/v1/auth/login
 | PUT | /storages/{id} | 修改存储位置（sys:config） |
 | DELETE | /storages/{id} | 停用（有文件的存储禁止删除） |
 | GET | /storages/health | 各存储空间检测：路径存在/可写/总空间/剩余空间（sys:config） |
-| POST | /ocr/recognize | {file_id, ocr_type: 1送货单/2商品外包装/3标签型号} → {task_id}；按 sys_config 选中的引擎异步识别（rapidocr / paddle） |
+| POST | /ocr/recognize | {file_id, ocr_type: 1送货单/2商品外包装/3标签型号, mode: auto/template/llm} → {task_id}；送货单（ocr_type=1）四级回退链（mode=auto）：① 本地 OCR + 规则模板（已知格式，秒级，engine=template）→ ② 通用字段提取 generic_parser（未知格式，坐标列识别，毫秒级，engine=generic）→ ③ SiliconFlow 视觉结构化（engine=siliconflow+deepseek）→ ④ DeepSeek 文本结构化（engine=deepseek）；各级结果统一过容错校验 sanitize_items，全部失败返回 {lines} 人工录入；mode=template 仅本地①+②，mode=llm 仅③+④ |
 | GET | /ocr/tasks/{task_id} | {status: running/done/failed, structured, record_id} 轮询 |
+| POST | /ocr/quick | {file_id, ocr_type: 2/3} 同步快查，识别链路按序执行（每级失败/未命中进入下一级）：① 条码解码（zxing-cpp，条码命中商品库直接返回）→ ② 本地 OCR + 纠错 + 模板匹配 → ③ 视觉模型识别物品（SiliconFlow → 豆包兜底链）→ ④ 未识别出物品则视觉纯文本提取 + 文本匹配，仍无匹配则 DeepSeek 文本分析物品名称再匹配 → ⑤ 全部不可用返回 5001；返回 {lines, matches, record_id, barcode}（barcode 为空串表示未识别到条码）；权限 ocr:use |
 | POST | /ocr/confirm | {record_id, structured} 人工修正确认（match_status=3） |
 | POST | /ocr/match | {record_id} 未匹配商品 → 豆包视觉识别 → 生成 ai_suggestion → 站内通知 |
 | GET | /ocr/records?date=&match_status=&page= | 识别历史 |
@@ -181,6 +182,13 @@ OCR 结果示例（structured）：
 - GET /settings、PUT /settings（公司信息、单据编号规则、OCR 引擎参数、大模型 Key/BaseURL、**注册模式 auth.register_mode（open/closed/review）、找回方式 auth.forgot_method（email/phone/both）、管理员电话 site.contact_phone、SMTP smtp.host/port/user/password/from**、水印 watermark.template/position/bg_opaque、视觉模型 llm.siliconflow.enabled/api_key/base_url/model、PP-OCR 版本 ocr.model_version）
   - **值契约**：所有配置值统一字符串传输（开关用 "1"/"0"、数字用字符串如 "8"）；密钥字段（`*api_key`、`smtp.password`）GET 返回脱敏 `****后四位`，PUT 传掩码/空串表示不修改，传新值才覆盖；**传非字符串（number/null）返回 4006**（前端保存前统一转字符串）
 - POST /llm/siliconflow/models、POST /llm/deepseek/models、POST /llm/doubao/models（sys:config）——用**已保存**的 API Key 调 OpenAI 兼容 `/models` 接口拉取模型列表 → `{models: [{id, owned_by}]}`；对应 enabled=0 → 4006（提示先启用并保存）、未配置 Key → 4006、网络/鉴权失败 → 5002（设置页「获取模型列表」按钮与保存后自动拉取共用）
+- **大模型兼容性标准**：三个模型槽位（视觉 llm.siliconflow.* / 文本 llm.deepseek.* / 兜底 llm.doubao.*）统一遵循 **OpenAI Chat Completions 兼容协议**（`POST {Base URL}/chat/completions`，`Authorization: Bearer`，messages 数组格式）；Base URL / API Key / 模型名均可自由指定，支持任意 OpenAI 兼容服务商与自建内网服务（vLLM / Ollama / 第三方网关），不绑定特定供应商
+- **配额与预警**（设置页「OCR 与大模型 → 配额与预警」，sys:config）：
+  - POST /llm/quota/{provider}（provider ∈ siliconflow|deepseek|doubao）——立即获取配额/余额，结果存快照 `quota.snapshot`（JSON）；GET /llm/quota 读取快照；失败/不适用一律返回 `ok=false + error`（HTTP 200，优雅降级不抛错）
+  - 前置跳过：模型未启用（llm.*.enabled=0）或未配置 API Key → 不查询，返回明确提示；Base URL 非官方域名（自建/第三方网关，无标准余额接口）→ 返回兼容性说明，不发起请求，不参与配额告警
+  - 配额来源：SiliconFlow `GET /user/info`（totalBalance，元）、DeepSeek `GET /user/balance`（balance_infos[].total_balance，优先 CNY）、豆包 `GET /usage/quota`（quota_list[]，防御式解析 total/used/remaining_quota）
+  - 配置键：`quota.warning.enabled`（1/0）、`quota.warning.recipients`（逗号分隔邮箱）、`quota.refresh.interval_minutes`（自动获取间隔分钟，默认 60；旧版 interval_hours 键自动 ×60 迁移）、`quota.warning.threshold.siliconflow/deepseek/doubao`（剩余低于该值时告警）；`quota.last_refresh` 记录最近获取时间（内部）
+  - 定时任务每 5 分钟轻量触发，按 `quota.refresh.interval_minutes` 判断到点后：自动获取配额刷新快照（仅已启用且配置 Key 的服务商）→ 剩余低于阈值 → 邮件通知全部收件人（邮件服务见 §SMTP）；每服务商跌破阈值仅通知一次，恢复后清除标记可再次通知；手动获取（POST /llm/quota/{provider}）视为一次刷新并重置计时
 - **运行时日志**：级别 DEBUG/INFO/WARN/ERROR（默认 INFO，环境变量 `LOG_LEVEL` 或系统设置 `log.level` 覆盖，保存后立即生效无需重启）；文件按天轮转 `logs/app-YYYY-MM-DD.log`；覆盖关键操作（请求/登录/OCR 任务/大模型调用/备份/设置修改），uvicorn 访问日志同文件
 - 存储位置管理见 §7（/storages，多存储地址：fill 最空闲 / round 轮询 / manual 手动指定）
 - GET /logs?username=&module=&method=&start=&end=&page= 操作日志（写操作审计查询）
@@ -204,6 +212,8 @@ OCR 结果示例（structured）：
 | report:view / report:export | 报表查看/导出 | 管理者/超级管理员 |
 | sys:user / sys:role / sys:log / sys:config / sys:backup | 系统管理 | 超级管理员 |
 | dept:manage | 单位管理（单位 CRUD + 货架关联） | 超级管理员 |
+| sys:llm-log | AI 调用日志（P9 大模型调用日志查询） | 超级管理员 |
+| ai:suggestion | AI 建议处理（列表/忽略；确认新增仍要求 base:product） | 超级管理员/仓管员 |
 
 ## 11. 关键实现要点
 

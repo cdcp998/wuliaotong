@@ -36,8 +36,11 @@ from app.models.ocr import AiSuggestion, OcrRecord
 from app.models.sys import SysFile, SysStorage, SysUser
 from app.schemas.ocr import ClassifyReq, DeliveryConfirmReq
 from app.services.llm import LLMNotConfigured, get_llm
-from app.services.ocr.client import get_ocr_engine
+from app.services.ocr.barcode import try_decode_barcode
+from app.services.ocr.client import OCRInitError, get_ocr_engine
 from app.services.ocr.correction import correct_texts
+from app.services.ocr.generic_parser import is_footer_text, parse_delivery_generic, sanitize_items
+from app.services.ocr.template import parse_delivery as parse_delivery_template
 from app.services.ai.supplier_norm import match_supplier_by_llm
 from app.services.ocr.product_template import build_anchors, load_templates, match_template, save_templates
 from app.services.storage import resolve_storage_path
@@ -91,7 +94,10 @@ VISION_DELIVERY_PROMPT = (
     "字段：ocr_text(图片中全部文字，按阅读顺序用换行分隔)、supplier_name(供应商名称，可空字符串)、"
     "bill_no(送货单号/单据编号，可空字符串)、items(商品明细数组，每项：product_name(商品名)、"
     "material_code(物料编码，可空)、spec(规格型号，可空)、unit(单位，可空)、qty(数量字符串)、"
-    "price(单价字符串)、amount(金额字符串，可空))。无法判断的项留空或跳过。"
+    "price(单价字符串)、amount(金额字符串，可空))。"
+    "注意：单据下方的合计行/总计/大写金额（如「合计 84460.00」「大写：捌万肆仟肆佰陆拾元整」）"
+    "不是商品明细，不要输出为 items；每条明细单独一项，数量/单价/金额分别输出，不要合并；"
+    "无法判断的项留空或跳过。"
 )
 
 VISION_TEXT_PROMPT = (
@@ -108,12 +114,27 @@ VISION_PRODUCT_PROMPT = (
 
 
 def _local_ocr(db: Session, data: bytes) -> list[str] | None:
-    """本地 OCR 引擎识别；引擎已关闭（ocr.engine=off）或配置未知返回 None。"""
+    """本地 OCR 引擎识别（纯文本）；引擎关闭/失败返回 None（走视觉兜底）。"""
+    lines = _local_ocr_lines(db, data)
+    return [l.text for l in lines] if lines is not None else None
+
+
+def _local_ocr_lines(db: Session, data: bytes) -> list | None:
+    """本地 OCR 引擎识别（带坐标 OcrLine）；引擎已关闭（ocr.engine=off）、启动失败或识别失败均返回 None
+    （走视觉兜底或统一 5001 错误，避免引擎异常堆 500 / 请求卡死）。"""
     try:
-        lines = get_ocr_engine(db).recognize(data)
-        return [l.text for l in lines]
-    except ValueError:
+        return get_ocr_engine(db).recognize(data)
+    except (ValueError, OCRInitError):
         return None
+
+
+def _sanitize_structured(structured: dict) -> None:
+    """容错校验（所有识别来源通用）：剔表头/合计/无名称/异常数值行，数值归一。"""
+    items, warns = sanitize_items(structured.get("items") or [])
+    structured["items"] = items
+    if warns:
+        structured["warnings"] = structured.get("warnings") or []
+        structured["warnings"].extend(warns)
 
 
 def _vision_product(db: Session, image_bytes: bytes) -> dict | None:
@@ -302,11 +323,11 @@ def _save_record(file_id: int, ocr_type: int, texts: list[str], structured: dict
 def ocr_recognize(
     file_id: int,
     ocr_type: int = Query(1, ge=1, le=3, description="1 送货单 / 2 商品外包装 / 3 标签型号"),
-    mode: str = Query("llm", description="llm 视觉识别（SiliconFlow+DeepSeek）；旧值 auto/template 兼容忽略"),
+    mode: str = Query("auto", description="auto 四级回退（模板→通用提取→视觉→DeepSeek）；template 仅本地；llm 仅大模型"),
     user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    # 已移除本地模板识别，mode 仅保留兼容（统一走 SiliconFlow 视觉识别 + DeepSeek 分类）
+    # 四级回退链在后台任务 _run 内按 mode 执行（见《后端API设计.md》§7 /ocr/recognize）
     if mode not in ("auto", "template", "llm"):
         raise BizError(E_PARAM, "mode 必须为 auto/template/llm")
     data = _read_file_bytes(db, file_id)
@@ -321,13 +342,44 @@ def ocr_recognize(
                 texts: list[str] = []
                 structured = None
                 if ocr_type == 1:
-                    # 送货单：SiliconFlow 视觉识别（不再使用本地模板/本地 OCR）→ DeepSeek 材料分类
-                    structured = _delivery_by_vision(s_eng, data)
+                    # 送货单四级回退（mode=auto）：① 规则模板（已知格式）→ ② 通用字段提取（未知格式，坐标列识别）
+                    # → ③ SiliconFlow 视觉结构化 → ④ DeepSeek 文本结构化；各级结果统一过容错校验
+                    ocr_lines = _local_ocr_lines(s_eng, data)
+                    texts = [l.text for l in ocr_lines] if ocr_lines else []
+                    boxes = [l.box for l in ocr_lines] if ocr_lines else None
+                    structured = None
+                    if mode in ("auto", "template"):
+                        structured = parse_delivery_template(texts)
+                        if structured:
+                            structured["_engine"] = "template"
+                        else:
+                            structured = parse_delivery_generic(texts, boxes)
+                            if structured:
+                                structured["_engine"] = "generic"
+                        if structured:
+                            _sanitize_structured(structured)
+                    if structured is None and mode in ("auto", "llm"):
+                        structured = _delivery_by_vision(s_eng, data)
+                        if structured:
+                            structured.setdefault("_engine", "siliconflow+deepseek")
+                            _sanitize_structured(structured)
+                    if structured is None and mode in ("auto", "llm") and texts:
+                        structured = _structured_by_deepseek(s_eng, texts)
+                        if structured:
+                            structured["_engine"] = "deepseek"
+                            _sanitize_structured(structured)
                     if structured:
-                        texts = structured.get("lines") or []
+                        if not structured.get("lines"):
+                            structured["lines"] = texts
+                        if not texts and structured.get("lines"):
+                            texts = structured["lines"]  # 纯视觉模式：识别记录原文用视觉返回行
                         structured["items"] = _classify_items_by_deepseek(s_eng, structured.get("items") or [])
-                        structured["lines"] = texts
-                        structured.setdefault("_engine", "siliconflow+deepseek")
+                    else:
+                        structured = {"lines": texts}
+                    # 训练样本归档：识别结果补写（best-effort，失败不影响主流程）
+                    from app.services.ocr.sample_archive import write_delivery_sample_result
+
+                    write_delivery_sample_result(file_id, structured, ocr_type)
                 else:
                     # 商品外包装/标签型号：本地 OCR 优先，本地关闭时回退视觉模型
                     texts = _recognize_text(s_eng, data)
@@ -366,6 +418,31 @@ def ocr_task_status(task_id: str, db: Session = Depends(get_db)) -> dict:
 # ============================ 拍照快查（同步） ============================
 
 
+def _guess_product_name_from_lines(db: Session, texts: list[str]) -> str | None:
+    """文本分析兜底：DeepSeek 从识别文本行中提取最可能的商品名称（判断物品是什么）。
+
+    仅当条码未命中且文本行也匹配不到商品时调用；未配置/调用失败/无法判断返回 None
+    （调用方保持原匹配结果，不阻断主流程）。
+    """
+    try:
+        llm = get_llm(db, "deepseek")
+    except LLMNotConfigured:
+        return None
+    prompt = (
+        "以下是从商品包装/标签图片识别出的文本行，请判断哪一行（或哪几行组合）是商品名称"
+        "（可能是品牌+型号/规格的组合）。只输出商品名称本身，不要解释，不要输出其他行。"
+        "若无法判断，输出「无」。\n文本行：\n" + "\n".join(texts)
+    )
+    try:
+        content = llm.chat_text("只输出商品名称，不要解释", prompt, scene="ocr_guess_name")
+    except Exception:  # noqa: BLE001 网络/鉴权/解析失败 → 保持原匹配结果
+        return None
+    name = content.strip().strip('"').strip()
+    if not name or name == "无" or len(name) > 100:
+        return None
+    return name
+
+
 @router.post("/ocr/quick", dependencies=[Depends(require_permission("ocr:use"))])
 def ocr_quick(
     file_id: int,
@@ -373,14 +450,41 @@ def ocr_quick(
     user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """同步识别商品照片并匹配系统商品（出入库带入用）。本地 OCR 关闭时回退视觉模型。"""
+    """同步识别商品照片并匹配系统商品（出入库带入用）。
+
+    识别链路（按序执行，每级失败/未命中自动进入下一级）：
+    ① 条码解码（zxing-cpp）→ 条码命中商品库直接返回；
+    ② 本地 OCR + 纠错 + 模板匹配（结构化 product_name/brand/spec）；
+    ③ 视觉模型识别物品（SiliconFlow → 豆包兜底链）；
+    ④ 未识别出物品 → 提取文字行（本地 OCR 失败时视觉纯文本兜底）→ 文本匹配，
+       仍无匹配则 DeepSeek 从文本行分析物品名称再匹配；
+    ⑤ 全部不可用 → 统一 5001 提示。
+    """
     data = _read_file_bytes(db, file_id)
     prod: dict | None = None
+    texts: list[str] = []
+
+    # ① 条码优先：图片含条码且商品库精确命中 → 直接返回（不走 OCR，秒级）
+    barcode = try_decode_barcode(data)
+    if barcode:
+        hit = db.scalars(
+            select(BaseProduct).where(BaseProduct.status == 1, BaseProduct.barcode == barcode).limit(1)
+        ).first()
+        if hit is not None:
+            record_id = _save_record(file_id, ocr_type, [], None, user.id)
+            return ok({
+                "lines": [],
+                "barcode": barcode,
+                "record_id": record_id,
+                "matches": [
+                    {"product_id": hit.id, "code": hit.code, "name": hit.name, "spec": hit.spec, "barcode": hit.barcode}
+                ],
+            })
+
+    # ② 本地 OCR + 模板匹配：文本纠错归一（DeepSeek，失败原样）→ 模板命中直接用结构化字段（秒级）
     local = _local_ocr(db, data)
     if local is not None:
-        # 本地 OCR 文本先纠错归一（DeepSeek，错字修正后模板/材料匹配更准；失败原样）
         texts = correct_texts(db, local)
-        # 本地 OCR 模板优先：视觉大模型训练生成的模板命中 → 直接用模板结构化字段（秒级，不调大模型）
         tpl = match_template(db, texts)
         if tpl:
             prod = {
@@ -389,15 +493,19 @@ def ocr_quick(
                 "spec": tpl.get("spec") or "",
                 "lines": texts,
             }
-    else:
-        # 视觉兜底：结构化商品识别（product_name/brand/spec 匹配更准），失败回退纯文本行
+    # ③ 视觉模型识别物品：模板未命中或本地 OCR 不可用 → 结构化商品识别（product_name/brand/spec）
+    if prod is None:
         prod = _vision_product(db, data)
-        texts = prod["lines"] if prod and prod.get("lines") else _vision_texts(db, data)
+        if prod and prod.get("lines"):
+            texts = prod["lines"]
+    # ④ 未识别出物品 → 提取文字分析：本地 OCR 失败时用视觉纯文本提取；都没有则识别功能不可用
+    if not texts:
+        texts = _vision_texts(db, data)
         if not texts:
             raise BizError(E_OCR_UNAVAILABLE, "识别功能不可用：本地 OCR 识别引擎已关闭，且视觉模型（SiliconFlow/豆包）均不可用（系统设置 → OCR 与大模型）")
     matches: list[dict] = []
     seen: set[int] = set()
-    # 视觉结构化候选优先匹配：商品名 / 品牌+规格 / 规格（比整行宣传文案更易命中）
+    # 视觉/模板结构化候选优先匹配：商品名 / 品牌+规格 / 规格（比整行宣传文案更易命中）
     candidates: list[str] = []
     if prod:
         if prod.get("product_name"):
@@ -413,8 +521,16 @@ def ocr_quick(
                 matches.append(m)
                 # 模板自动学习：同一商品 3 次命中同一行 → 自动生成模板（下次秒级匹配，不调大模型）
                 _maybe_learn_template(db, m["product_id"], t, m.get("spec") or "")
+    # ④b 文本分析物品是什么：条码未命中、文本行也匹配不到 → DeepSeek 提取商品名再匹配一次
+    if not matches and texts:
+        guessed = _guess_product_name_from_lines(db, texts)
+        if guessed:
+            for m in _match_products(db, guessed):
+                if m["product_id"] not in seen:
+                    seen.add(m["product_id"])
+                    matches.append(m)
     record_id = _save_record(file_id, ocr_type, texts, None, user.id)
-    return ok({"lines": texts, "matches": matches, "record_id": record_id})
+    return ok({"lines": texts, "matches": matches, "record_id": record_id, "barcode": barcode or ""})
 
 
 # ============================ 条形码解码 ============================
@@ -622,6 +738,13 @@ def delivery_confirm(
         }
         rec.match_status = 3  # 人工确认
     db.commit()
+    # 确认可能新建 供应商/单位/分类 → 失效对应字典缓存（与事务同函数、commit 后调用）
+    from app.core.cache import cache_delete_pattern
+
+    if supplier_created:
+        cache_delete_pattern("dict:suppliers*")
+    if any(i.get("_created") for i in confirmed_items):
+        cache_delete_pattern("dict:suppliers*", "dict:units", "dict:categories")
     return ok({
         "supplier_id": supplier_id,
         "supplier_name": supplier_name,
@@ -636,6 +759,8 @@ def delivery_confirm(
 
 def _match_or_create_product(db: Session, it, name: str) -> BaseProduct | None:
     """按 物料编码 → 名称 精确匹配系统材料；不存在则用识别数据自动新增（单位自动匹配/创建）。"""
+    if is_footer_text(name):
+        return None  # 表头/合计等非明细行：跳过自动建料（容错，防脏数据落库）
     if it.material_code:
         p = db.scalar(select(BaseProduct).where(BaseProduct.material_code == it.material_code.strip()))
         if p:
@@ -784,7 +909,7 @@ def ocr_match(
     return ok({"suggestion_id": suggestion.id, "product_name": name, "detail": parsed})
 
 
-@router.get("/ai-suggestions", dependencies=[Depends(require_permission("ocr:manage"))])
+@router.get("/ai-suggestions", dependencies=[Depends(require_permission("ai:suggestion"))])
 def ai_suggestions(
     status: int = Query(1),
     page: int = Query(1, ge=1),
@@ -852,7 +977,7 @@ def ai_suggestion_accept(
     return ok({"product_id": product.id, "code": product.code})
 
 
-@router.post("/ai-suggestions/{sug_id}/ignore", dependencies=[Depends(require_permission("ocr:manage"))])
+@router.post("/ai-suggestions/{sug_id}/ignore", dependencies=[Depends(require_permission("ai:suggestion"))])
 def ai_suggestion_ignore(
     sug_id: int,
     user: SysUser = Depends(get_current_user),

@@ -32,15 +32,16 @@ def _upload_img() -> int:
 
 
 class _FakeEngine:
-    """伪造 RapidOCR 引擎：返回指定文本行。"""
+    """伪造本地 OCR 引擎：返回指定文本行（可选 box 坐标，测试通用字段提取）。"""
 
-    def __init__(self, lines: list[str]) -> None:
+    def __init__(self, lines: list[str], boxes: list | None = None) -> None:
         self._lines = lines
+        self._boxes = boxes or [[] for _ in lines]
 
     def recognize(self, image_bytes: bytes):
         from app.services.ocr.client import OcrLine
 
-        return [OcrLine(t, 0.99, []) for t in self._lines]
+        return [OcrLine(t, 0.99, b) for t, b in zip(self._lines, self._boxes)]
 
 
 class _FakeDoubao:
@@ -76,6 +77,45 @@ def test_ocr_quick_match(monkeypatch):
     assert r.json()["code"] == 0, r.text
     data = r.json()["data"]
     assert data["lines"] == [name, "数量 10"]
+    assert any(m["product_id"] == pid for m in data["matches"])
+
+
+def test_ocr_quick_barcode_first(monkeypatch):
+    """识别链路①条码优先：图片解码出条码且商品库精确命中 → 直接返回，不走 OCR。"""
+    _login_admin()
+    tag = uuid.uuid4().hex[:6]
+    unit_id = client.get("/api/v1/units").json()["data"][0]["id"]
+    barcode = "69" + str(uuid.uuid4().int % 10**8)  # 唯一条码
+    r = client.post(
+        "/api/v1/products",
+        json={"code": "9" + str(uuid.uuid4().int % 10**9), "name": "条码品" + tag, "barcode": barcode, "unit_id": unit_id},
+    )
+    assert r.json()["code"] == 0, r.text
+    pid = r.json()["data"]["id"]
+    file_id = _upload_img()
+    monkeypatch.setattr("app.api.ocr.try_decode_barcode", lambda data: barcode)
+
+    r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
+    assert r.json()["code"] == 0, r.text
+    data = r.json()["data"]
+    assert data["barcode"] == barcode
+    assert data["matches"][0]["product_id"] == pid
+
+
+def test_ocr_quick_barcode_miss_continue(monkeypatch):
+    """条码解码成功但商品库未命中 → 继续后续 OCR 链路，不阻断识别。"""
+    _login_admin()
+    name = "条码未命中" + uuid.uuid4().hex[:6]
+    pid = _setup_product(name)
+    file_id = _upload_img()
+    monkeypatch.setattr("app.api.ocr.try_decode_barcode", lambda data: "99" + str(uuid.uuid4().int % 10**8))
+    monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine([name]))
+    monkeypatch.setattr("app.api.ocr.correct_texts", lambda db, lines: lines)
+
+    r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
+    assert r.json()["code"] == 0, r.text
+    data = r.json()["data"]
+    assert data["barcode"] != ""
     assert any(m["product_id"] == pid for m in data["matches"])
 
 
@@ -128,7 +168,7 @@ def test_ocr_recognize_task(monkeypatch):
             return '[{"product_name": "轴承6204", "qty": "10", "price": "8.50", "amount": "85.00", "category_name": "轴承类"}]'
 
     monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": _FakeVision())
-
+    monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine([]))  # 本地 OCR 空行，走视觉分支
     r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1")
     assert r.json()["code"] == 0, r.text
     task_id = r.json()["data"]["task_id"]
@@ -156,12 +196,80 @@ def test_ocr_recognize_task(monkeypatch):
     assert client.get("/api/v1/ocr/tasks/nope").json()["code"] == 4003
 
 
+def test_ocr_recognize_template_first(monkeypatch):
+    """已知格式（物料编码锚点）：本地规则模板命中 → 不再调用视觉/DeepSeek（兼容不变）。"""
+    _login_admin()
+    file_id = _upload_img()
+    lines = [
+        "供应商：测试供应商",
+        "订单编号：POAB2025120071",
+        "123456789012 轴承6204",
+        "10.0",
+        "8.50",
+        "85.00",
+    ]
+    monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine(lines))
+    monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured()))
+    monkeypatch.setattr(
+        "app.api.ocr._delivery_by_vision", lambda db, data: (_ for _ in ()).throw(AssertionError("模板命中不应调用视觉"))
+    )
+    monkeypatch.setattr(
+        "app.api.ocr._structured_by_deepseek", lambda db, texts: (_ for _ in ()).throw(AssertionError("模板命中不应调用 DeepSeek"))
+    )
+
+    r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1&mode=auto")
+    assert r.json()["code"] == 0, r.text
+    task_id = r.json()["data"]["task_id"]
+    for _ in range(20):
+        r = client.get(f"/api/v1/ocr/tasks/{task_id}")
+        if r.json()["data"]["status"] == "done":
+            break
+        time.sleep(0.1)
+    st = r.json()["data"]["structured"]
+    assert st["_engine"] == "template"
+    assert st["supplier_name"] == "测试供应商"
+    assert st["bill_no"] == "POAB2025120071"
+    assert st["items"] and st["items"][0]["product_name"] == "轴承6204"
+
+
+def test_ocr_recognize_generic_fallback(monkeypatch):
+    """未知格式（无物料编码列）：通用字段提取命中 → engine=generic，不调视觉。"""
+    _login_admin()
+    file_id = _upload_img()
+    lines = ["名称", "数量", "金额", "轴承", "2", "10", "螺丝", "3", "15"]
+    boxes = [
+        [100, 100, 300, 140], [400, 100, 500, 140], [600, 100, 700, 140],
+        [100, 200, 300, 240], [400, 200, 500, 240], [600, 200, 700, 240],
+        [100, 280, 300, 320], [400, 280, 500, 320], [600, 280, 700, 320],
+    ]
+    monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine(lines, boxes))
+    monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured()))
+    monkeypatch.setattr(
+        "app.api.ocr._delivery_by_vision", lambda db, data: (_ for _ in ()).throw(AssertionError("通用解析命中不应调用视觉"))
+    )
+
+    r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1&mode=auto")
+    assert r.json()["code"] == 0, r.text
+    task_id = r.json()["data"]["task_id"]
+    for _ in range(20):
+        r = client.get(f"/api/v1/ocr/tasks/{task_id}")
+        if r.json()["data"]["status"] == "done":
+            break
+        time.sleep(0.1)
+    st = r.json()["data"]["structured"]
+    assert st["_engine"] == "generic"
+    names = [it["product_name"] for it in st["items"]]
+    assert names == ["轴承", "螺丝"]
+    assert st["items"][0]["qty"] == "2" and st["items"][0]["amount"] == "10"
+    assert st["items"][0]["price"] == "5"  # 缺失单价 = 金额÷数量
+
+
 def test_ocr_recognize_unconfigured(monkeypatch):
     """SiliconFlow 未配置：任务 done 且无结构化（前端人工录入），不报错。"""
     _login_admin()
     file_id = _upload_img()
     monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured()))
-
+    monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine([]))  # 本地 OCR 空行，无结构化
     r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1")
     assert r.json()["code"] == 0, r.text
     task_id = r.json()["data"]["task_id"]
