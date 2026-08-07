@@ -304,26 +304,49 @@ export function InboundPage() {
         </List.Item>
       </List>
 
-      <List header={`材料明细（${rows.length}）——条码可选：输入后回车或扫码识别`}>
-        {rows.map((r, i) => (
-          <List.Item key={i} description={
-            <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <Tag color="primary" fill="outline" onClick={() => void pickLocation(i)}>{r.location ? r.location.code : "选库位"}</Tag>
-                <Input placeholder="数量" type="number" value={r.qty} onChange={(v) => updateRow(i, { qty: v })} style={{ flex: 1, border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
-                <Input placeholder="进价" type="number" value={r.price} onChange={(v) => updateRow(i, { price: v })} style={{ flex: 1, border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
+      {/* 材料明细：标题栏 + 操作提示 */}
+      <div style={{ background: "#fff", margin: "12px 12px 0", borderRadius: 10, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid #f0f1f3" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: "#1d2129" }}>材料明细</span>
+            <span style={{ fontSize: 12, color: "#86909c" }}>{rows.length} 项</span>
+          </div>
+          <span style={{ fontSize: 12, color: "#86909c" }}>条码可扫码 / 手输后回车</span>
+        </div>
+        <List>
+          {rows.map((r, i) => (
+            <List.Item key={i} description={
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 8 }}>
+                {/* 操作行：库位选择 + 扫码 / 删除 */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Tag color="primary" fill="outline" onClick={() => void pickLocation(i)}>{r.location ? r.location.code : "选库位"}</Tag>
+                  <span style={{ flex: 1 }} />
+                  <Tag color="success" fill="outline" onClick={() => { setScanRow(i); setScannerOpen(true); }}>扫码</Tag>
+                  <Tag color="danger" fill="outline" onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>删除</Tag>
+                </div>
+                {/* 数量 / 进价 */}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: "#86909c", marginBottom: 2 }}>数量</div>
+                    <Input placeholder="必填" type="number" value={r.qty} onChange={(v) => updateRow(i, { qty: v })} style={{ border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: "#86909c", marginBottom: 2 }}>进价</div>
+                    <Input placeholder="0" type="number" value={r.price} onChange={(v) => updateRow(i, { price: v })} style={{ border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
+                  </div>
+                </div>
+                {/* 条码：扫码或手输后回车自动匹配 */}
+                <div>
+                  <div style={{ fontSize: 11, color: "#86909c", marginBottom: 2 }}>条码（扫码或手输后回车自动匹配）</div>
+                  <Input placeholder="未匹配时自动填入条码" value={r.barcode} onChange={(v) => updateRow(i, { barcode: v })} onEnterPress={() => void scanBarcode(i, r.barcode)} style={{ border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
+                </div>
+                <span style={{ color: "#999", fontSize: 12 }}>{r.product.code}{r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}</span>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <Input placeholder="条码（可选）" value={r.barcode} onChange={(v) => updateRow(i, { barcode: v })} onEnterPress={() => void scanBarcode(i, r.barcode)} style={{ flex: 1, border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
-                <Tag color="success" fill="outline" onClick={() => { setScanRow(i); setScannerOpen(true); }}>扫码</Tag>
-                <Tag color="danger" fill="outline" onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>删除</Tag>
-              </div>
-              <span style={{ color: "#999", fontSize: 12 }}>{r.product.code}{r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}</span>
-            </div>
-          }>{r.product.name}</List.Item>
-        ))}
-        <List.Item onClick={() => setPickerOpen(true)} arrow="horizontal">+ 添加材料</List.Item>
-      </List>
+            }>{r.product.name}</List.Item>
+          ))}
+          <List.Item onClick={() => setPickerOpen(true)} arrow="horizontal">+ 添加材料</List.Item>
+        </List>
+      </div>
 
       <div style={{ padding: 16 }}>
         <Button block color="primary" loading={submitting} onClick={() => void submit()}>提交入库</Button>
