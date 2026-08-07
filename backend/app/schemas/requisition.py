@@ -28,9 +28,28 @@ class RequisitionReq(BaseModel):
     warehouse_id: int = Field(gt=0)
     use_location: str = Field(min_length=1, max_length=100, description="使用地点（必填）")
     use_reason: str = Field(min_length=1, max_length=255, description="因何使用（必填）")
+    is_private: int = Field(default=0, ge=0, le=1, description="私用标记（隐藏触发，提交时因何使用将被锁定为「私用」）")
+    applicant_id: int = Field(default=0, ge=0, description="指定申请人（仅管理员可代申请；0=自己）")
     location_photo_file_id: int = 0  # 使用地点照片（不强制）
     remark: str = ""
     items: list[RequisitionItemReq] = Field(min_length=1)
+
+
+class WorkDoneReq(BaseModel):
+    photo_file_id: int = Field(gt=0, description="完成工作照片（工作地点拍照留痕）")
+    lat: str = Field(default="", max_length=30, description="手机定位纬度（水印用）")
+    lng: str = Field(default="", max_length=30, description="手机定位经度（水印用）")
+
+
+class WorkLocationReq(BaseModel):
+    use_location: str = Field(min_length=1, max_length=100, description="使用地点（水印/记录用）")
+    lat: str = Field(default="", max_length=30, description="GPS 纬度")
+    lng: str = Field(default="", max_length=30, description="GPS 经度")
+
+
+class DisplayReq(BaseModel):
+    display_reason: str = Field(min_length=1, max_length=255, description="对外掩护-因何使用")
+    display_location: str = Field(min_length=1, max_length=100, description="对外掩护-使用地点")
 
 
 class AuditReq(BaseModel):
@@ -61,7 +80,14 @@ class RequisitionOut(BaseModel):
     applicant_name: str = ""
     use_location: str
     use_reason: str
+    is_private: int = 0  # 仅管理员可见真实标记；非管理员恒为 0
+    display_reason: str = ""  # 仅管理员返回（掩护值，可编辑）；非管理员恒为空
+    display_location: str = ""
     location_photo_file_id: int
+    work_photo_file_id: int = 0  # 完成工作照片（工作地点拍照留痕）
+    work_done_at: datetime | None = None  # 完成工作时间
+    work_lat: str = ""  # 完成工作定位纬度
+    work_lng: str = ""  # 完成工作定位经度
     warehouse_id: int
     warehouse_name: str = ""
     total_qty: Decimal

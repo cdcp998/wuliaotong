@@ -1,20 +1,26 @@
 """库存进阶接口：调拨/盘点/其他出入库（《后端API设计.md》§5）。
 
 库存一致性：全部走 services/stock.py 的 post_stock_change()，与单据状态同事务提交。
+盘点为物品级别：按商品聚合账面数量，差异在审核时按库位分摊入账。
 """
 from __future__ import annotations
 
 import re
 from datetime import datetime
 from decimal import Decimal
+from io import BytesIO
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, Query
-from sqlalchemy import func, select
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, Side
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_permission
-from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, ok
+from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, E_STOCK_NOT_ENOUGH, ok
 from app.db import get_db
 from app.models.advanced import (
     StkCheck,
@@ -24,8 +30,8 @@ from app.models.advanced import (
     StkTransfer,
     StkTransferItem,
 )
-from app.models.base import BaseLocation, BaseProduct, BaseWarehouse
-from app.models.stock import StkStock
+from app.models.base import BaseCategory, BaseLocation, BaseProduct, BaseUnit, BaseWarehouse
+from app.models.stock import StkStock, StkStockLog
 from app.models.sys import SysUser
 from app.schemas.advanced import (
     CheckItemOut,
@@ -181,6 +187,25 @@ def audit_transfer(
     return ok()
 
 
+@router.post("/transfers/{bill_id}/reject", dependencies=[Depends(require_permission("stk:transfer"))])
+def reject_transfer(
+    bill_id: int,
+    user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """调拨审核驳回：仅草稿可驳回（status=0 → -2 已驳回），不产生库存变动。"""
+    b = db.get(StkTransfer, bill_id)
+    if b is None:
+        raise BizError(E_NOT_FOUND, "调拨单不存在")
+    if b.status != 0:
+        raise BizError(E_BILL_STATUS, "仅草稿可驳回")
+    b.status = -2  # 已驳回
+    b.audit_by = user.id
+    b.audit_time = datetime.now()
+    db.commit()
+    return ok()
+
+
 @router.post("/transfers/{bill_id}/void", dependencies=[Depends(require_permission("stk:transfer"))])
 def void_transfer(
     bill_id: int,
@@ -234,13 +259,17 @@ def create_check(
     )
     db.add(bill)
     db.flush()
-    # 自动带出该仓库全部库存明细（商品×库位）
+    # 物品级别盘点：按商品聚合该仓库账面库存（跨库位汇总，每物品一行）
     rows = db.execute(
-        select(StkStock.product_id, StkStock.location_id, StkStock.qty)
+        select(StkStock.product_id, func.sum(StkStock.qty))
         .where(StkStock.warehouse_id == req.warehouse_id, StkStock.qty != 0)
+        .group_by(StkStock.product_id)
     ).all()
-    for product_id, location_id, qty in rows:
-        db.add(StkCheckItem(check_id=bill.id, product_id=product_id, location_id=location_id, book_qty=qty, diff_qty=0))
+    for product_id, qty in rows:
+        if not qty:
+            continue
+        # location_id=0 表示物品级汇总行，审核时按库位分摊入账
+        db.add(StkCheckItem(check_id=bill.id, product_id=product_id, location_id=0, book_qty=qty, diff_qty=0))
     db.commit()
     return ok({"id": bill.id, "bill_no": bill.bill_no, "status": 0, "item_count": len(rows)})
 
@@ -256,6 +285,12 @@ def _check_out(db: Session, b: StkCheck) -> dict:
                 id=it.id, product_id=it.product_id,
                 product_name=(p.name if (p := db.get(BaseProduct, it.product_id)) else ""),
                 code=(p.code if (p := db.get(BaseProduct, it.product_id)) else ""),
+                material_code=(p.material_code if (p := db.get(BaseProduct, it.product_id)) else ""),
+                spec=(p.spec if (p := db.get(BaseProduct, it.product_id)) else ""),
+                unit_name=(u.name if (p := db.get(BaseProduct, it.product_id)) and (u := db.get(BaseUnit, p.unit_id)) else ""),
+                category_name=(
+                    (c.name if (p := db.get(BaseProduct, it.product_id)) and p.category_id and (c := db.get(BaseCategory, p.category_id)) else "")
+                ),
                 location_id=it.location_id, location_code=_loc_code(db, it.location_id),
                 book_qty=it.book_qty, real_qty=it.real_qty, diff_qty=it.diff_qty,
                 photo_file_id=it.photo_file_id,
@@ -296,6 +331,23 @@ def update_check_items(bill_id: int, req: CheckItemsReq, db: Session = Depends(g
     if b.status not in (0, 1):
         raise BizError(E_BILL_STATUS, "已审核的盘点单不可修改")
     for item in req.items:
+        if item.check_item_id == 0:
+            # 当场新增账外物料：账面 0，实盘为录入值，审核时按盘盈入账
+            if item.product_id <= 0 or db.get(BaseProduct, item.product_id) is None:
+                raise BizError(E_PARAM, "新增物料无效")
+            dup = db.scalar(
+                select(func.count()).select_from(StkCheckItem).where(
+                    StkCheckItem.check_id == b.id, StkCheckItem.product_id == item.product_id
+                )
+            )
+            if dup:
+                raise BizError(E_PARAM, f"物料 id={item.product_id} 已在本盘点单中")
+            real = _parse_qty(item.real_qty)
+            db.add(StkCheckItem(
+                check_id=b.id, product_id=item.product_id, location_id=0,
+                book_qty=Decimal(0), real_qty=real, diff_qty=real,
+            ))
+            continue
         ci = db.get(StkCheckItem, item.check_item_id)
         if ci is None or ci.check_id != b.id:
             raise BizError(E_NOT_FOUND, f"盘点明细 id={item.check_item_id} 不存在")
@@ -328,16 +380,184 @@ def audit_check(
         if it.diff_qty == 0:
             continue
         change_type = "盘盈" if it.diff_qty > 0 else "盘亏"
-        post_stock_change(
-            db,
-            product_id=it.product_id, warehouse_id=b.warehouse_id, location_id=it.location_id,
-            change_type=change_type, bill_type="stk_check", bill_no=b.bill_no,
-            bill_item_id=it.id, qty_delta=it.diff_qty, cost_price=Decimal(0), operator_id=user.id,
-            remark=f"账面 {format(it.book_qty, 'f')} → 实盘 {format(it.real_qty, 'f')}",
-        )
+        remark = f"账面 {format(it.book_qty, 'f')} → 实盘 {format(it.real_qty, 'f')}"
+        # 物品级差异按库位分摊：盘亏从库存多的库位依次扣，盘盈记入库存最多的库位（无库存则仓库首个库位）
+        loc_rows = db.execute(
+            select(StkStock.location_id, StkStock.qty, StkStock.cost_price)
+            .where(
+                StkStock.warehouse_id == b.warehouse_id,
+                StkStock.product_id == it.product_id,
+                StkStock.qty != 0,
+            )
+            .order_by(StkStock.qty.desc())
+        ).all()
+        if it.diff_qty > 0:
+            if loc_rows:
+                loc_id = loc_rows[0][0]
+                # 按当前账面成本入账，避免摊薄移动加权成本
+                cost_price = loc_rows[0][2] or Decimal(0)
+            else:
+                loc_id = db.scalar(
+                    select(BaseLocation.id).where(BaseLocation.warehouse_id == b.warehouse_id).order_by(BaseLocation.id).limit(1)
+                )
+                cost_price = Decimal(0)
+            if loc_id is None:
+                raise BizError(E_PARAM, "仓库无库位，无法入账盘盈")
+            post_stock_change(
+                db, product_id=it.product_id, warehouse_id=b.warehouse_id, location_id=loc_id,
+                change_type=change_type, bill_type="stk_check", bill_no=b.bill_no,
+                bill_item_id=it.id, qty_delta=it.diff_qty, cost_price=cost_price, operator_id=user.id, remark=remark,
+            )
+        else:
+            remain = -it.diff_qty
+            for loc_id, qty, _cost in loc_rows:
+                if remain <= 0:
+                    break
+                take = min(remain, qty)
+                post_stock_change(
+                    db, product_id=it.product_id, warehouse_id=b.warehouse_id, location_id=loc_id,
+                    change_type=change_type, bill_type="stk_check", bill_no=b.bill_no,
+                    bill_item_id=it.id, qty_delta=-take, cost_price=Decimal(0), operator_id=user.id, remark=remark,
+                )
+                remain -= take
+            if remain > 0:
+                raise BizError(E_STOCK_NOT_ENOUGH, f"商品 id={it.product_id} 库存不足，无法盘亏 {format(remain, 'f')}")
     b.status = 2
     db.commit()
     return ok()
+
+
+# ============================ 盘点导出（收发存模板格式） ============================
+
+_CHECK_HEADERS = [
+    "年月", "仓库名称", "物料分类编码", "物料分类名称", "物料编码", "物料名称", "规格型号", "计量单位",
+    "月度期初数量", "月度期初金额", "月度入库数量", "月度入库金额", "月度出库数量", "月度出库金额",
+    "月度结存数量", "月度结存金额", "账面数量", "实盘数量", "盘盈盘亏数量", "盘盈盘亏金额", "备注",
+]
+
+
+def _month_flow_rows(db: Session, warehouse_id: int, start: datetime, end: datetime) -> dict[int, dict]:
+    """盘点月收发存（按商品聚合）：期初/入库/出库/结存的数量与金额（金额=变动量×流水成本）。"""
+    rows = db.execute(
+        select(
+            StkStockLog.product_id,
+            func.coalesce(func.sum(case((StkStockLog.created_at < start, StkStockLog.change_qty), else_=0)), 0),
+            func.coalesce(
+                func.sum(case((and_(StkStockLog.created_at >= start, StkStockLog.created_at <= end, StkStockLog.change_qty > 0), StkStockLog.change_qty), else_=0)), 0
+            ),
+            func.coalesce(
+                func.sum(case((and_(StkStockLog.created_at >= start, StkStockLog.created_at <= end, StkStockLog.change_qty < 0), -StkStockLog.change_qty), else_=0)), 0
+            ),
+            func.coalesce(func.sum(case((StkStockLog.created_at < start, StkStockLog.change_qty * StkStockLog.cost_price), else_=0)), 0),
+            func.coalesce(
+                func.sum(case((and_(StkStockLog.created_at >= start, StkStockLog.created_at <= end, StkStockLog.change_qty > 0), StkStockLog.change_qty * StkStockLog.cost_price), else_=0)), 0
+            ),
+            func.coalesce(
+                func.sum(case((and_(StkStockLog.created_at >= start, StkStockLog.created_at <= end, StkStockLog.change_qty < 0), -StkStockLog.change_qty * StkStockLog.cost_price), else_=0)), 0
+            ),
+        )
+        .where(StkStockLog.warehouse_id == warehouse_id)
+        .group_by(StkStockLog.product_id)
+    ).all()
+    out: dict[int, dict] = {}
+    for pid, op_q, in_q, out_q, op_a, in_a, out_a in rows:
+        op_q, in_q, out_q = Decimal(op_q or 0), Decimal(in_q or 0), Decimal(out_q or 0)
+        op_a, in_a, out_a = Decimal(op_a or 0), Decimal(in_a or 0), Decimal(out_a or 0)
+        out[pid] = {
+            "opening_qty": op_q, "opening_amount": op_a,
+            "in_qty": in_q, "in_amount": in_a,
+            "out_qty": out_q, "out_amount": out_a,
+            "closing_qty": op_q + in_q - out_q, "closing_amount": op_a + in_a - out_a,
+        }
+    return out
+
+
+@router.get("/checks/{bill_id}/export", dependencies=[Depends(require_permission("stk:check"))])
+def export_check(bill_id: int, db: Session = Depends(get_db)):
+    """导出盘点结果 Excel：列结构与《库存金额收发存（2026.06）》模板一致，追加账面/实盘/盈亏列。"""
+    b = db.get(StkCheck, bill_id)
+    if b is None:
+        raise BizError(E_NOT_FOUND, "盘点单不存在")
+    wh = db.get(BaseWarehouse, b.warehouse_id)
+    items = db.scalars(select(StkCheckItem).where(StkCheckItem.check_id == b.id).order_by(StkCheckItem.id)).all()
+    month_start = b.check_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_end = datetime(month_start.year + 1, 1, 1) if month_start.month == 12 else month_start.replace(month=month_start.month + 1)
+    flow = _month_flow_rows(db, b.warehouse_id, month_start, month_end)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "盘点结果"
+    ncols = len(_CHECK_HEADERS)
+    thin = Side(style="thin")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    title_font = Font(name="宋体", size=14, bold=True)
+    head_font = Font(name="宋体", size=14, bold=True)
+    body_font = Font(name="宋体", size=11)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # 标题行（合并，与模板 A1:P1 一致）
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+    title = f"{month_start.year}年{month_start.month}月库存金额收发存表（盘点结果 {b.bill_no}）"
+    c = ws.cell(row=1, column=1, value=title)
+    c.font = title_font
+    c.alignment = center
+    c.border = border
+    for col in range(2, ncols + 1):
+        ws.cell(row=1, column=col).border = border
+    # 表头行
+    for col, name in enumerate(_CHECK_HEADERS, start=1):
+        c = ws.cell(row=2, column=col, value=name)
+        c.font = head_font
+        c.alignment = center
+        c.border = border
+    # 数据行
+    row = 3
+    for it in items:
+        p = db.get(BaseProduct, it.product_id)
+        cat = db.get(BaseCategory, p.category_id) if p and p.category_id else None
+        unit = db.get(BaseUnit, p.unit_id) if p else None
+        f = flow.get(it.product_id, {})
+        closing_q = f.get("closing_qty", Decimal(0))
+        closing_a = f.get("closing_amount", Decimal(0))
+        cost = closing_a / closing_q if closing_q else Decimal(0)
+        real = it.real_qty if it.real_qty is not None else ""
+        values = [
+            month_start.strftime("%Y-%m"),
+            wh.name if wh else "",
+            p.category_id if p and p.category_id else "",
+            cat.name if cat else "",
+            (p.material_code or p.code) if p else "",
+            p.name if p else "",
+            p.spec if p else "",
+            unit.name if unit else "",
+            f.get("opening_qty", 0), f.get("opening_amount", 0),
+            f.get("in_qty", 0), f.get("in_amount", 0),
+            f.get("out_qty", 0), f.get("out_amount", 0),
+            closing_q, closing_a,
+            it.book_qty, real, it.diff_qty, it.diff_qty * cost,
+            "",
+        ]
+        for col, v in enumerate(values, start=1):
+            c = ws.cell(row=row, column=col, value=float(v) if isinstance(v, Decimal) else v)
+            c.font = body_font
+            c.border = border
+            c.alignment = Alignment(vertical="center")
+        row += 1
+    # 列宽
+    widths = [10, 18, 13, 14, 20, 26, 22, 10, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 14, 14, 20]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[ws.cell(row=2, column=i).column_letter].width = w
+    ws.freeze_panes = "A3"
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"库存金额收发存表_{b.bill_no}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 # ============================ 其他出入库 ============================

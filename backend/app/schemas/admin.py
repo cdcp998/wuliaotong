@@ -84,7 +84,7 @@ class RegisterApplyOut(BaseModel):
 
 
 class DeptReq(BaseModel):
-    code: str = Field(min_length=1, max_length=30)
+    code: str = Field(default="", max_length=30, description="单位编码（隐藏字段，系统自动生成数字编码，忽略传入值）")
     name: str = Field(min_length=1, max_length=100)
     remark: str = Field(default="", max_length=255)
     status: int = Field(default=1)

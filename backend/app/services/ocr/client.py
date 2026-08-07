@@ -56,7 +56,11 @@ class RapidOCREngine:
     name = "rapidocr"
 
     def recognize(self, image_bytes: bytes) -> list[OcrLine]:
-        api = OcrAPI()
+        try:
+            api = OcrAPI()
+        except Exception as e:
+            # 启动失败/初始化超时统一归一为 OCRInitError，调用方按引擎不可用快速失败（不堆 500）
+            raise OCRInitError(f"OCR 引擎启动失败：{e}") from e
         try:
             res = api.runBytes(image_bytes)
             if res.get("code") != 100:

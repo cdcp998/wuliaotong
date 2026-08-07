@@ -9,18 +9,22 @@ from __future__ import annotations
 import io
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, Side
+from openpyxl.worksheet.page import PageMargins
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.cache import cache_aside_json
 from app.core.deps import get_current_user, require_permission
 from app.core.response import BizError, E_PARAM, ok
 from app.db import get_db
 from app.models.advanced import StkCheck, StkTransfer
-from app.models.base import BaseLocation, BaseProduct, BaseUnit, BaseWarehouse
+from app.models.base import BaseCategory, BaseLocation, BaseProduct, BaseUnit, BaseWarehouse
 from app.models.requisition import REQ_STATUS_PENDING, OutRequisition
 from app.models.stock import StkStock, StkStockLog
 from app.schemas.stock import PageData
@@ -119,11 +123,14 @@ def _pending_todos(db: Session) -> dict:
 
 @router.get("/stock/summary")
 def stock_summary(db: Session = Depends(get_db)) -> dict:
-    """看板：SKU 数、总件数、今日入库/出库件数、预警数、待审计单数、近 7 日趋势。"""
-    today_start = datetime.combine(date.today(), time.min)
-    today_in, today_out = _in_out_sum(db, today_start, None)
-    return ok(
-        {
+    """看板：SKU 数、总件数、今日入库/出库件数、预警数、待审计单数、近 7 日趋势。
+
+    60 秒 TTL 缓存；库存变动（post_stock_change）即时失效。
+    """
+    def _load() -> dict:
+        today_start = datetime.combine(date.today(), time.min)
+        today_in, today_out = _in_out_sum(db, today_start, None)
+        return {
             "sku_count": db.scalar(select(func.count(func.distinct(StkStock.product_id))).where(StkStock.qty != 0)) or 0,
             "total_qty": _fmt_qty(db.scalar(select(func.coalesce(func.sum(StkStock.qty), 0))) or 0),
             "today_in_qty": _fmt_qty(today_in),
@@ -135,21 +142,23 @@ def stock_summary(db: Session = Depends(get_db)) -> dict:
             or 0,
             "trend_7d": _trend_7d(db),
         }
-    )
+
+    return ok(cache_aside_json("dash:stock_summary", 60, _load))
 
 
 @router.get("/reports/dashboard", dependencies=[Depends(require_permission("report:view"))])
 def dashboard(db: Session = Depends(get_db)) -> dict:
-    """经营看板：今日/本周/本月出入库、预警、待办、近 7 日趋势。"""
-    now = datetime.now()
-    today_start = datetime.combine(now.date(), time.min)
-    week_start = today_start - timedelta(days=now.weekday())
-    month_start = today_start.replace(day=1)
-    today_in, today_out = _in_out_sum(db, today_start, None)
-    week_in, week_out = _in_out_sum(db, week_start, None)
-    month_in, month_out = _in_out_sum(db, month_start, None)
-    return ok(
-        {
+    """经营看板：今日/本周/本月出入库、预警、待办、近 7 日趋势。60 秒 TTL 缓存。"""
+
+    def _load() -> dict:
+        now = datetime.now()
+        today_start = datetime.combine(now.date(), time.min)
+        week_start = today_start - timedelta(days=now.weekday())
+        month_start = today_start.replace(day=1)
+        today_in, today_out = _in_out_sum(db, today_start, None)
+        week_in, week_out = _in_out_sum(db, week_start, None)
+        month_in, month_out = _in_out_sum(db, month_start, None)
+        return {
             "today": {"in_qty": _fmt_qty(today_in), "out_qty": _fmt_qty(today_out)},
             "week": {"in_qty": _fmt_qty(week_in), "out_qty": _fmt_qty(week_out)},
             "month": {"in_qty": _fmt_qty(month_in), "out_qty": _fmt_qty(month_out)},
@@ -159,23 +168,25 @@ def dashboard(db: Session = Depends(get_db)) -> dict:
             "todos": _pending_todos(db),
             "trend_7d": _trend_7d(db),
         }
-    )
+
+    return ok(cache_aside_json("dash:dashboard", 60, _load))
 
 
 def _inventory_rows(db: Session, start: datetime, end: datetime, warehouse_id: int = 0, product_id: int = 0) -> list[dict]:
-    """期间进销存汇总（全量，供分页与导出复用）。按商品聚合：期初+入库-出库=结存。"""
+    """期间进销存汇总（全量，供分页与导出复用）。按商品聚合：期初+入库-出库=结存。
+
+    金额口径（与《后端API设计.md》一致）：入库/出库金额 = 流水变动数量 × 该笔流水成本价；
+    期初金额 = 结存金额 - 入库金额 + 出库金额（保持 期初+入库-出库=结存 恒等）。
+    """
+    in_period = and_(StkStockLog.created_at >= start, StkStockLog.created_at <= end)
     stmt = select(
         StkStockLog.product_id,
         StkStockLog.location_id,
         func.coalesce(func.sum(case((StkStockLog.created_at < start, StkStockLog.change_qty), else_=0)), 0),
-        func.coalesce(
-            func.sum(case((and_(StkStockLog.created_at >= start, StkStockLog.created_at <= end, StkStockLog.change_qty > 0), StkStockLog.change_qty), else_=0)),
-            0,
-        ),
-        func.coalesce(
-            func.sum(case((and_(StkStockLog.created_at >= start, StkStockLog.created_at <= end, StkStockLog.change_qty < 0), -StkStockLog.change_qty), else_=0)),
-            0,
-        ),
+        func.coalesce(func.sum(case((and_(in_period, StkStockLog.change_qty > 0), StkStockLog.change_qty), else_=0)), 0),
+        func.coalesce(func.sum(case((and_(in_period, StkStockLog.change_qty < 0), -StkStockLog.change_qty), else_=0)), 0),
+        func.coalesce(func.sum(case((and_(in_period, StkStockLog.change_qty > 0), StkStockLog.change_qty * StkStockLog.cost_price), else_=0)), 0),
+        func.coalesce(func.sum(case((and_(in_period, StkStockLog.change_qty < 0), -StkStockLog.change_qty * StkStockLog.cost_price), else_=0)), 0),
     ).select_from(StkStockLog)
     if warehouse_id:
         stmt = stmt.where(StkStockLog.warehouse_id == warehouse_id)
@@ -186,17 +197,21 @@ def _inventory_rows(db: Session, start: datetime, end: datetime, warehouse_id: i
     # 结存金额 = 各库位结存 × 该库位当前成本价（移动加权），避免跨库位成本混淆
     cost_map = {(s.product_id, s.location_id): Decimal(s.cost_price or 0) for s in db.scalars(select(StkStock)).all()}
     agg: dict[int, dict] = {}
-    for pid, loc_id, opening, in_qty, out_qty in rows:
+    for pid, loc_id, opening, in_qty, out_qty, in_amt, out_amt in rows:
         opening = Decimal(opening or 0)
         in_qty = Decimal(in_qty or 0)
         out_qty = Decimal(out_qty or 0)
+        in_amt = Decimal(in_amt or 0)
+        out_amt = Decimal(out_amt or 0)
         closing = opening + in_qty - out_qty
-        a = agg.setdefault(pid, {"opening": _DEC0, "in_qty": _DEC0, "out_qty": _DEC0, "closing": _DEC0, "amount": _DEC0})
+        a = agg.setdefault(pid, {"opening": _DEC0, "in_qty": _DEC0, "out_qty": _DEC0, "closing": _DEC0, "amount": _DEC0, "in_amount": _DEC0, "out_amount": _DEC0})
         a["opening"] += opening
         a["in_qty"] += in_qty
         a["out_qty"] += out_qty
         a["closing"] += closing
         a["amount"] += closing * cost_map.get((pid, loc_id), _DEC0)
+        a["in_amount"] += in_amt
+        a["out_amount"] += out_amt
     return [
         {
             "product_id": pid,
@@ -205,6 +220,10 @@ def _inventory_rows(db: Session, start: datetime, end: datetime, warehouse_id: i
             "out_qty": _fmt_qty(a["out_qty"]),
             "closing_qty": _fmt_qty(a["closing"]),
             "closing_amount": str(a["amount"].quantize(_DEC2)),
+            "opening_amount": str((a["amount"] - a["in_amount"] + a["out_amount"]).quantize(_DEC2)),
+            "in_amount": str(a["in_amount"].quantize(_DEC2)),
+            "out_amount": str(a["out_amount"].quantize(_DEC2)),
+            "unit_price": str((a["amount"] / a["closing"]).quantize(_DEC2)) if a["closing"] else "0.00",
         }
         for pid, a in sorted(agg.items())
     ]
@@ -315,13 +334,52 @@ def stock_report(
     return ok(PageData(list=page_rows, total=total, page=page, page_size=page_size).model_dump())
 
 
-def _export_xlsx(headers: list[str], data: list[list], filename: str) -> StreamingResponse:
+# ============================ Excel 导出（样式对齐 testdata/匹配导出表格/库存金额收发存（2026.06）.xlsx） ============================
+
+_FONT_TITLE = Font(name="宋体", size=14, bold=True)
+_FONT_HEADER = Font(name="宋体", size=14, bold=True)
+_FONT_HEADER_RED = Font(name="宋体", size=14, bold=True, color="FFFF0000")  # 模板 S/T 列（已使用数量/金额）红色表头
+_FONT_DATA = Font(name="宋体", size=11)
+_THIN = Side(style="thin")
+_BORDER_ALL = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
+# 模板表头仅左/右/上边框，表头与数据的分隔线由数据行上边框提供（避免双线）
+_BORDER_LRT = Border(left=_THIN, right=_THIN, top=_THIN)
+_ALIGN_CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+_ALIGN_DATA = Alignment(vertical="center")
+
+# 库存金额收发存表列（模板 21 列，顺序固定）
+_INV_EXPORT_HEADERS = [
+    "年月", "仓库名称", "物料分类编码", "物料分类名称", "物料编码", "物料名称", "规格型号", "计量单位",
+    "月度期初数量", "月度期初金额", "月度入库数量", "月度入库金额", "月度出库数量", "月度出库金额",
+    "月度结存数量", "月度结存金额", "领料员", "备注（板块）", "已使用数量", "金额（元）", "单价",
+]
+# 模板列宽（未列出的列保持默认宽；I~N 隐藏）
+_INV_COL_WIDTHS = {"B": 12, "C": 7.375, "D": 9.625, "E": 16, "F": 25.25, "G": 22.5, "H": 4.75, "Q": 11.5, "R": 17.5, "S": 14.75, "T": 13.5, "U": 10.5}
+_INV_TITLE_MERGE = "A1:P1"  # 模板标题仅跨 A~P（16 列）
+
+
+def _export_xlsx(headers: list[str], data: list[list], filename: str, sheet: str = "报表", title: str | None = None) -> StreamingResponse:
+    """通用导出：可选标题行 + 加粗居中表头 + 宋体数据行，风格与收发存模板一致。"""
     wb = Workbook()
     ws = wb.active
-    ws.title = "报表"
-    ws.append(headers)
+    ws.title = sheet
+    row = 1
+    if title:
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+        c = ws.cell(1, 1, title)
+        c.font, c.alignment, c.border = _FONT_TITLE, _ALIGN_CENTER, _BORDER_ALL
+        ws.row_dimensions[1].height = 47.45
+        row = 2
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(row, col, h)
+        c.font, c.alignment, c.border = _FONT_HEADER, _ALIGN_CENTER, _BORDER_LRT
+    ws.row_dimensions[row].height = 52.15
     for r in data:
-        ws.append(r)
+        row += 1
+        ws.row_dimensions[row].height = 25.15
+        for col, v in enumerate(r, 1):
+            c = ws.cell(row, col, v)
+            c.font, c.alignment, c.border = _FONT_DATA, _ALIGN_DATA, _BORDER_ALL
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -329,6 +387,52 @@ def _export_xlsx(headers: list[str], data: list[list], filename: str) -> Streami
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _export_inventory_xlsx(rows: list[list], title: str, filename: str) -> StreamingResponse:
+    """库存金额收发存表导出：1:1 复刻 testdata/匹配导出表格/库存金额收发存（2026.06）.xlsx 的
+    格式/布局/样式（标题合并 A1:P1、21 列表头（S/T 红色）、I~N 隐藏、列宽/行高、A4 纵向）。"""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "模板"
+    for col, w in _INV_COL_WIDTHS.items():
+        ws.column_dimensions[col].width = w
+    for col in "IJKLMN":
+        ws.column_dimensions[col].hidden = True
+        ws.column_dimensions[col].width = 0  # 与模板一致：隐藏列宽 0
+    # 标题行
+    ws.merge_cells(_INV_TITLE_MERGE)
+    c = ws["A1"]
+    c.value = title
+    c.font, c.alignment, c.border = _FONT_TITLE, _ALIGN_CENTER, _BORDER_ALL
+    ws.row_dimensions[1].height = 47.45
+    # 表头行（S/T 列红色加粗）
+    for col, h in enumerate(_INV_EXPORT_HEADERS, 1):
+        c = ws.cell(2, col, h)
+        c.font = _FONT_HEADER_RED if col in (19, 20) else _FONT_HEADER
+        c.alignment, c.border = _ALIGN_CENTER, _BORDER_LRT
+    ws.row_dimensions[2].height = 52.15
+    # 数据行（U 列单价 0.00 两位小数格式）
+    for i, r in enumerate(rows, start=3):
+        ws.row_dimensions[i].height = 25.15
+        for col, v in enumerate(r, 1):
+            c = ws.cell(i, col, v)
+            c.font, c.alignment, c.border = _FONT_DATA, _ALIGN_DATA, _BORDER_ALL
+            if col == 21:
+                c.number_format = "0.00_ "
+    # 页面设置：A4 纵向（与模板一致）
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.orientation = "portrait"
+    ws.page_margins = PageMargins(left=0.7, right=0.7, top=0.75, bottom=0.75, header=0.3, footer=0.3)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    # 中文文件名：RFC 5987 filename*（ASCII 兜底）
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="inventory-summary.xlsx"; filename*=UTF-8\'\'{quote(filename)}'},
     )
 
 
@@ -347,28 +451,43 @@ def export_report(
     today = date.today().isoformat().replace("-", "")
     if type == "inventory-summary":
         s, e = _parse_range(start, end)
+        same_month = (s.year, s.month) == (e.year, e.month)
+        period = f"{s.year}年{s.month}月" if same_month else f"{s:%Y-%m}~{e:%Y-%m}"
+        ym = f"{s:%Y-%m}" if same_month else f"{s:%Y-%m}~{e:%Y-%m}"
+        wh_name = ""
+        if warehouse_id:
+            wh = db.get(BaseWarehouse, warehouse_id)
+            wh_name = wh.name if wh else ""
         data = []
         for r in _inventory_rows(db, s, e, warehouse_id, product_id):
             p = db.get(BaseProduct, r["product_id"])
             unit = db.get(BaseUnit, p.unit_id) if p else None
+            cat = db.get(BaseCategory, p.category_id) if p and p.category_id else None
             data.append(
                 [
+                    ym,
+                    wh_name,
+                    str(cat.id) if cat else "",  # 物料分类编码（系统无独立编码字段，用分类 ID）
+                    cat.name if cat else "",
                     p.code if p else "",
                     p.name if p else "",
                     p.spec if p else "",
                     unit.name if unit else "",
                     r["opening_qty"],
+                    r["opening_amount"],
                     r["in_qty"],
+                    r["in_amount"],
                     r["out_qty"],
+                    r["out_amount"],
                     r["closing_qty"],
                     r["closing_amount"],
+                    "", "", "", 0,  # 领料员 / 备注（板块） / 已使用数量（模板列，库存口径无数据）
+                    r["unit_price"],
                 ]
             )
-        return _export_xlsx(
-            ["商品编码", "商品名称", "规格", "单位", "期初数量", "入库数量", "出库数量", "结存数量", "结存金额"],
-            data,
-            f"inventory-summary_{today}.xlsx",
-        )
+        now = datetime.now().strftime("%H%M")
+        filename = f"库存金额收发存{s:%Y.%m}_{now}.xlsx" if same_month else f"库存金额收发存{s:%Y.%m}-{e:%Y.%m}_{now}.xlsx"
+        return _export_inventory_xlsx(data, f"{period}库存金额收发存表", filename)
     if type == "stock":
         if sort not in ("qty", "amount", "turnover"):
             raise BizError(E_PARAM, "sort 仅支持 qty|amount|turnover")
@@ -383,6 +502,7 @@ def export_report(
             ["商品编码", "商品名称", "规格", "仓库", "数量", "成本价", "金额", "30天出库", "最近变动", "呆滞天数"],
             data,
             f"stock_{today}.xlsx",
+            title="库存报表",
         )
     if type == "flow":
         stmt = select(StkStockLog)
@@ -422,6 +542,7 @@ def export_report(
             ["时间", "商品编码", "商品名称", "仓库", "库位", "类型", "单据号", "变动前", "变动数量", "变动后", "成本价", "备注"],
             data,
             f"flow_{today}.xlsx",
+            title="库存流水",
         )
     raise BizError(E_PARAM, "type 仅支持 inventory-summary|stock|flow")
 

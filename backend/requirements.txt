@@ -2,6 +2,7 @@ fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30
 SQLAlchemy>=2.0,<2.1
 PyMySQL>=1.1
+redis>=5.0
 cryptography>=42
 bcrypt>=4.1
 python-dotenv>=1.0
@@ -12,3 +13,8 @@ openpyxl
 python-multipart
 pillow
 apscheduler
+zxing-cpp>=2.0
+# PP-OCR（PaddleOCR）：默认 OCR 引擎。Windows CPU 固定 3.2.2（3.3.x Windows oneDNN PIR 执行器 bug，识别报 NotImplementedError）
+# GPU 加速安装请使用 scripts/install_windows_gpu.py / install_linux_gpu.py（wheel 自带 CUDA 运行时，仅需驱动满足）
+paddlepaddle==3.2.2
+paddleocr>=3.0

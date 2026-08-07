@@ -68,9 +68,9 @@ def test_storage_crud_and_upload():
     d2 = _upload()
     assert d2["storage_id"] == s2
 
-    # 读取文件
+    # 读取文件（按实际文件类型返回 Content-Type，不再写死 webp）
     r = client.get(f"/api/v1/files/{d1['file_id']}")
-    assert r.status_code == 200 and r.headers["content-type"].startswith("image/webp")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("image/")
     # 404
     assert client.get("/api/v1/files/999999").json()["code"] == 4003
 

@@ -18,7 +18,8 @@ from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_permission
+from app.core.cache import cache_aside, cache_delete, cache_delete_pattern
+from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_any_permission, require_permission
 from app.core.response import BizError, E_NOT_FOUND, E_PARAM, ok
 from app.db import get_db
 from app.models.base import (
@@ -61,6 +62,10 @@ static_router = APIRouter(tags=["基础资料"], dependencies=[Depends(get_curre
 
 _DECIMAL_RE = re.compile(r"^\d+(\.\d+)?$")
 
+# 缓存 TTL（秒）：基础资料字典 10 分钟，商品详情/条码查询 10 分钟（写操作即时失效）
+_DICT_TTL = 600
+_PRODUCT_TTL = 600
+
 # 商品导入列（与模板/导出一致，顺序固定）
 PRODUCT_IMPORT_COLUMNS = ["编码", "条码", "SKU", "名称", "分类", "规格", "单位", "进价", "下限", "上限"]
 
@@ -93,21 +98,24 @@ def _rebuild_path(db: Session, cat: BaseCategory) -> None:
 
 @router.get("/categories")
 def list_categories(db: Session = Depends(get_db)) -> dict:
-    cats = db.scalars(
-        select(BaseCategory).order_by(BaseCategory.sort, BaseCategory.id)
-    ).all()
-    nodes: dict[int, dict] = {c.id: {"id": c.id, "parent_id": c.parent_id, "name": c.name, "sort": c.sort, "children": []} for c in cats}
-    tree: list[dict] = []
-    for c in cats:
-        node = nodes[c.id]
-        if c.parent_id and c.parent_id in nodes:
-            nodes[c.parent_id]["children"].append(node)
-        else:
-            tree.append(node)
-    return ok(tree)
+    def _load() -> list[dict]:
+        cats = db.scalars(
+            select(BaseCategory).order_by(BaseCategory.sort, BaseCategory.id)
+        ).all()
+        nodes: dict[int, dict] = {c.id: {"id": c.id, "parent_id": c.parent_id, "name": c.name, "sort": c.sort, "children": []} for c in cats}
+        tree: list[dict] = []
+        for c in cats:
+            node = nodes[c.id]
+            if c.parent_id and c.parent_id in nodes:
+                nodes[c.parent_id]["children"].append(node)
+            else:
+                tree.append(node)
+        return tree
+
+    return ok(cache_aside("dict:categories", _DICT_TTL, _load))
 
 
-@router.post("/categories", dependencies=[Depends(require_permission("base:category"))])
+@router.post("/categories", dependencies=[Depends(require_any_permission("base:category", "ai:suggestion"))])
 def create_category(req: CategoryReq, db: Session = Depends(get_db)) -> dict:
     cat = BaseCategory(
         parent_id=req.parent_id,
@@ -118,10 +126,11 @@ def create_category(req: CategoryReq, db: Session = Depends(get_db)) -> dict:
     db.add(cat)
     db.commit()
     db.refresh(cat)
+    cache_delete("dict:categories")  # 分类树缓存失效
     return ok(CategoryNode(id=cat.id, parent_id=cat.parent_id, name=cat.name, sort=cat.sort).model_dump())
 
 
-@router.put("/categories/{cat_id}", dependencies=[Depends(require_permission("base:category"))])
+@router.put("/categories/{cat_id}", dependencies=[Depends(require_any_permission("base:category", "ai:suggestion"))])
 def update_category(cat_id: int, req: CategoryReq, db: Session = Depends(get_db)) -> dict:
     cat = db.get(BaseCategory, cat_id)
     if cat is None:
@@ -133,6 +142,7 @@ def update_category(cat_id: int, req: CategoryReq, db: Session = Depends(get_db)
     cat.sort = req.sort
     _rebuild_path(db, cat)
     db.commit()
+    cache_delete("dict:categories")  # 分类树缓存失效
     return ok()
 
 
@@ -147,6 +157,7 @@ def delete_category(cat_id: int, db: Session = Depends(get_db)) -> dict:
         raise BizError(E_PARAM, "分类下存在子分类或商品，禁止删除")
     db.delete(cat)
     db.commit()
+    cache_delete("dict:categories")  # 分类树缓存失效
     return ok()
 
 
@@ -155,8 +166,11 @@ def delete_category(cat_id: int, db: Session = Depends(get_db)) -> dict:
 
 @router.get("/units")
 def list_units(db: Session = Depends(get_db)) -> dict:
-    units = db.scalars(select(BaseUnit).order_by(BaseUnit.id)).all()
-    return ok([UnitOut(id=u.id, name=u.name, remark=u.remark).model_dump() for u in units])
+    def _load() -> list[dict]:
+        units = db.scalars(select(BaseUnit).order_by(BaseUnit.id)).all()
+        return [UnitOut(id=u.id, name=u.name, remark=u.remark).model_dump() for u in units]
+
+    return ok(cache_aside("dict:units", _DICT_TTL, _load))
 
 
 
@@ -182,6 +196,7 @@ def create_unit(req: UnitReq, db: Session = Depends(get_db)) -> dict:
     db.add(unit)
     db.commit()
     db.refresh(unit)
+    cache_delete("dict:units")
     return ok(UnitOut(id=unit.id, name=unit.name, remark=unit.remark).model_dump())
 
 
@@ -197,6 +212,7 @@ def update_unit(unit_id: int, req: UnitReq, db: Session = Depends(get_db)) -> di
     unit.name = name
     unit.remark = req.remark
     db.commit()
+    cache_delete("dict:units")
     return ok()
 
 
@@ -212,6 +228,7 @@ def delete_unit(unit_id: int, db: Session = Depends(get_db)) -> dict:
         raise BizError(E_PARAM, "单位已被商品引用，禁止删除")
     db.delete(unit)
     db.commit()
+    cache_delete("dict:units")
     return ok()
 
 
@@ -226,6 +243,23 @@ def list_suppliers(
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> dict:
+    # 下拉场景（无关键词，取前 100 条）走缓存；带关键词的搜索不缓存（低频率、参数多变）
+    if not keyword and page == 1:
+        key = f"dict:suppliers:{status or 'all'}:{page_size}"
+
+        def _load() -> dict:
+            stmt = select(BaseSupplier)
+            if status is not None:
+                stmt = stmt.where(BaseSupplier.status == status)
+            total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+            rows = db.scalars(stmt.order_by(BaseSupplier.id.desc()).limit(page_size)).all()
+            return PageData(
+                list=[SupplierOut.model_validate(s, from_attributes=True).model_dump() for s in rows],
+                total=total, page=page, page_size=page_size,
+            ).model_dump()
+
+        return ok(cache_aside(key, _DICT_TTL, _load))
+
     stmt = select(BaseSupplier)
     if keyword:
         stmt = stmt.where(or_(BaseSupplier.name.like(f"%{keyword}%"), BaseSupplier.code.like(f"%{keyword}%")))
@@ -247,6 +281,7 @@ def create_supplier(req: SupplierReq, db: Session = Depends(get_db)) -> dict:
     db.add(sup)
     db.commit()
     db.refresh(sup)
+    cache_delete_pattern("dict:suppliers*")
     return ok(SupplierOut.model_validate(sup, from_attributes=True).model_dump())
 
 
@@ -261,6 +296,7 @@ def update_supplier(sup_id: int, req: SupplierReq, db: Session = Depends(get_db)
     for k, v in req.model_dump().items():
         setattr(sup, k, v)
     db.commit()
+    cache_delete_pattern("dict:suppliers*")
     return ok()
 
 
@@ -281,6 +317,7 @@ def delete_supplier(sup_id: int, db: Session = Depends(get_db)) -> dict:
     db.execute(BaseProductSupplier.__table__.delete().where(BaseProductSupplier.supplier_id == sup_id))  # 清理残留关联（停用材料的）
     sup.status = 0  # 软删除：停用
     db.commit()
+    cache_delete_pattern("dict:suppliers*")
     return ok()
 
 
@@ -310,6 +347,7 @@ def merge_suppliers(body: dict, db: Session = Depends(get_db)) -> dict:
     db.execute(update(PchPurchaseIn).where(PchPurchaseIn.supplier_id == a.id).values(supplier_id=b.id))
     a.status = 0  # 停用被合并的供应商
     db.commit()
+    cache_delete_pattern("dict:suppliers*")  # 供应商下拉缓存失效
     return ok({"merged_id": b.id})
 
 
@@ -356,6 +394,8 @@ async def import_suppliers(file: UploadFile = File(...), db: Session = Depends(g
         db.add(BaseSupplier(code=code, name=name, contact=vals[2], phone=vals[3], address=vals[4]))
         success += 1
     db.commit()
+    if success:
+        cache_delete_pattern("dict:suppliers*")
     return ok({"success_count": success, "fail_rows": fail_rows})
 
 
@@ -460,6 +500,23 @@ def list_products(
     ai: int = Query(0, description="1 无结果时用大模型改写关键词重试（语义搜索）"),
     db: Session = Depends(get_db),
 ) -> dict:
+    # 扫码场景：条码精确查询（无关键词）走缓存，命中直接返回分页结果
+    if barcode and not keyword and status is not None:
+        key = f"product:bc:{barcode.strip()}:{status}"
+
+        def _load() -> dict:
+            stmt = select(BaseProduct).where(BaseProduct.barcode == barcode.strip())
+            if status is not None:
+                stmt = stmt.where(BaseProduct.status == status)
+            total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+            rows = db.scalars(stmt.order_by(BaseProduct.id.desc()).limit(page_size)).all()
+            return PageData(
+                list=[_product_out(db, p) for p in rows],
+                total=total, page=page, page_size=page_size,
+            ).model_dump()
+
+        return ok(cache_aside(key, _PRODUCT_TTL, _load))
+
     stmt = select(BaseProduct)
     if keyword:
         like = f"%{keyword}%"
@@ -527,15 +584,19 @@ def create_product(req: ProductReq, db: Session = Depends(get_db)) -> dict:
     except IntegrityError:
         db.rollback()
         raise BizError(E_PARAM, "商品编码已存在")
+    cache_delete_pattern("product:*")  # 商品详情/条码缓存失效
     return ok(_product_out(db, db.get(BaseProduct, p.id)))
 
 
 @router.get("/products/{product_id}")
 def get_product(product_id: int, db: Session = Depends(get_db)) -> dict:
-    p = db.get(BaseProduct, product_id)
-    if p is None:
-        raise BizError(E_NOT_FOUND, "商品不存在")
-    return ok(_product_out(db, p))
+    def _load() -> dict:
+        p = db.get(BaseProduct, product_id)
+        if p is None:
+            raise BizError(E_NOT_FOUND, "商品不存在")
+        return _product_out(db, p)
+
+    return ok(cache_aside(f"product:{product_id}", _PRODUCT_TTL, _load))
 
 
 @router.put("/products/{product_id}", dependencies=[Depends(require_permission("base:product"))])
@@ -562,6 +623,7 @@ def update_product(product_id: int, req: ProductReq, db: Session = Depends(get_d
     except IntegrityError:
         db.rollback()
         raise BizError(E_PARAM, "商品编码已存在")
+    cache_delete_pattern("product:*")  # 商品详情/条码缓存失效
     return ok()
 
 
@@ -572,6 +634,7 @@ def delete_product(product_id: int, db: Session = Depends(get_db)) -> dict:
         raise BizError(E_NOT_FOUND, "商品不存在")
     p.status = 0  # 软删除：停用
     db.commit()
+    cache_delete_pattern("product:*")  # 商品详情/条码缓存失效
     return ok()
 
 
@@ -724,6 +787,9 @@ async def import_products(file: UploadFile = File(...), db: Session = Depends(ge
             db.rollback()
             fail_rows.append({"row": idx, "reason": f"编码 {code} 已存在"})
     db.commit()
+    if success:
+        cache_delete_pattern("product:*")  # 导入可能新增商品/单位/分类 → 全部失效
+        cache_delete("dict:categories", "dict:units")
     return ok({"success_count": success, "fail_rows": fail_rows})
 
 
@@ -747,8 +813,11 @@ def export_products(db: Session = Depends(get_db)) -> StreamingResponse:
 
 @router.get("/warehouses")
 def list_warehouses(db: Session = Depends(get_db)) -> dict:
-    rows = db.scalars(select(BaseWarehouse).order_by(BaseWarehouse.id)).all()
-    return ok([WarehouseOut.model_validate(w, from_attributes=True).model_dump() for w in rows])
+    def _load() -> list[dict]:
+        rows = db.scalars(select(BaseWarehouse).order_by(BaseWarehouse.id)).all()
+        return [WarehouseOut.model_validate(w, from_attributes=True).model_dump() for w in rows]
+
+    return ok(cache_aside("dict:warehouses", _DICT_TTL, _load))
 
 
 @router.post("/warehouses", dependencies=[Depends(require_permission("base:warehouse"))])
@@ -759,6 +828,7 @@ def create_warehouse(req: WarehouseReq, db: Session = Depends(get_db)) -> dict:
     db.add(w)
     db.commit()
     db.refresh(w)
+    cache_delete("dict:warehouses")
     return ok(WarehouseOut.model_validate(w, from_attributes=True).model_dump())
 
 
@@ -772,6 +842,7 @@ def update_warehouse(wh_id: int, req: WarehouseReq, db: Session = Depends(get_db
     for k, v in req.model_dump().items():
         setattr(w, k, v)
     db.commit()
+    cache_delete("dict:warehouses")
     return ok()
 
 
@@ -785,6 +856,7 @@ def delete_warehouse(wh_id: int, db: Session = Depends(get_db)) -> dict:
         raise BizError(E_PARAM, "仓库下存在货架，禁止删除")
     w.status = 0  # 软删除
     db.commit()
+    cache_delete("dict:warehouses")
     return ok()
 
 
@@ -801,6 +873,13 @@ def list_shelves(
     visible = _visible_shelf_ids(db, user)
     if visible is not None:
         stmt = stmt.where(BaseShelf.id.in_(visible) if visible else False)
+    # 无单位过滤（超管/管理者）时全量货架可缓存；受可见性限制的用户不缓存（正确性优先）
+    if visible is None:
+        def _load() -> list[dict]:
+            rows = db.scalars(stmt.order_by(BaseShelf.code)).all()
+            return [ShelfOut.model_validate(s, from_attributes=True).model_dump() for s in rows]
+
+        return ok(cache_aside(f"dict:shelves:{wh_id}", _DICT_TTL, _load))
     rows = db.scalars(stmt.order_by(BaseShelf.code)).all()
     return ok([ShelfOut.model_validate(s, from_attributes=True).model_dump() for s in rows])
 
@@ -816,6 +895,7 @@ def create_shelf(req: ShelfReq, db: Session = Depends(get_db)) -> dict:
     db.add(s)
     db.commit()
     db.refresh(s)
+    cache_delete_pattern("dict:shelves*", "stock:locsum:*")  # 货架图缓存同失效
     return ok(ShelfOut.model_validate(s, from_attributes=True).model_dump())
 
 
@@ -827,6 +907,7 @@ def update_shelf(shelf_id: int, req: ShelfReq, db: Session = Depends(get_db)) ->
     for k, v in req.model_dump().items():
         setattr(s, k, v)
     db.commit()
+    cache_delete_pattern("dict:shelves*", "stock:locsum:*")  # 货架图缓存同失效
     return ok()
 
 
@@ -840,6 +921,7 @@ def delete_shelf(shelf_id: int, db: Session = Depends(get_db)) -> dict:
         raise BizError(E_PARAM, "货架下存在库位，禁止删除")
     db.delete(s)
     db.commit()
+    cache_delete_pattern("dict:shelves*", "stock:locsum:*")  # 货架图缓存同失效
     return ok()
 
 
@@ -849,13 +931,16 @@ def list_locations(
     shelf_id: int = Query(0),
     db: Session = Depends(get_db),
 ) -> dict:
-    stmt = select(BaseLocation)
-    if warehouse_id:
-        stmt = stmt.where(BaseLocation.warehouse_id == warehouse_id)
-    if shelf_id:
-        stmt = stmt.where(BaseLocation.shelf_id == shelf_id)
-    rows = db.scalars(stmt.order_by(BaseLocation.code)).all()
-    return ok([LocationOut.model_validate(l, from_attributes=True).model_dump() for l in rows])
+    def _load() -> list[dict]:
+        stmt = select(BaseLocation)
+        if warehouse_id:
+            stmt = stmt.where(BaseLocation.warehouse_id == warehouse_id)
+        if shelf_id:
+            stmt = stmt.where(BaseLocation.shelf_id == shelf_id)
+        rows = db.scalars(stmt.order_by(BaseLocation.code)).all()
+        return [LocationOut.model_validate(l, from_attributes=True).model_dump() for l in rows]
+
+    return ok(cache_aside(f"dict:locations:{warehouse_id}:{shelf_id}", _DICT_TTL, _load))
 
 
 @router.post("/locations", dependencies=[Depends(require_permission("base:stock-location"))])
@@ -873,6 +958,7 @@ def create_location(req: LocationReq, db: Session = Depends(get_db)) -> dict:
     db.add(loc)
     db.commit()
     db.refresh(loc)
+    cache_delete_pattern("dict:locations*", "stock:locsum:*")  # 货架图缓存同失效
     return ok(LocationOut.model_validate(loc, from_attributes=True).model_dump())
 
 
@@ -884,6 +970,7 @@ def update_location(loc_id: int, req: LocationReq, db: Session = Depends(get_db)
     for k, v in req.model_dump().items():
         setattr(loc, k, v)
     db.commit()
+    cache_delete_pattern("dict:locations*", "stock:locsum:*")  # 货架图缓存同失效
     return ok()
 
 
@@ -897,6 +984,7 @@ def delete_location(loc_id: int, db: Session = Depends(get_db)) -> dict:
         raise BizError(E_PARAM, "库位存在库存，禁止删除")
     db.delete(loc)
     db.commit()
+    cache_delete_pattern("dict:locations*", "stock:locsum:*")  # 货架图缓存同失效
     return ok()
 
 
@@ -927,8 +1015,11 @@ def _dept_out(db: Session, d: BaseDepartment) -> dict:
 
 @router.get("/departments")
 def list_departments(db: Session = Depends(get_db)) -> dict:
-    rows = db.scalars(select(BaseDepartment).order_by(BaseDepartment.id)).all()
-    return ok([_dept_out(db, d) for d in rows])
+    def _load() -> list[dict]:
+        rows = db.scalars(select(BaseDepartment).order_by(BaseDepartment.id)).all()
+        return [_dept_out(db, d) for d in rows]
+
+    return ok(cache_aside("dict:departments", _DICT_TTL, _load))
 
 
 @router.post("/departments", dependencies=[Depends(require_permission("dept:manage"))])
@@ -938,6 +1029,7 @@ def create_department(req: DeptReq, db: Session = Depends(get_db)) -> dict:
     db.add(d)
     db.commit()
     db.refresh(d)
+    cache_delete("dict:departments")
     return ok({"id": d.id, "code": d.code})
 
 
@@ -965,6 +1057,7 @@ def update_department(dept_id: int, req: DeptUpdateReq, db: Session = Depends(ge
     if req.status is not None:
         d.status = req.status
     db.commit()
+    cache_delete("dict:departments")
     return ok()
 
 
@@ -978,6 +1071,7 @@ def delete_department(dept_id: int, db: Session = Depends(get_db)) -> dict:
     db.execute(BaseDepartmentShelf.__table__.delete().where(BaseDepartmentShelf.department_id == dept_id))
     db.delete(d)
     db.commit()
+    cache_delete("dict:departments")
     return ok()
 
 
@@ -994,6 +1088,7 @@ def update_department_shelves(dept_id: int, req: DeptShelvesReq, db: Session = D
     for sid in req.shelf_ids:
         db.add(BaseDepartmentShelf(department_id=dept_id, shelf_id=sid))
     db.commit()
+    cache_delete("dict:departments")  # 部门含 shelf_ids，变更需失效
     return ok()
 
 

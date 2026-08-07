@@ -17,7 +17,7 @@ class Settings:
     # 数据库
     db_url: str = os.getenv(
         "DB_URL",
-        "mysql+pymysql://root:cdcp520@127.0.0.1:3306/wuliaotong?charset=utf8mb4",
+        "mysql+pymysql://root:CHANGE_ME@127.0.0.1:3306/wuliaotong?charset=utf8mb4",
     )
 
     # 会话

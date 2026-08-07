@@ -9,12 +9,14 @@ from io import BytesIO
 import httpx
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select, text
+from pydantic import BaseModel, Field
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger("app.system")
 
 from app.config import settings
+from app.core.cache import ping as redis_ping
 from app.core.deps import require_permission
 from app.core.response import BizError, E_LLM_FAILED, E_PARAM, ok
 from app.db import get_db
@@ -64,6 +66,13 @@ SETTINGS_KEYS: dict[str, str] = {
     "watermark.position": "str",  # 完成工作照片水印位置（bottom/top/bottom-left/bottom-right/top-left/top-right）
     "watermark.bg_opaque": "str",  # 水印背景：1 黑色不透明底（默认）/ 0 透明背景仅文字描边
     "log.level": "str",  # 运行时日志级别：DEBUG / INFO（默认）/ WARN / ERROR（保存后立即生效）
+    # AI 服务配额与预警（设置页「OCR 与大模型 → 配额与预警」）
+    "quota.warning.enabled": "str",  # 1 启用 / 0 关闭（定时检查剩余配额并邮件告警）
+    "quota.warning.recipients": "str",  # 预警邮件收件人，逗号分隔
+    "quota.refresh.interval_minutes": "str",  # 配额自动获取间隔（分钟），默认 60
+    "quota.warning.threshold.siliconflow": "str",  # 视觉模型剩余余额低于该值（元）时告警
+    "quota.warning.threshold.deepseek": "str",  # 文本模型剩余余额低于该值（元）时告警
+    "quota.warning.threshold.doubao": "str",  # 豆包剩余配额低于该值（与服务商返回数值同单位）时告警
 }
 
 
@@ -77,10 +86,28 @@ def health(db: Session = Depends(get_db)) -> dict:
     cfg = db.scalar(select(SysConfig).where(SysConfig.config_key == "ocr.engine"))
     engine = cfg.config_value if cfg and cfg.config_value else settings.ocr_engine
     ver = db.scalar(select(SysConfig).where(SysConfig.config_key == "ocr.model_version"))
+    # LLM 服务商状态：只读配置（启用开关 + Key 是否已配置 + 模型），不做在线探测（探活不消耗配额）
+    llm_cfg = {
+        k: v
+        for k, v in db.execute(
+            select(SysConfig.config_key, SysConfig.config_value).where(SysConfig.config_key.like("llm.%"))
+        ).all()
+        if v
+    }
+    llm_state = {
+        name: {
+            "enabled": llm_cfg.get(f"llm.{name}.enabled") == "1",
+            "configured": bool(llm_cfg.get(f"llm.{name}.api_key")),
+            "model": llm_cfg.get(f"llm.{name}.model", ""),
+        }
+        for name in ("doubao", "deepseek", "siliconflow")
+    }
     return ok(
         {
             "status": "ok",
             "db": "ok",
+            "redis": "ok" if redis_ping() else "down",
+            "llm": llm_state,
             "ocr_engine": engine,
             "ocr_model_version": ver.config_value if ver and ver.config_value else ("PP-OCRv6" if engine == "paddle" else ""),
             "ocr_ready": ocr_engine_available(engine),
@@ -187,6 +214,38 @@ def list_doubao_models(db: Session = Depends(get_db)) -> dict:
         raise BizError(E_PARAM, "请先填写并保存豆包 API Key，再获取模型列表")
     base_url = _sys_config(db, "llm.doubao.base_url") or "https://ark.cn-beijing.volces.com/api/v3"
     return ok({"models": _fetch_models(base_url, key)})
+
+
+# ============================ 配额与预警（OCR/大模型服务商） ============================
+
+
+@router.get("/llm/quota", dependencies=[Depends(require_permission("sys:config"))])
+def get_llm_quota(db: Session = Depends(get_db)) -> dict:
+    """读取最近一次获取的各服务商配额快照（含失败信息，供设置页展示）。"""
+    from app.services.quota import get_quota_snapshot
+
+    return ok({"providers": get_quota_snapshot(db)})
+
+
+@router.post("/llm/quota/{provider}", dependencies=[Depends(require_permission("sys:config"))])
+def refresh_llm_quota(provider: str, db: Session = Depends(get_db)) -> dict:
+    """立即从服务商获取配额/余额，结果存入快照；失败也返回 ok=False + 错误说明（优雅降级）。"""
+    from app.services.quota import PROVIDERS, fetch_provider_quota, mark_quota_refreshed, save_quota_snapshot
+
+    if provider not in PROVIDERS:
+        raise BizError(E_PARAM, f"未知服务商: {provider}")
+    payload = fetch_provider_quota(db, provider)
+    save_quota_snapshot(db, provider, payload)
+    mark_quota_refreshed(db)  # 手动获取视为一次刷新，重置自动获取计时
+    return ok(payload)
+
+
+@router.get("/llm/model-scenes", dependencies=[Depends(require_permission("sys:config"))])
+def llm_model_scenes(db: Session = Depends(get_db)) -> dict:
+    """模型参与的工作任务映射（含启用状态），供设置页「模型与工作任务」展示。"""
+    from app.services.quota import get_model_scenes
+
+    return ok({"models": get_model_scenes(db)})
 
 
 # ============================ PP-OCR 自动安装 ============================
@@ -306,7 +365,7 @@ def watermark_preview(req: WatermarkPreviewReq, db: Session = Depends(get_db)):
     return StreamingResponse(buf, media_type="image/png")
 
 
-@router.get("/llm-logs", dependencies=[Depends(require_permission("sys:config"))])
+@router.get("/llm-logs", dependencies=[Depends(require_permission("sys:llm-log"))])
 def list_llm_logs(
     scene: str = "",
     status: str = "",
@@ -334,3 +393,18 @@ def list_llm_logs(
         ],
         "total": total, "page": page, "page_size": page_size,
     })
+
+
+class LlmLogDeleteReq(BaseModel):
+    """批量删除大模型调用日志请求：按 ID 列表删除（不含记录时静默跳过）。"""
+
+    ids: list[int] = Field(min_length=1, description="要删除的日志 ID 列表")
+
+
+@router.delete("/llm-logs", dependencies=[Depends(require_permission("sys:llm-log"))])
+def delete_llm_logs(req: LlmLogDeleteReq, db: Session = Depends(get_db)) -> dict:
+    """批量删除大模型调用日志（支持勾选多条后删除）。"""
+    result = db.execute(delete(LlmLog).where(LlmLog.id.in_(req.ids)))
+    db.commit()
+    logger.info("批量删除大模型调用日志 %d 条", result.rowcount or 0)
+    return ok({"deleted": result.rowcount or 0})

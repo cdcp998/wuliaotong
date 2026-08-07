@@ -9,6 +9,7 @@ from json import loads as jsonLoads, dumps as jsonDumps
 from base64 import b64encode  # base64 编码
 
 InitTimeout = 15  # 初始化超时时间，秒
+RecognizeTimeout = 30  # 单次识别超时，秒（引擎卡死时杀进程兜底，防止请求永久挂起）
 
 
 class OcrAPI:
@@ -86,11 +87,28 @@ class OcrAPI:
             self.ret.stdin.flush()
         except Exception as e:
             return {'code': 400, 'data': f'向识别器进程写入图片地址失败，疑似子进程已崩溃。{e}'}
-        # 获取返回值
+        # 获取返回值：加看门狗——readline 阻塞期间引擎卡死（死锁/杀软扫描等）会让请求永久挂起，
+        # 超时后杀掉子进程使 readline 立即返回，再以错误码返回（调用方快速失败，不阻塞请求线程）
+        timedOut = threading.Event()
+
+        def onTimeout():
+            timedOut.set()
+            try:
+                self.ret.kill()
+            except Exception:
+                pass
+
+        watchdog = threading.Timer(RecognizeTimeout, onTimeout)
+        watchdog.start()
         try:
-            getStr = self.ret.stdout.readline().decode('utf-8', errors = 'ignore')
+            try:
+                getStr = self.ret.stdout.readline().decode('utf-8', errors = 'ignore')
+            finally:
+                watchdog.cancel()
         except Exception as e:
-            return {'code': 401, 'data': f'读取识别器进程输出值失败，疑似传入了不存在或无法识别的图片。{e}'}
+            return {'code': 400, 'data': f'读取识别器进程输出值失败，疑似传入了不存在或无法识别的图片。{e}'}
+        if timedOut.is_set():
+            return {'code': 400, 'data': f'识别超时（>{RecognizeTimeout}s），已终止 OCR 引擎进程，请重试'}
         try:
             return jsonLoads(getStr)
         except Exception as e:

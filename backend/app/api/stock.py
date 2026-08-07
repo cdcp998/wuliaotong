@@ -17,6 +17,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.cache import cache_aside_json
 from app.core.deps import get_current_user, require_permission
 from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, ok
 from app.db import get_db
@@ -558,51 +559,54 @@ def location_summary(
     """2D 货架图数据源：仓库/货架下每个库位的商品库存 + 预警状态（绿=正常/红=低/黄=高）。
 
     与 /locations 的区别：本接口一次返回库位上的库存明细（商品+数量+预警），
-    避免货架图 N+1 请求。
+    避免货架图 N+1 请求。60 秒 TTL 缓存，库存变动（post_stock_change）即时失效。
     """
-    stmt = select(BaseLocation)
-    if warehouse_id:
-        stmt = stmt.where(BaseLocation.warehouse_id == warehouse_id)
-    if shelf_id:
-        stmt = stmt.where(BaseLocation.shelf_id == shelf_id)
-    locations = db.scalars(stmt.order_by(BaseLocation.layer_no, BaseLocation.code)).all()
-    if not locations:
-        return ok([])
-    loc_ids = [loc.id for loc in locations]
+    def _load() -> list[dict]:
+        stmt = select(BaseLocation)
+        if warehouse_id:
+            stmt = stmt.where(BaseLocation.warehouse_id == warehouse_id)
+        if shelf_id:
+            stmt = stmt.where(BaseLocation.shelf_id == shelf_id)
+        locations = db.scalars(stmt.order_by(BaseLocation.layer_no, BaseLocation.code)).all()
+        if not locations:
+            return []
+        loc_ids = [loc.id for loc in locations]
 
-    stocks = db.scalars(
-        select(StkStock).where(StkStock.location_id.in_(loc_ids), StkStock.qty != 0)
-    ).all()
-    prod_ids = {s.product_id for s in stocks}
-    products = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(prod_ids))).all()}
+        stocks = db.scalars(
+            select(StkStock).where(StkStock.location_id.in_(loc_ids), StkStock.qty != 0)
+        ).all()
+        prod_ids = {s.product_id for s in stocks}
+        products = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(prod_ids))).all()}
 
-    by_loc: dict[int, list[dict]] = {}
-    for s in stocks:
-        p = products.get(s.product_id)
-        if p is None:
-            continue
-        if p.min_stock and s.qty < p.min_stock:
-            alert = "low"
-        elif p.max_stock and s.qty > p.max_stock:
-            alert = "high"
-        else:
-            alert = "normal"
-        by_loc.setdefault(s.location_id, []).append({
-            "product_id": s.product_id,
-            "code": p.code,
-            "name": p.name,
-            "spec": p.spec,
-            "qty": _fmt_qty(s.qty),
-            "min_stock": _fmt_qty(p.min_stock),
-            "max_stock": _fmt_qty(p.max_stock),
-            "alert": alert,
-        })
-    return ok([
-        {
-            "location_id": loc.id,
-            "location_code": loc.code,
-            "layer_no": loc.layer_no,
-            "items": by_loc.get(loc.id, []),
-        }
-        for loc in locations
-    ])
+        by_loc: dict[int, list[dict]] = {}
+        for s in stocks:
+            p = products.get(s.product_id)
+            if p is None:
+                continue
+            if p.min_stock and s.qty < p.min_stock:
+                alert = "low"
+            elif p.max_stock and s.qty > p.max_stock:
+                alert = "high"
+            else:
+                alert = "normal"
+            by_loc.setdefault(s.location_id, []).append({
+                "product_id": s.product_id,
+                "code": p.code,
+                "name": p.name,
+                "spec": p.spec,
+                "qty": _fmt_qty(s.qty),
+                "min_stock": _fmt_qty(p.min_stock),
+                "max_stock": _fmt_qty(p.max_stock),
+                "alert": alert,
+            })
+        return [
+            {
+                "location_id": loc.id,
+                "location_code": loc.code,
+                "layer_no": loc.layer_no,
+                "items": by_loc.get(loc.id, []),
+            }
+            for loc in locations
+        ]
+
+    return ok(cache_aside_json(f"stock:locsum:{warehouse_id}:{shelf_id}", 60, _load))

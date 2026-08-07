@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.cache import cache_aside, cache_delete_pattern
 from app.core.deps import get_current_user
 from app.core.response import BizError, E_NOT_FOUND, ok
 from app.db import get_db
@@ -35,11 +36,14 @@ def list_notifications(
 
 @router.get("/notifications/unread-count")
 def unread_count(user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
-    cnt = db.scalar(
-        select(func.count()).select_from(SysNotification).where(
-            SysNotification.user_id == user.id, SysNotification.is_read == 0
-        )
-    ) or 0
+    # 前端轮询热点：30 秒 TTL；读通知/新通知生成时即时失效
+    cnt = cache_aside(f"notify:unread:{user.id}", 30, lambda: (
+        db.scalar(
+            select(func.count()).select_from(SysNotification).where(
+                SysNotification.user_id == user.id, SysNotification.is_read == 0
+            )
+        ) or 0
+    ))
     return ok({"unread_count": cnt})
 
 
@@ -54,6 +58,7 @@ def mark_read(
         raise BizError(E_NOT_FOUND, "通知不存在")
     n.is_read = 1
     db.commit()
+    cache_delete_pattern(f"notify:unread:{user.id}")
     return ok()
 
 
@@ -65,4 +70,5 @@ def mark_read_all(user: SysUser = Depends(get_current_user), db: Session = Depen
         .values(is_read=1)
     )
     db.commit()
+    cache_delete_pattern(f"notify:unread:{user.id}")
     return ok()

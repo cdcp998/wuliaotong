@@ -142,7 +142,9 @@ def test_role_permission_effective() -> None:
 
 def test_operation_logs() -> None:
     _login_admin()
-    client.post("/api/v1/units", json={"name": f"log件{_TAG}"})  # 制造写操作
+    # 制造写操作（复用规范单位，避免随机单位名污染单位表）
+    if not any(u["name"] == "件" for u in client.get("/api/v1/units").json()["data"]):
+        client.post("/api/v1/units", json={"name": "件"})
     r = client.get(f"/api/v1/logs?username=admin&page=1&page_size=5")
     assert r.json()["code"] == 0, r.text
     d = r.json()["data"]

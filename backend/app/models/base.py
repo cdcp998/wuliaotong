@@ -71,6 +71,16 @@ class BaseProductUnit(Base):
     is_default: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+class BaseProductSupplier(Base):
+    """材料-供应商多对多关联（材料可关联多家供应商）。"""
+
+    __tablename__ = "base_product_supplier"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    product_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    supplier_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
 class BaseWarehouse(TimestampMixin, Base):
     __tablename__ = "base_warehouse"
 

@@ -743,7 +743,9 @@ INSERT INTO sys_permission (id, name, code, type, sort) VALUES
   (21, '操作日志',      'sys:log',             2, 72),
   (22, '系统设置',      'sys:config',          2, 73),
   (23, '备份管理',      'sys:backup',          2, 74),
-  (24, '单位管理',      'dept:manage',         2, 75);
+  (24, '单位管理',      'dept:manage',         2, 75),
+  (25, 'AI 调用日志',   'sys:llm-log',         2, 76),
+  (26, 'AI 建议处理',   'ai:suggestion',       2, 62);
 
 -- 角色-权限映射
 -- 超级管理员：全部
@@ -752,11 +754,11 @@ INSERT INTO sys_role_permission (role_id, permission_id)
 -- 管理者：报表 + 库存查询/流水
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
   (2, 8), (2, 9), (2, 17), (2, 18);
--- 仓管员：基础资料 + 采购 + 库存 + 审计 + OCR
+-- 仓管员：基础资料 + 采购 + 库存 + 审计 + OCR + AI 建议处理
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
   (3, 1), (3, 2), (3, 3), (3, 4), (3, 5),
   (3, 6), (3, 7), (3, 8), (3, 9), (3, 10), (3, 11), (3, 12),
-  (3, 14), (3, 15), (3, 16);
+  (3, 14), (3, 15), (3, 16), (3, 26);
 -- 使用者：领用申请 + 库存查询（自己相关）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
   (4, 13), (4, 8);

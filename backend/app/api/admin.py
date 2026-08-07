@@ -13,7 +13,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_permission
+from app.core.cache import session_delete_all
+from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, invalidate_role_cache, require_permission
 from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, ok
 from app.core.security import hash_password
 from app.db import get_db
@@ -133,6 +134,11 @@ def update_user(
     if req.password:
         u.password_hash = hash_password(req.password)
     db.commit()
+    # 缓存一致性：改角色/停用用户后失效角色缓存；停用用户同时清除其 Redis 会话
+    if req.role_id is not None:
+        invalidate_role_cache(u.role_id)
+    if req.status == 0:
+        session_delete_all(u.id)
     return ok()
 
 
@@ -151,6 +157,7 @@ def delete_user(
         raise BizError(E_PARAM, "内置超级管理员不可停用")
     u.status = 0  # 逻辑停用，保留历史数据
     db.commit()
+    session_delete_all(u.id)  # 停用即清除该用户全部 Redis 会话
     return ok()
 
 
@@ -212,6 +219,7 @@ def update_role(role_id: int, req: RoleUpdateReq, db: Session = Depends(get_db))
             raise BizError(E_PARAM, "单位不存在")
         r.department_id = req.department_id
     db.commit()
+    invalidate_role_cache(role_id)  # 角色信息变更 → 失效缓存
     return ok()
 
 
@@ -227,6 +235,7 @@ def delete_role(role_id: int, db: Session = Depends(get_db)) -> dict:
     db.execute(SysRolePermission.__table__.delete().where(SysRolePermission.role_id == role_id))
     db.delete(r)
     db.commit()
+    invalidate_role_cache(role_id)
     return ok()
 
 
@@ -246,6 +255,7 @@ def update_role_permissions(role_id: int, req: RolePermReq, db: Session = Depend
     for pid in req.permission_ids:
         db.add(SysRolePermission(role_id=role_id, permission_id=pid))
     db.commit()
+    invalidate_role_cache(role_id)  # 权限变更 → 失效缓存
     return ok()
 
 

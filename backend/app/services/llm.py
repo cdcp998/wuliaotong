@@ -4,6 +4,11 @@
 - DeepSeekClient：文本模型（OCR 文本结构化/纠错/归一化，不支持图像输入）
 - API Key/BaseURL/Model 存 sys_config（llm.doubao.* / llm.deepseek.*），接口返回时脱敏
 - 未配置时调用抛 LLMNotConfigured，由调用方降级（人工录入），不影响主流程
+
+兼容性标准：三个模型槽位（豆包兜底 / 文本 / 视觉）均遵循 **OpenAI Chat Completions
+兼容协议**（POST {base_url}/chat/completions，Authorization: Bearer，messages 格式），
+Base URL / API Key / 模型名可自由指向任意兼容服务商（SiliconFlow、DeepSeek、火山方舟、
+通义、智谱、自建 vLLM / Ollama、第三方网关等），不绑定特定供应商。
 """
 from __future__ import annotations
 
@@ -55,8 +60,9 @@ def _log_llm_call(scene: str, model: str, prompt_text: str, output: str, status:
         try:
             s.add(LlmLog(
                 scene=scene[:50], model=model[:50],
-                prompt=prompt_text[:4000], output=output[:8000],
-                status=status[:10], error=error[:2000],
+                # TEXT 列上限 65535 字节，按 utf8mb4 最坏 4 字节/字符留余量，尽量保存完整内容供详情查看
+                prompt=prompt_text[:15000], output=output[:15000],
+                status=status[:10], error=error[:5000],
                 duration_ms=int(duration_ms), user_id=user_id,
             ))
             s.commit()

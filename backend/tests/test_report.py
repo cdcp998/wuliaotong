@@ -5,11 +5,13 @@
 from __future__ import annotations
 
 import io
+import re
 import uuid
 from datetime import date
 
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
+from urllib.parse import unquote
 
 from app.main import app
 
@@ -35,8 +37,7 @@ def _setup(qty: str = "30", min_stock: str = "30") -> tuple[int, int, int]:
     r = client.post("/api/v1/locations", json={"warehouse_id": wh, "shelf_id": r.json()["data"]["id"], "layer_no": 1})
     loc = r.json()["data"]["id"]
 
-    r = client.post("/api/v1/units", json={"name": "RP件" + tag})
-    unit_id = r.json()["data"]["id"]
+    unit_id = client.get("/api/v1/units").json()["data"][0]["id"]  # 复用种子单位
     r = client.post("/api/v1/products", json={
         "code": "9" + str(int(tag, 16) % 10**9), "name": "报表物料", "unit_id": unit_id,
         "purchase_price": "2.00", "min_stock": min_stock,
@@ -128,6 +129,10 @@ def test_inventory_summary_period() -> None:
     assert row["out_qty"] == "5"
     assert row["closing_qty"] == "25"
     assert row["closing_amount"] == "50.00"  # 25 × 移动加权成本 2.00
+    assert row["in_amount"] == "60.00"  # 30 × 2.00
+    assert row["out_amount"] == "10.00"  # 5 × 2.00
+    assert row["opening_amount"] == "0.00"  # 结存金额 - 入库金额 + 出库金额
+    assert row["unit_price"] == "2.00"
     # warehouse 过滤：不存在的仓库 → 空
     r = client.get(f"/api/v1/reports/inventory-summary?warehouse_id={wh + 999999}&product_id={pid}&start={today}&end={today}")
     assert r.json()["data"]["total"] == 0
@@ -144,6 +149,7 @@ def test_inventory_summary_opening() -> None:
     assert row["opening_qty"] == "25"
     assert row["in_qty"] == "0"
     assert row["closing_qty"] == "25"
+    assert row["opening_amount"] == "50.00"  # 期初 25 × 成本 2.00
 
 
 # ============================ 库存报表 ============================
@@ -169,6 +175,8 @@ def test_stock_report_sorts() -> None:
 # ============================ Excel 导出 ============================
 
 def test_export_inventory_summary() -> None:
+    """导出布局/样式与 testdata/匹配导出表格/库存金额收发存（2026.06）.xlsx 一致：
+    标题合并 A1:P1 + 21 列表头（S/T 红色）+ I~N 隐藏 + 数据行自第 3 行起。"""
     _login_admin()
     wh, loc, pid = _setup()
     _out_5(wh, loc, pid)
@@ -178,9 +186,27 @@ def test_export_inventory_summary() -> None:
     assert "spreadsheetml" in r.headers["content-type"]
     wb = load_workbook(io.BytesIO(r.content))
     ws = wb.active
-    assert ws.max_row == 2  # 表头 + 1 行数据
-    assert ws.cell(1, 1).value == "商品编码"
-    assert float(ws.cell(2, 8).value) == 25  # 结存数量
+    assert ws.title == "模板"
+    assert ws.max_row == 3  # 标题 + 表头 + 1 行数据
+    assert str(next(iter(ws.merged_cells.ranges))) == "A1:P1"
+    assert ws.cell(1, 1).value == f"{today[:4]}年{int(today[5:7])}月库存金额收发存表"
+    assert ws.cell(1, 1).font.bold
+    assert ws.cell(2, 1).value == "年月"
+    assert ws.cell(2, 5).value == "物料编码"
+    assert ws.cell(2, 19).value == "已使用数量"
+    assert ws.cell(2, 19).font.color.rgb == "FFFF0000"  # S/T 红色表头
+    assert ws.column_dimensions["I"].hidden
+    assert ws.row_dimensions[1].height == 47.45
+    assert float(ws.cell(3, 15).value) == 25  # 月度结存数量（O 列）
+    assert float(ws.cell(3, 21).value) == 2.0  # 单价 = 50 / 25
+    assert ws.cell(3, 21).number_format == "0.00_ "
+    # 文件名：无括号 + 末尾追加当前时间（精确到分钟）
+    cd = r.headers["content-disposition"]
+    m = re.search(r"filename\*=UTF-8''([^;]+)", cd)
+    fname = unquote(m.group(1)) if m else ""
+    assert "库存金额收发存" in fname
+    assert "（" not in fname and "）" not in fname
+    assert re.search(r"_\d{4}\.xlsx$", fname)
 
 
 def test_export_stock_and_flow() -> None:

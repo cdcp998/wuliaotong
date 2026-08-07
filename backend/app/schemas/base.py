@@ -45,6 +45,7 @@ class SupplierReq(BaseModel):
     phone: str = ""
     address: str = ""
     remark: str = ""
+    status: int = 1
 
 
 class SupplierOut(BaseModel):
@@ -84,8 +85,10 @@ class ProductReq(BaseModel):
     min_stock: str = "0"
     max_stock: str = "0"
     image_file_id: int = 0
+    status: int = 1
     remark: str = ""
     units: list[ProductUnitItem] = []
+    supplier_ids: list[int] | None = None  # None=不修改关联（编辑时缺省保持），[]=清空关联
 
     @field_validator("code")
     @classmethod
@@ -121,6 +124,8 @@ class ProductOut(BaseModel):
     status: int
     remark: str
     units: list[dict[str, Any]] = []
+    supplier_ids: list[int] = []
+    supplier_names: list[str] = []
 
     @field_serializer("purchase_price", "min_stock", "max_stock")
     def _ser_dec(self, v: Decimal) -> str:

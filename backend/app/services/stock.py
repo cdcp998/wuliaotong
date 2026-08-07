@@ -12,6 +12,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.cache import cache_delete_pattern
 from app.core.response import BizError, E_NOT_FOUND, E_STOCK_NOT_ENOUGH
 from app.models.base import BaseLocation, BaseProduct
 from app.models.stock import StkStock, StkStockLog
@@ -46,8 +47,12 @@ def post_stock_change(
         raise BizError(4006, "变动数量不能为 0")
     if db.get(BaseProduct, product_id) is None:
         raise BizError(E_NOT_FOUND, "商品不存在")
-    if db.get(BaseLocation, location_id) is None:
+    loc = db.get(BaseLocation, location_id)
+    if loc is None:
         raise BizError(E_NOT_FOUND, "库位不存在")
+    # 库位必须属于目标仓库：否则库存记录会挂在错误仓库下，导致仓库维度报表/查询不一致
+    if loc.warehouse_id != warehouse_id:
+        raise BizError(E_PARAM, f"库位 {loc.code} 不属于仓库 id={warehouse_id}")
 
     stock = db.scalar(
         select(StkStock)
@@ -97,6 +102,9 @@ def post_stock_change(
         remark=remark,
     )
     db.add(log)
+    # 库存已变动：看板聚合与货架图缓存失效（下个请求回源重建；即使事务回滚也仅是多余失效，安全）
+    cache_delete_pattern("dash:*")
+    cache_delete_pattern("stock:locsum:*")
     return log
 
 

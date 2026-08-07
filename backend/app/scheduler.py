@@ -12,11 +12,13 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import select
 
 from app.db import SessionLocal
+from app.core.cache import cache_delete_pattern
 from app.models.base import BaseProduct
 from app.models.stock import StkStock
 from app.models.sys import SysNotification, SysRole, SysUser
 from app.services.backup import cleanup_auto_backups, run_backup
 from app.services.ai.alert_text import generate_alert_text
+from app.services.quota import check_quota_warnings
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,8 @@ def scan_stock_alerts() -> dict:
                     db.add(SysNotification(user_id=uid, title=title, content=content, biz_type="预警"))
                 created += 1
         db.commit()
+        if created:
+            cache_delete_pattern("notify:unread:*")  # 新预警通知 → 未读数缓存失效
         return {"alerts": created}
     finally:
         db.close()
@@ -114,8 +118,16 @@ def start_scheduler() -> None:
             id="daily_backup",
             replace_existing=True,
         )
+        scheduler.add_job(
+            check_quota_warnings,
+            "interval",
+            minutes=5,  # 轻量触发；是否执行配额获取/预警由内部按配置间隔（默认 1 小时）判断
+            id="quota_warnings",
+            replace_existing=True,
+            next_run_time=datetime.now(),
+        )
         scheduler.start()
-        logger.info("scheduler started: stock_alerts(1min), daily_backup(02:00)")
+        logger.info("scheduler started: stock_alerts(1min), daily_backup(02:00), quota_refresh+check(5min trigger)")
 
 
 def stop_scheduler() -> None:

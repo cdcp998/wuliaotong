@@ -88,6 +88,7 @@ class PchPurchaseIn(TimestampMixin, Base):
         DateTime, nullable=False, server_default="CURRENT_TIMESTAMP"
     )
     operator_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    ocr_record_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)  # 来源送货单 OCR 记录 → ocr_record.id（0=手工录入）
     remark: Mapped[str] = mapped_column(String(255), nullable=False, default="")
 
 

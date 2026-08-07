@@ -25,9 +25,8 @@ def _login_admin() -> None:
 
 
 def _make_unit() -> int:
-    r = client.post("/api/v1/units", json={"name": "PC件" + uuid.uuid4().hex[:6]})
-    assert r.json()["code"] == 0, r.text
-    return r.json()["data"]["id"]
+    """复用种子单位（测试禁止创建随机单位数据）。"""
+    return client.get("/api/v1/units").json()["data"][0]["id"]
 
 
 def test_product_code_must_be_numeric() -> None:

@@ -11,7 +11,7 @@ from openpyxl import Workbook
 from app.core.security import hash_password
 from app.db import SessionLocal
 from app.main import app
-from app.models.sys import SysUser
+from app.models.sys import SysRole, SysRolePermission, SysUser
 
 client = TestClient(app)
 _TAG = uuid.uuid4().hex[:6]  # 本次运行的唯一后缀
@@ -63,7 +63,7 @@ def test_category_tree_crud():
 
 def test_unit_crud():
     _login_admin()
-    tag = "件" + _TAG
+    tag = "件" + _TAG + "x"  # 合法名（避免 6 位 hex 尾被垃圾名校验拦截）
     r = client.post("/api/v1/units", json={"name": tag})
     assert r.json()["code"] == 0, r.text
     unit_id = r.json()["data"]["id"]
@@ -72,6 +72,33 @@ def test_unit_crud():
     r = client.put(f"/api/v1/units/{unit_id}", json={"name": tag + "改"})
     assert r.json()["code"] == 0
     assert client.delete(f"/api/v1/units/{unit_id}").json()["code"] == 0
+
+
+def test_department_auto_code():
+    """单位编码自动生成（隐藏）：不传 code 创建 → 返回纯数字编码（yyyyMMdd + 当日序号），编辑不涉及编码。"""
+    _login_admin()
+    tag = "自动码" + _TAG
+    r = client.post("/api/v1/departments", json={"name": tag})
+    assert r.json()["code"] == 0, r.text
+    code1 = r.json()["data"]["code"]
+    assert code1.isdigit() and len(code1) == 12  # 8 位日期 + 4 位序号
+    assert code1.startswith(__import__("datetime").date.today().strftime("%Y%m%d"))
+    dept_id = r.json()["data"]["id"]
+
+    # 再次创建：序号递增且唯一
+    r2 = client.post("/api/v1/departments", json={"name": tag + "2"})
+    assert r2.json()["code"] == 0, r2.text
+    code2 = r2.json()["data"]["code"]
+    assert code2 != code1 and code2.isdigit()
+
+    # 列表返回的编码全为数字（自动生成，前端隐藏展示）
+    lst = client.get("/api/v1/departments").json()["data"]
+    assert any(x["id"] == dept_id and x["code"].isdigit() for x in lst)
+
+    # 编辑单位不涉及编码（名称/备注可改）
+    assert client.put(f"/api/v1/departments/{dept_id}", json={"name": tag + "改", "remark": "备注"}).json()["code"] == 0
+    updated = [x for x in client.get("/api/v1/departments").json()["data"] if x["id"] == dept_id][0]
+    assert updated["name"] == tag + "改" and updated["code"] == code1
 
 
 # ============================ 供应商 ============================
@@ -133,13 +160,12 @@ def test_warehouse_shelf_location_crud():
 
 def test_product_crud():
     _login_admin()
-    unit_name = "箱" + _TAG
-    client.post("/api/v1/units", json={"name": unit_name})
-    unit_id = client.get("/api/v1/units").json()["data"][0]["id"]
+    unit_id = client.get("/api/v1/units").json()["data"][0]["id"]  # 复用种子单位
 
     code = "9" + str(int(_TAG, 16) % 10**9)
+    barcode = "69" + str(int(_TAG, 16) % 10**12)  # 条码全局唯一（条码唯一性校验）
     payload = {
-        "code": code, "barcode": "6900000000001", "sku": "SKU-1", "name": "轴承6204",
+        "code": code, "barcode": barcode, "sku": "SKU-1", "name": "轴承6204",
         "spec": "20x12", "unit_id": unit_id, "purchase_price": "8.50",
         "min_stock": "10", "max_stock": "500",
         "units": [{"unit_id": unit_id, "rate": "1", "is_default": 1}],
@@ -155,8 +181,8 @@ def test_product_crud():
     # 搜索
     r = client.get(f"/api/v1/products?keyword={code}").json()
     assert r["data"]["total"] == 1
-    r = client.get("/api/v1/products?barcode=6900000000001").json()
-    assert r["data"]["total"] >= 1
+    r = client.get(f"/api/v1/products?barcode={barcode}").json()
+    assert r["data"]["total"] == 1
 
     # 修改
     r = client.put(f"/api/v1/products/{pid}", json={**payload, "name": "轴承6204-2RS"})
@@ -171,7 +197,7 @@ def test_product_crud():
 
 def test_product_import_export():
     _login_admin()
-    unit_name = "盒" + _TAG
+    unit_name = "盒"  # 复用种子单位（导入命中已有单位，不新建）
     cat_name = "标准件" + _TAG
     xlsx = _make_xlsx(
         ["编码", "条码", "SKU", "名称", "分类", "规格", "单位", "进价", "下限", "上限"],
@@ -224,3 +250,36 @@ def test_permission_denied():
     assert c.get("/api/v1/products").status_code == 200
     # 未登录 → 401
     assert TestClient(app).get("/api/v1/products").status_code == 401
+
+
+def test_category_write_with_ai_suggestion_perm():
+    """AI 建议处理员（仅 ai:suggestion，无 base:category）可在确认新增材料时维护分类：
+    可新增/编辑分类，删除仍要求 base:category（403）。"""
+    tag = "AI" + _TAG
+    db = SessionLocal()
+    try:
+        role = SysRole(code=f"ai_only_{tag}", name="AI处理员(测试)", description="test", is_builtin=0)
+        db.add(role)
+        db.flush()
+        db.add(SysRolePermission(role_id=role.id, permission_id=26))  # ai:suggestion
+        db.add(SysUser(username=f"ai_worker_{tag}", password_hash=hash_password("123456"),
+                       real_name="AI处理员(测试)", role_id=role.id))
+        db.commit()
+    finally:
+        db.close()
+
+    c = TestClient(app)
+    r = c.post("/api/v1/auth/login", json={"username": f"ai_worker_{tag}", "password": "123456"})
+    assert r.status_code == 200 and r.json()["code"] == 0
+
+    name = f"AI内联分类{tag}"
+    r = c.post("/api/v1/categories", json={"parent_id": 0, "name": name, "sort": 0})
+    assert r.status_code == 200 and r.json()["code"] == 0, r.text
+    cid = r.json()["data"]["id"]
+    assert c.put(f"/api/v1/categories/{cid}", json={"parent_id": 0, "name": name + "改", "sort": 1}).json()["code"] == 0
+    # 删除仍要求 base:category → 403
+    assert c.delete(f"/api/v1/categories/{cid}").status_code == 403
+
+    # 清理：admin 删除测试分类
+    _login_admin()
+    assert client.delete(f"/api/v1/categories/{cid}").status_code == 200

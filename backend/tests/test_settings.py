@@ -23,8 +23,20 @@ def _raw_config(key: str) -> str | None:
 
 
 def _restore_config(key: str, value: str | None) -> None:
-    """测试写库后恢复原值，避免污染开发库（本仓库测试与开发共用数据库）。"""
+    """测试写库后恢复原值，避免污染开发库（本仓库测试与开发共用数据库）。
+
+    原值不存在（用户从未配置）时删除测试写入的配置行——secret 键 PUT 空值/掩码
+    均不生效，必须直接删行才能恢复「未配置」状态。
+    """
     if value is None:
+        from app.models.sys import SysConfig
+        from sqlalchemy import select
+
+        with SessionLocal() as s:
+            row = s.scalar(select(SysConfig).where(SysConfig.config_key == key))
+            if row is not None:
+                s.delete(row)
+                s.commit()
         return
     _login_admin()
     assert client.put("/api/v1/settings", json={key: value}).json()["code"] == 0
@@ -110,10 +122,12 @@ def test_siliconflow_models_requires_key(monkeypatch):
         assert client.post("/api/v1/llm/siliconflow/models").json()["code"] == 4006
         assert client.post("/api/v1/llm/deepseek/models").json()["code"] == 4006
         assert client.post("/api/v1/llm/doubao/models").json()["code"] == 4006
-    # 已配置 Key → 拉取模型列表（打桩模拟 /models 响应）
+    # 已配置 Key → 拉取模型列表（打桩模拟 /models 响应与已存 Key，不依赖/不写开发库）
     monkeypatch.setattr(sysmod, "_fetch_models", lambda base_url, api_key: [{"id": "deepseek-chat", "owned_by": "deepseek"}])
-    r = client.post("/api/v1/llm/siliconflow/models")
-    assert r.json()["code"] == 0 and r.json()["data"]["models"][0]["id"] == "deepseek-chat"
+    with monkeypatch.context() as m:
+        m.setattr(sysmod, "_sys_config", lambda db, key: "sk-test-ok" if key == "llm.siliconflow.api_key" else "")
+        r = client.post("/api/v1/llm/siliconflow/models")
+        assert r.json()["code"] == 0 and r.json()["data"]["models"][0]["id"] == "deepseek-chat"
     # 无 sys:config 权限 → 403
     c = TestClient(app)
     c.post("/api/v1/auth/login", json={"username": "tester_user", "password": "123456"})

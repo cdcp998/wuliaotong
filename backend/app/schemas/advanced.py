@@ -64,7 +64,8 @@ class OtherIoReq(BaseModel):
 
 
 class CheckItemReq(BaseModel):
-    check_item_id: int = Field(gt=0)
+    check_item_id: int = Field(ge=0)  # 0 = 当场新增账外物料（配合 product_id + real_qty）
+    product_id: int = 0  # 新增物料时必填
     real_qty: str
     photo_file_id: int = 0  # 盘点拍照记录（可选）
 
@@ -130,8 +131,12 @@ class CheckItemOut(BaseModel):
     product_id: int
     product_name: str = ""
     code: str = ""
+    material_code: str = ""  # 物料编码（公司系统编码）
+    spec: str = ""  # 规格型号
+    unit_name: str = ""  # 计量单位
+    category_name: str = ""  # 物料分类名称
     location_id: int
-    location_code: str = ""
+    location_code: str = ""  # 物品级盘点时为空
     book_qty: Decimal
     real_qty: Decimal | None
     diff_qty: Decimal
