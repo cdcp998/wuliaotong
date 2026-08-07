@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger("app.system")
 
+from app import __version__
 from app.config import settings
 from app.core.cache import ping as redis_ping
 from app.core.deps import require_permission
@@ -105,6 +106,7 @@ def health(db: Session = Depends(get_db)) -> dict:
     return ok(
         {
             "status": "ok",
+            "version": __version__,
             "db": "ok",
             "redis": "ok" if redis_ping() else "down",
             "llm": llm_state,

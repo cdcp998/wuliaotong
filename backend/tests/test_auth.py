@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 
+from app import __version__
 from app.config import settings
 from app.db import SessionLocal
 from app.main import app
@@ -17,6 +18,7 @@ def test_health():
     body = r.json()
     assert body["code"] == 0
     assert body["data"]["status"] == "ok"
+    assert body["data"]["version"] == __version__  # 版本号与单一事实源一致
     assert body["data"]["db"] == "ok"
     assert body["data"]["redis"] in ("ok", "down")
     llm = body["data"]["llm"]
