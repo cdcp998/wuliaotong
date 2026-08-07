@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Button, Input, Popup, Tag, Toast } from "antd-mobile";
+import { Button, Input, NavBar, Popup, Tag, Toast } from "antd-mobile";
 
 import { baseApi, fileApi, ocrApi, resolveByBarcode, type Product } from "@wlt/shared";
 
@@ -97,9 +97,20 @@ export function ProductPicker({
   }
 
   return (
-    <Popup visible={visible} onMaskClick={onClose} bodyStyle={{ height: "70vh" }}>
-      <div style={{ padding: 16, display: "flex", flexDirection: "column", height: "100%" }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+    <Popup visible={visible} onMaskClick={onClose} bodyStyle={{ height: "70vh", display: "flex", flexDirection: "column" }}>
+      {/* 标题栏：明确弹层用途，右侧关闭按钮 */}
+      <NavBar
+        right={
+          <span onClick={onClose} style={{ fontSize: 14, color: "#1668dc", padding: "0 12px" }}>
+            关闭
+          </span>
+        }
+        style={{ borderBottom: "1px solid #f0f1f3", background: "#fff", flex: "none" }}
+      >
+        添加材料
+      </NavBar>
+      <div style={{ padding: 12, display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
           <Input
             placeholder="材料名称/物料编码/条码"
             value={keyword}
@@ -111,7 +122,7 @@ export function ProductPicker({
             搜索
           </Button>
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
           <Button fill="outline" style={{ flex: 1 }} loading={imgLoading} onClick={() => camRef.current?.click()}>
             拍照
           </Button>
@@ -122,8 +133,17 @@ export function ProductPicker({
             扫码
           </Button>
         </div>
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          {!searched && !loading && <div style={{ color: "#999", textAlign: "center", paddingTop: 40 }}>输入关键字搜索商品</div>}
+        <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+          {!searched && !loading && (
+            <div style={{ color: "#999", textAlign: "center", paddingTop: 48, fontSize: 13, lineHeight: 1.8 }}>
+              输入材料名称 / 编码 / 条码搜索，
+              <br />
+              或使用下方「拍照 / 相册 / 扫码」直接添加
+            </div>
+          )}
+          {searched && (
+            <div style={{ fontSize: 12, color: "#86909c", padding: "6px 2px" }}>搜索结果（{list.length} 个），点击选中</div>
+          )}
           {list.map((p) => (
             <div
               key={p.id}
