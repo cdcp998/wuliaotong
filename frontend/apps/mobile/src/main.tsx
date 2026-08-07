@@ -3,6 +3,9 @@ import React from "react";
 import ReactDOM, { type Root } from "react-dom/client";
 import { RouterProvider, createBrowserRouter } from "react-router";
 
+// 电脑/宽屏浏览器（≥768px）打开移动端时的「应用窗口化」适配（限宽居中+弹层限宽）
+import "./styles/widescreen.css";
+
 import { RequireAuth } from "./components/RequireAuth";
 import { TabLayout } from "./components/TabLayout";
 import { CheckRunPage } from "./pages/CheckRun";

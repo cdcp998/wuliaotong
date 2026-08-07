@@ -1,0 +1,41 @@
+/**
+ * 移动端电脑端兼容样式（widescreen）
+ *
+ * 移动端 App 在电脑/宽屏浏览器（≥768px）打开时，手机式单列页面被无限拉宽会很难看。
+ * 本文件用媒体查询做「应用窗口化」适配：内容限宽居中、两侧灰底、弹层同步限宽，
+ * 一套 CSS 覆盖全部页面（页面根容器均带 height/min-height:100vh 内联样式，
+ * 用属性选择器命中；弹层用 antd-mobile 稳定类名），≤767px 手机端不受任何影响。
+ *
+ * 覆盖策略与《前端设计.md》桌面端适配约定一致：仅依赖稳定类名/结构特征，不逐页改组件。
+ */
+
+@media (min-width: 768px) {
+  /* 窗口外背景：与 App 内 #f5f6f8 区分的浅灰，突出「应用窗口」；清除默认 8px 边距保证精确居中 */
+  body {
+    background: #e9ebef;
+    margin: 0;
+  }
+
+  /* 页面根容器限宽居中（页面根 div 均带 height/min-height:100vh 内联样式，为 #root 直接子级） */
+  #root > div[style*="100vh"] {
+    max-width: 720px;
+    margin: 0 auto;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.07);
+  }
+
+  /* 登录页根容器收窄为居中登录卡片（480px），类名见 Login.tsx */
+  #root > div.wlt-login {
+    max-width: 480px;
+  }
+
+  /* 底部弹层 / 全屏弹层（Popup/ActionSheet，含「修改密码」全屏弹层）限宽居中：
+     antd-mobile 的 bottom body 是 width:100% + left:0，auto margin 不生效（fixed 定位），
+     用 left:50% 平移居中；不动 transform，避免破坏滑入动画 */
+  .adm-popup-body {
+    max-width: 720px;
+  }
+  .adm-popup-body-position-bottom {
+    left: 50%;
+    margin-left: -360px; /* 720px / 2 */
+  }
+}
