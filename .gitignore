@@ -29,9 +29,17 @@ Thumbs.db
 # 日志与临时文件
 *.log
 tmp/
+backend/logs/
+
+# AI 工具本地元数据（不入库）
+.kun/
+.kun-design/
 
 # 上传文件存储（本地默认存储 data/files）
 backend/data/
 
 # 测试临时存储目录
 backend/tests/_tmp/
+
+# 开源发布副本（由脱敏流程生成，避免误提交）
+开源发布/

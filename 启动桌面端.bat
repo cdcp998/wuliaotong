@@ -1,23 +1,26 @@
 @echo off
-chcp 65001 >nul
-title ç‰©æ–™é€š - ç”µè„‘ç«¯ (5174)
+title ÎïÁÏÍ¨ - µçÄÔ¶Ë (5174)
 cd /d "%~dp0frontend"
 where npm >nul 2>nul
 if errorlevel 1 (
-  echo [é”™è¯¯] æœªæ‰¾åˆ° npmï¼Œè¯·å…ˆå®‰è£… Node.js å¹¶åŠ å…¥ PATH
+  echo [´íÎó] Î´ÕÒµ½ npm£¬ÇëÏÈ°²×° Node.js ²¢¼ÓÈë PATH
   pause
   exit /b 1
 )
 if not exist "node_modules" (
-  echo [ä¿¡æ¯] é¦–æ¬¡è¿è¡Œï¼šå®‰è£…ä¾èµ–ï¼Œè¯·ç¨å€™...
+  echo [ÐÅÏ¢] Ê×´ÎÔËÐÐ£º°²×°ÒÀÀµ£¬ÇëÉÔºò...
   call npm install
   if errorlevel 1 (
-    echo [é”™è¯¯] npm install å¤±è´¥
+    echo [´íÎó] npm install Ê§°Ü
     pause
     exit /b 1
   )
 )
-echo å¯åŠ¨ç”µè„‘ç«¯ï¼ˆhttps://localhost:5174 ï¼Œå†…ç½‘ https://æœ¬æœºIP:5174ï¼‰...
-echo å…³é—­æœ¬çª—å£å³åœæ­¢ç”µè„‘ç«¯ã€‚
+echo Æô¶¯µçÄÔ¶Ë£¨https://localhost:5174 £¬ÄÚÍø https://±¾»úIP:5174£©...
+echo ¹Ø±Õ±¾´°¿Ú¼´Í£Ö¹µçÄÔ¶Ë¡£
+:loop
 call npm run dev:desktop
-pause
+echo.
+echo [ÌáÊ¾] µçÄÔ¶ËÒÑÍ£Ö¹»òÆô¶¯Ê§°Ü¡£°´ÈÎÒâ¼üÖØÐÂÆô¶¯£»Ö±½Ó¹Ø±Õ±¾´°¿Ú¿ÉÍË³ö¡£
+pause >nul
+goto loop

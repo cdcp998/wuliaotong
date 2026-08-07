@@ -1,19 +1,22 @@
 @echo off
-chcp 65001 >nul
-title ç‰©æ–™é€š - åŽç«¯ (8443)
+title ÎïÁÏÍ¨ - ºó¶Ë (8443)
 cd /d "%~dp0backend"
 if not exist ".venv\Scripts\python.exe" (
-  echo [é”™è¯¯] æœªæ‰¾åˆ° backend\.venvï¼Œè¯·å…ˆåˆå§‹åŒ–çŽ¯å¢ƒï¼š
+  echo [´íÎó] Î´ÕÒµ½ backend\.venv£¬ÇëÏÈ³õÊ¼»¯»·¾³£º
   echo   cd backend ^&^& python -m venv .venv ^&^& .venv\Scripts\pip install -r requirements.txt
   pause
   exit /b 1
 )
 if not exist "certs\dev\cert.pem" (
-  echo [é”™è¯¯] æœªæ‰¾åˆ°åŽç«¯è¯ä¹¦ certs\dev\cert.pemï¼Œè¯·æŒ‰ READMEã€Œç”Ÿæˆå¼€å‘è€…è¯ä¹¦ã€ä¸€èŠ‚ç”Ÿæˆ
+  echo [´íÎó] Î´ÕÒµ½ºó¶ËÖ¤Êé certs\dev\cert.pem£¬Çë°´ README¡¸Éú³É¿ª·¢ÕßÖ¤Êé¡¹Ò»½ÚÉú³É
   pause
   exit /b 1
 )
-echo å¯åŠ¨åŽç«¯ï¼ˆHTTPS https://localhost:8443 ï¼Œå†…ç½‘ https://æœ¬æœºIP:8443ï¼‰...
-echo å…³é—­æœ¬çª—å£å³åœæ­¢åŽç«¯ã€‚
+echo Æô¶¯ºó¶Ë£¨HTTPS https://localhost:8443 £¬ÄÚÍø https://±¾»úIP:8443£©...
+echo ¹Ø±Õ±¾´°¿Ú¼´Í£Ö¹ºó¶Ë¡£
+:loop
 ".venv\Scripts\python.exe" -m uvicorn app.main:app --host 0.0.0.0 --port 8443 --ssl-keyfile certs\dev\key.pem --ssl-certfile certs\dev\cert.pem
-pause
+echo.
+echo [ÌáÊ¾] ºó¶ËÒÑÍ£Ö¹»òÆô¶¯Ê§°Ü¡£°´ÈÎÒâ¼üÖØÐÂÆô¶¯£»Ö±½Ó¹Ø±Õ±¾´°¿Ú¿ÉÍË³ö¡£
+pause >nul
+goto loop

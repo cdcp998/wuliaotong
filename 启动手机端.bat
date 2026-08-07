@@ -1,23 +1,26 @@
 @echo off
-chcp 65001 >nul
-title ç‰©æ–™é€š - æ‰‹æœºç«¯ (5175)
+title ÎïÁÏÍ¨ - ÊÖ»ú¶Ë (5175)
 cd /d "%~dp0frontend"
 where npm >nul 2>nul
 if errorlevel 1 (
-  echo [é”™è¯¯] æœªæ‰¾åˆ° npmï¼Œè¯·å…ˆå®‰è£… Node.js å¹¶åŠ å…¥ PATH
+  echo [´íÎó] Î´ÕÒµ½ npm£¬ÇëÏÈ°²×° Node.js ²¢¼ÓÈë PATH
   pause
   exit /b 1
 )
 if not exist "node_modules" (
-  echo [ä¿¡æ¯] é¦–æ¬¡è¿è¡Œï¼šå®‰è£…ä¾èµ–ï¼Œè¯·ç¨å€™...
+  echo [ÐÅÏ¢] Ê×´ÎÔËÐÐ£º°²×°ÒÀÀµ£¬ÇëÉÔºò...
   call npm install
   if errorlevel 1 (
-    echo [é”™è¯¯] npm install å¤±è´¥
+    echo [´íÎó] npm install Ê§°Ü
     pause
     exit /b 1
   )
 )
-echo å¯åŠ¨æ‰‹æœºç«¯ï¼ˆhttps://localhost:5175 ï¼Œæ‰‹æœºå†…ç½‘è®¿é—® https://æœ¬æœºIP:5175ï¼‰...
-echo å…³é—­æœ¬çª—å£å³åœæ­¢æ‰‹æœºç«¯ã€‚
+echo Æô¶¯ÊÖ»ú¶Ë£¨https://localhost:5175 £¬ÊÖ»úÄÚÍø·ÃÎÊ https://±¾»úIP:5175£©...
+echo ¹Ø±Õ±¾´°¿Ú¼´Í£Ö¹ÊÖ»ú¶Ë¡£
+:loop
 call npm run dev:mobile
-pause
+echo.
+echo [ÌáÊ¾] ÊÖ»ú¶ËÒÑÍ£Ö¹»òÆô¶¯Ê§°Ü¡£°´ÈÎÒâ¼üÖØÐÂÆô¶¯£»Ö±½Ó¹Ø±Õ±¾´°¿Ú¿ÉÍË³ö¡£
+pause >nul
+goto loop
