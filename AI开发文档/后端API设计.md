@@ -181,7 +181,7 @@ OCR 结果示例（structured）：
 
 ## 9. 系统管理
 
-- GET /settings、PUT /settings（公司信息、单据编号规则、OCR 引擎参数、大模型 Key/BaseURL、**注册模式 auth.register_mode（open/closed/review）、找回方式 auth.forgot_method（email/phone/both）、管理员电话 site.contact_phone、SMTP smtp.host/port/user/password/from**、水印 watermark.template/position/bg_opaque、视觉模型 llm.siliconflow.enabled/api_key/base_url/model、PP-OCR 版本 ocr.model_version）
+- GET /settings、PUT /settings（公司信息、单据编号规则、**图片池目录 image_pool.dir**、OCR 引擎参数、大模型 Key/BaseURL、**注册模式 auth.register_mode（open/closed/review）、找回方式 auth.forgot_method（email/phone/both）、管理员电话 site.contact_phone、SMTP smtp.host/port/user/password/from**、水印 watermark.template/position/bg_opaque、视觉模型 llm.siliconflow.enabled/api_key/base_url/model、PP-OCR 版本 ocr.model_version）
   - **值契约**：所有配置值统一字符串传输（开关用 "1"/"0"、数字用字符串如 "8"）；密钥字段（`*api_key`、`smtp.password`）GET 返回脱敏 `****后四位`，PUT 传掩码/空串表示不修改，传新值才覆盖；**传非字符串（number/null）返回 4006**（前端保存前统一转字符串）
 - POST /llm/siliconflow/models、POST /llm/deepseek/models、POST /llm/doubao/models（sys:config）——用**已保存**的 API Key 调 OpenAI 兼容 `/models` 接口拉取模型列表 → `{models: [{id, owned_by}]}`；对应 enabled=0 → 4006（提示先启用并保存）、未配置 Key → 4006、网络/鉴权失败 → 5002（设置页「获取模型列表」按钮与保存后自动拉取共用）
 - **大模型兼容性标准**：三个模型槽位（视觉 llm.siliconflow.* / 文本 llm.deepseek.* / 兜底 llm.doubao.*）统一遵循 **OpenAI Chat Completions 兼容协议**（`POST {Base URL}/chat/completions`，`Authorization: Bearer`，messages 数组格式）；Base URL / API Key / 模型名均可自由指定，支持任意 OpenAI 兼容服务商与自建内网服务（vLLM / Ollama / 第三方网关），不绑定特定供应商

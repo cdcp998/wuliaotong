@@ -9,6 +9,7 @@ export interface Settings {
   "llm.doubao.enabled": string;
   "llm.deepseek.enabled": string;
   "bill.rule": string;
+  "image_pool.dir": string;
   "llm.doubao.api_key": string;
   "llm.doubao.base_url": string;
   "llm.doubao.model": string;
@@ -128,4 +129,47 @@ export const notificationApi = {
   unreadCount: () => http.get<{ unread_count: number }>("/notifications/unread-count"),
   markRead: (id: number) => http.put<null>(`/notifications/${id}/read`),
   markReadAll: () => http.put<null>("/notifications/read-all"),
+};
+
+/** 存储位置（多存储地址管理，《后端API设计.md》§7）。 */
+export interface StorageItem {
+  id: number;
+  name: string;
+  type: string; // 当前仅 local
+  path: string;
+  policy: "fill" | "round" | "manual"; // 最空闲 / 轮询 / 手动指定
+  is_default: number;
+  status: number; // 1 启用 / 0 停用
+  remark: string;
+  file_count: number;
+}
+
+/** 存储位置提交参数（新增/编辑共用）。 */
+export interface StoragePayload {
+  name: string;
+  type?: string;
+  path: string;
+  policy: "fill" | "round" | "manual";
+  is_default?: number;
+  status?: number;
+  remark?: string;
+}
+
+/** 单存储健康检测结果（路径存在/可写/空间）。 */
+export interface StorageHealth {
+  id: number;
+  name: string;
+  path: string;
+  exists: boolean;
+  writable: boolean;
+  total_gb: number;
+  free_gb: number;
+}
+
+export const storageApi = {
+  list: () => http.get<StorageItem[]>("/storages"),
+  create: (body: StoragePayload) => http.post<StorageItem>("/storages", body),
+  update: (id: number, body: StoragePayload) => http.put<null>(`/storages/${id}`, body),
+  remove: (id: number) => http.delete<null>(`/storages/${id}`),
+  health: () => http.get<StorageHealth[]>("/storages/health"),
 };

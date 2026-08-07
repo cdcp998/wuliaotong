@@ -3,19 +3,23 @@ import {
   App,
   Alert,
   Button,
+  Divider,
   Form,
   Input,
   InputNumber,
   Modal,
+  Popconfirm,
   Radio,
   Select,
   Space,
   Spin,
   Switch,
+  Table,
   Tag,
   Tabs,
   Typography,
   theme,
+  type TableProps,
 } from "antd";
 import {
   AlertOutlined,
@@ -24,15 +28,27 @@ import {
   FileSearchOutlined,
   FileTextOutlined,
   GlobalOutlined,
+  HddOutlined,
   KeyOutlined,
   MailOutlined,
   MessageOutlined,
   PictureOutlined,
+  PlusOutlined,
   ThunderboltOutlined,
   UserAddOutlined,
 } from "@ant-design/icons";
 
-import { systemApi, type ModelSceneInfo, type OcrInstallState, type QuotaPayload, type Settings } from "@wlt/shared";
+import {
+  storageApi,
+  systemApi,
+  type ModelSceneInfo,
+  type OcrInstallState,
+  type QuotaPayload,
+  type Settings,
+  type StorageHealth,
+  type StorageItem,
+  type StoragePayload,
+} from "@wlt/shared";
 
 const EMPTY: Settings = {
   "site.name": "",
@@ -42,6 +58,7 @@ const EMPTY: Settings = {
   "llm.doubao.enabled": "1",
   "llm.deepseek.enabled": "1",
   "bill.rule": "",
+  "image_pool.dir": "",
   "watermark.template": "",
   "watermark.position": "bottom",
   "watermark.bg_opaque": "1",
@@ -70,6 +87,23 @@ const EMPTY: Settings = {
   "smtp.user": "",
   "smtp.password": "",
   "smtp.from": "",
+};
+
+/** 存储位置表单值（Switch 用 boolean，提交时转 0/1）。 */
+interface StorageFormValues {
+  name: string;
+  path: string;
+  policy: "fill" | "round" | "manual";
+  is_default: boolean;
+  status: boolean;
+  remark?: string;
+}
+
+/** 存储选择策略文案（fill 最空闲 / round 轮询 / manual 手动指定）。 */
+const STORAGE_POLICY_META: Record<"fill" | "round" | "manual", { label: string; color: string }> = {
+  fill: { label: "最空闲", color: "green" },
+  round: { label: "轮询", color: "blue" },
+  manual: { label: "手动指定", color: "orange" },
 };
 
 /** 表单值统一转字符串：InputNumber 字段（会话有效期/端口）返回 number、清空返回 null，
@@ -125,6 +159,14 @@ export function SettingsPage() {
   const [quota, setQuota] = useState<Record<string, QuotaPayload>>({});
   const [quotaLoading, setQuotaLoading] = useState<Record<string, boolean>>({});
   const [scenes, setScenes] = useState<ModelSceneInfo[]>([]);
+  // 图片池与存储：多存储地址列表 / 健康检测结果 / 新增编辑弹窗
+  const [storages, setStorages] = useState<StorageItem[]>([]);
+  const [healthMap, setHealthMap] = useState<Record<number, StorageHealth>>({});
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [storageModalOpen, setStorageModalOpen] = useState(false);
+  const [editingStorage, setEditingStorage] = useState<StorageItem | null>(null);
+  const [storageSaving, setStorageSaving] = useState(false);
+  const [storageForm] = Form.useForm<StorageFormValues>();
 
   useEffect(() => {
     systemApi.getQuota().then((r) => setQuota(r.providers)).catch(() => undefined);
@@ -179,6 +221,12 @@ export function SettingsPage() {
       .finally(() => setLoading(false));
   }, [form, message]);
 
+  // 多存储地址列表（图片池与存储分区）
+  useEffect(() => {
+    void loadStorages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /** 任意字段变化后与已加载快照比对，驱动「未保存」提示（setFieldsValue 不触发本回调）。 */
   function handleValuesChange() {
     setDirty(JSON.stringify(toStrings(form.getFieldsValue())) !== loadedRef.current);
@@ -198,6 +246,92 @@ export function SettingsPage() {
       message.error(e instanceof Error ? e.message : "保存失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  /** ---- 图片池与存储：多存储地址管理（《后端API设计.md》§7，权限 sys:config）---- */
+  async function loadStorages() {
+    try {
+      setStorages(await storageApi.list());
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "加载存储位置失败");
+    }
+  }
+
+  async function checkStorageHealth() {
+    setHealthLoading(true);
+    try {
+      const rows = await storageApi.health();
+      setHealthMap(Object.fromEntries(rows.map((h) => [h.id, h])));
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "健康检测失败");
+    } finally {
+      setHealthLoading(false);
+    }
+  }
+
+  function openStorageModal(item?: StorageItem) {
+    setEditingStorage(item ?? null);
+    storageForm.setFieldsValue(
+      item
+        ? { name: item.name, path: item.path, policy: item.policy, is_default: item.is_default === 1, status: item.status === 1, remark: item.remark }
+        : { name: "", path: "", policy: "fill", is_default: false, status: true, remark: "" }
+    );
+    setStorageModalOpen(true);
+  }
+
+  async function submitStorage() {
+    const v = await storageForm.validateFields();
+    const payload: StoragePayload = {
+      name: v.name.trim(),
+      path: v.path.trim(),
+      policy: v.policy,
+      is_default: v.is_default ? 1 : 0,
+      status: v.status ? 1 : 0,
+      remark: v.remark?.trim() ?? "",
+    };
+    setStorageSaving(true);
+    try {
+      if (editingStorage) {
+        await storageApi.update(editingStorage.id, payload);
+        message.success("存储位置已更新");
+      } else {
+        await storageApi.create(payload);
+        message.success("存储位置已新增");
+      }
+      setStorageModalOpen(false);
+      await loadStorages();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setStorageSaving(false);
+    }
+  }
+
+  async function removeStorage(item: StorageItem) {
+    try {
+      await storageApi.remove(item.id);
+      message.success("存储位置已删除");
+      await loadStorages();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "删除失败");
+    }
+  }
+
+  async function setDefaultStorage(item: StorageItem) {
+    try {
+      await storageApi.update(item.id, {
+        name: item.name,
+        path: item.path,
+        policy: item.policy,
+        is_default: 1,
+        status: item.status,
+        remark: item.remark,
+      });
+      message.success("已设为默认存储");
+      await loadStorages();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "操作失败");
     }
   }
 
@@ -445,6 +579,71 @@ export function SettingsPage() {
     </Form.Item>
   );
 
+  /** 存储地址表格列：策略/状态/默认/健康/文件数与操作（设默认、编辑、删除）。 */
+  const storageColumns: NonNullable<TableProps<StorageItem>["columns"]> = [
+    { title: "名称", dataIndex: "name", width: 130, ellipsis: true },
+    { title: "路径", dataIndex: "path", ellipsis: true },
+    {
+      title: "策略",
+      dataIndex: "policy",
+      width: 90,
+      render: (v: StorageItem["policy"]) => (
+        <Tag color={STORAGE_POLICY_META[v]?.color}>{STORAGE_POLICY_META[v]?.label ?? v}</Tag>
+      ),
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 70,
+      render: (v: number) => (v === 1 ? <Tag color="green">启用</Tag> : <Tag>停用</Tag>),
+    },
+    {
+      title: "默认",
+      dataIndex: "is_default",
+      width: 70,
+      render: (v: number) => (v === 1 ? <Tag color="gold">默认</Tag> : "-"),
+    },
+    {
+      title: "健康",
+      key: "health",
+      width: 150,
+      render: (_, r: StorageItem) => {
+        const h = healthMap[r.id];
+        if (!h) return <Typography.Text type="secondary">未检测</Typography.Text>;
+        if (!h.exists) return <Tag color="red">路径不存在</Tag>;
+        if (!h.writable) return <Tag color="orange">不可写</Tag>;
+        return <Tag color="green">正常 · 剩 {h.free_gb}G</Tag>;
+      },
+    },
+    { title: "文件数", dataIndex: "file_count", width: 70 },
+    {
+      title: "操作",
+      key: "op",
+      width: 160,
+      render: (_, r: StorageItem) => (
+        <Space size={4}>
+          {r.is_default !== 1 && (
+            <Button type="link" size="small" onClick={() => void setDefaultStorage(r)}>
+              设默认
+            </Button>
+          )}
+          <Button type="link" size="small" onClick={() => openStorageModal(r)}>
+            编辑
+          </Button>
+          <Popconfirm
+            title="确定删除该存储位置？"
+            description="已有文件的存储禁止删除（可改为停用）"
+            onConfirm={() => void removeStorage(r)}
+          >
+            <Button type="link" size="small" danger>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
   const baseTab = (
     <>
       <Section
@@ -461,6 +660,80 @@ export function SettingsPage() {
         <Form.Item name="bill.rule" label="单据编号规则" extra="格式：前缀列表，用 | 分隔">
           <Input style={{ maxWidth: 560 }} placeholder="RK|LL|DB|PD|QT|QCK" />
         </Form.Item>
+      </Section>
+
+      <Section
+        icon={<HddOutlined />}
+        title="图片池与存储"
+        desc="图片池目录与多存储地址：上传文件按选择策略（最空闲 / 轮询 / 手动指定）落到不同存储位置。"
+        extra={storages.length > 0 ? <Tag color="blue">{storages.length} 个存储</Tag> : undefined}
+      >
+        <Form.Item
+          name="image_pool.dir"
+          label="图片池目录"
+          extra="单据/OCR 图片统一存放目录，支持相对或绝对路径"
+        >
+          <Input style={{ maxWidth: 560 }} placeholder="如 data/files 或 D:\image_pool" />
+        </Form.Item>
+        <Divider style={{ margin: "8px 0 16px" }} />
+        <Space style={{ marginBottom: 12 }} wrap>
+          <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => openStorageModal()}>
+            新增存储位置
+          </Button>
+          <Button size="small" onClick={() => void checkStorageHealth()} loading={healthLoading}>
+            检测存储健康
+          </Button>
+        </Space>
+        <Table<StorageItem>
+          rowKey="id"
+          size="small"
+          columns={storageColumns}
+          dataSource={storages}
+          pagination={false}
+          locale={{ emptyText: "暂无存储位置，点击「新增存储位置」添加（上传文件按策略落盘）" }}
+        />
+        <Modal
+          title={editingStorage ? "编辑存储位置" : "新增存储位置"}
+          open={storageModalOpen}
+          onOk={() => void submitStorage()}
+          confirmLoading={storageSaving}
+          onCancel={() => setStorageModalOpen(false)}
+          destroyOnClose
+        >
+          <Form form={storageForm} layout="vertical" style={{ marginTop: 8 }}>
+            <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}>
+              <Input maxLength={50} placeholder="如：本机 D 盘图片目录" />
+            </Form.Item>
+            <Form.Item
+              name="path"
+              label="路径"
+              rules={[{ required: true, message: "请输入路径" }]}
+              extra="绝对路径或相对 backend/ 的目录"
+            >
+              <Input maxLength={500} placeholder="如 D:\image_pool 或 data/files" />
+            </Form.Item>
+            <Form.Item name="policy" label="选择策略" rules={[{ required: true, message: "请选择策略" }]}>
+              <Select
+                options={[
+                  { value: "fill", label: "最空闲（优先剩余空间最大的存储）" },
+                  { value: "round", label: "轮询（依次轮流落盘）" },
+                  { value: "manual", label: "手动指定" },
+                ]}
+              />
+            </Form.Item>
+            <Space size={32}>
+              <Form.Item name="is_default" label="设为默认存储" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="status" label="启用" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </Space>
+            <Form.Item name="remark" label="备注">
+              <Input.TextArea rows={2} maxLength={200} placeholder="可选" />
+            </Form.Item>
+          </Form>
+        </Modal>
       </Section>
 
       <Section

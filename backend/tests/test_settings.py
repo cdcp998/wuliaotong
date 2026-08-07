@@ -133,3 +133,17 @@ def test_siliconflow_models_requires_key(monkeypatch):
     c.post("/api/v1/auth/login", json={"username": "tester_user", "password": "123456"})
     assert c.post("/api/v1/llm/siliconflow/models").status_code == 403
     assert c.post("/api/v1/llm/deepseek/models").status_code == 403
+
+
+def test_settings_image_pool_dir_roundtrip():
+    """图片池目录设置项：GET 返回当前值（未配置为空串），PUT 保存后可读回；测试后恢复原值。"""
+    _login_admin()
+    original = _raw_config("image_pool.dir")
+    try:
+        r = client.get("/api/v1/settings")
+        assert r.json()["code"] == 0
+        assert "image_pool.dir" in r.json()["data"]
+        assert client.put("/api/v1/settings", json={"image_pool.dir": "data/files"}).json()["code"] == 0
+        assert client.get("/api/v1/settings").json()["data"]["image_pool.dir"] == "data/files"
+    finally:
+        _restore_config("image_pool.dir", original)
