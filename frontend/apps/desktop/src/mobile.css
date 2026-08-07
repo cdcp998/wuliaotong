@@ -64,6 +64,10 @@
     overflow-y: auto;
     overscroll-behavior: contain;
   }
+  /* 侧栏"全部展开/收缩"文字按钮：与菜单项同高，触屏友好 */
+  .ant-layout-sider .ant-btn-text {
+    min-height: 40px;
+  }
   /* 顶栏：压缩水平间距；搜索框让出弹性宽度 */
   .ant-layout-header {
     padding: 0 10px !important;

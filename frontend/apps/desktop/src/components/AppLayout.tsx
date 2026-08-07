@@ -249,6 +249,13 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
     if (window.innerWidth <= 768) setCollapsed(true);
   }
 
+  // 导航"全部展开/全部收缩"：menuItems 已按权限过滤，以其分类 key 集合为准
+  const menuGroupKeys = useMemo(() => menuItems.map((i) => String(i?.key)), [menuItems]);
+  const allExpanded = menuGroupKeys.length > 0 && menuGroupKeys.every((k) => openKeys.includes(k));
+  function toggleAllGroups() {
+    setOpenKeys(allExpanded ? [] : menuGroupKeys);
+  }
+
   return (
     <>
       <Layout style={{ minHeight: "100vh" }}>
@@ -301,6 +308,15 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
               placeholder="搜索导航…"
               allowClear
             />
+            <Button
+              type="text"
+              block
+              icon={allExpanded ? <MenuFoldOutlined /> : <MenuUnfoldOutlined />}
+              style={{ marginTop: 8, justifyContent: "flex-start", paddingLeft: 12, color: token.colorTextSecondary }}
+              onClick={toggleAllGroups}
+            >
+              {allExpanded ? "全部收缩" : "全部展开"}
+            </Button>
           </div>
         )}
         <Menu

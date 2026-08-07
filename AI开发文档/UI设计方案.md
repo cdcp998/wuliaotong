@@ -375,7 +375,7 @@
 
 - 页面清单、路由、store、跨端组件（ProductPicker/BarcodeScanner/ImageUploader/LocationPicker/BillItemsTable/PhotoPreview/StatusBadge/OcrResultPanel/AiSuggestionCard）均已在《前端设计.md》定义并有部分实现（开发进度记录：P0–P7 已完成），本方案只约束其**视觉与布局**，不改变接口与状态模型
 - 已落地实现（对应 UI 改造）：
-  - **电脑端**：`AppLayout`（侧边导航分组菜单 + 顶栏：面包屑/全局搜索/通知铃铛/用户菜单，按权限点过滤）；`ConfigProvider` 主题 token（colorPrimary #1668dc）；登录页双栏品牌设计；新增 `StockQuery`（库存查询）与 `RequisitionAudit`（领用审计）两个核心页
+  - **电脑端**：`AppLayout`（侧边导航分组菜单 + 顶栏：面包屑/全局搜索/通知铃铛/用户菜单，按权限点过滤；导航搜索框下方含「全部展开/全部收缩」菜单分组切换按钮）；`ConfigProvider` 主题 token（colorPrimary #1668dc）；登录页双栏品牌设计；新增 `StockQuery`（库存查询）与 `RequisitionAudit`（领用审计）两个核心页
   - **手机端**：`TabLayout`（TabBar 五页：首页/扫码/领用/通知/我的，按权限过滤）；首页 hero + 快捷宫格 + 我的申请状态 + 通知摘要；新增 `Notifications`/`Mine`/`StockQuery`/`RequisitionDetail` 页；领用申请三步向导 + 固定底部操作栏；主题 CSS 变量换肤
   - **共享层**：新增 `notificationApi`（列表/未读/已读）、`stockApi`（库存查询/流水）、`requisitionApi.detail/list/audit`
 - 待实现项：2D 货架图视觉细化、echarts 封装、手机端扫码页相机 UI；均按开发规范 L1–L5 门禁推进
