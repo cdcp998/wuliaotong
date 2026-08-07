@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router";
 import { TabBar } from "antd-mobile";
 
 import { notificationApi, useAuthStore } from "@wlt/shared";
@@ -28,7 +28,7 @@ const TABS: TabItem[] = [
   },
   {
     key: "scan",
-    title: "扫码",
+    title: "识别",
     path: "/ocr/scan",
     icon: stroke(<><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><rect x="7" y="7" width="10" height="10" rx="2" /></>),
     activeIcon: stroke(<><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none" /></>, true),
@@ -56,7 +56,7 @@ const TABS: TabItem[] = [
   },
 ];
 
-/** 手机端 TabBar 布局（《UI设计方案.md》§3.3）：首页/扫码/领用/通知/我的。 */
+/** 手机端 TabBar 布局（《UI设计方案.md》§3.3）：首页/识别/领用/通知/我的。 */
 export function TabLayout() {
   const navigate = useNavigate();
   const location = useLocation();

@@ -19,7 +19,7 @@ import { RequisitionDetailPage } from "./pages/RequisitionDetail";
 import { RequisitionNewPage } from "./pages/RequisitionNew";
 import { StockQueryPage } from "./pages/StockQuery";
 
-/** TabBar 五页：首页/扫码/领用/通知/我的（《UI设计方案.md》§3.3）。
+/** TabBar 五页：首页/识别/领用/通知/我的（《UI设计方案.md》§3.3）。
  * 生产环境经 Nginx 反代部署在 /m/ 前缀（入口后缀），路由 basename=/m/ 后
  * 应用内跳转不再拼接前缀，刷新/直达 /m/xxx 均正常；开发环境无前缀。 */
 const tabRouter = createBrowserRouter(
