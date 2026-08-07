@@ -2,11 +2,16 @@
 
 覆盖：存储位置 CRUD、fill 最空闲策略落盘、manual 指定存储、round 轮询、
 文件读取、删除保护（有文件的存储禁删）、权限（非 sys:config 403）。
-每个测试先停用全部存储，保证选择策略的确定性（不受历史数据干扰）。
+每个测试先停用全部存储，保证选择策略的确定性（不受历史数据干扰）；
+模块级 fixture 在测试结束后自动清理本次创建的文件/存储并恢复原状态（共用存储池零残留）。
 """
 import io
+import shutil
 import uuid
+from datetime import datetime
+from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -14,6 +19,58 @@ from app.main import app
 
 client = TestClient(app)
 _TAG = uuid.uuid4().hex[:6]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _storage_pool_cleanup():
+    """存储池测试自动清理：测试前快照全部存储状态，测试后删除测试创建的文件/存储并恢复原状态、
+    清空测试临时目录——不向共用存储池留下任何测试数据（垃圾数据零残留）。
+
+    注意：fixture 的 session 在 setup 时已开启事务快照（MySQL REPEATABLE READ），
+    teardown 必须先 rollback 才能看到测试期间其他会话提交的数据。
+    """
+    from app.db import SessionLocal
+    from app.models.sys import SysFile, SysStorage
+
+    db = SessionLocal()
+    try:
+        db.rollback()  # 确保无残留事务
+        before = {
+            s.id: {"name": s.name, "status": s.status, "is_default": s.is_default, "policy": s.policy}
+            for s in db.query(SysStorage).all()
+        }
+        before_ids = set(before)
+        yield
+        db.rollback()  # 结束 setup 时的快照事务，让清理查询看到测试期间提交的数据
+        # 1) 删除测试上传的文件（biz_type=test 仅本测试使用；含本次与历史残留，自动收敛）
+        rows = db.query(SysFile).filter(SysFile.biz_type == "test").all()
+        for f in rows:
+            try:
+                fp = Path(f.file_path)
+                if not fp.is_absolute():
+                    st = db.get(SysStorage, f.storage_id) if f.storage_id else None
+                    base = Path(st.path) if st else Path("data/files")
+                    fp = base / f.file_path
+                fp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            db.delete(f)
+        # 2) 删除本次新增的测试存储（不在测试前快照中的存储）
+        for s in db.query(SysStorage).all():
+            if s.id not in before_ids:
+                db.delete(s)
+        # 3) 恢复测试前的存储状态（status/is_default/policy）
+        for sid, st in before.items():
+            row = db.get(SysStorage, sid)
+            if row is not None:
+                row.status = st["status"]
+                row.is_default = st["is_default"]
+                row.policy = st["policy"]
+        db.commit()
+        # 4) 清空测试临时目录（含上传落盘的图片文件与历史残留）
+        shutil.rmtree(Path("tests/_tmp"), ignore_errors=True)
+    finally:
+        db.close()
 
 
 def _login_admin() -> None:
