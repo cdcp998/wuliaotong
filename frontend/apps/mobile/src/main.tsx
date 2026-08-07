@@ -1,6 +1,7 @@
+import { unstableSetRender } from "antd-mobile";
 import React from "react";
-import ReactDOM from "react-dom/client";
-import { RouterProvider, createBrowserRouter } from "react-router-dom";
+import ReactDOM, { type Root } from "react-dom/client";
+import { RouterProvider, createBrowserRouter } from "react-router";
 
 import { RequireAuth } from "./components/RequireAuth";
 import { TabLayout } from "./components/TabLayout";
@@ -47,8 +48,21 @@ const tabRouter = createBrowserRouter(
     { path: "/checks", element: <RequireAuth><ChecksPage /></RequireAuth> },
     { path: "/checks/:id", element: <RequireAuth><CheckRunPage /></RequireAuth> },
   ],
-  { basename: import.meta.env.DEV ? "" : "/m/" }
+  // v7 future flags：react-router 6.30.4 运行时支持 v7_startTransition（类型声明滞后，故断言）；消除 v7 迁移警告
+  { basename: import.meta.env.DEV ? "" : "/m/", future: { v7_startTransition: true, v7_relativeSplatPath: true, v7_fetcherPersist: true, v7_normalizeFormMethod: true, v7_partialHydration: true, v7_skipActionErrorRevalidation: true } as Record<string, boolean> }
 );
+
+// antd-mobile v5 命令式弹层（Toast/Dialog 等）默认走 ReactDOM.render，React 19 已移除该 API；
+// 官方兼容方案（mobile.ant.design/guide/v5-for-19）：注册 createRoot 渲染器，
+// 否则每次弹层自动关闭都会报 unmountComponentAtNode is not a function。
+unstableSetRender((node, container) => {
+  const el = container as HTMLElement & { _reactRoot?: Root };
+  el._reactRoot = el._reactRoot ?? ReactDOM.createRoot(el);
+  el._reactRoot.render(node);
+  return async () => {
+    el._reactRoot?.unmount();
+  };
+});
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
