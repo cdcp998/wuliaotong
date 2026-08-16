@@ -240,7 +240,7 @@ export function MaterialsPage() {
       width: 160,
       render: (v: string[]) => (v?.length ? v.join("、") : <span style={{ color: "#c0c4cc" }}>未关联</span>),
     },
-    { title: "进价", dataIndex: "purchase_price", width: 90, align: "right" as const },
+    { title: "价格", dataIndex: "purchase_price", width: 90, align: "right" as const },
     { title: "下限", dataIndex: "min_stock", width: 80, align: "right" as const },
     { title: "上限", dataIndex: "max_stock", width: 80, align: "right" as const },
     {
@@ -389,7 +389,7 @@ export function MaterialsPage() {
                 maxTagCount={2}
               />
             </Form.Item>
-            <Form.Item name="purchase_price" label="进价" style={{ width: 120 }}>
+            <Form.Item name="purchase_price" label="价格" style={{ width: 120 }}>
               <InputNumber min={0} precision={2} style={{ width: "100%" }} />
             </Form.Item>
             <Form.Item name="min_stock" label="库存下限" style={{ width: 120 }}>

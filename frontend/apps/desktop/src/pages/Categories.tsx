@@ -6,16 +6,6 @@ import { baseApi, type CategoryNode } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
 
-/** 分类树拍平（保留完整节点，parent_id 用于上级查询）。 */
-function flattenCats(nodes: CategoryNode[]): CategoryNode[] {
-  const out: CategoryNode[] = [];
-  for (const n of nodes) {
-    out.push(n);
-    if (n.children?.length) out.push(...flattenCats(n.children));
-  }
-  return out;
-}
-
 /** 分类树转 Select options（顶级=0）。 */
 function catOptions(nodes: CategoryNode[]): { value: number; label: string }[] {
   const out: { value: number; label: string }[] = [{ value: 0, label: "顶级分类" }];
@@ -48,7 +38,17 @@ export function CategoriesPage() {
     void load().catch((e) => message.error(e instanceof Error ? e.message : "加载失败"));
   }, [load, message]);
 
-  const flat = useMemo(() => flattenCats(list), [list]);
+  const parentNames = useMemo(() => {
+    const map = new Map<number, string>();
+    const walk = (nodes: CategoryNode[]) => {
+      for (const n of nodes) {
+        map.set(n.id, n.name);
+        if (n.children?.length) walk(n.children);
+      }
+    };
+    walk(list);
+    return map;
+  }, [list]);
   const options = useMemo(() => catOptions(list), [list]);
 
   function openCreate() {
@@ -90,11 +90,11 @@ export function CategoriesPage() {
   }
 
   const columns: ColumnsType<CategoryNode> = [
-    { title: "分类名称", dataIndex: "name", width: 220, render: (v: string, r) => (r.parent_id ? <span style={{ paddingLeft: 8 }}>└ {v}</span> : <b>{v}</b>) },
+    { title: "分类名称", dataIndex: "name", width: 220, render: (v: string, r) => (r.parent_id ? v : <b>{v}</b>) },
     {
       title: "上级分类",
       width: 200,
-      render: (_, r) => (r.parent_id ? (flat.find((f) => f.id === r.parent_id)?.name ?? "-") : <Tag>顶级</Tag>),
+      render: (_, r) => (r.parent_id ? (parentNames.get(r.parent_id) ?? "-") : <Tag>顶级</Tag>),
     },
     { title: "排序", dataIndex: "sort", width: 80 },
     {
@@ -115,7 +115,7 @@ export function CategoriesPage() {
         rowKey="id"
         loading={loading}
         columns={columns}
-        dataSource={flat}
+        dataSource={list}
         pagination={false}
         locale={{ emptyText: "暂无分类" }}
         rowSelection

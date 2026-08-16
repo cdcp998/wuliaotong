@@ -2,18 +2,23 @@
 
 《后端API设计.md》§11.2：OCR 引擎抽象，PaddleOCREngine 与 RapidOCREngine 实现同一接口。
 - 惰性初始化：首次识别时导入 paddleocr 并加载模型（约 1-3 秒），模型由 PaddleOCR 自动下载
-  至用户目录 ~/.paddlex/official_models（也可用 scripts/setup_ppocr.py 预下载/验证）
-- 模型版本：PP-OCRv4 / PP-OCRv5 / PP-OCRv6（由 sys_config ocr.model_version 配置，默认 PP-OCRv6）
+  至 backend/model/official_models（也可用 scripts/setup_ppocr.py 预下载/验证）
+- 模型版本：PP-OCRv6（由 sys_config ocr.model_version 配置，默认 PP-OCRv6）
 - 未安装 paddleocr 时抛出 OCRInitError（提示运行 setup_ppocr.py 自动安装）
 """
 from __future__ import annotations
 
 import io
+import os
 import threading
+from pathlib import Path
 
 from PIL import Image
 
 from app.services.ocr.client import OCRInitError, OcrLine
+
+# PP-OCR/PaddleX 模型缓存根目录：backend/model（下载与加载均使用该目录）
+MODEL_DIR = Path(__file__).resolve().parents[3] / "model"
 
 # paddleocr 未安装时延迟报错（接口层已 try/except 转 5001）
 _paddleocr = None
@@ -27,6 +32,10 @@ def _load_paddleocr():
         return _paddleocr
     with _import_lock:
         if _paddleocr is None:
+            # 模型目录固定为 backend/model（PaddleX 在其下创建 official_models 子目录），
+            # 必须在导入 paddleocr 前设置，否则 PaddleX 已按默认目录初始化
+            os.makedirs(MODEL_DIR, exist_ok=True)
+            os.environ["PADDLE_PDX_CACHE_HOME"] = str(MODEL_DIR)
             try:
                 from paddleocr import PaddleOCR  # noqa: PLC0415
             except ImportError as e:

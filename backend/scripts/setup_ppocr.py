@@ -4,9 +4,9 @@
     backend\\.venv\\Scripts\\python.exe backend\\scripts\\setup_ppocr.py
 
 功能：
-1. 交互选择识别引擎/模型版本（RapidOCR 保留现状 / PP-OCRv6 推荐 / v5 / v4）
+1. 交互选择识别引擎/模型版本（RapidOCR 保留现状 / PP-OCRv6）
 2. 自动检测并安装运行环境：pip install paddlepaddle paddleocr（CPU 版）
-3. 自动下载 PP-OCR 模型并验证识别（模型由 PaddleOCR 首次初始化时下载到 ~/.paddlex/official_models）
+3. 自动下载 PP-OCR 模型并验证识别（模型由 PaddleOCR 首次初始化时下载到 backend/model/official_models）
 4. 将选择写入系统配置（sys_config：ocr.engine / ocr.model_version），后端立即生效（识别时按配置加载）
 5. 输出使用说明
 
@@ -23,9 +23,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 PROJECT_DIR = BACKEND_DIR.parent
 
 MODELS = {
-    "2": ("PP-OCRv6", "PP-OCRv6（最新，推荐）"),
-    "3": ("PP-OCRv5", "PP-OCRv5（平衡精度/速度）"),
-    "4": ("PP-OCRv4", "PP-OCRv4（兼容旧版 paddleocr）"),
+    "2": ("PP-OCRv6", "PP-OCRv6"),
 }
 
 
@@ -41,13 +39,13 @@ def _banner() -> None:
 
 def _choose() -> str:
     while True:
-        choice = input("请选择 OCR 引擎 [1/2/3/4]：").strip() or "2"
+        choice = input("请选择 OCR 引擎 [1/2]：").strip() or "2"
         if choice == "1":
             print("保持 RapidOCR-json 引擎，退出。")
             sys.exit(0)
         if choice in MODELS:
             return MODELS[choice][0]
-        print("无效选择，请重新输入（1=保持现状，2/3/4=PP-OCR 版本）。")
+        print("无效选择，请重新输入（1=保持现状，2=PP-OCRv6）。")
 
 
 def _install() -> None:
@@ -147,7 +145,7 @@ def _usage(model_version: str) -> None:
     print("\n" + "=" * 62)
     print("  安装完成！使用说明")
     print("=" * 62)
-    print(f"  1. 当前配置：识别引擎 PP-OCR（{model_version}），模型已下载至 ~/.paddlex/official_models")
+    print(f"  1. 当前配置：识别引擎 PP-OCR（{model_version}），模型已下载至 backend/model/official_models")
     print("  2. 如后端正在运行，请重启后端（uvicorn）使配置生效")
     print("  3. 验证：浏览器访问 /api/v1/health，ocr_engine=paddle、ocr_ready=true 即就绪")
     print("  4. 切换回 RapidOCR：系统设置 → OCR 与大模型 → 识别引擎选择 RapidOCR 并保存")

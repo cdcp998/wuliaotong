@@ -15,6 +15,7 @@ dist/
 
 # 大体积本地资源：OCR 引擎二进制与模型（不入库，部署时单独放置）
 backend/ocr/
+backend/model/
 
 # 开发用自签名证书（不入库，部署时用正式证书）
 backend/certs/

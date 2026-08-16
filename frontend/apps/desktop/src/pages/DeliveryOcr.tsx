@@ -116,7 +116,7 @@ export function DeliveryOcrPage() {
     setRows((rs) => rs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
   }
 
-  /** 材料名称历史价格查询：按名称匹配系统材料 → 查历史进价（可按供应商过滤）。 */
+  /** 材料名称历史价格查询：按名称匹配系统材料 → 查历史价格（可按供应商过滤）。 */
   async function openHistory(r: Row) {
     try {
       const found = await baseApi.products(r.product_name.trim());

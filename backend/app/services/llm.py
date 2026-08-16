@@ -187,7 +187,7 @@ def get_llm(db: Session, name: str = "") -> LLMClient:
         return SiliconFlowClient(
             api_key=key,
             base_url=_get_config(db, "llm.siliconflow.base_url") or "https://api.siliconflow.cn/v1",
-            # 默认视觉模型：nex-agi/Nex-N2-Pro（2026-08-07 SiliconFlow 在售；旧默认 Qwen/Qwen2.5-VL-7B-Instruct 已下线导致 400）
+            # 默认视觉模型：nex-agi/Nex-N2-Pro
             model=_get_config(db, "llm.siliconflow.model") or "nex-agi/Nex-N2-Pro",
         )
     if name == "deepseek":

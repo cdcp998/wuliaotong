@@ -851,14 +851,12 @@ export function SettingsPage() {
             ]}
           />
         </Form.Item>
-        <Form.Item name="ocr.model_version" label="PP-OCR 模型版本" tooltip="保存后生效；PP-OCRv6 为最新版本（需 paddleocr 3.4+，首次识别自动下载模型）">
+        <Form.Item name="ocr.model_version" label="PP-OCR 模型版本" tooltip="保存后生效；当前仅支持 PP-OCRv6（需 paddleocr 3.4+，首次识别自动下载模型）">
           <Select
             disabled={ocrEngine === "off"}
             style={{ width: 320 }}
             options={[
-              { value: "PP-OCRv6", label: "PP-OCRv6（推荐）" },
-              { value: "PP-OCRv5", label: "PP-OCRv5" },
-              { value: "PP-OCRv4", label: "PP-OCRv4" },
+              { value: "PP-OCRv6", label: "PP-OCRv6" },
             ]}
           />
         </Form.Item>

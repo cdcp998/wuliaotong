@@ -248,7 +248,7 @@ export function AiSuggestionsPage() {
             <Form.Item label="单位" style={{ marginBottom: 0 }}>
               <Select style={{ width: "100%" }} placeholder="选择单位" options={units} fieldNames={{ label: "name", value: "id" }} value={form.unit_id || undefined} onChange={(v) => setForm((f) => ({ ...f, unit_id: v }))} />
             </Form.Item>
-            <Form.Item label="进价（元）" style={{ marginBottom: 0 }}>
+            <Form.Item label="价格（元）" style={{ marginBottom: 0 }}>
               <InputNumber style={{ width: "100%" }} placeholder="0.00" min={0} precision={2} value={Number(form.purchase_price)} onChange={(v) => setForm((f) => ({ ...f, purchase_price: String(v ?? 0) }))} />
             </Form.Item>
           </div>
