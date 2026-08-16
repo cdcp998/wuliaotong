@@ -31,7 +31,7 @@ class RequisitionReq(BaseModel):
     is_private: int = Field(default=0, ge=0, le=1, description="私用标记（隐藏触发，提交时因何使用将被锁定为「私用」）")
     applicant_id: int = Field(default=0, ge=0, description="指定申请人（仅管理员可代申请；0=自己）")
     location_photo_file_id: int = 0  # 使用地点照片（不强制）
-    remark: str = ""
+    remark: str = Field(default="", max_length=200)
     items: list[RequisitionItemReq] = Field(min_length=1)
 
 

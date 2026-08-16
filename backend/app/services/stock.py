@@ -114,3 +114,12 @@ def generate_bill_no(db: Session, prefix: str, model) -> str:
     like = f"{prefix}{today}%"
     cnt = db.scalar(select(func.count()).select_from(model).where(model.bill_no.like(like))) or 0
     return f"{prefix}{today}{cnt + 1:04d}"
+
+
+def bill_no_conflict(exc: Exception) -> bool:
+    """判断 IntegrityError 是否由单据号唯一键（uk_bill_no）冲突引起。
+
+    并发撞号时重试换号；其余唯一/外键冲突必须如实报错，不能误吞。
+    """
+    orig = str(getattr(exc, "orig", None) or "")
+    return "uk_bill_no" in orig or "bill_no" in orig

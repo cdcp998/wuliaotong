@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.cache import cache_aside_json
-from app.core.deps import get_current_user, require_permission
+from app.core.deps import get_current_user, require_any_permission, require_permission
 from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, ok
 from app.db import get_db
 from app.models.base import BaseCategory, BaseLocation, BaseProduct, BaseSupplier, BaseUnit, BaseWarehouse
@@ -43,7 +43,7 @@ from app.schemas.stock import (
     StockFlowRow,
     StockRow,
 )
-from app.services.stock import generate_bill_no, post_stock_change
+from app.services.stock import bill_no_conflict, generate_bill_no, post_stock_change
 
 router = APIRouter(tags=["库存"], dependencies=[Depends(get_current_user)])
 
@@ -51,6 +51,8 @@ _DECIMAL_RE = re.compile(r"^\d+(\.\d+)?$")
 _DEC2 = Decimal("0.01")
 _DEC3 = Decimal("0.001")
 _OPENING_IMPORT_COLUMNS = ["商品编码", "库位编码", "数量", "成本价"]
+_MAX_IMPORT_BYTES = 10 * 1024 * 1024  # 导入文件大小上限 10MB（防内存耗尽）
+_MAX_IMPORT_ROWS = 5000  # 单次导入行数上限
 
 
 def _fmt_qty(v: Decimal | int | str | None) -> str:
@@ -63,6 +65,15 @@ def _parse_dec(v: str, field: str) -> Decimal:
     if not _DECIMAL_RE.match(v):
         raise BizError(E_PARAM, f"{field} 必须是数字")
     return Decimal(v)
+
+
+def _check_date_arg(v: str, field: str) -> None:
+    """日期参数格式校验（YYYY-MM-DD）：非法值直接 4006，避免拼进 SQL 后 500。"""
+    if v:
+        try:
+            datetime.fromisoformat(v)
+        except ValueError:
+            raise BizError(E_PARAM, f"{field} 格式错误，应为 YYYY-MM-DD")
 
 
 def _user_name(db: Session, uid: int) -> str:
@@ -166,13 +177,19 @@ def create_purchase_in(
             bill.total_amount = total_amount.quantize(_DEC2)
             db.commit()
             return ok({"id": bill.id, "bill_no": bill_no})
-        except IntegrityError:
+        except IntegrityError as exc:
             db.rollback()
+            if not bill_no_conflict(exc):
+                # 非单号冲突（外键/其他唯一约束）：如实报错，不掩盖真实原因
+                raise BizError(E_PARAM, f"入库单保存失败：{exc.orig}") from exc
             continue  # 单号冲突，换号重试
     raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
-@router.get("/purchase-in/history-price")
+@router.get(
+    "/purchase-in/history-price",
+    dependencies=[Depends(require_any_permission("stk:query", "pch:in", "pch:ocr"))],
+)
 def purchase_in_history_price(
     product_id: int = Query(0, description="材料 id（0=全部材料，历史价格管理页用）"),
     keyword: str = Query("", max_length=100, description="材料名称/编码/物料编码模糊查询"),
@@ -252,8 +269,10 @@ def list_purchase_in(
     if warehouse_id:
         stmt = stmt.where(PchPurchaseIn.warehouse_id == warehouse_id)
     if start:
+        _check_date_arg(start, "start")
         stmt = stmt.where(PchPurchaseIn.bill_date >= f"{start} 00:00:00")
     if end:
+        _check_date_arg(end, "end")
         stmt = stmt.where(PchPurchaseIn.bill_date <= f"{end} 23:59:59")
     if status is not None:
         stmt = stmt.where(PchPurchaseIn.status == status)
@@ -331,21 +350,28 @@ def create_opening(
 ) -> dict:
     if db.get(BaseWarehouse, req.warehouse_id) is None:
         raise BizError(E_PARAM, "仓库不存在")
-    bill_no = generate_bill_no(db, "QCK", StkOpening)
-    bill = StkOpening(bill_no=bill_no, warehouse_id=req.warehouse_id, status=0, remark=req.remark, creator_id=user.id)
-    db.add(bill)
-    db.flush()
-    for idx, item in enumerate(req.items):
-        if db.get(BaseProduct, item.product_id) is None:
-            raise BizError(E_NOT_FOUND, f"商品 id={item.product_id} 不存在")
-        if db.get(BaseLocation, item.location_id) is None:
-            raise BizError(E_NOT_FOUND, f"库位 id={item.location_id} 不存在")
-        db.add(StkOpeningItem(
-            bill_id=bill.id, product_id=item.product_id, location_id=item.location_id,
-            qty=_parse_dec(item.qty, "数量"), cost_price=_parse_dec(item.cost_price, "成本价"),
-        ))
-    db.commit()
-    return ok({"id": bill.id, "bill_no": bill_no})
+    for attempt in range(5):  # 单号并发冲突重试
+        bill_no = generate_bill_no(db, "QCK", StkOpening)
+        bill = StkOpening(bill_no=bill_no, warehouse_id=req.warehouse_id, status=0, remark=req.remark, creator_id=user.id)
+        db.add(bill)
+        db.flush()
+        try:
+            for idx, item in enumerate(req.items):
+                if db.get(BaseProduct, item.product_id) is None:
+                    raise BizError(E_NOT_FOUND, f"商品 id={item.product_id} 不存在")
+                if db.get(BaseLocation, item.location_id) is None:
+                    raise BizError(E_NOT_FOUND, f"库位 id={item.location_id} 不存在")
+                db.add(StkOpeningItem(
+                    bill_id=bill.id, product_id=item.product_id, location_id=item.location_id,
+                    qty=_parse_dec(item.qty, "数量"), cost_price=_parse_dec(item.cost_price, "成本价"),
+                ))
+            db.commit()
+            return ok({"id": bill.id, "bill_no": bill_no})
+        except IntegrityError as exc:
+            db.rollback()
+            if not bill_no_conflict(exc):
+                raise BizError(E_PARAM, f"期初单保存失败：{exc.orig}") from exc
+    raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
 @router.get("/opening")
@@ -430,40 +456,51 @@ async def import_opening(
     if db.get(BaseWarehouse, warehouse_id) is None:
         raise BizError(E_PARAM, "仓库不存在")
     data = await file.read()
+    if len(data) > _MAX_IMPORT_BYTES:
+        raise BizError(E_PARAM, "导入文件不能超过 10MB")
     wb = load_workbook(io.BytesIO(data), read_only=True)
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         raise BizError(E_PARAM, "文件为空")
+    if len(rows) > _MAX_IMPORT_ROWS:
+        raise BizError(E_PARAM, f"单次导入不能超过 {_MAX_IMPORT_ROWS} 行")
     headers = [str(h).strip() if h else "" for h in rows[0]]
     if headers[:4] != _OPENING_IMPORT_COLUMNS:
         raise BizError(E_PARAM, f"表头必须为：{'/'.join(_OPENING_IMPORT_COLUMNS)}")
 
-    bill = StkOpening(bill_no=generate_bill_no(db, "QCK", StkOpening), warehouse_id=warehouse_id, status=0, creator_id=user.id)
-    db.add(bill)
-    db.flush()
-    success, fail_rows = 0, []
-    for idx, row in enumerate(rows[1:], start=2):
-        vals = [str(v).strip() if v is not None else "" for v in row] + [""] * 4
-        product = db.scalar(select(BaseProduct).where(BaseProduct.code == vals[0])) if vals[0] else None
-        location = db.scalar(select(BaseLocation).where(BaseLocation.code == vals[1])) if vals[1] else None
-        if product is None:
-            fail_rows.append({"row": idx, "reason": f"商品编码 {vals[0]} 不存在"})
-            continue
-        if location is None:
-            fail_rows.append({"row": idx, "reason": f"库位编码 {vals[1]} 不存在"})
-            continue
-        if not _DECIMAL_RE.match(vals[2]) or Decimal(vals[2]) <= 0:
-            fail_rows.append({"row": idx, "reason": "数量必须为正数"})
-            continue
-        cost = Decimal(vals[3]) if _DECIMAL_RE.match(vals[3]) else Decimal(0)
-        db.add(StkOpeningItem(bill_id=bill.id, product_id=product.id, location_id=location.id, qty=Decimal(vals[2]), cost_price=cost))
-        success += 1
-    if success == 0:
-        db.rollback()
-        raise BizError(E_PARAM, "导入全部失败，未生成草稿")
-    db.commit()
-    return ok({"draft_id": bill.id, "bill_no": bill.bill_no, "success_count": success, "fail_rows": fail_rows})
+    for attempt in range(5):  # 单号并发冲突重试
+        bill = StkOpening(bill_no=generate_bill_no(db, "QCK", StkOpening), warehouse_id=warehouse_id, status=0, creator_id=user.id)
+        db.add(bill)
+        db.flush()
+        success, fail_rows = 0, []
+        for idx, row in enumerate(rows[1:], start=2):
+            vals = [str(v).strip() if v is not None else "" for v in row] + [""] * 4
+            product = db.scalar(select(BaseProduct).where(BaseProduct.code == vals[0])) if vals[0] else None
+            location = db.scalar(select(BaseLocation).where(BaseLocation.code == vals[1])) if vals[1] else None
+            if product is None:
+                fail_rows.append({"row": idx, "reason": f"商品编码 {vals[0]} 不存在"})
+                continue
+            if location is None:
+                fail_rows.append({"row": idx, "reason": f"库位编码 {vals[1]} 不存在"})
+                continue
+            if not _DECIMAL_RE.match(vals[2]) or Decimal(vals[2]) <= 0:
+                fail_rows.append({"row": idx, "reason": "数量必须为正数"})
+                continue
+            cost = Decimal(vals[3]) if _DECIMAL_RE.match(vals[3]) else Decimal(0)
+            db.add(StkOpeningItem(bill_id=bill.id, product_id=product.id, location_id=location.id, qty=Decimal(vals[2]), cost_price=cost))
+            success += 1
+        if success == 0:
+            db.rollback()
+            raise BizError(E_PARAM, "导入全部失败，未生成草稿")
+        try:
+            db.commit()
+            return ok({"draft_id": bill.id, "bill_no": bill.bill_no, "success_count": success, "fail_rows": fail_rows})
+        except IntegrityError as exc:
+            db.rollback()
+            if not bill_no_conflict(exc):
+                raise BizError(E_PARAM, f"期初导入保存失败：{exc.orig}") from exc
+    raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
 # ============================ 库存查询 / 流水 ============================
@@ -488,18 +525,26 @@ def list_stock(
         stmt = stmt.where(StkStock.location_id == location_id)
     if keyword:
         like = f"%{keyword}%"
-        prod_ids = db.scalars(select(BaseProduct.id).where(or_(
+        # 子查询代替 IN(prod_ids)：避免无上限的关键字命中全量加载进内存
+        prod_q = select(BaseProduct.id).where(or_(
             BaseProduct.name.like(like), BaseProduct.code.like(like),
             BaseProduct.barcode.like(like), BaseProduct.sku.like(like),
-        ))).all()
-        stmt = stmt.where(StkStock.product_id.in_(prod_ids) if prod_ids else False)
+        ))
+        stmt = stmt.where(StkStock.product_id.in_(prod_q))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(StkStock.product_id, StkStock.location_id).offset((page - 1) * page_size).limit(page_size)).all()
+    # 批量预取商品/仓库/库位，避免每行 3 次回表（N+1）
+    pids = {s.product_id for s in rows}
+    wids = {s.warehouse_id for s in rows}
+    lids = {s.location_id for s in rows}
+    prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(pids))).all()} if pids else {}
+    wh_map = {w.id: w for w in db.scalars(select(BaseWarehouse).where(BaseWarehouse.id.in_(wids))).all()} if wids else {}
+    loc_map = {l.id: l for l in db.scalars(select(BaseLocation).where(BaseLocation.id.in_(lids))).all()} if lids else {}
     out = []
     for s in rows:
-        p = db.get(BaseProduct, s.product_id)
-        wh = db.get(BaseWarehouse, s.warehouse_id)
-        loc = db.get(BaseLocation, s.location_id)
+        p = prod_map.get(s.product_id)
+        wh = wh_map.get(s.warehouse_id)
+        loc = loc_map.get(s.location_id)
         out.append(StockRow(
             product_id=s.product_id, product_name=p.name if p else "", code=p.code if p else "",
             material_code=p.material_code if p else "", barcode=p.barcode if p else "", spec=p.spec if p else "",
@@ -529,22 +574,34 @@ def list_stock_flow(
     if change_type:
         stmt = stmt.where(StkStockLog.change_type == change_type)
     if start:
+        _check_date_arg(start, "start")
         stmt = stmt.where(StkStockLog.created_at >= f"{start} 00:00:00")
     if end:
+        _check_date_arg(end, "end")
         stmt = stmt.where(StkStockLog.created_at <= f"{end} 23:59:59")
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(StkStockLog.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
+    # 批量预取商品/仓库/库位/操作人，避免每行 3+1 次回表（N+1）
+    pids = {log.product_id for log in rows}
+    wids = {log.warehouse_id for log in rows}
+    lids = {log.location_id for log in rows}
+    uids = {log.operator_id for log in rows if log.operator_id}
+    prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(pids))).all()} if pids else {}
+    wh_map = {w.id: w for w in db.scalars(select(BaseWarehouse).where(BaseWarehouse.id.in_(wids))).all()} if wids else {}
+    loc_map = {l.id: l for l in db.scalars(select(BaseLocation).where(BaseLocation.id.in_(lids))).all()} if lids else {}
+    user_map = {u.id: u for u in db.scalars(select(SysUser).where(SysUser.id.in_(uids))).all()} if uids else {}
     out = []
     for log in rows:
-        p = db.get(BaseProduct, log.product_id)
-        wh = db.get(BaseWarehouse, log.warehouse_id)
-        loc = db.get(BaseLocation, log.location_id)
+        p = prod_map.get(log.product_id)
+        wh = wh_map.get(log.warehouse_id)
+        loc = loc_map.get(log.location_id)
+        op = user_map.get(log.operator_id)
         out.append(StockFlowRow(
             id=log.id, product_id=log.product_id, product_name=p.name if p else "", code=p.code if p else "",
             warehouse_name=wh.name if wh else "", location_code=loc.code if loc else "",
             change_type=log.change_type, bill_no=log.bill_no,
             before_qty=log.before_qty, change_qty=log.change_qty, after_qty=log.after_qty,
-            cost_price=log.cost_price, operator_name=_user_name(db, log.operator_id),
+            cost_price=log.cost_price, operator_name=op.real_name if op else "",
             remark=log.remark, created_at=log.created_at,
         ).model_dump())
     return ok(PageData(list=out, total=total, page=page, page_size=page_size).model_dump())

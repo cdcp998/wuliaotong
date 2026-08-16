@@ -15,6 +15,18 @@ export class BizError extends Error {
 }
 
 const API_BASE = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE ?? "/api/v1";
+/** 应用路由基路径：桌面端为 "/"，手机端生产构建为 "/m/"（与 vite base / 路由 basename 一致）。 */
+const APP_BASE = (import.meta as unknown as { env?: Record<string, string> }).env?.BASE_URL ?? "/";
+
+/** 统一 API 基地址（所有 fetch/文件 URL 必须经此拼接，禁止散落硬编码 "/api/v1"）。 */
+export function apiBase(): string {
+  return API_BASE;
+}
+
+/** 当前端的登录页地址（手机端部署在 /m/ 下时 401 跳转不再误跳桌面端登录页）。 */
+export function loginUrl(): string {
+  return `${APP_BASE}login`;
+}
 
 async function request<T>(method: string, path: string, body?: unknown, timeoutMs?: number): Promise<T> {
   // 超时兜底：OCR 等同步识别接口若服务端挂起，客户端不能无限等待（拍照识别卡死）
@@ -37,8 +49,9 @@ async function request<T>(method: string, path: string, body?: unknown, timeoutM
   }
   if (res.status === 401) {
     // 已在登录页时不再重复跳转（location.href 赋相同值也会整页刷新，导致登录页无限刷新循环）
-    if (window.location.pathname !== "/login") {
-      window.location.href = "/login";
+    const target = loginUrl();
+    if (window.location.pathname !== target) {
+      window.location.href = target;
     }
     throw new BizError(4004, "未登录或会话已过期");
   }

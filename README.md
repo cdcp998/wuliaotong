@@ -40,7 +40,7 @@
 ## 技术栈
 
 - 前端：React 19 + TypeScript + Vite + Zustand + Ant Design（电脑端）/ Ant Design Mobile（手机端），npm workspaces monorepo
-- 后端：Python 3.13 + FastAPI + SQLAlchemy 2.x + MySQL 5.7/8.0（phpstudy 5.7 开发，生产 8.0）
+- 后端：Python 3.13 + FastAPI + SQLAlchemy 2.x + MySQL 8.0
 - OCR：PaddleOCR（默认）/ RapidOCR-json（可切换，`OCRClient` 抽象）
 - 大模型：SiliconFlow 视觉（送货单/商品识别）、DeepSeek 文本（纠错/分类/摘要/查重/别名）、豆包视觉（兜底）
 
@@ -83,6 +83,7 @@
 3. **验证门禁**（提交前必须）：
    - L1 语法/类型：`python -m compileall app`；`npm run typecheck`（零错误）
    - L2 接口：`scripts/run_tests.sh`——普通改动自动跑**针对性测试**（按 git diff 映射）；发布/关键变更用 `scripts/run_tests.sh --full` 跑全量（详见《开发规范.md》§6.1 分层策略）
+     - 测试库隔离：设置 `TEST_DB_URL`（如 `mysql+pymysql://root:***@127.0.0.1:3306/wuliaotong_test`）后运行 pytest，可避免测试直连开发库；Python 依赖可复现安装：`pip install -r backend/requirements.lock`
    - L4 前端：`npm run build -w wlt-desktop`、`npm run build -w wlt-mobile`（发布/关键变更时）
    - 测试/构建失败**不允许提交**
 4. **文档同步**：每项完成后回写《开发进度记录.md》（交付/验证/遗留/提交）；接口/表结构变更同步《后端API设计.md》《数据库设计.md》
@@ -90,8 +91,8 @@
 
 ## 本地开发环境
 
-- Python 3.13、MySQL 5.7（phpstudy，`root/CHANGE_ME`，端口 3306）、Node 20、Redis 5.x（127.0.0.1:6379；缓存加速层，不可用时自动降级直查数据库）
-- 端口：后端 **8443（HTTPS，自签名）**、电脑端 dev **5174**、手机端 dev **5175**（本地 80 被 phpstudy 业务占用）
+- Python 3.13、MySQL 8.0、Node 20、Redis 5.x（127.0.0.1:6379；缓存加速层，不可用时自动降级直查数据库）
+- 端口：后端 **8443（HTTPS，自签名）**、电脑端 dev **5174**、手机端 dev **5175**
 - 后端需配置大模型 Key（系统设置 → OCR 与大模型）：视觉 SiliconFlow + 文本 DeepSeek（豆包可选）
 
 ## 快速启动
@@ -150,7 +151,7 @@ npm run dev:mobile    # 手机端
 2. **后端**：
    - 安装 Python 3.13 + `pip install -r requirements.txt`；配置 `backend/.env`（DB_URL、SESSION_COOKIE_NAME、BACKUP_MYSQLDUMP 指向 mysqldump 绝对路径、BACKUP_DIR、REDIS_URL）
    - 启动 Redis 并保持运行（缓存加速层；Redis 挂掉时自动降级，业务不受影响）
-   - 启动：`uvicorn app.main:app --host 127.0.0.1 --port 8080`（内网端口，由 Nginx 反代；生产 HTTPS 由 Nginx 终止）
+   - 启动：`uvicorn app.main:app --host 127.0.0.1 --port 8080 --proxy-headers --forwarded-allow-ips=127.0.0.1`（内网端口，由 Nginx 反代；生产 HTTPS 由 Nginx 终止；`--proxy-headers` 让限流/审计拿到真实客户端 IP）
    - 建议用 NSSM/任务计划注册为 Windows 服务（开机自启、崩溃重启）
 3. **前端**：`cd frontend && npm ci && npm run build`（产出 desktop/mobile dist）
 4. **Nginx**（示例）：
@@ -167,7 +168,12 @@ server {
     # 手机端（mobile dist，vite base=/m/ + 路由 basename=/m/）
     location /m/ { alias /path/mobile/dist/; try_files $uri /m/index.html; }
     # API 反代
-    location /api/ { proxy_pass http://127.0.0.1:8080; proxy_set_header Host $host; }
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
 }
 server { listen 80; server_name 你的域名; return 301 https://$host$request_uri; }
 ```
@@ -178,8 +184,8 @@ server { listen 80; server_name 你的域名; return 301 https://$host$request_u
 
 ## 默认账号
 
-- 管理员：`admin` / `admin123`（首次登录后请立即修改；密码 bcrypt 存储）
-- 测试用户：`tester_user` / `123456`
+- 管理员：`admin`（密码由**初始化安装向导**设置；`init.sql` 中仅插入不可登录的占位哈希，直接导入脚本后必须先跑安装向导或手动 `UPDATE` bcrypt 哈希）
+- 测试用户：`tester_user` / `123456`（仅测试环境；pytest 未设置 `TEST_DB_URL` 时会自动补齐该账号与 `admin/admin123` 测试口令）
 
 ## 测试样本（testdata）
 

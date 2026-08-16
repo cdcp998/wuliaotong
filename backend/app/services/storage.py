@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -23,6 +24,8 @@ from app.models.sys import SysConfig, SysFile, SysStorage
 
 MAX_EDGE = 1600  # 压缩后长边上限
 JPEG_QUALITY = 80
+# 解码像素上限：拦截解压炸弹类超大图片（默认约 8900 万像素，正常照片远小于此值）
+Image.MAX_IMAGE_PIXELS = 60_000_000
 
 
 def resolve_storage_path(storage: SysStorage) -> Path:
@@ -88,7 +91,9 @@ def save_uploaded_image(db: Session, data: bytes, original_name: str, biz_type: 
     if storage is None:
         raise BizError(E_NOT_FOUND, "存储位置不存在")
     root = resolve_storage_path(storage)
-    rel = Path(f"{biz_type}/{uuid.uuid4().hex}.webp")
+    # 纵深防御：业务类型只保留白名单字符并截断，杜绝 ../ 或分隔符逃逸存储根目录
+    safe_biz = re.sub(r"[^A-Za-z0-9_-]", "", biz_type or "")[:30] or "other"
+    rel = Path(f"{safe_biz}/{uuid.uuid4().hex}.webp")
     try:
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
         (root / rel).write_bytes(payload)

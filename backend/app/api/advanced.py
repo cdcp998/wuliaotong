@@ -17,9 +17,11 @@ from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, Side
 from sqlalchemy import and_, case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_permission
+from app.core.excel_guard import safe_excel_value
 from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, E_STOCK_NOT_ENOUGH, ok
 from app.db import get_db
 from app.models.advanced import (
@@ -47,7 +49,7 @@ from app.schemas.advanced import (
     TransferOut,
     TransferReq,
 )
-from app.services.stock import generate_bill_no, post_stock_change
+from app.services.stock import bill_no_conflict, generate_bill_no, post_stock_change
 
 router = APIRouter(tags=["库存进阶"], dependencies=[Depends(get_current_user)])
 
@@ -94,26 +96,33 @@ def create_transfer(
         raise BizError(E_PARAM, "调出仓库与调入仓库不能相同")
     if db.get(BaseWarehouse, req.from_warehouse_id) is None or db.get(BaseWarehouse, req.to_warehouse_id) is None:
         raise BizError(E_PARAM, "仓库不存在")
-    bill = StkTransfer(
-        bill_no=generate_bill_no(db, "DB", StkTransfer),
-        from_warehouse_id=req.from_warehouse_id,
-        to_warehouse_id=req.to_warehouse_id,
-        status=0,
-        remark=req.remark,
-    )
-    db.add(bill)
-    db.flush()
-    for idx, item in enumerate(req.items):
-        if db.get(BaseProduct, item.product_id) is None:
-            raise BizError(E_NOT_FOUND, f"商品 id={item.product_id} 不存在")
-        if db.get(BaseLocation, item.from_location_id) is None or db.get(BaseLocation, item.to_location_id) is None:
-            raise BizError(E_NOT_FOUND, "库位不存在")
-        db.add(StkTransferItem(
-            transfer_id=bill.id, product_id=item.product_id, qty=_parse_qty(item.qty),
-            from_location_id=item.from_location_id, to_location_id=item.to_location_id,
-        ))
-    db.commit()
-    return ok({"id": bill.id, "bill_no": bill.bill_no, "status": 0})
+    for attempt in range(5):  # 单号并发冲突重试
+        bill = StkTransfer(
+            bill_no=generate_bill_no(db, "DB", StkTransfer),
+            from_warehouse_id=req.from_warehouse_id,
+            to_warehouse_id=req.to_warehouse_id,
+            status=0,
+            remark=req.remark,
+        )
+        db.add(bill)
+        db.flush()
+        try:
+            for idx, item in enumerate(req.items):
+                if db.get(BaseProduct, item.product_id) is None:
+                    raise BizError(E_NOT_FOUND, f"商品 id={item.product_id} 不存在")
+                if db.get(BaseLocation, item.from_location_id) is None or db.get(BaseLocation, item.to_location_id) is None:
+                    raise BizError(E_NOT_FOUND, "库位不存在")
+                db.add(StkTransferItem(
+                    transfer_id=bill.id, product_id=item.product_id, qty=_parse_qty(item.qty),
+                    from_location_id=item.from_location_id, to_location_id=item.to_location_id,
+                ))
+            db.commit()
+            return ok({"id": bill.id, "bill_no": bill.bill_no, "status": 0})
+        except IntegrityError as exc:
+            db.rollback()
+            if not bill_no_conflict(exc):
+                raise BizError(E_PARAM, f"调拨单保存失败：{exc.orig}") from exc
+    raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
 def _transfer_out(db: Session, b: StkTransfer) -> dict:
@@ -249,29 +258,36 @@ def create_check(
 ) -> dict:
     if db.get(BaseWarehouse, req.warehouse_id) is None:
         raise BizError(E_PARAM, "仓库不存在")
-    bill = StkCheck(
-        bill_no=generate_bill_no(db, "PD", StkCheck),
-        warehouse_id=req.warehouse_id,
-        status=0,
-        checker_id=user.id,
-        check_date=datetime.now(),
-        remark=req.remark,
-    )
-    db.add(bill)
-    db.flush()
-    # 物品级别盘点：按商品聚合该仓库账面库存（跨库位汇总，每物品一行）
-    rows = db.execute(
-        select(StkStock.product_id, func.sum(StkStock.qty))
-        .where(StkStock.warehouse_id == req.warehouse_id, StkStock.qty != 0)
-        .group_by(StkStock.product_id)
-    ).all()
-    for product_id, qty in rows:
-        if not qty:
-            continue
-        # location_id=0 表示物品级汇总行，审核时按库位分摊入账
-        db.add(StkCheckItem(check_id=bill.id, product_id=product_id, location_id=0, book_qty=qty, diff_qty=0))
-    db.commit()
-    return ok({"id": bill.id, "bill_no": bill.bill_no, "status": 0, "item_count": len(rows)})
+    for attempt in range(5):  # 单号并发冲突重试
+        bill = StkCheck(
+            bill_no=generate_bill_no(db, "PD", StkCheck),
+            warehouse_id=req.warehouse_id,
+            status=0,
+            checker_id=user.id,
+            check_date=datetime.now(),
+            remark=req.remark,
+        )
+        db.add(bill)
+        db.flush()
+        # 物品级别盘点：按商品聚合该仓库账面库存（跨库位汇总，每物品一行）
+        rows = db.execute(
+            select(StkStock.product_id, func.sum(StkStock.qty))
+            .where(StkStock.warehouse_id == req.warehouse_id, StkStock.qty != 0)
+            .group_by(StkStock.product_id)
+        ).all()
+        for product_id, qty in rows:
+            if not qty:
+                continue
+            # location_id=0 表示物品级汇总行，审核时按库位分摊入账
+            db.add(StkCheckItem(check_id=bill.id, product_id=product_id, location_id=0, book_qty=qty, diff_qty=0))
+        try:
+            db.commit()
+            return ok({"id": bill.id, "bill_no": bill.bill_no, "status": 0, "item_count": len(rows)})
+        except IntegrityError as exc:
+            db.rollback()
+            if not bill_no_conflict(exc):
+                raise BizError(E_PARAM, f"盘点单保存失败：{exc.orig}") from exc
+    raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
 def _check_out(db: Session, b: StkCheck) -> dict:
@@ -377,29 +393,40 @@ def audit_check(
     for it in items:
         if it.real_qty is None:
             raise BizError(E_PARAM, f"盘点明细 id={it.id} 未录入实盘数量")
+    # 一次性取该仓库全部商品库位库存（数量降序），内存按商品分组分摊，避免每明细一次查询（N+1）
+    pids = [it.product_id for it in items if it.diff_qty != 0]
+    loc_by_product: dict[int, list[tuple[int, Decimal, Decimal]]] = {}
+    if pids:
+        loc_rows = db.execute(
+            select(StkStock.product_id, StkStock.location_id, StkStock.qty, StkStock.cost_price)
+            .where(
+                StkStock.warehouse_id == b.warehouse_id,
+                StkStock.product_id.in_(pids),
+                StkStock.qty != 0,
+            )
+            .order_by(StkStock.product_id, StkStock.qty.desc())
+        ).all()
+        for pid, lid, q, c in loc_rows:
+            loc_by_product.setdefault(pid, []).append((lid, q, c))
+    first_loc_cache: dict[int, int | None] = {}
+    for it in items:
         if it.diff_qty == 0:
             continue
         change_type = "盘盈" if it.diff_qty > 0 else "盘亏"
         remark = f"账面 {format(it.book_qty, 'f')} → 实盘 {format(it.real_qty, 'f')}"
         # 物品级差异按库位分摊：盘亏从库存多的库位依次扣，盘盈记入库存最多的库位（无库存则仓库首个库位）
-        loc_rows = db.execute(
-            select(StkStock.location_id, StkStock.qty, StkStock.cost_price)
-            .where(
-                StkStock.warehouse_id == b.warehouse_id,
-                StkStock.product_id == it.product_id,
-                StkStock.qty != 0,
-            )
-            .order_by(StkStock.qty.desc())
-        ).all()
+        loc_rows = loc_by_product.get(it.product_id, [])
         if it.diff_qty > 0:
             if loc_rows:
                 loc_id = loc_rows[0][0]
                 # 按当前账面成本入账，避免摊薄移动加权成本
                 cost_price = loc_rows[0][2] or Decimal(0)
             else:
-                loc_id = db.scalar(
-                    select(BaseLocation.id).where(BaseLocation.warehouse_id == b.warehouse_id).order_by(BaseLocation.id).limit(1)
-                )
+                if it.product_id not in first_loc_cache:
+                    first_loc_cache[it.product_id] = db.scalar(
+                        select(BaseLocation.id).where(BaseLocation.warehouse_id == b.warehouse_id).order_by(BaseLocation.id).limit(1)
+                    )
+                loc_id = first_loc_cache[it.product_id]
                 cost_price = Decimal(0)
             if loc_id is None:
                 raise BizError(E_PARAM, "仓库无库位，无法入账盘盈")
@@ -511,11 +538,18 @@ def export_check(bill_id: int, db: Session = Depends(get_db)):
         c.alignment = center
         c.border = border
     # 数据行
+    # 批量预取商品/分类/单位，避免每行 3 次回表（N+1）
+    pids = {it.product_id for it in items}
+    prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(pids))).all()} if pids else {}
+    cids = {p.category_id for p in prod_map.values() if p.category_id}
+    cat_map = {c.id: c for c in db.scalars(select(BaseCategory).where(BaseCategory.id.in_(cids))).all()} if cids else {}
+    uids = {p.unit_id for p in prod_map.values() if p.unit_id}
+    unit_map = {u.id: u for u in db.scalars(select(BaseUnit).where(BaseUnit.id.in_(uids))).all()} if uids else {}
     row = 3
     for it in items:
-        p = db.get(BaseProduct, it.product_id)
-        cat = db.get(BaseCategory, p.category_id) if p and p.category_id else None
-        unit = db.get(BaseUnit, p.unit_id) if p else None
+        p = prod_map.get(it.product_id)
+        cat = cat_map.get(p.category_id) if p and p.category_id else None
+        unit = unit_map.get(p.unit_id) if p and p.unit_id else None
         f = flow.get(it.product_id, {})
         closing_q = f.get("closing_qty", Decimal(0))
         closing_a = f.get("closing_amount", Decimal(0))
@@ -538,7 +572,7 @@ def export_check(bill_id: int, db: Session = Depends(get_db)):
             "",
         ]
         for col, v in enumerate(values, start=1):
-            c = ws.cell(row=row, column=col, value=float(v) if isinstance(v, Decimal) else v)
+            c = ws.cell(row=row, column=col, value=float(v) if isinstance(v, Decimal) else safe_excel_value(v))
             c.font = body_font
             c.border = border
             c.alignment = Alignment(vertical="center")
@@ -571,38 +605,45 @@ def create_other_io(
 ) -> dict:
     if db.get(BaseWarehouse, req.warehouse_id) is None:
         raise BizError(E_PARAM, "仓库不存在")
-    bill = StkOtherIo(
-        bill_no=generate_bill_no(db, "QT", StkOtherIo),
-        warehouse_id=req.warehouse_id,
-        io_type=req.io_type,
-        status=1,  # 直接过账
-        operator_id=user.id,
-        remark=req.remark,
-    )
-    db.add(bill)
-    db.flush()
-    direction = 1 if req.io_type in IN_TYPES else -1
-    for idx, item in enumerate(req.items):
-        if db.get(BaseProduct, item.product_id) is None:
-            raise BizError(E_NOT_FOUND, f"商品 id={item.product_id} 不存在")
-        if db.get(BaseLocation, item.location_id) is None:
-            raise BizError(E_NOT_FOUND, f"库位 id={item.location_id} 不存在")
-        qty = _parse_qty(item.qty)
-        item_row = StkOtherIoItem(
-            bill_id=bill.id, product_id=item.product_id, qty=qty,
-            location_id=item.location_id, photo_file_id=item.photo_file_id, sort=idx,
+    for attempt in range(5):  # 单号并发冲突重试
+        bill = StkOtherIo(
+            bill_no=generate_bill_no(db, "QT", StkOtherIo),
+            warehouse_id=req.warehouse_id,
+            io_type=req.io_type,
+            status=1,  # 直接过账
+            operator_id=user.id,
+            remark=req.remark,
         )
-        db.add(item_row)
+        db.add(bill)
         db.flush()
-        post_stock_change(
-            db,
-            product_id=item.product_id, warehouse_id=req.warehouse_id, location_id=item.location_id,
-            change_type=req.io_type, bill_type="stk_other_io", bill_no=bill.bill_no,
-            bill_item_id=item_row.id, qty_delta=direction * qty, cost_price=Decimal(0),
-            photo_file_id=item.photo_file_id, operator_id=user.id,
-        )
-    db.commit()
-    return ok({"id": bill.id, "bill_no": bill.bill_no, "status": 1})
+        direction = 1 if req.io_type in IN_TYPES else -1
+        try:
+            for idx, item in enumerate(req.items):
+                if db.get(BaseProduct, item.product_id) is None:
+                    raise BizError(E_NOT_FOUND, f"商品 id={item.product_id} 不存在")
+                if db.get(BaseLocation, item.location_id) is None:
+                    raise BizError(E_NOT_FOUND, f"库位 id={item.location_id} 不存在")
+                qty = _parse_qty(item.qty)
+                item_row = StkOtherIoItem(
+                    bill_id=bill.id, product_id=item.product_id, qty=qty,
+                    location_id=item.location_id, photo_file_id=item.photo_file_id, sort=idx,
+                )
+                db.add(item_row)
+                db.flush()
+                post_stock_change(
+                    db,
+                    product_id=item.product_id, warehouse_id=req.warehouse_id, location_id=item.location_id,
+                    change_type=req.io_type, bill_type="stk_other_io", bill_no=bill.bill_no,
+                    bill_item_id=item_row.id, qty_delta=direction * qty, cost_price=Decimal(0),
+                    photo_file_id=item.photo_file_id, operator_id=user.id,
+                )
+            db.commit()
+            return ok({"id": bill.id, "bill_no": bill.bill_no, "status": 1})
+        except IntegrityError as exc:
+            db.rollback()
+            if not bill_no_conflict(exc):
+                raise BizError(E_PARAM, f"其他出入库单保存失败：{exc.orig}") from exc
+    raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
 def _other_out(db: Session, b: StkOtherIo) -> dict:

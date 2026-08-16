@@ -31,7 +31,7 @@ class PurchaseInReq(BaseModel):
     supplier_id: int = 0
     warehouse_id: int = Field(gt=0)
     bill_date: datetime | None = None
-    remark: str = ""
+    remark: str = Field(default="", max_length=200)
     ocr_record_id: int = 0  # 来源送货单 OCR 识别记录（0=手工录入）
     items: list[PurchaseInItemReq] = Field(min_length=1)
 
@@ -90,7 +90,7 @@ class OpeningItemReq(BaseModel):
 
 class OpeningReq(BaseModel):
     warehouse_id: int = Field(gt=0)
-    remark: str = ""
+    remark: str = Field(default="", max_length=200)
     items: list[OpeningItemReq] = Field(min_length=1)
 
 

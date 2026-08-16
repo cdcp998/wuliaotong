@@ -1,8 +1,10 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
 
+import { apiBase } from "../api/client";
+
 /** 文件访问 URL（登录 Cookie 自动携带）。 */
 export function fileUrl(fileId: number): string {
-  return `/api/v1/files/${fileId}`;
+  return `${apiBase()}/files/${fileId}`;
 }
 
 /**

@@ -40,11 +40,32 @@ def scan_stock_alerts() -> dict:
 
         cutoff = datetime.now() - timedelta(hours=1)
         created = 0
+        # 只扫描命中预警条件的行（低库存/高库存），避免每分钟全表拉取后逐行判断
+        from sqlalchemy import and_, or_
+
         rows = db.execute(
             select(StkStock, BaseProduct)
             .join(BaseProduct, BaseProduct.id == StkStock.product_id)
-            .where(StkStock.qty != 0)
+            .where(
+                StkStock.qty != 0,
+                or_(
+                    and_(BaseProduct.min_stock > 0, StkStock.qty < BaseProduct.min_stock),
+                    and_(BaseProduct.max_stock > 0, StkStock.qty > BaseProduct.max_stock),
+                ),
+            )
         ).all()
+        # 一次拉取近期未读预警，内存按标题+内容判断去重（替代每个商品一次 LIKE 查询）
+        recent = db.execute(
+            select(SysNotification.title, SysNotification.content)
+            .where(
+                SysNotification.biz_type == "预警",
+                SysNotification.created_at >= cutoff,
+                SysNotification.is_read == 0,
+            )
+        ).all()
+        existing: dict[str, list[str]] = {}
+        for title, content in recent:
+            existing.setdefault(title, []).append(content)
         for stock, product in rows:
             alerts: list[tuple[str, str]] = []
             if product.min_stock and stock.qty < product.min_stock:
@@ -53,22 +74,13 @@ def scan_stock_alerts() -> dict:
                 alerts.append(("高库存", generate_alert_text(db, product=product, qty=stock.qty, kind="高库存")))
 
             for title, content in alerts:
-                dup = db.scalar(
-                    select(SysNotification.id)
-                    .where(
-                        SysNotification.biz_type == "预警",
-                        SysNotification.title == title,
-                        SysNotification.content.like(f"%({product.code})%"),
-                        SysNotification.created_at >= cutoff,
-                        SysNotification.is_read == 0,
-                    )
-                    .limit(1)
-                )
-                if dup:
+                # 正文中商品编码出现在全角/半角括号内均视为已预警（与 generate_alert_text 输出一致）
+                if any(f"（{product.code}）" in c or f"({product.code})" in c for c in existing.get(title, [])):
                     continue
                 for uid in receivers:
                     db.add(SysNotification(user_id=uid, title=title, content=content, biz_type="预警"))
                 created += 1
+                existing.setdefault(title, []).append(content)
         db.commit()
         if created:
             cache_delete_pattern("notify:unread:*")  # 新预警通知 → 未读数缓存失效

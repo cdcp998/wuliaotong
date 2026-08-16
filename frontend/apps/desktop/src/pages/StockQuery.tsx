@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router";
 import { App, Button, Input, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
-import { baseApi, stockApi, type StockRow, type Warehouse } from "@wlt/shared";
+import { apiBase, baseApi, stockApi, type StockRow, type Warehouse } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
 
@@ -94,7 +94,7 @@ export function StockQueryPage() {
         <Button
           onClick={() => {
             const a = document.createElement("a");
-            a.href = `/api/v1/reports/export?type=stock&keyword=${encodeURIComponent(keyword)}`;
+            a.href = `${apiBase()}/reports/export?type=stock&keyword=${encodeURIComponent(keyword)}`;
             a.click();
           }}
         >

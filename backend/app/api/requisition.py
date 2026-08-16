@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from PIL import Image
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_permission
@@ -40,7 +41,7 @@ from app.schemas.requisition import (
     WorkDoneReq,
     WorkLocationReq,
 )
-from app.services.stock import generate_bill_no, post_stock_change
+from app.services.stock import bill_no_conflict, generate_bill_no, post_stock_change
 from app.services.storage import resolve_storage_path
 from app.services.watermark import (
     WATERMARK_DEFAULT_POSITION,
@@ -272,7 +273,7 @@ def create_requisition(
             raise BizError(E_PARAM, "指定申请人不存在或已停用")
         applicant_id = target.id
     bill = OutRequisition(
-        bill_no=generate_bill_no(db, "LL", OutRequisition),
+        bill_no="",  # 占位，重试循环内生成
         applicant_id=applicant_id,
         use_location=req.use_location,
         use_reason=req.use_reason,
@@ -284,20 +285,28 @@ def create_requisition(
         status=REQ_STATUS_WORKING,
         remark=req.remark,
     )
-    db.add(bill)
-    db.flush()
-    _apply_private(db, bill, req.is_private)
-    bill.total_qty = _replace_items(db, bill.id, req.items)
-    # 提交即自动出库（允许负库存，不足通知管理员核对）
-    shortages = _deduct_items(db, bill, user.id)
-    if shortages:
-        _notify_admins(
-            db,
-            "领用出库库存不足",
-            f"{bill.bill_no} 领用出库后以下商品库存为负（实际库存与系统不符，请核对）：{'；'.join(shortages)}",
-        )
-    db.commit()
-    return ok({"id": bill.id, "bill_no": bill.bill_no, "status": REQ_STATUS_WORKING, "shortages": shortages})
+    for attempt in range(5):  # 单号并发冲突重试
+        bill.bill_no = generate_bill_no(db, "LL", OutRequisition)
+        db.add(bill)
+        db.flush()
+        _apply_private(db, bill, req.is_private)
+        bill.total_qty = _replace_items(db, bill.id, req.items)
+        # 提交即自动出库（允许负库存，不足通知管理员核对）
+        shortages = _deduct_items(db, bill, user.id)
+        if shortages:
+            _notify_admins(
+                db,
+                "领用出库库存不足",
+                f"{bill.bill_no} 领用出库后以下商品库存为负（实际库存与系统不符，请核对）：{'；'.join(shortages)}",
+            )
+        try:
+            db.commit()
+            return ok({"id": bill.id, "bill_no": bill.bill_no, "status": REQ_STATUS_WORKING, "shortages": shortages})
+        except IntegrityError as exc:
+            db.rollback()
+            if not bill_no_conflict(exc):
+                raise BizError(E_PARAM, f"领用单保存失败：{exc.orig}") from exc
+    raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
 @router.get("/requisitions/applicants", dependencies=[Depends(require_permission("req:apply"))])
@@ -330,8 +339,12 @@ def work_done_requisition(
         raise BizError(E_NO_PERMISSION, "只能提交自己的申请", http_status=403)
     if r.status != REQ_STATUS_WORKING:
         raise BizError(E_BILL_STATUS, "仅待完成工作的申请可提交完成拍照")
-    if db.get(SysFile, body.photo_file_id) is None:
+    photo = db.get(SysFile, body.photo_file_id)
+    if photo is None:
         raise BizError(E_PARAM, "照片不存在")
+    role = db.get(SysRole, user.role_id)
+    if photo.uploader_id != user.id and not (role and role.code == "super_admin"):
+        raise BizError(E_PARAM, "只能提交自己上传的照片")
     r.work_photo_file_id = body.photo_file_id
     r.work_done_at = datetime.now()
     r.work_lat = body.lat

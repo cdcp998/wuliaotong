@@ -31,7 +31,7 @@ class TransferItemReq(BaseModel):
 class TransferReq(BaseModel):
     from_warehouse_id: int = Field(gt=0)
     to_warehouse_id: int = Field(gt=0)
-    remark: str = ""
+    remark: str = Field(default="", max_length=200)
     items: list[TransferItemReq] = Field(min_length=1)
 
 
@@ -52,7 +52,7 @@ class OtherIoItemReq(BaseModel):
 class OtherIoReq(BaseModel):
     io_type: str
     warehouse_id: int = Field(gt=0)
-    remark: str = ""
+    remark: str = Field(default="", max_length=200)
     items: list[OtherIoItemReq] = Field(min_length=1)
 
     @field_validator("io_type")
@@ -83,7 +83,7 @@ class CheckItemsReq(BaseModel):
 
 class CheckReq(BaseModel):
     warehouse_id: int = Field(gt=0)
-    remark: str = ""
+    remark: str = Field(default="", max_length=200)
 
 
 class _ItemOut(BaseModel):

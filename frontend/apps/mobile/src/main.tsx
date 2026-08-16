@@ -1,5 +1,5 @@
-import { unstableSetRender } from "antd-mobile";
-import React from "react";
+import { DotLoading, unstableSetRender } from "antd-mobile";
+import React, { lazy, Suspense } from "react";
 import ReactDOM, { type Root } from "react-dom/client";
 import { RouterProvider, createBrowserRouter } from "react-router";
 
@@ -8,19 +8,20 @@ import "./styles/widescreen.css";
 
 import { RequireAuth } from "./components/RequireAuth";
 import { TabLayout } from "./components/TabLayout";
-import { CheckRunPage } from "./pages/CheckRun";
-import { ChecksPage } from "./pages/Checks";
-import { HomePage } from "./pages/Home";
-import { InboundPage } from "./pages/Inbound";
-import { LoginPage } from "./pages/Login";
-import { MinePage } from "./pages/Mine";
-import { MyRequisitionsPage } from "./pages/MyRequisitions";
-import { NotificationsPage } from "./pages/Notifications";
-import { OcrScanPage } from "./pages/OcrScan";
-import { OutboundPage } from "./pages/Outbound";
-import { RequisitionDetailPage } from "./pages/RequisitionDetail";
-import { RequisitionNewPage } from "./pages/RequisitionNew";
-import { StockQueryPage } from "./pages/StockQuery";
+// 页面按路由懒加载：首屏只加载当前 Tab 所需代码
+const CheckRunPage = lazy(() => import("./pages/CheckRun").then((m) => ({ default: m.CheckRunPage })));
+const ChecksPage = lazy(() => import("./pages/Checks").then((m) => ({ default: m.ChecksPage })));
+const HomePage = lazy(() => import("./pages/Home").then((m) => ({ default: m.HomePage })));
+const InboundPage = lazy(() => import("./pages/Inbound").then((m) => ({ default: m.InboundPage })));
+const LoginPage = lazy(() => import("./pages/Login").then((m) => ({ default: m.LoginPage })));
+const MinePage = lazy(() => import("./pages/Mine").then((m) => ({ default: m.MinePage })));
+const MyRequisitionsPage = lazy(() => import("./pages/MyRequisitions").then((m) => ({ default: m.MyRequisitionsPage })));
+const NotificationsPage = lazy(() => import("./pages/Notifications").then((m) => ({ default: m.NotificationsPage })));
+const OcrScanPage = lazy(() => import("./pages/OcrScan").then((m) => ({ default: m.OcrScanPage })));
+const OutboundPage = lazy(() => import("./pages/Outbound").then((m) => ({ default: m.OutboundPage })));
+const RequisitionDetailPage = lazy(() => import("./pages/RequisitionDetail").then((m) => ({ default: m.RequisitionDetailPage })));
+const RequisitionNewPage = lazy(() => import("./pages/RequisitionNew").then((m) => ({ default: m.RequisitionNewPage })));
+const StockQueryPage = lazy(() => import("./pages/StockQuery").then((m) => ({ default: m.StockQueryPage })));
 
 /** TabBar 五页：首页/识别/领用/通知/我的（《UI设计方案.md》§3.3）。
  * 生产环境经 Nginx 反代部署在 /m/ 前缀（入口后缀），路由 basename=/m/ 后
@@ -67,10 +68,16 @@ unstableSetRender((node, container) => {
   };
 });
 
+function PageLoading() {
+  return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#86909c" }}><DotLoading /></div>;
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     {/* 品牌主色（《UI设计方案.md》§2.1）：antd-mobile 通过 CSS 变量换肤 */}
     <style>{`:root{--adm-color-primary:#1668dc;--adm-color-success:#52c41a;--adm-color-warning:#faad14;--adm-color-danger:#ff4d4f}`}</style>
-    <RouterProvider router={tabRouter} />
+    <Suspense fallback={<PageLoading />}>
+      <RouterProvider router={tabRouter} />
+    </Suspense>
   </React.StrictMode>
 );

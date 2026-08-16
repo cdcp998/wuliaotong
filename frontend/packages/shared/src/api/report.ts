@@ -1,5 +1,5 @@
 /** 报表/看板/2D 货架图接口（P6，对应《后端API设计.md》§6、§8）。 */
-import { http, type PageData } from "./client";
+import { apiBase, http, type PageData } from "./client";
 
 export interface TrendPoint {
   date: string;
@@ -104,5 +104,5 @@ export function exportReportUrl(params: Record<string, string | number | undefin
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== "") q.set(k, String(v));
   }
-  return `/api/v1/reports/export?${q}`;
+  return `${apiBase()}/reports/export?${q}`;
 }

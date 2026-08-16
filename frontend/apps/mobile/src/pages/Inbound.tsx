@@ -172,9 +172,11 @@ export function InboundPage() {
     if (ocrTimerRef.current) clearInterval(ocrTimerRef.current);
     let ticks = 0;
     ocrTimerRef.current = setInterval(async () => {
+      let finished = false;
       try {
         const t = await ocrApi.taskStatus(id);
         if (t.status === "done") {
+          finished = true;
           clearInterval(ocrTimerRef.current);
           setOcrLoading(false);
           const s = t.structured;
@@ -182,15 +184,19 @@ export function InboundPage() {
           setOcrConfirm({ supplierName: s?.supplier_name ?? "", billNo: s?.bill_no ?? "", items: s?.items ?? [] });
           Toast.show("识别完成，请确认明细");
         } else if (t.status === "failed") {
+          finished = true;
           clearInterval(ocrTimerRef.current);
           setOcrLoading(false);
           Toast.show(t.error ?? "识别失败");
         }
       } catch (e) {
+        finished = true;
         clearInterval(ocrTimerRef.current);
         setOcrLoading(false);
         Toast.show(e instanceof Error ? e.message : "查询失败");
       } finally {
+        // 任务已完成/失败时不再继续计数，避免第 24 次恰好成功时误报「识别超时」
+        if (finished) return;
         ticks += 1;
         if (ticks >= 24) {
           clearInterval(ocrTimerRef.current);

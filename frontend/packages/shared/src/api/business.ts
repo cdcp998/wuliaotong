@@ -1,5 +1,5 @@
 /** 出入库/盘点/OCR 接口。 */
-import { http, type PageData } from "./client";
+import { apiBase, http, type PageData } from "./client";
 
 export interface InboundItem {
   product_id: number;
@@ -81,7 +81,7 @@ export const checkApi = {
     http.put<null>(`/checks/${id}/items`, { items }),
   audit: (id: number) => http.post<null>(`/checks/${id}/audit`),
   /** 导出盘点结果 Excel（收发存模板格式 + 盘点字段），浏览器直接下载（session cookie 同源）。 */
-  exportUrl: (id: number) => `/api/v1/checks/${id}/export`,
+  exportUrl: (id: number) => `${apiBase()}/checks/${id}/export`,
 };
 
 export interface TransferBill {
@@ -244,7 +244,7 @@ export const requisitionApi = {
   workDone: (id: number, photoFileId: number, lat = "", lng = "") =>
     http.post<null>(`/requisitions/${id}/work-done`, { photo_file_id: photoFileId, lat, lng }),
   /** 下载完成工作照片（下载时动态添加地点/时间/定位水印，原图不保存水印）。 */
-  workPhotoUrl: (id: number) => `/api/v1/requisitions/${id}/work-photo`,
+  workPhotoUrl: (id: number) => `${apiBase()}/requisitions/${id}/work-photo`,
   /** 管理员编辑私用申请的对外显示信息（掩护值，固定展示给非管理员）。 */
   updateDisplay: (id: number, displayReason: string, displayLocation: string) =>
     http.put<null>(`/requisitions/${id}/display`, {
@@ -260,18 +260,28 @@ export const fileApi = {
   upload: async (file: File, bizType = "other"): Promise<{ file_id: number; url: string }> => {
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`/api/v1/files/upload?biz_type=${bizType}`, {
+    const res = await fetch(`${apiBase()}/files/upload?biz_type=${bizType}`, {
       method: "POST",
       credentials: "include",
       body: form,
     });
-    const json = await res.json();
-    if (json.code !== 0) throw new Error(json.message);
+    // 与统一客户端一致：非 JSON 响应（网关错误页）不抛 SyntaxError，转为可读错误
+    const text = await res.text();
+    let json: { code?: number; message?: string; data?: { file_id: number; url: string } };
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`上传失败（HTTP ${res.status}）`);
+    }
+    if (!res.ok || json.code !== 0) {
+      throw new Error(json.message || `上传失败（HTTP ${res.status}）`);
+    }
+    if (!json.data?.file_id) throw new Error("上传失败：服务端未返回文件信息");
     return json.data;
   },
   /** 真实照片水印预览（完成工作拍照提交前）：按当前系统模板/位置渲染，返回 blob URL。 */
   watermarkPreview: async (fileId: number, body: { location?: string; time?: string; lat?: string; lng?: string }) => {
-    const resp = await fetch(`/api/v1/files/${fileId}/watermark-preview`, {
+    const resp = await fetch(`${apiBase()}/files/${fileId}/watermark-preview`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

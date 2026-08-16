@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.cache import session_delete_all
 from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, invalidate_role_cache, require_permission
-from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, ok
+from app.core.response import BizError, E_BILL_STATUS, E_NO_PERMISSION, E_NOT_FOUND, E_PARAM, ok
 from app.core.security import hash_password
 from app.db import get_db
 from app.models.base import BaseDepartment
@@ -82,11 +82,21 @@ def list_users(
 
 
 @router.post("/users", dependencies=[Depends(require_permission("sys:user"))])
-def create_user(req: UserCreateReq, db: Session = Depends(get_db)) -> dict:
+def create_user(
+    req: UserCreateReq,
+    user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
     if db.scalar(select(SysUser.id).where(SysUser.username == req.username)):
         raise BizError(E_PARAM, "用户名已存在")
-    if db.get(SysRole, req.role_id) is None:
+    role = db.get(SysRole, req.role_id)
+    if role is None:
         raise BizError(E_PARAM, "角色不存在")
+    # 防提权：非超管不能创建超管账号
+    if role.code == SUPER_ADMIN_ROLE_CODE:
+        actor = db.get(SysRole, user.role_id)
+        if not (actor and actor.code == SUPER_ADMIN_ROLE_CODE):
+            raise BizError(E_NO_PERMISSION, "仅超级管理员可创建超级管理员账号", http_status=403)
     u = SysUser(
         username=req.username,
         password_hash=hash_password(req.password),
@@ -113,6 +123,12 @@ def update_user(
     if u is None:
         raise BizError(E_NOT_FOUND, "用户不存在")
     is_self = u.id == user.id
+    # 防提权：非超管不得管理超管账号（改角色/密码/状态/信息均禁止）
+    actor_role = db.get(SysRole, user.role_id)
+    actor_is_super = bool(actor_role and actor_role.code == SUPER_ADMIN_ROLE_CODE)
+    target_role = db.get(SysRole, u.role_id)
+    if target_role and target_role.code == SUPER_ADMIN_ROLE_CODE and not actor_is_super:
+        raise BizError(E_NO_PERMISSION, "仅超级管理员可管理超级管理员账号", http_status=403)
     # 防锁死：不能修改自己的角色/状态（可改自己的姓名电话密码）
     if is_self and (req.role_id is not None or req.status is not None):
         raise BizError(E_PARAM, "不能修改自己的角色或启用状态")
@@ -120,8 +136,12 @@ def update_user(
     if u.id == 1 and req.status == 0:
         raise BizError(E_PARAM, "内置超级管理员不可停用")
     if req.role_id is not None:
-        if db.get(SysRole, req.role_id) is None:
+        new_role = db.get(SysRole, req.role_id)
+        if new_role is None:
             raise BizError(E_PARAM, "角色不存在")
+        # 防提权：非超管不能授予超管角色
+        if new_role.code == SUPER_ADMIN_ROLE_CODE and not actor_is_super:
+            raise BizError(E_NO_PERMISSION, "仅超级管理员可授予超级管理员角色", http_status=403)
         u.role_id = req.role_id
     if req.status is not None:
         u.status = req.status

@@ -35,12 +35,27 @@ class RateLimiter:
         self.window_seconds = window_seconds
         self._hits: dict[str, deque[float]] = {}
         self._lock = threading.Lock()
+        self._last_cleanup = 0.0  # 全表清理时间戳（防空闲 IP 的 key 永久残留）
+
+    def _cleanup_locked(self, now: float) -> None:
+        """周期清理过期时间戳与空桶（每 5 分钟一次，保持 key 数量有界）。"""
+        if now - self._last_cleanup < 300:
+            return
+        self._last_cleanup = now
+        cutoff = now - self.window_seconds
+        for key in list(self._hits.keys()):
+            hits = self._hits[key]
+            while hits and hits[0] <= cutoff:
+                hits.popleft()
+            if not hits:
+                del self._hits[key]
 
     def allow(self, key: str) -> tuple[bool, int]:
         """登记一次访问。返回 (是否放行, 若被拒需等待秒数)。"""
         now = time.monotonic()
         cutoff = now - self.window_seconds
         with self._lock:
+            self._cleanup_locked(now)
             hits = self._hits.get(key)
             if hits is None:
                 self._hits[key] = deque([now])
@@ -56,10 +71,34 @@ class RateLimiter:
     def clear(self) -> None:
         with self._lock:
             self._hits.clear()
+            self._last_cleanup = time.monotonic()
 
 
 # 模块级共享实例：默认按 settings 构造；测试可整体替换
 limiter = RateLimiter(settings.rate_limit_requests, settings.rate_limit_window_seconds)
+
+
+def _client_ip(scope: dict[str, Any]) -> str:
+    """限流计数的客户端 IP。
+
+    - 直连：直接用 TCP 对端 IP（scope["client"]）。
+    - 反向代理：uvicorn --proxy-headers 已重写 scope["client"]；若运维漏配，
+      当对端是本机回环且带 X-Forwarded-For 时兜底取 XFF 第一个地址，
+      避免生产 Nginx 反代下所有请求都记到 127.0.0.1 一个桶里。
+    直连用户伪造 XFF 不影响计数（对端非回环时不采信代理头）。
+    """
+    client = scope.get("client")
+    ip = client[0] if client else "unknown"
+    if ip in ("127.0.0.1", "::1"):
+        xff = ""
+        for name, value in scope.get("headers") or []:
+            if name == b"x-forwarded-for":
+                xff = value.decode("latin-1")
+                break
+        first = xff.split(",")[0].strip() if xff else ""
+        if first:
+            return first
+    return ip
 
 
 class RateLimitMiddleware:
@@ -87,8 +126,7 @@ class RateLimitMiddleware:
         if path in EXEMPT_PATHS:
             await self.app(scope, receive, send)
             return
-        client = scope.get("client")
-        key = client[0] if client else "unknown"
+        key = _client_ip(scope)
         allowed, retry_after = limiter.allow(key)
         if not allowed:
             if self._should_log(key):

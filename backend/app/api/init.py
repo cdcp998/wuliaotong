@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 import re
@@ -21,12 +22,13 @@ from pathlib import Path
 from urllib.parse import quote
 
 from dotenv import set_key
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from redis import Redis
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import BASE_DIR, settings
+from app.core import cache as cache_mod
 from app.core.deps import SUPER_ADMIN_ROLE_CODE
 from app.core.response import BizError, E_FILE_FAILED, E_PARAM, ok
 from app.core.security import hash_password
@@ -269,6 +271,7 @@ def _apply_runtime_config(db_url: str, redis_url: str) -> None:
     reconfigure_db(db_url)
     settings.db_url = db_url
     settings.redis_url = redis_url
+    cache_mod.reset_client()  # 立即按新 Redis 配置重连；失败时按退避窗口自动重试（自治愈）
 
 
 def _set_config(db: Session, key: str, value: str) -> None:
@@ -300,13 +303,30 @@ def init_status(db: Session = Depends(get_db)) -> dict:
     )
 
 
+def _is_private_ip(ip: str) -> bool:
+    """判断来源 IP 是否为本机/私网地址；测试客户端（testclient）视为可信本地来源。"""
+    if ip in ("testclient", "unknown"):
+        return True
+    try:
+        return ipaddress.ip_address(ip).is_private or ipaddress.ip_address(ip).is_loopback
+    except ValueError:
+        return False
+
+
 @router.post("")
-def do_init(req: InitReq) -> dict:
+def do_init(req: InitReq, request: Request) -> dict:
     """执行初始化（公开，仅未初始化时可执行）：
     验证连接（缺失/空库自动建库导入）→ 目标库写系统信息 → 保存配置 → 热切换连接 → 写标记文件。
+
+    安全限制：默认仅允许本机/私网来源执行安装（INIT_ALLOW_PUBLIC=true 才允许公网），
+    避免首次启动期间安装接口暴露公网时被抢先接管系统。
     """
     if is_initialized():
         raise BizError(E_PARAM, "系统已完成初始化，不能重复执行")
+    client_ip = request.client.host if request.client else "unknown"
+    if not settings.init_allow_public and not _is_private_ip(client_ip):
+        logger.warning("拒绝非私网来源执行初始化：ip=%s", client_ip)
+        raise BizError(E_PARAM, "仅允许内网访问执行初始化安装，请通过内网/本机访问")
 
     # 连接验证：数据库必须可用（阻止安装）；Redis 失败仅提示（缓存层优雅降级）
     db_err = _test_db_conn(req.db_host, req.db_port, req.db_user, req.db_password, req.db_name)
@@ -325,6 +345,12 @@ def do_init(req: InitReq) -> dict:
             admin = tdb.scalar(
                 select(SysUser).where(SysUser.role_id == role.id).order_by(SysUser.id).limit(1)
             )
+            # 防重置攻击：标记文件被误删后，任何人调用 /init 都会重写超管密码并接管系统。
+            # 目标库存在 system.init_ts（首次初始化写入的时间戳，存量库由 upgrade_indexes.sql 补写）
+            # 即视为已投入使用，拒绝重复初始化；重装需管理员手动清理该配置行（本地操作）。
+            init_ts = tdb.scalar(select(SysConfig).where(SysConfig.config_key == "system.init_ts"))
+            if init_ts is not None:
+                raise BizError(E_PARAM, "目标库已完成初始化，禁止重复执行（如需重置密码请使用忘记密码或联系管理员）")
             # 改名冲突校验：目标账号已被其他用户占用（含大小写不敏感的唯一约束由 DB 兜底）
             conflict = tdb.scalar(
                 select(SysUser).where(
@@ -351,6 +377,7 @@ def do_init(req: InitReq) -> dict:
                     )
                 )
             _set_config(tdb, "site.name", req.site_name)
+            _set_config(tdb, "system.init_ts", datetime.now().isoformat())
             if req.contact_phone:
                 _set_config(tdb, "site.contact_phone", req.contact_phone)
             tdb.commit()

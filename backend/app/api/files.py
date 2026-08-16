@@ -1,6 +1,7 @@
 """文件上传/读取（《后端API设计.md》§7）：多存储地址策略落盘 + Pillow 压缩 + 水印预览。"""
 from __future__ import annotations
 
+import re
 from io import BytesIO
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
-from app.core.response import BizError, E_FILE_FAILED, E_NO_PERMISSION, E_NOT_FOUND, ok
+from app.core.response import BizError, E_FILE_FAILED, E_NO_PERMISSION, E_NOT_FOUND, E_PARAM, ok
 from app.db import get_db
 from app.models.sys import SysConfig, SysFile, SysRole, SysStorage, SysUser
 from app.schemas.watermark import FileWatermarkReq
@@ -38,6 +39,9 @@ async def upload_file(
     user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    # biz_type 会被拼进存储相对路径：白名单字符防路径穿越（../ 逃逸存储根目录）
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,30}", biz_type):
+        raise BizError(E_PARAM, "biz_type 仅允许字母、数字、下划线与连字符")
     if file.content_type not in ALLOWED_TYPES:
         raise BizError(E_FILE_FAILED, "仅支持图片文件（jpg/png/webp/bmp/gif）")
     data = await file.read()
@@ -72,10 +76,18 @@ _MEDIA_BY_EXT = {
 
 
 @router.get("/files/{file_id}")
-def get_file(file_id: int, db: Session = Depends(get_db)) -> FileResponse:
+def get_file(
+    file_id: int,
+    user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FileResponse:
     f = db.get(SysFile, file_id)
     if f is None:
         raise BizError(E_NOT_FOUND, "文件不存在")
+    # 归属校验（防 IDOR 枚举下载他人文件）：上传者本人或超管/管理者/仓管员可访问
+    role = db.get(SysRole, user.role_id)
+    if f.uploader_id != user.id and not (role and role.code in ("super_admin", "manager", "storekeeper")):
+        raise BizError(E_NO_PERMISSION, "无权访问该文件", http_status=403)
     storage = db.get(SysStorage, f.storage_id)
     path = resolve_storage_path(storage) / f.file_path
     if not path.is_file():

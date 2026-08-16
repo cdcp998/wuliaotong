@@ -10,6 +10,7 @@ import json
 import logging
 import re
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -26,6 +27,7 @@ from app.core.response import (
     E_BILL_STATUS,
     E_LLM_FAILED,
     E_NOT_FOUND,
+    E_NO_PERMISSION,
     E_OCR_UNAVAILABLE,
     E_PARAM,
     ok,
@@ -33,7 +35,7 @@ from app.core.response import (
 from app.db import SessionLocal, get_db
 from app.models.base import BaseCategory, BaseProduct, BaseSupplier, BaseUnit
 from app.models.ocr import AiSuggestion, OcrRecord
-from app.models.sys import SysFile, SysStorage, SysUser
+from app.models.sys import SysFile, SysRole, SysStorage, SysUser
 from app.schemas.ocr import ClassifyReq, DeliveryConfirmReq
 from app.services.llm import LLMNotConfigured, get_llm
 from app.services.ocr.barcode import try_decode_barcode
@@ -51,12 +53,30 @@ router = APIRouter(tags=["OCR/大模型"], dependencies=[Depends(get_current_use
 _tasks: dict[str, dict] = {}
 _task_lock = threading.Lock()
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ocr")
+_TASK_TTL_SECONDS = 3600  # 任务结果保留 1 小时，之后惰性清理（防任务表无界增长）
+_MAX_TASKS = 500  # 任务表容量上限（防止恶意刷识别任务导致内存耗尽）
 
 
-def _read_file_bytes(db: Session, file_id: int) -> bytes:
+def _cleanup_tasks_locked(now: float) -> None:
+    """清理过期任务；超容量时淘汰最旧任务。必须在 _task_lock 内调用。"""
+    for task_id in list(_tasks.keys()):
+        created = _tasks[task_id].get("created_at", 0.0)
+        if now - created > _TASK_TTL_SECONDS:
+            del _tasks[task_id]
+    if len(_tasks) > _MAX_TASKS:
+        for task_id in sorted(_tasks, key=lambda k: _tasks[k].get("created_at", 0.0))[:_MAX_TASKS // 5]:
+            del _tasks[task_id]
+
+
+def _read_file_bytes(db: Session, file_id: int, user: SysUser) -> bytes:
+    """按 file_id 读取上传文件；校验归属防止 IDOR（普通用户只能读取自己上传的文件，
+    超管/管理者/仓管员与 /files/{id} 下载接口的访问语义保持一致）。"""
     f = db.get(SysFile, file_id)
     if f is None:
         raise BizError(E_NOT_FOUND, "文件不存在")
+    role = db.get(SysRole, user.role_id)
+    if f.uploader_id != user.id and not (role and role.code in ("super_admin", "manager", "storekeeper")):
+        raise BizError(E_NO_PERMISSION, "无权访问该文件", http_status=403)
     storage = db.get(SysStorage, f.storage_id)
     path = resolve_storage_path(storage) / f.file_path
     if not path.is_file():
@@ -330,10 +350,11 @@ def ocr_recognize(
     # 四级回退链在后台任务 _run 内按 mode 执行（见《后端API设计.md》§7 /ocr/recognize）
     if mode not in ("auto", "template", "llm"):
         raise BizError(E_PARAM, "mode 必须为 auto/template/llm")
-    data = _read_file_bytes(db, file_id)
+    data = _read_file_bytes(db, file_id, user)
     task_id = uuid.uuid4().hex
     with _task_lock:
-        _tasks[task_id] = {"status": "running", "record_id": 0, "structured": None, "error": ""}
+        _cleanup_tasks_locked(time.monotonic())
+        _tasks[task_id] = {"status": "running", "record_id": 0, "structured": None, "error": "", "created_at": time.monotonic()}
 
     def _run() -> None:
         try:
@@ -387,17 +408,20 @@ def ocr_recognize(
                 s_eng.close()
             record_id = _save_record(file_id, ocr_type, texts, structured, user.id)
             with _task_lock:
+                _cleanup_tasks_locked(time.monotonic())
                 _tasks[task_id] = {
                     "status": "done",
                     "record_id": record_id,
                     "structured": structured or {"lines": texts},
                     "error": "",
+                    "created_at": time.monotonic(),
                 }
             logger.info("OCR 任务完成 task=%s type=%s record_id=%s items=%s lines=%s", task_id, ocr_type, record_id, len((structured or {}).get("items") or []), len(texts))
         except Exception as e:
             logger.error("OCR 任务失败 task=%s type=%s: %s", task_id, ocr_type, e, exc_info=True)
             with _task_lock:
-                _tasks[task_id] = {"status": "failed", "record_id": 0, "structured": None, "error": str(e)}
+                _cleanup_tasks_locked(time.monotonic())
+                _tasks[task_id] = {"status": "failed", "record_id": 0, "structured": None, "error": str(e), "created_at": time.monotonic()}
 
     logger.info("OCR 任务开始 task=%s file_id=%s type=%s mode=%s user=%s", task_id, file_id, ocr_type, mode, user.username)
     _executor.submit(_run)
@@ -407,6 +431,7 @@ def ocr_recognize(
 @router.get("/ocr/tasks/{task_id}")
 def ocr_task_status(task_id: str, db: Session = Depends(get_db)) -> dict:
     with _task_lock:
+        _cleanup_tasks_locked(time.monotonic())
         task = _tasks.get(task_id)
         if task is None:
             raise BizError(E_NOT_FOUND, "任务不存在")
@@ -460,7 +485,7 @@ def ocr_quick(
        仍无匹配则 DeepSeek 从文本行分析物品名称再匹配；
     ⑤ 全部不可用 → 统一 5001 提示。
     """
-    data = _read_file_bytes(db, file_id)
+    data = _read_file_bytes(db, file_id, user)
     prod: dict | None = None
     texts: list[str] = []
 
@@ -539,12 +564,13 @@ def ocr_quick(
 @router.post("/barcode/decode", dependencies=[Depends(require_permission("ocr:use"))])
 def barcode_decode(
     file_id: int = Query(..., description="已上传图片文件 id"),
+    user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
     """解码图片中的条形码/二维码（zxing-cpp），返回条码值供材料查询。"""
     from app.services.ocr.barcode import decode_barcode
 
-    data = _read_file_bytes(db, file_id)
+    data = _read_file_bytes(db, file_id, user)
     value = decode_barcode(data)
     return ok({"barcode": value})
 
@@ -597,6 +623,8 @@ def _maybe_learn_template(db: Session, product_id: int, anchor: str, spec: str =
     key = anchor.replace(" ", "").replace("\u3000", "")
     if len(key) < 4:
         return
+    if len(_tpl_learn) >= 2000:
+        _tpl_learn.clear()  # 总量有界：超过 2000 个商品时整体重置，模板已落库不受影响
     hits = _tpl_learn.setdefault(product_id, [])
     hits.append(key)
     if len(hits) > 3:
@@ -626,12 +654,16 @@ def _maybe_learn_template(db: Session, product_id: int, anchor: str, spec: str =
 
 
 @router.post("/ocr/template/train", dependencies=[Depends(require_permission("ocr:manage"))])
-def train_product_template(file_id: int = Query(...), db: Session = Depends(get_db)) -> dict:
+def train_product_template(
+    file_id: int = Query(...),
+    user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
     """用视觉大模型识别样本图生成本地 OCR 识别模板（锚点=品牌/规格/商品名）。
 
     之后同类图片走本地 OCR 时按模板秒级结构化匹配，无需再调大模型；锚点完全相同则覆盖旧模板。
     """
-    data = _read_file_bytes(db, file_id)
+    data = _read_file_bytes(db, file_id, user)
     prod = _vision_product(db, data)
     if not prod or not (prod.get("product_name") or prod.get("spec")):
         raise BizError(E_LLM_FAILED, "训练失败：视觉模型未能识别出商品名称/规格，请换一张更清晰的图片")
@@ -870,7 +902,7 @@ def ocr_match(
         db.refresh(suggestion)
         return ok({"suggestion_id": suggestion.id, "product_name": name, "detail": suggestion.suggestion})
     # 2) 视觉模型分析链：豆包 → SiliconFlow（豆包关闭/未配置时用 SiliconFlow 视觉模型）
-    file_bytes = _read_file_bytes(db, record.file_id)
+    file_bytes = _read_file_bytes(db, record.file_id, user)
     llm = None
     for llm_name in ("doubao", "siliconflow"):
         try:

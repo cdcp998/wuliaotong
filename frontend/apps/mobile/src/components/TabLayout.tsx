@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { TabBar } from "antd-mobile";
 
@@ -62,18 +62,30 @@ export function TabLayout() {
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
   const hasPerm = useAuthStore((s) => s.hasPerm);
+  const [unread, setUnread] = useState(0);
 
   const activeKey = (() => {
     const hit = TABS.find((t) => (t.path !== "/" ? location.pathname.startsWith(t.path) : location.pathname === t.path));
     return hit?.key ?? "home";
   })();
 
-  // 未读角标轮询（30s，前端设计 §6）
+  // 未读角标：进入即拉取 + 30s 轮询（前端设计 §6）
   useEffect(() => {
-    const timer = setInterval(() => {
-      notificationApi.unreadCount().catch(() => undefined);
-    }, 30000);
-    return () => clearInterval(timer);
+    let alive = true;
+    const refresh = () => {
+      notificationApi
+        .unreadCount()
+        .then((d) => {
+          if (alive) setUnread(d.unread_count);
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    const timer = setInterval(refresh, 30000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
   }, []);
 
   // 使用者无领用权限时隐藏"领用"入口
@@ -93,7 +105,12 @@ export function TabLayout() {
         style={{ borderTop: "1px solid #f0f1f3", background: "#fff", paddingBottom: 4 }}
       >
         {visibleTabs.map((t) => (
-          <TabBar.Item key={t.key} icon={(active: boolean) => (active ? t.activeIcon : t.icon)} title={t.title} />
+          <TabBar.Item
+            key={t.key}
+            icon={(active: boolean) => (active ? t.activeIcon : t.icon)}
+            title={t.title}
+            badge={t.key === "notice" && unread > 0 ? (unread > 99 ? "99+" : String(unread)) : undefined}
+          />
         ))}
       </TabBar>
     </div>

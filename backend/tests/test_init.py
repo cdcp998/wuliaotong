@@ -74,6 +74,7 @@ def _save_state() -> dict:
             "admin_password_hash": admin.password_hash if admin else None,
             "site_name": _raw_config("site.name"),
             "contact_phone": _raw_config("site.contact_phone"),
+            "init_ts": _raw_config("system.init_ts"),
         }
 
 
@@ -91,6 +92,7 @@ def _restore_state(state: dict) -> None:
                 admin.password_hash = state["admin_password_hash"]
         _restore_one(s, "site.name", state["site_name"])
         _restore_one(s, "site.contact_phone", state["contact_phone"])
+        _restore_one(s, "system.init_ts", state["init_ts"])
         s.commit()
 
 

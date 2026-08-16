@@ -1,5 +1,5 @@
 /** 系统设置接口（OCR 引擎/大模型 API 后台管理）。 */
-import { http, type PageData } from "./client";
+import { apiBase, http, type PageData } from "./client";
 
 export interface Settings {
   "site.name": string;
@@ -8,7 +8,6 @@ export interface Settings {
   "ocr.model_version": string;
   "llm.doubao.enabled": string;
   "llm.deepseek.enabled": string;
-  "bill.rule": string;
   "llm.doubao.api_key": string;
   "llm.doubao.base_url": string;
   "llm.doubao.model": string;
@@ -100,7 +99,7 @@ export const systemApi = {
   installStatus: () => http.get<OcrInstallState>("/ocr/install-status"),
   /** 水印预览（示例底图，未保存也可预览）：返回 blob URL。 */
   previewWatermark: async (body: { template?: string; position?: string; bg_opaque?: boolean; location?: string; time?: string; gps?: string }) => {
-    const resp = await fetch("/api/v1/watermark/preview", {
+    const resp = await fetch(`${apiBase()}/watermark/preview`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

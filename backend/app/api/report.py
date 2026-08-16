@@ -16,11 +16,12 @@ from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, Side
 from openpyxl.worksheet.page import PageMargins
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.core.cache import cache_aside_json
 from app.core.deps import get_current_user, require_permission
+from app.core.excel_guard import safe_excel_value
 from app.core.response import BizError, E_PARAM, ok
 from app.db import get_db
 from app.models.advanced import StkCheck, StkTransfer
@@ -34,6 +35,8 @@ router = APIRouter(tags=["报表"], dependencies=[Depends(get_current_user)])
 _DEC2 = Decimal("0.01")
 _DEC3 = Decimal("0.001")
 _DEC0 = Decimal(0)
+_MAX_EXPORT_ROWS = 20000  # 流水/库存导出行数上限（防全表加载导致 OOM）
+_MAX_INVENTORY_AGG_ROWS = 50000  # 进销存汇总聚合行数上限
 
 
 def _fmt_qty(v: Decimal | int | str | None) -> str:
@@ -194,8 +197,18 @@ def _inventory_rows(db: Session, start: datetime, end: datetime, warehouse_id: i
         stmt = stmt.where(StkStockLog.product_id == product_id)
     rows = db.execute(stmt.group_by(StkStockLog.product_id, StkStockLog.location_id)).all()
 
-    # 结存金额 = 各库位结存 × 该库位当前成本价（移动加权），避免跨库位成本混淆
-    cost_map = {(s.product_id, s.location_id): Decimal(s.cost_price or 0) for s in db.scalars(select(StkStock)).all()}
+    # 结存金额 = 各库位结存 × 该库位当前成本价（移动加权），避免跨库位成本混淆。
+    # 只查结果集涉及的 (product_id, location_id)，不再整表加载 stk_stock。
+    pairs = sorted({(pid, loc_id) for pid, loc_id, *_ in rows})
+    if pairs:
+        cost_map = {
+            (s.product_id, s.location_id): Decimal(s.cost_price or 0)
+            for s in db.scalars(
+                select(StkStock).where(tuple_(StkStock.product_id, StkStock.location_id).in_(pairs))
+            ).all()
+        }
+    else:
+        cost_map = {}
     agg: dict[int, dict] = {}
     for pid, loc_id, opening, in_qty, out_qty, in_amt, out_amt in rows:
         opening = Decimal(opening or 0)
@@ -241,12 +254,19 @@ def inventory_summary(
 ) -> dict:
     s, e = _parse_range(start, end)
     rows = _inventory_rows(db, s, e, warehouse_id, product_id)
+    if len(rows) > _MAX_INVENTORY_AGG_ROWS:
+        raise BizError(E_PARAM, f"汇总结果超过 {_MAX_INVENTORY_AGG_ROWS} 行，请缩小查询范围或导出")
     total = len(rows)
     page_rows = rows[(page - 1) * page_size : page * page_size]
+    # 批量预取商品/单位，避免每行 2 次回表（N+1）
+    pids = [r["product_id"] for r in page_rows]
+    prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(pids))).all()} if pids else {}
+    uids = {p.unit_id for p in prod_map.values() if p.unit_id}
+    unit_map = {u.id: u for u in db.scalars(select(BaseUnit).where(BaseUnit.id.in_(uids))).all()} if uids else {}
     out = []
     for r in page_rows:
-        p = db.get(BaseProduct, r["product_id"])
-        unit = db.get(BaseUnit, p.unit_id) if p else None
+        p = prod_map.get(r["product_id"])
+        unit = unit_map.get(p.unit_id) if p and p.unit_id else None
         out.append(
             {
                 **r,
@@ -259,8 +279,17 @@ def inventory_summary(
     return ok(PageData(list=out, total=total, page=page, page_size=page_size).model_dump())
 
 
-def _stock_rows(db: Session, warehouse_id: int, sort: str) -> list[dict]:
-    """库存余额全量（供分页与导出复用）：qty/amount/turnover 排序，含 30 天出库与呆滞天数。"""
+def _stock_rows(
+    db: Session,
+    warehouse_id: int,
+    sort: str,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list[dict]:
+    """库存余额行：qty/amount/turnover 排序，含 30 天出库与呆滞天数。
+
+    limit/offset 在 SQL 层生效（分页不再全表加载）；缺省（导出）返回全量。
+    """
     out30 = (
         select(StkStockLog.product_id, func.sum(-StkStockLog.change_qty).label("out30"))
         .where(StkStockLog.change_qty < 0, StkStockLog.created_at >= datetime.now() - timedelta(days=30))
@@ -286,11 +315,19 @@ def _stock_rows(db: Session, warehouse_id: int, sort: str) -> list[dict]:
         stmt = stmt.order_by((StkStock.qty * StkStock.cost_price).desc())
     else:  # turnover：30 天出库多优先，久未变动靠前
         stmt = stmt.order_by(func.coalesce(out30.c.out30, 0).desc(), func.coalesce(last.c.last, _EPOCH).asc())
+    if limit is not None:
+        stmt = stmt.limit(limit).offset(offset)
     now = datetime.now()
+    rows_all = db.execute(stmt).all()
+    # 批量预取商品/仓库，避免每行 2 次回表（N+1）
+    pids = {stock.product_id for stock, _, _ in rows_all}
+    wids = {stock.warehouse_id for stock, _, _ in rows_all}
+    prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(pids))).all()} if pids else {}
+    wh_map = {w.id: w for w in db.scalars(select(BaseWarehouse).where(BaseWarehouse.id.in_(wids))).all()} if wids else {}
     out = []
-    for stock, out30_qty, last_moved in db.execute(stmt).all():
-        p = db.get(BaseProduct, stock.product_id)
-        wh = db.get(BaseWarehouse, stock.warehouse_id)
+    for stock, out30_qty, last_moved in rows_all:
+        p = prod_map.get(stock.product_id)
+        wh = wh_map.get(stock.warehouse_id)
         # 兼容驱动返回 str / datetime / None（coalesce 兜底 _EPOCH 可能改变列类型）
         if isinstance(last_moved, datetime):
             last_dt: datetime | None = last_moved
@@ -328,10 +365,12 @@ def stock_report(
     """库存余额/周转/呆滞。"""
     if sort not in ("qty", "amount", "turnover"):
         raise BizError(E_PARAM, "sort 仅支持 qty|amount|turnover")
-    rows = _stock_rows(db, warehouse_id, sort)
-    total = len(rows)
-    page_rows = rows[(page - 1) * page_size : page * page_size]
-    return ok(PageData(list=page_rows, total=total, page=page, page_size=page_size).model_dump())
+    total_stmt = select(func.count()).select_from(StkStock).where(StkStock.qty > 0)
+    if warehouse_id:
+        total_stmt = total_stmt.where(StkStock.warehouse_id == warehouse_id)
+    total = db.scalar(total_stmt) or 0
+    rows = _stock_rows(db, warehouse_id, sort, limit=page_size, offset=(page - 1) * page_size)
+    return ok(PageData(list=rows, total=total, page=page, page_size=page_size).model_dump())
 
 
 # ============================ Excel 导出（样式对齐 testdata/匹配导出表格/库存金额收发存（2026.06）.xlsx） ============================
@@ -378,7 +417,7 @@ def _export_xlsx(headers: list[str], data: list[list], filename: str, sheet: str
         row += 1
         ws.row_dimensions[row].height = 25.15
         for col, v in enumerate(r, 1):
-            c = ws.cell(row, col, v)
+            c = ws.cell(row, col, safe_excel_value(v))
             c.font, c.alignment, c.border = _FONT_DATA, _ALIGN_DATA, _BORDER_ALL
     buf = io.BytesIO()
     wb.save(buf)
@@ -386,7 +425,7 @@ def _export_xlsx(headers: list[str], data: list[list], filename: str, sheet: str
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{quote(filename)}"'},
     )
 
 
@@ -417,7 +456,7 @@ def _export_inventory_xlsx(rows: list[list], title: str, filename: str) -> Strea
     for i, r in enumerate(rows, start=3):
         ws.row_dimensions[i].height = 25.15
         for col, v in enumerate(r, 1):
-            c = ws.cell(i, col, v)
+            c = ws.cell(i, col, safe_excel_value(v))
             c.font, c.alignment, c.border = _FONT_DATA, _ALIGN_DATA, _BORDER_ALL
             if col == 21:
                 c.number_format = "0.00_ "
@@ -459,10 +498,20 @@ def export_report(
             wh = db.get(BaseWarehouse, warehouse_id)
             wh_name = wh.name if wh else ""
         data = []
-        for r in _inventory_rows(db, s, e, warehouse_id, product_id):
-            p = db.get(BaseProduct, r["product_id"])
-            unit = db.get(BaseUnit, p.unit_id) if p else None
-            cat = db.get(BaseCategory, p.category_id) if p and p.category_id else None
+        inv_rows = _inventory_rows(db, s, e, warehouse_id, product_id)
+        if len(inv_rows) > _MAX_INVENTORY_AGG_ROWS:
+            raise BizError(E_PARAM, f"导出汇总超过 {_MAX_INVENTORY_AGG_ROWS} 行，请缩小范围后分批导出")
+        # 批量预取商品/单位/分类，避免每行 3 次回表（N+1）
+        pids = [r["product_id"] for r in inv_rows]
+        prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(pids))).all()} if pids else {}
+        uids = {p.unit_id for p in prod_map.values() if p.unit_id}
+        unit_map = {u.id: u for u in db.scalars(select(BaseUnit).where(BaseUnit.id.in_(uids))).all()} if uids else {}
+        cids = {p.category_id for p in prod_map.values() if p.category_id}
+        cat_map = {c.id: c for c in db.scalars(select(BaseCategory).where(BaseCategory.id.in_(cids))).all()} if cids else {}
+        for r in inv_rows:
+            p = prod_map.get(r["product_id"])
+            unit = unit_map.get(p.unit_id) if p and p.unit_id else None
+            cat = cat_map.get(p.category_id) if p and p.category_id else None
             data.append(
                 [
                     ym,
@@ -491,12 +540,15 @@ def export_report(
     if type == "stock":
         if sort not in ("qty", "amount", "turnover"):
             raise BizError(E_PARAM, "sort 仅支持 qty|amount|turnover")
+        stock_rows = _stock_rows(db, warehouse_id, sort)
+        if len(stock_rows) > _MAX_EXPORT_ROWS:
+            raise BizError(E_PARAM, f"导出库存超过 {_MAX_EXPORT_ROWS} 行，请按仓库分批导出")
         data = [
             [
                 r["code"], r["name"], r["spec"], r["warehouse_name"], r["qty"],
                 r["cost_price"], r["amount"], r["out_qty_30d"], r["last_moved_at"], r["dormant_days"],
             ]
-            for r in _stock_rows(db, warehouse_id, sort)
+            for r in stock_rows
         ]
         return _export_xlsx(
             ["商品编码", "商品名称", "规格", "仓库", "数量", "成本价", "金额", "30天出库", "最近变动", "呆滞天数"],
@@ -513,15 +565,32 @@ def export_report(
         if change_type:
             stmt = stmt.where(StkStockLog.change_type == change_type)
         if start:
+            try:
+                date.fromisoformat(start)
+            except ValueError:
+                raise BizError(E_PARAM, "start 格式错误，应为 YYYY-MM-DD")
             stmt = stmt.where(StkStockLog.created_at >= f"{start} 00:00:00")
         if end:
+            try:
+                date.fromisoformat(end)
+            except ValueError:
+                raise BizError(E_PARAM, "end 格式错误，应为 YYYY-MM-DD")
             stmt = stmt.where(StkStockLog.created_at <= f"{end} 23:59:59")
-        rows = db.scalars(stmt.order_by(StkStockLog.id.desc())).all()
+        rows = db.scalars(stmt.order_by(StkStockLog.id.desc()).limit(_MAX_EXPORT_ROWS + 1)).all()
+        if len(rows) > _MAX_EXPORT_ROWS:
+            raise BizError(E_PARAM, f"导出流水超过 {_MAX_EXPORT_ROWS} 行，请缩小日期范围后分批导出")
+        # 批量预取商品/仓库/库位，避免每行 3 次回表（N+1）
+        pids = {log.product_id for log in rows}
+        wids = {log.warehouse_id for log in rows}
+        lids = {log.location_id for log in rows}
+        prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(pids))).all()} if pids else {}
+        wh_map = {w.id: w for w in db.scalars(select(BaseWarehouse).where(BaseWarehouse.id.in_(wids))).all()} if wids else {}
+        loc_map = {l.id: l for l in db.scalars(select(BaseLocation).where(BaseLocation.id.in_(lids))).all()} if lids else {}
         data = []
         for log in rows:
-            p = db.get(BaseProduct, log.product_id)
-            wh = db.get(BaseWarehouse, log.warehouse_id)
-            loc = db.get(BaseLocation, log.location_id)
+            p = prod_map.get(log.product_id)
+            wh = wh_map.get(log.warehouse_id)
+            loc = loc_map.get(log.location_id)
             data.append(
                 [
                     log.created_at.strftime("%Y-%m-%d %H:%M:%S"),

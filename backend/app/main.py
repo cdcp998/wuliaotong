@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 import time
 from contextlib import asynccontextmanager
 
@@ -35,7 +36,7 @@ from app.core.loop_guard import install_loop_guard, install_proactor_accept_patc
 from app.core.ratelimit import RateLimitMiddleware
 from app.core.response import BizError, E_PARAM, biz_error_handler, err
 from app.db import SessionLocal, engine
-from app.models.sys import SysConfig
+from app.models.sys import SysConfig, SysOperationLog
 from app.scheduler import start_scheduler, stop_scheduler
 
 logger = logging.getLogger("app.main")
@@ -81,8 +82,9 @@ app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
     lifespan=lifespan,
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json",
+    # 生产环境默认关闭 API 文档（DEBUG=true 时开放），避免暴露完整攻击面
+    docs_url="/api/docs" if settings.debug else None,
+    openapi_url="/api/openapi.json" if settings.debug else None,
 )
 
 app.add_exception_handler(BizError, biz_error_handler)
@@ -99,13 +101,18 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 
 
+_AUDIT_MAX_PENDING = 500  # 审计落库任务并发上限（防 executor 队列无界堆积）
+_audit_semaphore = threading.Semaphore(_AUDIT_MAX_PENDING)
+_audit_drop_logged_at = 0.0
+
+
 def _audit_log(db, request: Request, status_code: int, duration_ms: int) -> None:
     """写操作审计（sys_operation_log）。fire-and-forget，失败不影响主流程。"""
     try:
         user = resolve_session_user(db, request.cookies.get(settings.session_cookie_name))
         module = request.url.path.removeprefix(settings.api_prefix).split("/")[1] or "-"
         db.add(
-            __import__("app.models.sys", fromlist=["SysOperationLog"]).SysOperationLog(
+            SysOperationLog(
                 user_id=user.id if user else 0,
                 username=user.username if user else "",
                 module=module,
@@ -135,15 +142,28 @@ async def audit_middleware(request: Request, call_next):
     level = logging.INFO if response.status_code < 400 else logging.WARNING
     logger.log(level, "%s %s -> %s (%dms)", request.method, request.url.path, response.status_code, duration_ms)
     if request.method in ("POST", "PUT", "DELETE"):
-        # 独立会话异步落库，避免占用请求事务
-        def _run() -> None:
-            db = SessionLocal()
-            try:
-                _audit_log(db, request, response.status_code, duration_ms)
-            finally:
-                db.close()
+        # 独立会话异步落库，避免占用请求事务；用信号量给 executor 队列设上限，
+        # 积压超过上限时丢弃审计记录并节流告警（宁可丢审计，不可让审计拖垮主流程/内存）
+        if _audit_semaphore.acquire(blocking=False):
+            def _run() -> None:
+                db = SessionLocal()
+                try:
+                    _audit_log(db, request, response.status_code, duration_ms)
+                finally:
+                    db.close()
+                    _audit_semaphore.release()
 
-        asyncio.get_event_loop().run_in_executor(None, _run)
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:  # 非异步上下文（测试直接调用）兜底
+                loop = asyncio.get_event_loop()
+            loop.run_in_executor(None, _run)
+        else:
+            global _audit_drop_logged_at
+            now = time.monotonic()
+            if now - _audit_drop_logged_at >= 60:
+                _audit_drop_logged_at = now
+                logger.warning("审计日志队列已满（>%d），丢弃本次审计记录 %s %s", _AUDIT_MAX_PENDING, request.method, request.url.path)
     return response
 
 

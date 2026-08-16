@@ -158,7 +158,8 @@ CREATE TABLE sys_operation_log (
   updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_user_time (user_id, created_at),
-  KEY idx_module_time (module, created_at)
+  KEY idx_module_time (module, created_at),
+  KEY idx_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='操作日志';
 
 DROP TABLE IF EXISTS sys_notification;
@@ -203,7 +204,8 @@ CREATE TABLE sys_file (
   updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_biz (biz_type, biz_id),
-  KEY idx_storage (storage_id)
+  KEY idx_storage (storage_id),
+  KEY idx_md5 (md5)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件/照片（永久保存）';
 
 DROP TABLE IF EXISTS sys_storage;
@@ -275,6 +277,8 @@ CREATE TABLE base_product (
   PRIMARY KEY (id),
   UNIQUE KEY uk_code (code),
   KEY idx_barcode (barcode),
+  KEY idx_material_code (material_code),
+  KEY idx_sku (sku),
   KEY idx_name (name),
   KEY idx_category (category_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='商品';
@@ -394,6 +398,7 @@ CREATE TABLE base_shelf (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  UNIQUE KEY uk_wh_code (warehouse_id, code),
   KEY idx_warehouse (warehouse_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='货架';
 
@@ -451,7 +456,10 @@ CREATE TABLE stk_stock_log (
   updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_product_time (product_id, created_at),
+  KEY idx_wh_time (warehouse_id, created_at),
   KEY idx_bill (bill_no),
+  KEY idx_bill_item (bill_item_id),
+  KEY idx_change_type (change_type),
   KEY idx_time (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库存流水（唯一事实来源）';
 
@@ -480,7 +488,8 @@ CREATE TABLE stk_opening_item (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_bill (bill_id)
+  KEY idx_bill (bill_id),
+  KEY idx_product (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='期初明细';
 
 -- ============================ 5. 采购入库 ============================
@@ -503,6 +512,8 @@ CREATE TABLE pch_purchase_in (
   PRIMARY KEY (id),
   UNIQUE KEY uk_bill_no (bill_no),
   KEY idx_supplier (supplier_id),
+  KEY idx_warehouse (warehouse_id),
+  KEY idx_ocr (ocr_record_id),
   KEY idx_status_time (status, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采购入库单';
 
@@ -521,7 +532,8 @@ CREATE TABLE pch_purchase_in_item (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_bill (bill_id)
+  KEY idx_bill (bill_id),
+  KEY idx_product (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采购入库明细';
 
 -- ============================ 6. 领用出库 ============================
@@ -553,6 +565,8 @@ CREATE TABLE out_requisition (
   PRIMARY KEY (id),
   UNIQUE KEY uk_bill_no (bill_no),
   KEY idx_applicant (applicant_id),
+  KEY idx_warehouse (warehouse_id),
+  KEY idx_audit_by (audit_by),
   KEY idx_status_time (status, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='领用申请单';
 
@@ -568,7 +582,8 @@ CREATE TABLE out_requisition_item (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_requisition (requisition_id)
+  KEY idx_requisition (requisition_id),
+  KEY idx_product (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='领用明细';
 
 -- ============================ 7. 其他出入库 ============================
@@ -585,7 +600,9 @@ CREATE TABLE stk_other_io (
   created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_bill_no (bill_no)
+  UNIQUE KEY uk_bill_no (bill_no),
+  KEY idx_wh_type (warehouse_id, io_type),
+  KEY idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='其他出入库单';
 
 DROP TABLE IF EXISTS stk_other_io_item;
@@ -600,7 +617,8 @@ CREATE TABLE stk_other_io_item (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_bill (bill_id)
+  KEY idx_bill (bill_id),
+  KEY idx_product (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='其他出入库明细';
 
 -- ============================ 8. 调拨 ============================
@@ -618,7 +636,9 @@ CREATE TABLE stk_transfer (
   created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_bill_no (bill_no)
+  UNIQUE KEY uk_bill_no (bill_no),
+  KEY idx_from_wh (from_warehouse_id),
+  KEY idx_to_wh (to_warehouse_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='调拨单';
 
 DROP TABLE IF EXISTS stk_transfer_item;
@@ -632,7 +652,8 @@ CREATE TABLE stk_transfer_item (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_transfer (transfer_id)
+  KEY idx_transfer (transfer_id),
+  KEY idx_product (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='调拨明细';
 
 -- ============================ 9. 盘点 ============================
@@ -649,7 +670,8 @@ CREATE TABLE stk_check (
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_bill_no (bill_no)
+  UNIQUE KEY uk_bill_no (bill_no),
+  KEY idx_wh_status (warehouse_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='盘点单';
 
 DROP TABLE IF EXISTS stk_check_item;
@@ -665,7 +687,8 @@ CREATE TABLE stk_check_item (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_check (check_id)
+  KEY idx_check (check_id),
+  KEY idx_product (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='盘点明细';
 
 -- ============================ 10. OCR / 大模型 ============================
@@ -685,6 +708,7 @@ CREATE TABLE ocr_record (
   created_at        DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  KEY idx_file (file_id),
   KEY idx_time (created_at),
   KEY idx_match (match_status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='OCR 识别记录';
@@ -763,9 +787,11 @@ INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
   (4, 13), (4, 8);
 
--- 初始管理员（admin / admin123，首次登录后请立即修改）
+-- 初始管理员占位（不可登录）：密码哈希为无效值，必须通过「初始化安装向导」设置密码后方可登录。
+-- 若手工导入本脚本部署，请执行安装向导（删除 backend/data/.initialized 后访问系统入口），
+-- 或自行用 bcrypt 生成哈希后 UPDATE 本行密码（严禁使用固定默认口令）。
 INSERT INTO sys_user (id, username, password_hash, real_name, role_id, status) VALUES
-  (1, 'admin', '$2b$12$UABpNCWCLt2fMHlSG6wF4eYGVmnuJnD2zQB4TH.vci8PL9qLXnYoO', '超级管理员', 1, 1);
+  (1, 'admin', '!', '超级管理员', 1, 1);
 
 -- 系统配置
 INSERT INTO sys_config (config_key, config_value, remark) VALUES

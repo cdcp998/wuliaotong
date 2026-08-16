@@ -198,6 +198,7 @@ export function BarcodeScanner({
     })();
     return () => {
       cancelled = true;
+      finishedRef.current = true; // 卸载后禁止残留的异步 scanOnce 再调度下一帧
       if (noDetectTimerRef.current) {
         window.clearTimeout(noDetectTimerRef.current);
         noDetectTimerRef.current = 0;

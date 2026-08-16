@@ -27,6 +27,9 @@ class Settings:
     session_remember_hours: float = float(os.getenv("SESSION_REMEMBER_HOURS", "720"))
     cookie_secure: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
+    # 调试模式：开启时才暴露 /api/docs、/api/openapi.json（生产默认关闭，缩小攻击面）
+    debug: bool = os.getenv("DEBUG", "false").lower() == "true"
+
     # 接口限流（反刷屏/反垃圾）：每 IP 滑动窗口；超限返回 HTTP 429 + 错误码 4008（《后端API设计.md》§11.12）
     rate_limit_enabled: bool = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
     rate_limit_requests: int = int(os.getenv("RATE_LIMIT_REQUESTS", "300"))
@@ -34,6 +37,14 @@ class Settings:
 
     # Redis（缓存加速层；不可用时自动降级直查数据库，不阻塞业务）
     redis_url: str = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    # Redis 故障退避重试间隔（秒）：连接失败后先短路降级，到点自动重连（自治愈，无需重启进程）
+    redis_retry_seconds: float = float(os.getenv("REDIS_RETRY_SECONDS", "30"))
+
+    # 水印字体：自定义字体文件路径（可选）；不配置时按 Windows/Linux 常见中文字体探测
+    watermark_font_path: str = os.getenv("WATERMARK_FONT_PATH", "")
+
+    # 初始化安装接口：false=仅允许私网来源（127.0.0.1/内网）执行 POST /init，防止首启暴露公网被抢占
+    init_allow_public: bool = os.getenv("INIT_ALLOW_PUBLIC", "false").lower() == "true"
 
     # 跨域（前端 dev）
     cors_origins: list[str] = [

@@ -9,15 +9,30 @@ import os
 
 from PIL import Image, ImageDraw, ImageFont
 
+from app.config import settings
+
 WATERMARK_DEFAULT_TEMPLATE = "地点：{location}｜时间：{time}｜坐标：{gps}"
 WATERMARK_POSITIONS = ("bottom", "top", "bottom-left", "bottom-right", "top-left", "top-right")
 WATERMARK_DEFAULT_POSITION = "bottom"
 
 
 def load_font(size: int = 26):
-    for p in (r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\simhei.ttf", r"C:\Windows\Fonts\arial.ttf"):
-        if os.path.exists(p):
-            return ImageFont.truetype(p, size)
+    # 优先使用显式配置的字体文件；否则按 Windows/Linux 常见中文字体路径探测，最后回退默认字体
+    candidates = [settings.watermark_font_path] if settings.watermark_font_path else []
+    candidates += [
+        r"C:\Windows\Fonts\msyh.ttc",
+        r"C:\Windows\Fonts\simhei.ttf",
+        r"C:\Windows\Fonts\arial.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for p in candidates:
+        try:
+            if p and os.path.exists(p):
+                return ImageFont.truetype(p, size)
+        except OSError:
+            continue
     return ImageFont.load_default()
 
 

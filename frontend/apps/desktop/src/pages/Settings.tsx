@@ -57,7 +57,6 @@ const EMPTY: Settings = {
   "ocr.model_version": "PP-OCRv6",
   "llm.doubao.enabled": "1",
   "llm.deepseek.enabled": "1",
-  "bill.rule": "",
   "watermark.template": "",
   "watermark.position": "bottom",
   "watermark.bg_opaque": "1",
@@ -655,9 +654,6 @@ export function SettingsPage() {
         </Form.Item>
         <Form.Item name="session.expire_hours" label="会话有效期（小时）" extra="登录后无操作多久自动失效，1~720 小时">
           <InputNumber style={{ width: 200 }} min={1} max={720} />
-        </Form.Item>
-        <Form.Item name="bill.rule" label="单据编号规则" extra="格式：前缀列表，用 | 分隔">
-          <Input style={{ maxWidth: 560 }} placeholder="RK|LL|DB|PD|QT|QCK" />
         </Form.Item>
       </Section>
 

@@ -1,7 +1,7 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider, createBrowserRouter, Navigate } from "react-router";
-import { App as AntApp, ConfigProvider } from "antd";
+import { App as AntApp, ConfigProvider, Spin } from "antd";
 import zhCN from "antd/locale/zh_CN";
 
 // 移动端适配（响应式）样式：全部规则位于 @media 内，桌面宽度下不生效（《前端设计.md》§2.3）
@@ -9,41 +9,53 @@ import "./mobile.css";
 
 import { AppLayout } from "./components/AppLayout";
 import { RequireAuth } from "./components/RequireAuth";
-import { AiSuggestionsPage } from "./pages/AiSuggestions";
-import { AiLogsPage } from "./pages/AiLogs";
-import { BackupsPage } from "./pages/Backups";
-import { CheckDetailPage } from "./pages/CheckDetail";
-import { ChecksPage } from "./pages/Checks";
-import { DashboardPage } from "./pages/Dashboard";
-import { DeliveryOcrPage } from "./pages/DeliveryOcr";
-import { DepartmentsPage } from "./pages/Departments";
-import { HistoryPricePage } from "./pages/HistoryPrice";
-import { InitPage } from "./pages/Init";
-import { LandingPage } from "./pages/Landing";
-import { LogsPage } from "./pages/Logs";
-import { LoginPage } from "./pages/Login";
-import { CategoriesPage } from "./pages/Categories";
-import { MaterialsPage } from "./pages/Materials";
-import { OtherIoPage } from "./pages/OtherIo";
-import { PurchaseInPage } from "./pages/PurchaseIn";
-import { RegisterAppliesPage } from "./pages/RegisterApplies";
-import { ReportsPage } from "./pages/Reports";
-import { RequisitionApplyPage } from "./pages/RequisitionApply";
-import { RequisitionAuditPage } from "./pages/RequisitionAudit";
-import { RequisitionQueryPage } from "./pages/RequisitionQuery";
-import { RolesPage } from "./pages/Roles";
-import { SettingsPage } from "./pages/Settings";
-import { ShelfMapPage } from "./pages/ShelfMap";
-import { StockQueryPage } from "./pages/StockQuery";
-import { SuppliersPage } from "./pages/Suppliers";
-import { TransfersPage } from "./pages/Transfers";
-import { UnitsPage } from "./pages/Units";
-import { UsersPage } from "./pages/Users";
-import { WarehousesPage } from "./pages/Warehouses";
+// 页面全部按路由懒加载：首屏不再打包全部页面（此前单 chunk >1.6MB）
+const AiSuggestionsPage = lazy(() => import("./pages/AiSuggestions").then((m) => ({ default: m.AiSuggestionsPage })));
+const AiLogsPage = lazy(() => import("./pages/AiLogs").then((m) => ({ default: m.AiLogsPage })));
+const BackupsPage = lazy(() => import("./pages/Backups").then((m) => ({ default: m.BackupsPage })));
+const CheckDetailPage = lazy(() => import("./pages/CheckDetail").then((m) => ({ default: m.CheckDetailPage })));
+const ChecksPage = lazy(() => import("./pages/Checks").then((m) => ({ default: m.ChecksPage })));
+const DashboardPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.DashboardPage })));
+const DeliveryOcrPage = lazy(() => import("./pages/DeliveryOcr").then((m) => ({ default: m.DeliveryOcrPage })));
+const DepartmentsPage = lazy(() => import("./pages/Departments").then((m) => ({ default: m.DepartmentsPage })));
+const HistoryPricePage = lazy(() => import("./pages/HistoryPrice").then((m) => ({ default: m.HistoryPricePage })));
+const InitPage = lazy(() => import("./pages/Init").then((m) => ({ default: m.InitPage })));
+const LandingPage = lazy(() => import("./pages/Landing").then((m) => ({ default: m.LandingPage })));
+const LogsPage = lazy(() => import("./pages/Logs").then((m) => ({ default: m.LogsPage })));
+const LoginPage = lazy(() => import("./pages/Login").then((m) => ({ default: m.LoginPage })));
+const CategoriesPage = lazy(() => import("./pages/Categories").then((m) => ({ default: m.CategoriesPage })));
+const MaterialsPage = lazy(() => import("./pages/Materials").then((m) => ({ default: m.MaterialsPage })));
+const OtherIoPage = lazy(() => import("./pages/OtherIo").then((m) => ({ default: m.OtherIoPage })));
+const PurchaseInPage = lazy(() => import("./pages/PurchaseIn").then((m) => ({ default: m.PurchaseInPage })));
+const RegisterAppliesPage = lazy(() => import("./pages/RegisterApplies").then((m) => ({ default: m.RegisterAppliesPage })));
+const ReportsPage = lazy(() => import("./pages/Reports").then((m) => ({ default: m.ReportsPage })));
+const RequisitionApplyPage = lazy(() => import("./pages/RequisitionApply").then((m) => ({ default: m.RequisitionApplyPage })));
+const RequisitionAuditPage = lazy(() => import("./pages/RequisitionAudit").then((m) => ({ default: m.RequisitionAuditPage })));
+const RequisitionQueryPage = lazy(() => import("./pages/RequisitionQuery").then((m) => ({ default: m.RequisitionQueryPage })));
+const RolesPage = lazy(() => import("./pages/Roles").then((m) => ({ default: m.RolesPage })));
+const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
+const ShelfMapPage = lazy(() => import("./pages/ShelfMap").then((m) => ({ default: m.ShelfMapPage })));
+const StockQueryPage = lazy(() => import("./pages/StockQuery").then((m) => ({ default: m.StockQueryPage })));
+const SuppliersPage = lazy(() => import("./pages/Suppliers").then((m) => ({ default: m.SuppliersPage })));
+const TransfersPage = lazy(() => import("./pages/Transfers").then((m) => ({ default: m.TransfersPage })));
+const UnitsPage = lazy(() => import("./pages/Units").then((m) => ({ default: m.UnitsPage })));
+const UsersPage = lazy(() => import("./pages/Users").then((m) => ({ default: m.UsersPage })));
+const WarehousesPage = lazy(() => import("./pages/Warehouses").then((m) => ({ default: m.WarehousesPage })));
+
+/** 路由懒加载的统一 Loading 占位。 */
+function PageLoading() {
+  return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}><Spin size="large" /></div>;
+}
 
 /** 受保护页面统一套上应用骨架（侧边导航 + 顶栏）。 */
 function withLayout(page: React.ReactNode) {
-  return <RequireAuth><AppLayout>{page}</AppLayout></RequireAuth>;
+  return (
+    <RequireAuth>
+      <AppLayout>
+        <Suspense fallback={<PageLoading />}>{page}</Suspense>
+      </AppLayout>
+    </RequireAuth>
+  );
 }
 
 const router = createBrowserRouter(

@@ -43,7 +43,6 @@ SETTINGS_KEYS: dict[str, str] = {
     "ocr.model_version": "str",  # PP-OCRv4 / PP-OCRv5 / PP-OCRv6（paddle 引擎模型版本）
     "llm.doubao.enabled": "str",  # 1 启用 / 0 关闭（关闭后拍照识别未匹配不再调用豆包分析并提示）
     "llm.deepseek.enabled": "str",  # 1 启用 / 0 关闭（关闭后送货单结构化仅用本地模板并提示）
-    "bill.rule": "str",
     "llm.doubao.api_key": "secret",
     "llm.doubao.base_url": "str",
     "llm.doubao.model": "str",
@@ -141,9 +140,18 @@ def get_settings(db: Session = Depends(get_db)) -> dict:
 @router.put("/settings", dependencies=[Depends(require_permission("sys:config"))])
 def update_settings(body: dict[str, str], db: Session = Depends(get_db)) -> dict:
     """部分更新系统设置；密钥字段传空或掩码（****）表示不修改。"""
+    session_cfg_changed = False
     for key, value in body.items():
         if key not in SETTINGS_KEYS:
             raise BizError(E_PARAM, f"未知配置项: {key}")
+        if key == "session.expire_hours":
+            try:
+                hours = float(str(value))
+            except ValueError as e:
+                raise BizError(E_PARAM, "会话有效期必须是数字（小时）") from e
+            if not 1 <= hours <= 720:
+                raise BizError(E_PARAM, "会话有效期必须在 1~720 小时之间")
+            session_cfg_changed = True
         if key == "log.level":
             # 运行时日志级别：校验并立即生效（无需重启）
             from app.core.logging_config import set_log_level
@@ -161,6 +169,11 @@ def update_settings(body: dict[str, str], db: Session = Depends(get_db)) -> dict
         else:
             cfg.config_value = str(value)
     db.commit()
+    if session_cfg_changed:
+        # 立即对后续登录/会话续期生效（进程内 60s 缓存失效）
+        from app.core.deps import invalidate_session_cfg_cache
+
+        invalidate_session_cfg_cache()
     logger.info("系统设置已更新：%s", ", ".join(body.keys()))
     return ok()
 
@@ -184,7 +197,8 @@ def _fetch_models(base_url: str, api_key: str) -> list[dict]:
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:  # 网络/鉴权失败等
-        raise BizError(E_LLM_FAILED, f"获取模型列表失败：{e}")
+        logger.warning("获取模型列表失败：%s", e)
+        raise BizError(E_LLM_FAILED, "获取模型列表失败，请检查网络与 API Key（详情见系统日志）") from e
     return [
         {"id": m.get("id", ""), "owned_by": m.get("owned_by", "")}
         for m in data.get("data", [])

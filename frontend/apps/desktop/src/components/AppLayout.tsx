@@ -88,6 +88,7 @@ export const MENU: MenuNode[] = [
     icon: <DatabaseOutlined />,
     children: [
       { key: "/stock", label: "库存查询", icon: <DatabaseOutlined />, perm: "stk:query" },
+      { key: "/history-price", label: "历史价格管理", icon: <DatabaseOutlined />, perm: "stk:query" },
       { key: "/transfers", label: "库存调拨", icon: <SwapOutlined />, perm: "stk:transfer" },
       { key: "/history-price", label: "历史价格管理", icon: <DatabaseOutlined />, perm: "stk:query" },
       { key: "/other-io", label: "其他出入库", icon: <ExportOutlined />, perm: "stk:other" },

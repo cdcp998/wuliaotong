@@ -139,9 +139,10 @@ def test_forgot_email_requires_smtp() -> None:
     _set_cfg("auth.forgot_method", "email")
     _set_cfg("smtp.host", "")  # 未配置 SMTP
     c = TestClient(app)
-    # 邮箱不匹配
+    # 邮箱不匹配：防枚举，返回与账号不存在同构的成功响应（不发送验证码）
     r = c.post("/api/v1/auth/forgot", json={"username": uname, "email": "x@y.z"})
-    assert r.json()["code"] == 4006
+    assert r.json()["code"] == 0, r.text
+    assert r.json()["data"]["method"] == "email"
     # 邮箱匹配但 SMTP 未配置
     r = c.post("/api/v1/auth/forgot", json={"username": uname, "email": f"{uname}@test.local"})
     assert r.json()["code"] == 4006

@@ -1,5 +1,5 @@
 /** 系统管理接口（P7）：用户/角色/权限/操作日志/备份。 */
-import { http, type PageData } from "./client";
+import { apiBase, http, type PageData } from "./client";
 
 export interface SysUser {
   id: number;
@@ -111,7 +111,7 @@ export const adminApi = {
   backups: (page = 1, pageSize = 20) => http.get<PageData<BackupRecord>>(`/backups?page=${page}&page_size=${pageSize}`),
   createBackup: () => http.post<{ id: number; file_path: string; file_size: number }>("/backups"),
   deleteBackup: (id: number) => http.delete<null>(`/backups/${id}`),
-  backupDownloadUrl: (id: number) => `/api/v1/backups/${id}/download`,
+  backupDownloadUrl: (id: number) => `${apiBase()}/backups/${id}/download`,
 
   registerApplies: (status?: number, page = 1, pageSize = 20) =>
     http.get<PageData<RegisterApply>>(

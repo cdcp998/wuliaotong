@@ -117,7 +117,8 @@ class _OpenAICompatClient:
         except Exception as e:  # 网络/鉴权/限流等
             _log_llm_call(scene, self.name, prompt_text, "", "error", str(e), (time.time() - start) * 1000, user_id)
             logger.error("大模型调用失败 name=%s model=%s 耗时=%.1fs: %s", self.name, self.model, time.time() - start, e)
-            raise BizError(E_LLM_FAILED, f"大模型调用失败：{e}")
+            # 完整错误只进日志/调用记录，客户端仅返回可读摘要（避免暴露服务商接口细节）
+            raise BizError(E_LLM_FAILED, "大模型调用失败，请稍后重试（详情见系统日志/AI 调用日志）") from e
 
     def chat_text(self, system: str, user: str, scene: str = "", user_id: int | None = None) -> str:
         return self._request([

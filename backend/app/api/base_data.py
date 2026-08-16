@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.cache import cache_aside, cache_delete, cache_delete_pattern
 from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_any_permission, require_permission
+from app.core.excel_guard import safe_excel_value
 from app.core.response import BizError, E_NOT_FOUND, E_PARAM, ok
 from app.db import get_db
 from app.models.base import (
@@ -367,15 +368,22 @@ def supplier_products(sup_id: int, db: Session = Depends(get_db)) -> dict:
 
 SUPPLIER_IMPORT_COLUMNS = ["编码", "名称", "联系人", "电话", "地址"]
 
+_MAX_IMPORT_BYTES = 10 * 1024 * 1024  # 导入文件大小上限 10MB（防内存耗尽）
+_MAX_IMPORT_ROWS = 5000  # 单次导入行数上限
+
 
 @router.post("/suppliers/import", dependencies=[Depends(require_permission("base:supplier"))])
 async def import_suppliers(file: UploadFile = File(...), db: Session = Depends(get_db)) -> dict:
     data = await file.read()
+    if len(data) > _MAX_IMPORT_BYTES:
+        raise BizError(E_PARAM, "导入文件不能超过 10MB")
     wb = load_workbook(io.BytesIO(data), read_only=True)
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         raise BizError(E_PARAM, "文件为空")
+    if len(rows) > _MAX_IMPORT_ROWS:
+        raise BizError(E_PARAM, f"单次导入不能超过 {_MAX_IMPORT_ROWS} 行")
     headers = [str(h).strip() if h else "" for h in rows[0]]
     if headers[:5] != SUPPLIER_IMPORT_COLUMNS:
         raise BizError(E_PARAM, f"表头必须为：{'/'.join(SUPPLIER_IMPORT_COLUMNS)}")
@@ -670,11 +678,15 @@ def product_import_template() -> StreamingResponse:
 @router.post("/products/import", dependencies=[Depends(require_permission("base:product"))])
 async def import_products(file: UploadFile = File(...), db: Session = Depends(get_db)) -> dict:
     data = await file.read()
+    if len(data) > _MAX_IMPORT_BYTES:
+        raise BizError(E_PARAM, "导入文件不能超过 10MB")
     wb = load_workbook(io.BytesIO(data), read_only=True)
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         raise BizError(E_PARAM, "文件为空")
+    if len(rows) > _MAX_IMPORT_ROWS:
+        raise BizError(E_PARAM, f"单次导入不能超过 {_MAX_IMPORT_ROWS} 行")
     headers = [str(h).strip() if h else "" for h in rows[0]]
     # 公司系统模板：按列名定位（序号|材料用途|材料大类|材料分类|物料编码|材料名称|型号规格|单位|数量|用途|用量(仅导入使用)|使用单位|备注）
     is_company = any("物料编码" in h for h in headers) and any("材料名称" in h for h in headers)
@@ -800,7 +812,7 @@ def export_products(db: Session = Depends(get_db)) -> StreamingResponse:
     ws.title = "商品"
     ws.append(PRODUCT_IMPORT_COLUMNS + ["状态"])
     for row in _product_export_rows(db):
-        ws.append(row)
+        ws.append([safe_excel_value(x) for x in row])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
