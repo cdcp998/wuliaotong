@@ -19,6 +19,9 @@ export interface Product {
   remark: string;
   supplier_ids: number[];
   supplier_names: string[];
+  created_at?: string;
+  /** 全仓库存合计（仅 /products?category_id= 查询返回；分类管理挂载材料表格的「数量」列） */
+  stock_qty?: string;
 }
 
 /** 新建/编辑材料入参（与后端 ProductReq 对应）。 */
@@ -44,6 +47,7 @@ export interface Warehouse {
   id: number;
   code: string;
   name: string;
+  address: string;
   status: number;
 }
 
@@ -53,6 +57,8 @@ export interface Location {
   shelf_id: number;
   layer_no: number;
   code: string;
+  /** 友好库位名：仓库名-货架编码-层号（如「一号仓-A01-01」；界面显示用，避免 WH 编码混淆）。 */
+  display?: string;
 }
 
 export interface Unit {
@@ -67,6 +73,8 @@ export interface CategoryNode {
   name: string;
   sort?: number;
   children?: CategoryNode[];
+  /** 已挂启用材料数（/categories 实时统计；材料只挂二级分类，顶级分类该值为 0）。 */
+  product_count?: number;
 }
 
 export interface Shelf {
@@ -77,17 +85,20 @@ export interface Shelf {
 }
 
 export const baseApi = {
-  products: (keyword = "", page = 1, extra?: { barcode?: string; status?: number; pageSize?: number; ai?: number }) => {
+  products: (keyword = "", page = 1, extra?: { barcode?: string; status?: number; pageSize?: number; ai?: number; categoryId?: number }) => {
     const p = new URLSearchParams({ keyword, page: String(page), page_size: String(extra?.pageSize ?? 20) });
     if (extra?.barcode) p.set("barcode", extra.barcode);
     if (extra?.status !== undefined) p.set("status", String(extra.status));
     if (extra?.ai !== undefined) p.set("ai", String(extra.ai));
+    if (extra?.categoryId) p.set("category_id", String(extra.categoryId));
     return http.get<PageData<Product>>(`/products?${p.toString()}`);
   },
   product: (id: number) => http.get<Product>(`/products/${id}`),
   createProduct: (body: ProductInput) => http.post<Product>("/products", body),
   updateProduct: (id: number, body: ProductInput) => http.put<null>(`/products/${id}`, body),
   deleteProduct: (id: number) => http.delete<null>(`/products/${id}`),
+  /** 单独更新材料分类（分类管理页「取消挂载/改挂」）：categoryId=0 取消挂载。 */
+  updateProductCategory: (id: number, categoryId: number) => http.put<null>(`/products/${id}/category`, { category_id: categoryId }),
   warehouses: () => http.get<Warehouse[]>("/warehouses"),
   createWarehouse: (body: { code: string; name: string; address?: string; remark?: string }) =>
     http.post<{ id: number; code: string }>("/warehouses", body),
@@ -102,7 +113,7 @@ export const baseApi = {
   locations: (warehouseId: number) =>
     http.get<Location[]>(`/locations?warehouse_id=${warehouseId}`),
   createLocation: (body: { warehouse_id: number; shelf_id: number; layer_no: number; remark?: string }) =>
-    http.post<{ id: number; code: string }>("/locations", body),
+    http.post<Location>("/locations", body),
   deleteLocation: (id: number) => http.delete<null>(`/locations/${id}`),
   units: () => http.get<Unit[]>("/units"),
   createUnit: (body: { name: string; remark?: string }) => http.post<Unit>("/units", body),

@@ -71,8 +71,8 @@ export function ChecksPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Space style={{ marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>盘点</h2>
+      <h2 style={{ margin: "0 0 16px" }}>盘点</h2>
+      <Space style={{ marginBottom: 16 }} wrap>
         <Radio.Group value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} optionType="button" size="small">
           <Radio.Button value={undefined}>全部</Radio.Button>
           <Radio.Button value={0}>待盘点</Radio.Button>
@@ -85,7 +85,7 @@ export function ChecksPage() {
 
       <Modal title="新建盘点单" open={open} onOk={() => void create()} onCancel={() => setOpen(false)}>
         <Select style={{ width: "100%" }} placeholder="选择盘点仓库" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={whId} onChange={setWhId} />
-        <p style={{ color: "#999", fontSize: 12 }}>创建后自动带出该仓库全部库存物品（按物品汇总账面数量），逐项录入实盘数量。</p>
+        <p style={{ color: "#646a73", fontSize: 12 }}>创建后自动带出该仓库全部库存物品（按物品汇总账面数量），逐项录入实盘数量。</p>
       </Modal>
     </div>
   );

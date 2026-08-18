@@ -21,7 +21,7 @@ from app.core.cache import cache_aside_json
 from app.core.deps import get_current_user, require_any_permission, require_permission
 from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, ok
 from app.db import get_db
-from app.models.base import BaseCategory, BaseLocation, BaseProduct, BaseSupplier, BaseUnit, BaseWarehouse
+from app.models.base import BaseCategory, BaseLocation, BaseProduct, BaseShelf, BaseSupplier, BaseUnit, BaseWarehouse
 from app.models.stock import (
     PchPurchaseIn,
     PchPurchaseInItem,
@@ -82,8 +82,13 @@ def _user_name(db: Session, uid: int) -> str:
 
 
 def _loc_code(db: Session, loc_id: int) -> str:
+    """库位显示名：仓库名-货架编码-层号（界面不显示 WH 仓库编码，避免混淆）。"""
     loc = db.get(BaseLocation, loc_id)
-    return loc.code if loc else ""
+    if loc is None:
+        return ""
+    wh = db.get(BaseWarehouse, loc.warehouse_id)
+    shelf = db.get(BaseShelf, loc.shelf_id)
+    return f"{wh.name if wh else ''}-{shelf.code if shelf else ''}-{loc.layer_no:02d}"
 
 
 def _purchase_out(db: Session, bill: PchPurchaseIn) -> dict:
@@ -91,7 +96,7 @@ def _purchase_out(db: Session, bill: PchPurchaseIn) -> dict:
     wh = db.get(BaseWarehouse, bill.warehouse_id)
     sup = db.get(BaseSupplier, bill.supplier_id)
     return PurchaseInOut(
-        id=bill.id, bill_no=bill.bill_no, supplier_id=bill.supplier_id,
+        id=bill.id, bill_no=bill.bill_no, ocr_bill_no=bill.ocr_bill_no, supplier_id=bill.supplier_id,
         supplier_name=sup.name if sup else "",
         warehouse_id=bill.warehouse_id, warehouse_name=wh.name if wh else "",
         total_qty=bill.total_qty, total_amount=bill.total_amount, status=bill.status,
@@ -131,7 +136,7 @@ def create_purchase_in(
         bill = PchPurchaseIn(
             bill_no=bill_no, supplier_id=req.supplier_id, warehouse_id=req.warehouse_id,
             status=1, bill_date=req.bill_date or datetime.now(), operator_id=user.id,
-            ocr_record_id=req.ocr_record_id, remark=req.remark,
+            ocr_record_id=req.ocr_record_id, ocr_bill_no=req.ocr_bill_no.strip(), remark=req.remark,
         )
         db.add(bill)
         db.flush()
@@ -149,11 +154,14 @@ def create_purchase_in(
                     raise BizError(E_PARAM, "数量必须大于 0")
                 if price < 0:
                     raise BizError(E_PARAM, "进价不能为负数")
-                # 明细带分类（大模型识别/人工确认）：校验分类存在并更新材料分类
+                # 明细带分类（大模型识别/人工确认）：校验分类存在并更新材料分类；
+                # 规则（三级体系）：顶级分类仅作分组，材料挂二级/三级；历史值不变时放行
                 if item.category_id:
                     cat = db.get(BaseCategory, item.category_id)
                     if cat is None:
                         raise BizError(E_PARAM, f"分类 id={item.category_id} 不存在")
+                    if cat.parent_id == 0 and item.category_id != product.category_id:
+                        raise BizError(E_PARAM, "顶级分类仅作分组，材料请挂到其二级或三级子分类")
                     product.category_id = item.category_id
                 amount = (qty * price).quantize(_DEC2)
                 unit_name = item.unit_name or (db.get(BaseUnit, product.unit_id).name if product.unit_id else "")
@@ -181,7 +189,7 @@ def create_purchase_in(
             db.rollback()
             if not bill_no_conflict(exc):
                 # 非单号冲突（外键/其他唯一约束）：如实报错，不掩盖真实原因
-                raise BizError(E_PARAM, f"入库单保存失败：{exc.orig}") from exc
+                raise BizError(E_PARAM, "入库单保存失败，请重试（详情见系统日志）") from exc
             continue  # 单号冲突，换号重试
     raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
@@ -370,7 +378,7 @@ def create_opening(
         except IntegrityError as exc:
             db.rollback()
             if not bill_no_conflict(exc):
-                raise BizError(E_PARAM, f"期初单保存失败：{exc.orig}") from exc
+                raise BizError(E_PARAM, "期初单保存失败，请重试（详情见系统日志）") from exc
     raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
@@ -499,7 +507,7 @@ async def import_opening(
         except IntegrityError as exc:
             db.rollback()
             if not bill_no_conflict(exc):
-                raise BizError(E_PARAM, f"期初导入保存失败：{exc.orig}") from exc
+                raise BizError(E_PARAM, "期初导入保存失败，请重试（详情见系统日志）") from exc
     raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
@@ -549,7 +557,7 @@ def list_stock(
             product_id=s.product_id, product_name=p.name if p else "", code=p.code if p else "",
             material_code=p.material_code if p else "", barcode=p.barcode if p else "", spec=p.spec if p else "",
             warehouse_id=s.warehouse_id, warehouse_name=wh.name if wh else "",
-            location_id=s.location_id, location_code=loc.code if loc else "",
+            location_id=s.location_id, location_code=_loc_code(db, s.location_id),
             qty=s.qty, cost_price=s.cost_price, amount=(s.qty * s.cost_price).quantize(_DEC2),
         ).model_dump())
     return ok(PageData(list=out, total=total, page=page, page_size=page_size).model_dump())
@@ -594,11 +602,10 @@ def list_stock_flow(
     for log in rows:
         p = prod_map.get(log.product_id)
         wh = wh_map.get(log.warehouse_id)
-        loc = loc_map.get(log.location_id)
         op = user_map.get(log.operator_id)
         out.append(StockFlowRow(
             id=log.id, product_id=log.product_id, product_name=p.name if p else "", code=p.code if p else "",
-            warehouse_name=wh.name if wh else "", location_code=loc.code if loc else "",
+            warehouse_name=wh.name if wh else "", location_code=_loc_code(db, log.location_id),
             change_type=log.change_type, bill_no=log.bill_no,
             before_qty=log.before_qty, change_qty=log.change_qty, after_qty=log.after_qty,
             cost_price=log.cost_price, operator_name=op.real_name if op else "",
@@ -659,7 +666,7 @@ def location_summary(
         return [
             {
                 "location_id": loc.id,
-                "location_code": loc.code,
+                "location_code": _loc_code(db, loc.id),
                 "layer_no": loc.layer_no,
                 "items": by_loc.get(loc.id, []),
             }

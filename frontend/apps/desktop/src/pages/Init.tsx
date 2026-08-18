@@ -112,12 +112,13 @@ export function InitPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", background: "#fff" }}>
-      {/* 左侧品牌区（与登录页一致） */}
+    <div style={{ minHeight: "100dvh", display: "flex", background: "#fff" }}>
+      {/* 左侧品牌区（与登录页一致：深蓝纯色底，不用渐变） */}
       <div
+        className="wlt-brand"
         style={{
           flex: "1.15",
-          background: "linear-gradient(135deg,#0d2b52 0%,#1668dc 78%,#3c89f0 100%)",
+          background: "#0d2b52",
           color: "#fff",
           display: "flex",
           flexDirection: "column",
@@ -136,6 +137,17 @@ export function InitPage() {
             height: 420,
             borderRadius: "50%",
             border: "60px solid rgba(255,255,255,.06)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: -120,
+            left: -120,
+            width: 300,
+            height: 300,
+            borderRadius: "50%",
+            border: "44px solid rgba(255,255,255,.04)",
           }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 40 }}>
@@ -171,7 +183,7 @@ export function InitPage() {
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
         <div style={{ width: 440 }}>
           <h2 style={{ fontSize: 22, margin: 0 }}>初始化安装</h2>
-          <div style={{ fontSize: 13, color: "#86909c", margin: "6px 0 26px" }}>物料通管理系统 · 首次使用引导</div>
+          <div style={{ fontSize: 13, color: "#646a73", margin: "6px 0 26px" }}>物料通管理系统 · 首次使用引导</div>
           <Steps
             current={step}
             size="small"

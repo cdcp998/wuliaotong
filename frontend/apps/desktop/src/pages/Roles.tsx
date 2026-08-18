@@ -149,7 +149,7 @@ export function RolesPage() {
         >
           {perms.map((p) => (
             <Checkbox key={p.id} value={p.id}>
-              {p.name} <span style={{ color: "#999", fontSize: 12 }}>{p.code}</span>
+              {p.name} <span style={{ color: "#646a73", fontSize: 12 }}>{p.code}</span>
             </Checkbox>
           ))}
         </Checkbox.Group>

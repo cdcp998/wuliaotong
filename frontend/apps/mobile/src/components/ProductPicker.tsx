@@ -145,14 +145,14 @@ export function ProductPicker({
         </div>
         <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
           {!searched && !loading && (
-            <div style={{ color: "#999", textAlign: "center", paddingTop: 48, fontSize: 13, lineHeight: 1.8 }}>
+            <div style={{ color: "#646a73", textAlign: "center", paddingTop: 48, fontSize: 13, lineHeight: 1.8 }}>
               输入材料名称 / 编码 / 条码搜索，
               <br />
               或使用下方「拍照 / 相册 / 扫码」直接添加
             </div>
           )}
           {searched && (
-            <div style={{ fontSize: 12, color: "#86909c", padding: "6px 2px" }}>搜索结果（{list.length} 个），点击选中</div>
+            <div style={{ fontSize: 12, color: "#646a73", padding: "6px 2px" }}>搜索结果（{list.length} 个），点击选中</div>
           )}
           {list.map((p) => (
             <div
@@ -168,7 +168,7 @@ export function ProductPicker({
             >
               <div>
                 <div>{p.name}</div>
-                <div style={{ color: "#999", fontSize: 12 }}>
+                <div style={{ color: "#646a73", fontSize: 12 }}>
                   {p.code}
                   {p.spec ? ` / ${p.spec}` : ""}
                 </div>

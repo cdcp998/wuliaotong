@@ -42,7 +42,7 @@ export function OcrScanPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate("/")}>扫码</NavBar>
 
       {hit && (
@@ -50,7 +50,7 @@ export function OcrScanPage() {
           <List header="识别结果（已匹配材料）">
             <List.Item
               description={
-                <div style={{ fontSize: 11.5, color: "#86909c", marginTop: 2 }}>
+                <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 2 }}>
                   {hit.code}
                   {hit.spec ? ` / ${hit.spec}` : ""}
                   {hit.barcode ? ` / 条码 ${hit.barcode}` : ""}
@@ -78,7 +78,7 @@ export function OcrScanPage() {
       {!hit && missCode && (
         <div style={{ padding: 40, textAlign: "center" }}>
           <div style={{ fontSize: 14, color: "#4e5969" }}>未找到条码 {missCode} 对应的材料</div>
-          <p style={{ color: "#86909c", fontSize: 12, margin: "8px 0 20px" }}>
+          <p style={{ color: "#646a73", fontSize: 12, margin: "8px 0 20px" }}>
             可在「入库」页扫码后直接新增材料，或点击下方重新扫码
           </p>
           <Button block color="primary" onClick={rescan} style={{ height: 44 }}>
@@ -88,7 +88,7 @@ export function OcrScanPage() {
       )}
 
       {!hit && !missCode && (
-        <div style={{ padding: 40, textAlign: "center", color: "#86909c", fontSize: 13 }}>
+        <div style={{ padding: 40, textAlign: "center", color: "#646a73", fontSize: 13 }}>
           正在打开相机…
         </div>
       )}

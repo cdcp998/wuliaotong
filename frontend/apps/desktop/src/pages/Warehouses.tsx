@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { App, Button, Card, Empty, Form, Input, InputNumber, Modal, Popconfirm, Space, Spin, Tag, Typography } from "antd";
+import { App, Button, Card, Empty, Form, Input, InputNumber, Modal, Popconfirm, Space, Spin, Tag } from "antd";
 
 import { baseApi, type Location, type Shelf, type Warehouse } from "@wlt/shared";
 
@@ -60,7 +60,8 @@ export function WarehousesPage() {
         await baseApi.updateWarehouse(whModal.editing.id, { name: v.name, address: v.address ?? "", remark: v.remark ?? "" });
         message.success("仓库已保存");
       } else {
-        await baseApi.createWarehouse({ code: v.code || "WH" + Date.now(), name: v.name, address: v.address ?? "", remark: v.remark ?? "" });
+        // 仓库编码直接用仓库名称（界面不展示编码，避免 WH 编码混淆）；名称唯一由数据库约束
+        await baseApi.createWarehouse({ code: v.name.trim(), name: v.name, address: v.address ?? "", remark: v.remark ?? "" });
         message.success("仓库已创建");
       }
       setWhModal({ open: false, editing: null });
@@ -114,7 +115,7 @@ export function WarehousesPage() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>仓库与货架</Typography.Title>
+        <h2 style={{ margin: 0 }}>仓库与货架</h2>
         <Space>
           {selectedWh && (
             <Button onClick={() => navigate(`/warehouses/${selectedWh.id}/map`)}>查看 2D 货架图</Button>
@@ -132,7 +133,7 @@ export function WarehousesPage() {
 
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
         {/* 左：仓库列表 */}
-        <div style={{ flex: "0 0 240px", maxHeight: "calc(100vh - 180px)", overflow: "auto" }}>
+        <div style={{ flex: "0 0 240px", maxHeight: "calc(100dvh - 180px)", overflow: "auto" }}>
           <Spin spinning={whLoading}>
             {whs.map((w) => (
               <div
@@ -151,7 +152,7 @@ export function WarehousesPage() {
                   <b>{w.name}</b>
                   {w.status === 1 ? <Tag color="green" style={{ marginInlineEnd: 0 }}>启用</Tag> : <Tag style={{ marginInlineEnd: 0 }}>停用</Tag>}
                 </div>
-                <div style={{ fontSize: 12, color: "#86909c" }}>{w.code}</div>
+                <div style={{ fontSize: 12, color: "#646a73" }}>{w.address}</div>
               </div>
             ))}
             {!whs.length && !whLoading && <Empty description="暂无仓库" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
@@ -219,7 +220,7 @@ export function WarehousesPage() {
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                         {shelfLocs.map((l) => (
                           <span key={l.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: "#f0f1f3", borderRadius: 6, fontSize: 12 }}>
-                            {l.code}（{l.layer_no} 层）
+                            {l.display ?? l.code}（{l.layer_no} 层）
                             <a
                               style={{ color: "#cf1322", marginLeft: 2 }}
                               onClick={async () => {
@@ -290,7 +291,7 @@ export function WarehousesPage() {
 
       {/* 库位 Modal */}
       <Modal
-        title={`新建库位（${locModal.shelf?.code ?? ""}）`}
+        title={`新建库位（${locModal.shelf?.name || locModal.shelf?.code || ""}）`}
         open={locModal.open}
         onOk={() => void saveLocation()}
         onCancel={() => setLocModal({ open: false, shelf: null })}
@@ -300,7 +301,7 @@ export function WarehousesPage() {
       >
         <Form form={locForm} layout="vertical">
           <Form.Item name="layer_no" label="层数" rules={[{ required: true, message: "请输入层数" }]}>
-            <InputNumber min={1} style={{ width: 160 }} placeholder="如 1" />
+            <InputNumber min={1} max={99} style={{ width: 160 }} placeholder="如 1" />
           </Form.Item>
           <Form.Item name="remark" label="备注"><Input /></Form.Item>
         </Form>

@@ -200,9 +200,8 @@ export function DataTable<T extends object>(props: DataTableProps<T>) {
             </Button>
           ))}
         {enableSelect && selectedKeys.length > 0 && (
-          <span style={{ color: "#86909c", fontSize: 12 }}>已选 {selectedKeys.length} 行</span>
+          <span style={{ color: "#646a73", fontSize: 12 }}>已选 {selectedKeys.length} 行</span>
         )}
-        <span style={{ color: "#86909c", fontSize: 12 }}>表头右侧可拖拽调整列宽</span>
         <div style={{ flex: 1 }} />
         {columnSelector && selectorCols.length > 1 && (
           <Popover

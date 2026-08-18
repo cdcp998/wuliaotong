@@ -89,7 +89,7 @@ export function BackupsPage() {
         <h2 style={{ margin: 0 }}>备份管理</h2>
         <Button type="primary" loading={busy} onClick={() => void doBackup()}>立即备份</Button>
       </div>
-      <p style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>
+      <p style={{ color: "#646a73", fontSize: 12, marginBottom: 16 }}>
         每日 02:00 自动备份（保留最近 14 份，更早自动清理）；备份文件为 gzip 压缩的 mysqldump 导出。
       </p>
       <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }} rowSelection onBatchDelete={async (keys) => { for (const k of keys) await adminApi.deleteBackup(Number(k)); message.success(`已删除 ${keys.length} 个备份`); void load(); }} />

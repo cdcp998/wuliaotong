@@ -13,7 +13,7 @@ import { DataTable } from "../components/DataTable";
 export function ReportsPage() {
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: 0, marginBottom: 16 }}>报表中心</h2>
+      <h2 style={{ margin: "0 0 16px" }}>报表中心</h2>
       <Tabs
         items={[
           { key: "inventory", label: "进销存汇总", children: <InventorySummaryTab /> },
@@ -177,7 +177,7 @@ function FlowExportTab() {
   const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   return (
     <div>
-      <p style={{ color: "#999", fontSize: 12 }}>
+      <p style={{ color: "#646a73", fontSize: 12 }}>
         按条件导出库存流水明细（stk_stock_log）。条件可留空（全量导出，数据量大时建议限定日期）。
       </p>
       <Space wrap>

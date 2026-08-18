@@ -25,7 +25,7 @@ from app.core.excel_guard import safe_excel_value
 from app.core.response import BizError, E_PARAM, ok
 from app.db import get_db
 from app.models.advanced import StkCheck, StkTransfer
-from app.models.base import BaseCategory, BaseLocation, BaseProduct, BaseUnit, BaseWarehouse
+from app.models.base import BaseCategory, BaseLocation, BaseProduct, BaseShelf, BaseUnit, BaseWarehouse
 from app.models.requisition import REQ_STATUS_PENDING, OutRequisition
 from app.models.stock import StkStock, StkStockLog
 from app.schemas.stock import PageData
@@ -586,18 +586,21 @@ def export_report(
         prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(pids))).all()} if pids else {}
         wh_map = {w.id: w for w in db.scalars(select(BaseWarehouse).where(BaseWarehouse.id.in_(wids))).all()} if wids else {}
         loc_map = {l.id: l for l in db.scalars(select(BaseLocation).where(BaseLocation.id.in_(lids))).all()} if lids else {}
+        shelf_map = {s.id: s for s in db.scalars(select(BaseShelf).where(BaseShelf.id.in_({l.shelf_id for l in loc_map.values()}))).all()} if loc_map else {}
         data = []
         for log in rows:
             p = prod_map.get(log.product_id)
             wh = wh_map.get(log.warehouse_id)
             loc = loc_map.get(log.location_id)
+            # 库位显示名：仓库名-货架编码-层号（界面/导出不显示 WH 仓库编码，避免混淆）
+            loc_name = f"{wh.name if wh else ''}-{shelf_map[loc.shelf_id].code if loc and loc.shelf_id in shelf_map else ''}-{loc.layer_no:02d}" if loc else ""
             data.append(
                 [
                     log.created_at.strftime("%Y-%m-%d %H:%M:%S"),
                     p.code if p else "",
                     p.name if p else "",
                     wh.name if wh else "",
-                    loc.code if loc else "",
+                    loc_name,
                     log.change_type,
                     log.bill_no,
                     str(log.before_qty),

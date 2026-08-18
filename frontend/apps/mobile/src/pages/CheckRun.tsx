@@ -72,7 +72,7 @@ export function CheckRunPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate("/checks")}>{bill.bill_no}</NavBar>
       <List header={`${bill.warehouse_name} · 共 ${bill.items.length} 项（物品级盘点）`}>
         {bill.items.map((it: CheckItem) => {
@@ -102,7 +102,7 @@ export function CheckRunPage() {
                       />
                     )}
                   </div>
-                  <span style={{ color: "#999", fontSize: 12 }}>
+                  <span style={{ color: "#646a73", fontSize: 12 }}>
                     {it.material_code || it.code}
                     {it.spec && ` / ${it.spec}`}
                     {it.unit_name && ` / ${it.unit_name}`}
@@ -153,7 +153,7 @@ export function CheckRunPage() {
                   />
                   <span style={{ color: "#ff4d4f", fontSize: 12, cursor: "pointer" }} onClick={() => setExtraRows((rs) => rs.filter((x) => x.key !== r.key))}>删</span>
                 </div>
-                <span style={{ color: "#999", fontSize: 12 }}>
+                <span style={{ color: "#646a73", fontSize: 12 }}>
                   {r.product.code}
                   {r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}
                 </span>
@@ -173,7 +173,7 @@ export function CheckRunPage() {
         </div>
       )}
       {readonly && (
-        <div style={{ padding: 16, textAlign: "center", color: "#999" }}>该盘点单已审核（只读）</div>
+        <div style={{ padding: 16, textAlign: "center", color: "#646a73" }}>该盘点单已审核（只读）</div>
       )}
 
       <ProductPicker

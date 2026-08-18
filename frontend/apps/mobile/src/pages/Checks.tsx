@@ -64,7 +64,7 @@ export function ChecksPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar
         onBack={() => navigate("/")}
         right={
@@ -102,7 +102,7 @@ export function ChecksPage() {
         title="发起盘点"
         content={
           <div>
-            <div style={{ fontSize: 13, color: "#86909c", marginBottom: 10 }}>
+            <div style={{ fontSize: 13, color: "#646a73", marginBottom: 10 }}>
               选择要盘点的仓库，创建后自动带出该仓库全部库存物品（按物品汇总账面数量），手机/电脑均可录入实盘。
             </div>
             <Selector

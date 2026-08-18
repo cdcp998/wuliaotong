@@ -10,14 +10,15 @@ export interface InboundItem {
   category_id?: number; // 大模型识别/人工确认的材料分类（>0 时入库同步更新材料分类）
 }
 
-/** 新建入库：warehouseId 仓库（表头）+ items 明细；supplierId/billDate/remark 为单据表头（标题行）信息。 */
+/** 新建入库：warehouseId 仓库（表头）+ items 明细；supplierId/billDate/remark 为单据表头（标题行）信息；ocrBillNo 送货单号（OCR 带入/手工填写，可空）。 */
 export function purchaseIn(
   warehouseId: number,
   items: InboundItem[],
   remark = "",
   supplierId = 0,
   billDate?: string,
-  ocrRecordId = 0
+  ocrRecordId = 0,
+  ocrBillNo = ""
 ) {
   return http.post<{ id: number; bill_no: string }>("/purchase-in", {
     warehouse_id: warehouseId,
@@ -25,6 +26,7 @@ export function purchaseIn(
     bill_date: billDate,
     remark,
     ocr_record_id: ocrRecordId,
+    ocr_bill_no: ocrBillNo,
     items,
   });
 }
@@ -301,6 +303,7 @@ export interface OcrDeliveryItem {
   material_code?: string;
   spec?: string;
   unit?: string;
+  category_name?: string;
   qty?: string;
   price?: string;
   amount?: string;
@@ -309,6 +312,8 @@ export interface OcrDeliveryItem {
 export interface OcrTask {
   status: "running" | "done" | "failed";
   record_id: number;
+  /** 原图文件 id（恢复「原始单据参考」用）。 */
+  file_id?: number;
   structured: {
     lines?: string[];
     supplier_name?: string;
@@ -316,6 +321,16 @@ export interface OcrTask {
     _engine?: "template" | "deepseek";
     items?: OcrDeliveryItem[];
   } | null;
+  error?: string;
+}
+
+/** 识别任务单列表项（页面刷新后经「查询任务单」恢复继续处理）。 */
+export interface OcrTaskListItem {
+  task_id: string;
+  status: "running" | "done" | "failed";
+  record_id: number;
+  file_id: number;
+  created_ts: number; // 秒级时间戳
   error?: string;
 }
 
@@ -352,6 +367,8 @@ export const ocrApi = {
   recognize: (fileId: number, ocrType: 1 | 2 | 3, mode: "auto" | "template" | "llm" = "auto") =>
     http.post<{ task_id: string }>(`/ocr/recognize?file_id=${fileId}&ocr_type=${ocrType}&mode=${mode}`),
   taskStatus: (taskId: string) => http.get<OcrTask>(`/ocr/tasks/${taskId}`),
+  /** 我的识别任务列表（最近 20 条，结果保留 1 小时）：刷新页面后查询任务单恢复。 */
+  tasks: () => http.get<{ tasks: OcrTaskListItem[] }>("/ocr/tasks"),
   quick: (fileId: number, ocrType: 2 | 3) =>
     // 同步识别链路含引擎+纠错大模型，服务端最坏可达 60s+；客户端 60s 超时兜底，避免无限等待（卡死）
     http.post<OcrQuickResult>(`/ocr/quick?file_id=${fileId}&ocr_type=${ocrType}`, undefined, 60_000),
@@ -397,6 +414,7 @@ export const aiApi = {
 export interface PurchaseInBill {
   id: number;
   bill_no: string;
+  ocr_bill_no?: string; // 送货单号（来源单据，OCR 识别/手工填写）
   supplier_name: string;
   warehouse_name: string;
   status: number;

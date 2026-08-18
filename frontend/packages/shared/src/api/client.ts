@@ -43,7 +43,8 @@ async function request<T>(method: string, path: string, body?: unknown, timeoutM
     });
   } catch (e) {
     if (ctrl?.signal.aborted) throw new BizError(408, "请求超时，请重试");
-    throw e;
+    // 网络层错误（断网/服务不可达/跨域等）统一中文提示，避免 TypeError: Failed to fetch 等英文透传
+    throw new BizError(500, "网络请求失败，请检查网络连接后重试");
   } finally {
     if (timer) clearTimeout(timer);
   }

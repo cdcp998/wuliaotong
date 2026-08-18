@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { App, Alert, Button, Checkbox, Form, Input, Modal } from "antd";
+import { App, Alert, Button, Checkbox, Form, Input, Modal, theme } from "antd";
 
 import { authApi, BizError, initApi, otherEndUrl, useAuthStore, type RegisterStatus } from "@wlt/shared";
 
 /** 登录页（电脑端双栏：品牌区 + 表单区）：未初始化跳初始化安装页；已登录直进主页；连续失败 3 次需验证码；忘记密码/注册入口。 */
 export function LoginPage() {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
   const fetchMe = useAuthStore((s) => s.fetchMe);
@@ -111,12 +112,13 @@ export function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", background: "#fff" }}>
-      {/* 左侧品牌区 */}
+    <div style={{ minHeight: "100dvh", display: "flex", background: "#fff" }}>
+      {/* 左侧品牌区（深蓝纯色底，不用渐变，《UI设计方案.md》§2.1/§4.1） */}
       <div
+        className="wlt-brand"
         style={{
           flex: "1.15",
-          background: "linear-gradient(135deg,#0d2b52 0%,#1668dc 78%,#3c89f0 100%)",
+          background: "#0d2b52",
           color: "#fff",
           display: "flex",
           flexDirection: "column",
@@ -135,6 +137,17 @@ export function LoginPage() {
             height: 420,
             borderRadius: "50%",
             border: "60px solid rgba(255,255,255,.06)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: -120,
+            left: -120,
+            width: 300,
+            height: 300,
+            borderRadius: "50%",
+            border: "44px solid rgba(255,255,255,.04)",
           }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 40 }}>
@@ -170,7 +183,7 @@ export function LoginPage() {
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
         <div style={{ width: 340 }}>
           <h2 style={{ fontSize: 22, margin: 0 }}>登录系统</h2>
-          <div style={{ fontSize: 13, color: "#86909c", margin: "6px 0 26px" }}>物料通管理系统 · 企业内部使用</div>
+          <div style={{ fontSize: 13, color: "#646a73", margin: "6px 0 26px" }}>物料通管理系统 · 企业内部使用</div>
           <Form layout="vertical" onFinish={(v) => void onSubmit(v)}>
             <Form.Item name="username" rules={[{ required: true, message: "请输入账号" }]}>
               <Input placeholder="账号 / 用户名" size="large" autoFocus />
@@ -187,7 +200,7 @@ export function LoginPage() {
                     alt="验证码"
                     title="点击刷新"
                     onClick={() => void refreshCaptcha()}
-                    style={{ height: 40, borderRadius: 6, cursor: "pointer", border: "1px solid #e5e5e5" }}
+                    style={{ height: 40, borderRadius: 6, cursor: "pointer", border: `1px solid ${token.colorBorder}` }}
                   />
                 </div>
               </Form.Item>
@@ -214,7 +227,7 @@ export function LoginPage() {
               登 录
             </Button>
           </Form>
-          <div style={{ marginTop: 18, textAlign: "center", fontSize: 12.5, color: "#86909c" }}>
+          <div style={{ marginTop: 18, textAlign: "center", fontSize: 12.5, color: "#646a73" }}>
             手机端操作请前往 <a href={otherEndUrl("mobile")} style={{ color: "#1668dc" }}>手机版入口</a>
           </div>
         </div>
@@ -284,7 +297,7 @@ export function LoginPage() {
           <Form.Item name="real_name" label="姓名"><Input /></Form.Item>
           <Form.Item name="phone" label="手机"><Input maxLength={20} /></Form.Item>
           <Form.Item name="email" label="邮箱（找回密码用）"><Input maxLength={100} /></Form.Item>
-          <p style={{ color: "#999", fontSize: 12 }}>
+          <p style={{ color: "#646a73", fontSize: 12 }}>
             {regStatus?.mode === "review" ? "审核注册模式：提交后需管理员审核通过方可登录。" : "开放注册模式：注册即开通使用者账号。"}
           </p>
         </Form>

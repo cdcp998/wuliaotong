@@ -180,7 +180,7 @@
   }
   /* 弹窗内容区限高滚动：表单弹窗在手机上不再超高，底部操作按钮始终可见 */
   .ant-modal-body {
-    max-height: calc(100vh - 150px);
+    max-height: calc(100dvh - 150px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -238,39 +238,40 @@
   .ant-dropdown div[style*="width: 340px"],
   .ant-dropdown div[style*="width:340px"] {
     width: min(340px, calc(100vw - 24px)) !important;
-    max-height: min(70vh, 560px);
+    max-height: min(70dvh, 560px);
     overflow-y: auto;
   }
 
   /* 12. 登录 / 初始化安装页（双栏：品牌区 + 表单区）：改为上下布局。
    * 注意：不依赖 #root 的直接子层级（React Router 的 RouterProvider 会在
-   * #root 下再包一层无 class 的 div），统一用"渐变品牌区"定位：
+   * #root 下再包一层无 class 的 div），统一用品牌区类名定位：
    * - 登录根 = 品牌区的父容器（:has 直接子匹配）
    * - 表单区 = 品牌区的兄弟 */
-  #root div:has(> div[style*="linear-gradient"]) {
+  #root div:has(> div.wlt-brand) {
     flex-direction: column;
   }
   /* 品牌区：压缩为顶部条带 */
-  #root div[style*="linear-gradient"] {
+  #root div.wlt-brand {
     flex: none !important;
     padding: 20px 20px 12px !important;
   }
-  #root div[style*="linear-gradient"] > div:first-child {
+  /* Logo 行（品牌区第 2 个子元素，第 1 个是绝对定位的装饰环） */
+  #root div.wlt-brand > div:nth-child(2) {
     margin-bottom: 10px !important;
   }
-  #root div[style*="linear-gradient"] h1 {
+  #root div.wlt-brand h1 {
     font-size: 19px !important;
     line-height: 1.5 !important;
   }
-  #root div[style*="linear-gradient"] p {
+  #root div.wlt-brand p {
     display: none;
   }
   /* 表单区（品牌区的兄弟）：占满剩余宽度 */
-  #root div[style*="linear-gradient"] + div {
+  #root div.wlt-brand + div {
     flex: none !important;
     padding: 20px 16px 28px !important;
   }
-  #root div[style*="linear-gradient"] + div > div {
+  #root div.wlt-brand + div > div {
     width: 100% !important;
     max-width: 420px;
   }
@@ -280,6 +281,20 @@
   #root > div > div:has(> h2) {
     padding: 24px 16px;
     text-align: center;
+  }
+
+  /* 14. 分类管理树形页：双栏在窄屏改为上下堆叠（分类树在上、详情在下） */
+  .wlt-cat-layout {
+    flex-direction: column !important;
+  }
+  .wlt-cat-layout .wlt-cat-aside {
+    width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid #f0f1f3;
+    max-height: 44vh;
+  }
+  .wlt-cat-layout .wlt-cat-aside .ant-tree {
+    max-height: 30vh;
   }
 }
 

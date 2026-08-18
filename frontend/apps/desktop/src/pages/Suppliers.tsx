@@ -122,8 +122,8 @@ export function SuppliersPage() {
 
   return (
     <div style={{ padding: 24 }}>
+      <h2 style={{ margin: "0 0 16px" }}>供应商管理</h2>
       <Space style={{ marginBottom: 16 }} wrap>
-        <h2 style={{ margin: 0 }}>供应商管理</h2>
         <Input.Search
           placeholder="名称 / 联系人 / 电话"
           allowClear

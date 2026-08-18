@@ -69,7 +69,7 @@ export function DepartmentsPage() {
         <h2 style={{ margin: 0 }}>单位管理</h2>
         <Button type="primary" onClick={() => setCreating(true)}>新建单位</Button>
       </div>
-      <p style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>
+      <p style={{ color: "#646a73", fontSize: 12, marginBottom: 16 }}>
         角色可归属单位；单位关联的仓库货架仅该单位角色（非超管/管理者）可见，用于 2D 货架图与库位选择。单位编码由系统自动生成（数字编码，对外隐藏）。
       </p>
       <DataTable
@@ -141,7 +141,7 @@ export function DepartmentsPage() {
           options={shelves.map((s) => ({ label: `${s.code}${s.name ? ` ${s.name}` : ""}`, value: s.id }))}
           optionFilterProp="label"
         />
-        <p style={{ color: "#999", fontSize: 12, marginTop: 8 }}>留空表示该单位无可见货架。</p>
+        <p style={{ color: "#646a73", fontSize: 12, marginTop: 8 }}>留空表示该单位无可见货架。</p>
       </Modal>
     </div>
   );

@@ -31,7 +31,7 @@ export function StockQueryPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate("/")}>库存查询</NavBar>
       <div style={{ padding: 12 }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
@@ -58,7 +58,7 @@ export function StockQueryPage() {
             📷 扫码
           </Button>
         </div>
-        <div style={{ fontSize: 11.5, color: "#86909c", marginBottom: 8, padding: "0 2px" }}>扫码 / 条码查询更快捷，也可点击「扫码」按钮调用摄像头</div>
+        <div style={{ fontSize: 11.5, color: "#646a73", marginBottom: 8, padding: "0 2px" }}>扫码 / 条码查询更快捷，也可点击「扫码」按钮调用摄像头</div>
         <List style={{ "--border-top": "0" } as React.CSSProperties}>
           {list.map((r) => (
             <List.Item
@@ -82,8 +82,8 @@ export function StockQueryPage() {
                 </span>
               }
               description={
-                <div style={{ fontSize: 11.5, color: "#86909c", marginTop: 2 }}>
-                  {r.warehouse_name} / {r.location_code}
+                <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 2 }}>
+                  {r.location_code}
                   {r.spec ? ` · ${r.spec}` : ""}
                 </div>
               }

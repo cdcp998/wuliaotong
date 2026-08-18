@@ -42,6 +42,22 @@ SETTINGS_KEYS: dict[str, str] = {
     "ocr.engine": "str",  # rapidocr / paddle
     "ocr.model_version": "str",  # PP-OCRv4 / PP-OCRv5 / PP-OCRv6（paddle 引擎模型版本）
     "llm.doubao.enabled": "str",  # 1 启用 / 0 关闭（关闭后拍照识别未匹配不再调用豆包分析并提示）
+    # 多模态大模型（主用）任务开关：1 启用（默认）/ 0 关闭（该任务跳过主用，直接走备用模型）
+    "llm.doubao.scene.match_vision": "str",  # 送货单参考匹配（主用）
+    "llm.doubao.scene.vision_product": "str",  # 拍照识别商品（主用）
+    "llm.doubao.scene.classify_items": "str",  # 材料自动分类（主用）
+    "llm.doubao.scene.ocr_correct": "str",  # OCR 文本纠错（主用）
+    "llm.doubao.scene.vision_text": "str",  # 视觉文字兜底（主用）
+    "llm.doubao.scene.structured": "str",  # 送货单结构化（主用）
+    # 视觉模型（备用）任务开关
+    "llm.siliconflow.scene.vision_delivery": "str",  # 送货单识别（备用）
+    "llm.siliconflow.scene.vision_product": "str",  # 拍照识别商品（备用）
+    "llm.siliconflow.scene.vision_text": "str",  # 视觉文字兜底（备用）
+    "llm.siliconflow.scene.match_vision": "str",  # 送货单参考匹配（备用）
+    # 文本模型（备用）任务开关
+    "llm.deepseek.scene.ocr_correct": "str",  # OCR 文本纠错（备用）
+    "llm.deepseek.scene.classify_items": "str",  # 材料自动分类（备用）
+    "llm.deepseek.scene.structured": "str",  # 送货单结构化（备用）
     "llm.deepseek.enabled": "str",  # 1 启用 / 0 关闭（关闭后送货单结构化仅用本地模板并提示）
     "llm.doubao.api_key": "secret",
     "llm.doubao.base_url": "str",
@@ -234,10 +250,10 @@ def list_deepseek_models(db: Session = Depends(get_db)) -> dict:
 def list_doubao_models(db: Session = Depends(get_db)) -> dict:
     """用已保存的豆包 Key 拉取模型列表（设置页保存后展示，供选择模型）。"""
     if _sys_config(db, "llm.doubao.enabled") == "0":
-        raise BizError(E_PARAM, "豆包大模型未启用：请先在系统设置中打开「启用豆包大模型」开关并保存")
+        raise BizError(E_PARAM, "多模态大模型未启用：请先在系统设置中打开「启用多模态大模型」开关并保存")
     key = _sys_config(db, "llm.doubao.api_key")
     if not key:
-        raise BizError(E_PARAM, "请先填写并保存豆包 API Key，再获取模型列表")
+        raise BizError(E_PARAM, "请先填写并保存多模态大模型 API Key，再获取模型列表")
     base_url = _sys_config(db, "llm.doubao.base_url") or "https://ark.cn-beijing.volces.com/api/v3"
     return ok({"models": _fetch_models(base_url, key)})
 

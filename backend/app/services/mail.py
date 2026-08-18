@@ -42,7 +42,7 @@ def send_mail(db: Session, to_addr: str, subject: str, content: str) -> None:
         finally:
             server.quit()
     except Exception as exc:  # 邮件失败不暴露内部细节
-        raise BizError(E_PARAM, f"邮件发送失败：{exc}")
+        raise BizError(E_PARAM, "邮件发送失败，请检查 SMTP 配置（详情见系统日志）")
 
 
 def send_reset_code(db: Session, to_addr: str, username: str, code: str) -> None:

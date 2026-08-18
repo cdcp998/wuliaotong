@@ -4,6 +4,8 @@ import { RouterProvider, createBrowserRouter, Navigate } from "react-router";
 import { App as AntApp, ConfigProvider, Spin } from "antd";
 import zhCN from "antd/locale/zh_CN";
 
+// 全局基础样式（字体栈/标题层级/焦点环/数字排版，见《UI设计方案.md》§2 设计系统）
+import "./styles/global.css";
 // 移动端适配（响应式）样式：全部规则位于 @media 内，桌面宽度下不生效（《前端设计.md》§2.3）
 import "./mobile.css";
 
@@ -44,7 +46,7 @@ const WarehousesPage = lazy(() => import("./pages/Warehouses").then((m) => ({ de
 
 /** 路由懒加载的统一 Loading 占位。 */
 function PageLoading() {
-  return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}><Spin size="large" /></div>;
+  return <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center" }}><Spin size="large" /></div>;
 }
 
 /** 受保护页面统一套上应用骨架（侧边导航 + 顶栏）。 */
@@ -104,12 +106,17 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       locale={zhCN}
       theme={{
         token: {
+          // 设计系统 token（《UI设计方案.md》§2.1/§2.2）
           colorPrimary: "#1668dc",
+          colorInfo: "#1668dc",
+          colorLink: "#1668dc",
           colorBgLayout: "#f5f6f8",
           colorText: "#1f2329",
-          colorTextSecondary: "#4e5969",
+          colorTextSecondary: "#646a73",
           borderRadius: 6,
           fontSize: 14,
+          fontFamily:
+            '-apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
         },
       }}
     >

@@ -33,6 +33,7 @@ class PurchaseInReq(BaseModel):
     bill_date: datetime | None = None
     remark: str = Field(default="", max_length=200)
     ocr_record_id: int = 0  # 来源送货单 OCR 识别记录（0=手工录入）
+    ocr_bill_no: str = Field(default="", max_length=60)  # 送货单号（OCR 识别带入/手工填写，可空）
     items: list[PurchaseInItemReq] = Field(min_length=1)
 
 
@@ -56,6 +57,7 @@ class PurchaseInItemOut(BaseModel):
 class PurchaseInOut(BaseModel):
     id: int
     bill_no: str
+    ocr_bill_no: str = ""  # 送货单号（来源单据）
     supplier_id: int
     supplier_name: str = ""
     warehouse_id: int

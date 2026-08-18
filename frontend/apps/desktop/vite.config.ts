@@ -9,6 +9,10 @@ const CERT_DIR = "../../../backend/certs/dev";
 
 export default defineConfig({
   plugins: [react()],
+  // workspace 源码包不参与依赖预构建：@wlt/shared 改动即时 HMR（否则 dev server 用旧缓存，改动不生效）
+  optimizeDeps: {
+    exclude: ["@wlt/shared"],
+  },
   server: {
     host: true, // 监听 0.0.0.0，内网其他设备可访问（访问者需信任自签名证书）
     port: 5174, // 电脑端

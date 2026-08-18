@@ -52,11 +52,59 @@ def test_category_tree_crud():
     r = client.put(f"/api/v1/categories/{root_id}", json={"name": tag + "改", "parent_id": 0})
     assert r.json()["code"] == 0
 
-    # 有子分类不能删
-    assert client.delete(f"/api/v1/categories/{root_id}").json()["code"] == 4006
+    # 有子分类不能删（HTTP 409 冲突）
+    rd = client.delete(f"/api/v1/categories/{root_id}")
+    assert rd.status_code == 409 and rd.json()["code"] == 4006
     # 删子分类成功
     assert client.delete(f"/api/v1/categories/{child_id}").json()["code"] == 0
     assert client.delete(f"/api/v1/categories/{root_id}").json()["code"] == 0
+
+
+def test_category_three_level_and_delete_404():
+    """三级体系：三级分类可创建并可挂材料；四级创建被拒；删除不存在分类返回 404/4003。"""
+    _login_admin()
+    tag = "三" + _TAG
+    r1 = client.post("/api/v1/categories", json={"name": tag})
+    assert r1.json()["code"] == 0, r1.text
+    l1 = r1.json()["data"]["id"]
+    r2 = client.post("/api/v1/categories", json={"parent_id": l1, "name": tag + "二"})
+    l2 = r2.json()["data"]["id"]
+    r3 = client.post("/api/v1/categories", json={"parent_id": l2, "name": tag + "三"})
+    assert r3.json()["code"] == 0, r3.text
+    l3 = r3.json()["data"]["id"]
+
+    # 四级创建被拒（4006）
+    assert client.post("/api/v1/categories", json={"parent_id": l3, "name": tag + "四"}).json()["code"] == 4006
+
+    # 材料可挂二级/三级，挂顶级被拒（4006）
+    unit = client.post("/api/v1/units", json={"name": "个" + _TAG + "x"}).json()["data"]["id"]
+    p1 = client.post("/api/v1/products", json={"name": tag + "料A", "unit_id": unit, "category_id": l2}).json()["data"]
+    p2 = client.post("/api/v1/products", json={"name": tag + "料B", "unit_id": unit, "category_id": l3}).json()["data"]
+    assert p1["category_id"] == l2 and p2["category_id"] == l3
+    assert client.post("/api/v1/products", json={"name": tag + "料C", "unit_id": unit, "category_id": l1}).json()["code"] == 4006
+
+    # 分类维度商品查询附带挂载材料明细（含数量列）
+    rows = client.get(f"/api/v1/products?category_id={l3}").json()["data"]
+    assert rows["total"] == 1 and rows["list"][0]["id"] == p2["id"]
+    assert "stock_qty" in rows["list"][0]
+
+    # 单独改挂：取消挂载（0）+ 改挂三级；挂顶级被拒
+    assert client.put(f"/api/v1/products/{p1['id']}/category", json={"category_id": 0}).json()["code"] == 0
+    assert client.get(f"/api/v1/products/{p1['id']}").json()["data"]["category_id"] == 0
+    assert client.put(f"/api/v1/products/{p1['id']}/category", json={"category_id": l3}).json()["code"] == 0
+    assert client.put(f"/api/v1/products/{p1['id']}/category", json={"category_id": l1}).json()["code"] == 4006
+
+    # 删除不存在的分类：HTTP 404 + code=4003
+    r = client.delete("/api/v1/categories/999999999")
+    assert r.status_code == 404 and r.json()["code"] == 4003 and r.json()["message"] == "分类不存在"
+
+    # 清理（先取消挂载，再自底向上删）
+    for pid in (p1["id"], p2["id"]):
+        client.put(f"/api/v1/products/{pid}/category", json={"category_id": 0})
+        client.delete(f"/api/v1/products/{pid}")
+    assert client.delete(f"/api/v1/categories/{l3}").json()["code"] == 0
+    assert client.delete(f"/api/v1/categories/{l2}").json()["code"] == 0
+    assert client.delete(f"/api/v1/categories/{l1}").json()["code"] == 0
 
 
 # ============================ 单位 ============================

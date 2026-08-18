@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import gzip
+import logging
 import os
 import shutil
 import subprocess
@@ -14,6 +15,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.response import BizError, E_FILE_FAILED
 from app.models.sys import SysBackupLog
+
+logger = logging.getLogger("app.backup")
 
 # 自动备份保留份数（更早的自动备份自动清理；手动备份不清理）
 AUTO_KEEP = 14
@@ -60,7 +63,8 @@ def run_backup(db: Session, backup_type: str = "manual") -> SysBackupLog:
     if proc.returncode != 0:
         sql_path.unlink(missing_ok=True)
         err = proc.stderr.decode("utf-8", "ignore")[:300]
-        raise BizError(E_FILE_FAILED, f"备份失败（请检查 BACKUP_MYSQLDUMP 路径）：{err}")
+        logger.error("数据库备份失败：%s", err)
+        raise BizError(E_FILE_FAILED, "备份失败，请检查 BACKUP_MYSQLDUMP 路径（详情见系统日志）")
 
     gz_path = backup_dir() / f"{p['db']}_{ts}.sql.gz"
     with open(sql_path, "rb") as fin, gzip.open(gz_path, "wb") as fout:

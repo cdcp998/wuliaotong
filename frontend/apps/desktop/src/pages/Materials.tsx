@@ -7,13 +7,14 @@ import { baseApi, fileApi, ocrApi, type CategoryNode, type Product, type Product
 
 import { DataTable } from "../components/DataTable";
 
-/** 分类树拍平：二级分类显示「父级/子级」。 */
-function flattenCats(nodes: CategoryNode[], parent = ""): { id: number; name: string }[] {
+/** 材料挂载分类候选（三级体系）：二级 + 三级分类，显示完整路径；顶级分类只作分组。 */
+function leafCats(nodes: CategoryNode[]): { id: number; name: string }[] {
   const out: { id: number; name: string }[] = [];
   for (const n of nodes) {
-    const label = parent ? `${parent}/${n.name}` : n.name;
-    out.push({ id: n.id, name: label });
-    if (n.children?.length) out.push(...flattenCats(n.children, n.name));
+    n.children?.forEach((c) => {
+      out.push({ id: c.id, name: `${n.name}/${c.name}` });
+      c.children?.forEach((g) => out.push({ id: g.id, name: `${n.name}/${c.name}/${g.name}` }));
+    });
   }
   return out;
 }
@@ -43,6 +44,7 @@ export function MaterialsPage() {
   // Space.Compact 内的表单控件拿不到 Form.Item 注入的 value/onChange（antd v6 只注入直接子元素）→ 显式受控
   const nameValue = Form.useWatch("name", form);
   const barcodeValue = Form.useWatch("barcode", form);
+  const categoryValue = Form.useWatch("category_id", form);
   const nameFileRef = useRef<HTMLInputElement>(null); // 材料名称：相机 OCR 识别
   const barcodeFileRef = useRef<HTMLInputElement>(null); // 条码：相机扫码解码
   const nameAlbumRef = useRef<HTMLInputElement>(null); // 材料名称：相册选图 OCR
@@ -76,7 +78,7 @@ export function MaterialsPage() {
 
   useEffect(() => {
     baseApi.units().then(setUnits).catch(() => undefined);
-    baseApi.categories().then((cs) => setCats(flattenCats(cs))).catch(() => undefined);
+    baseApi.categories().then((cs) => setCats(leafCats(cs))).catch(() => undefined);
     // 供应商下拉：初始加载前 100 个；搜索走服务端（全库），避免供应商多时关联不上
     baseApi.suppliers(1).then((d) => setSuppliers(d.list.map((s) => ({ id: s.id, name: s.name })))).catch(() => undefined);
   }, []);
@@ -253,8 +255,8 @@ export function MaterialsPage() {
 
   return (
     <div style={{ padding: 24 }}>
+      <h2 style={{ margin: "0 0 16px" }}>材料管理</h2>
       <Space style={{ marginBottom: 16 }} wrap>
-        <h2 style={{ margin: 0 }}>材料管理</h2>
         <Input.Search
           placeholder="材料名称 / 编码 / 物料编码 / 规格"
           allowClear
@@ -373,8 +375,13 @@ export function MaterialsPage() {
             <Form.Item name="spec" label="型号规格" style={{ width: 200 }}>
               <Input placeholder="如：20x12" maxLength={100} />
             </Form.Item>
-            <Form.Item name="category_id" label="分类" style={{ width: 160 }}>
-              <Select placeholder="选择" allowClear options={cats} fieldNames={{ label: "name", value: "id" }} />
+            <Form.Item name="category_id" label="分类" style={{ width: 200 }}>
+              <Select
+                placeholder="选择"
+                allowClear
+                options={categoryValue && !cats.some((c) => c.id === categoryValue) ? [{ id: categoryValue, name: "原分类（顶级，请改挂二级/三级）" }, ...cats] : cats}
+                fieldNames={{ label: "name", value: "id" }}
+              />
             </Form.Item>
             <Form.Item name="supplier_ids" label="关联供应商（可多选）" style={{ width: 280 }}>
               <Select
@@ -424,7 +431,7 @@ export function MaterialsPage() {
                 <span>
                   <b>{m.name}</b>
                   {m.spec ? `（${m.spec}）` : ""}
-                  <span style={{ color: "#86909c", fontSize: 12, marginLeft: 8 }}>
+                  <span style={{ color: "#646a73", fontSize: 12, marginLeft: 8 }}>
                     {m.material_code ? `编码 ${m.material_code}` : "无物料编码"} · {m.unit_name || "-"}
                   </span>
                 </span>

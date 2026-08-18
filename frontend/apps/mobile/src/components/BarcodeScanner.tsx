@@ -224,7 +224,7 @@ export function BarcodeScanner({
   }
 
   return (
-    <Popup visible={visible} onMaskClick={onClose} bodyStyle={{ height: "100vh", background: "#000" }} destroyOnClose>
+    <Popup visible={visible} onMaskClick={onClose} bodyStyle={{ height: "100dvh", background: "#000" }} destroyOnClose>
       <div style={{ height: "100%", position: "relative", overflow: "hidden" }}>
         <video ref={videoRef} playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         {/* 取景框 */}

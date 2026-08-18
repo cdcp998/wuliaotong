@@ -229,13 +229,16 @@ def test_stock_query_and_permission():
 
 
 def test_purchase_in_with_category_updates_product():
-    """入库明细带分类（大模型识别/人工确认）→ 同步更新材料分类；无效分类 4006。"""
+    """入库明细带分类（大模型识别/人工确认）→ 同步更新材料分类；顶级分类挂材料被拒（4006）；无效分类 4006。"""
     _login_admin()
     wh_id, loc_id, pid = _setup_wh_loc_product()
     r = client.post("/api/v1/categories", json={"parent_id": 0, "name": "P2测试分类" + uuid.uuid4().hex[:6]})
     assert r.json()["code"] == 0, r.text
+    root_id = r.json()["data"]["id"]
+    r = client.post("/api/v1/categories", json={"parent_id": root_id, "name": "P2测试子分类" + uuid.uuid4().hex[:6]})
+    assert r.json()["code"] == 0, r.text
     cat_id = r.json()["data"]["id"]
-    # 带分类入库 → 材料分类被更新
+    # 带二级分类入库 → 材料分类被更新
     r = client.post("/api/v1/purchase-in", json={
         "warehouse_id": wh_id,
         "items": [{"product_id": pid, "qty": "1", "price": "1.00", "location_id": loc_id, "category_id": cat_id}],
@@ -243,6 +246,12 @@ def test_purchase_in_with_category_updates_product():
     assert r.json()["code"] == 0, r.text
     p = client.get(f"/api/v1/products/{pid}").json()["data"]
     assert p["category_id"] == cat_id
+    # 顶级分类不可挂材料 → 4006（整单回滚）
+    r = client.post("/api/v1/purchase-in", json={
+        "warehouse_id": wh_id,
+        "items": [{"product_id": pid, "qty": "1", "price": "1.00", "location_id": loc_id, "category_id": root_id}],
+    })
+    assert r.json()["code"] == 4006, r.text
     # 无效分类 → 4006（整单回滚）
     r = client.post("/api/v1/purchase-in", json={
         "warehouse_id": wh_id,

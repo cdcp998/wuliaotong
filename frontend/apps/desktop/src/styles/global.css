@@ -1,0 +1,122 @@
+/* ==========================================================================
+ * 物料通电脑端 —— 全局基础样式（《UI设计方案.md》§2 设计系统）
+ *
+ * 1. 只放「设计系统级」规则：字体栈、标题层级、焦点环、数字排版、微交互；
+ *    页面级布局仍在组件内（内联样式）维护，本文件不做页面布局覆盖。
+ * 2. 不写任何 !important（与 mobile.css 的移动端覆盖策略区分），
+ *    以便页面内联样式在必要时可继续精确控制。
+ * ========================================================================== */
+
+/* ---------- 1. 字体与渲染 ---------- */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family:
+    -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+    "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- 2. 键盘可达性：可见焦点环 ---------- */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid rgba(22, 104, 220, 0.55);
+  outline-offset: 2px;
+}
+
+/* ---------- 3. 页面标题层级（《UI设计方案.md》§2.2 Display 24/32）----------
+ * 覆盖位置：仅内容区（.ant-layout-content）内直接出现的 h2 页面标题；
+ * 登录/初始化/弹窗内的标题不受影响。页面内联 margin 仍可精确控制。 */
+.ant-layout-content h2 {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #1f2329;
+}
+
+/* ---------- 4. 数字排版：统计与表格数字等宽（§2.2 Number tabular-nums） ---------- */
+.ant-layout-content .ant-statistic,
+.ant-layout-content .ant-statistic-content {
+  font-variant-numeric: tabular-nums;
+}
+
+.ant-layout-content .ant-table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 5. 微交互：顶栏通知条目 / 用户区 / 待办行悬浮反馈 ---------- */
+.wlt-notice-item {
+  transition: background-color 0.2s ease;
+}
+
+.wlt-notice-item:hover {
+  background: rgba(31, 35, 41, 0.04);
+}
+
+.wlt-user-chip {
+  transition: background-color 0.2s ease;
+}
+
+.wlt-user-chip:hover {
+  background: rgba(31, 35, 41, 0.06);
+}
+
+.wlt-todo-row {
+  transition: background-color 0.2s ease;
+}
+
+.wlt-todo-row:hover {
+  background: rgba(22, 104, 220, 0.05);
+}
+
+/* ---------- 5b. 分类管理树形页：子分类卡片 / 新建砖块交互反馈 ---------- */
+.wlt-cat-cell {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+  cursor: pointer;
+}
+
+.wlt-cat-cell:hover {
+  border-color: rgba(22, 104, 220, 0.4);
+  box-shadow: 0 4px 12px rgba(22, 104, 220, 0.08);
+}
+
+.wlt-cat-cell:active {
+  transform: scale(0.98);
+}
+
+.wlt-cat-cell-active {
+  border-color: #1668dc !important;
+  box-shadow: inset 0 0 0 1px #1668dc;
+}
+
+.wlt-cat-add {
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.wlt-cat-add:hover {
+  color: #1668dc !important;
+  border-color: #1668dc !important;
+  background: rgba(22, 104, 220, 0.03);
+}
+
+/* ---------- 6. 文本选区 ---------- */
+::selection {
+  background: rgba(22, 104, 220, 0.18);
+}
+
+/* ---------- 7. 减少动态效果偏好（无障碍）：全局降级动画/过渡 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

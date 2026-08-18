@@ -1,0 +1,60 @@
+/* ==========================================================================
+ * 物料通手机端 —— 全局基础样式（《UI设计方案.md》§2 设计系统）
+ * 与 widescreen.css 分工：本文件放设备无关的基础规则（字体/焦点/按压反馈），
+ * widescreen.css 只放 ≥768px 的「应用窗口化」适配。
+ * ========================================================================== */
+
+/* ---------- 1. 字体与渲染 ---------- */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family:
+    -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+    "Helvetica Neue", sans-serif;
+  background: #f5f6f8;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- 2. 键盘可达性：可见焦点环 ---------- */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid rgba(22, 104, 220, 0.55);
+  outline-offset: 2px;
+}
+
+/* ---------- 3. 快捷宫格卡片：按压反馈（触屏）+ 宽屏悬浮 ---------- */
+.wlt-action-cell {
+  transition: transform 0.15s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.wlt-action-cell:active {
+  transform: scale(0.96);
+  background: #eef4fd;
+}
+
+@media (min-width: 768px) {
+  .wlt-action-cell:hover {
+    box-shadow: 0 4px 14px rgba(22, 104, 220, 0.1);
+  }
+}
+
+/* ---------- 4. 文本选区 ---------- */
+::selection {
+  background: rgba(22, 104, 220, 0.18);
+}
+
+/* ---------- 5. 减少动态效果偏好（无障碍）：全局降级动画/过渡 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,11 +1,14 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { App, Alert, Button, Drawer, Input, InputNumber, Modal, Space, Spin, Tag, Upload } from "antd";
+import { SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router";
 
-import { baseApi, fileApi, ocrApi, purchaseApi, type HistoryPriceRow, type OcrTask } from "@wlt/shared";
+import { baseApi, fileApi, fileUrl, ocrApi, purchaseApi, type CategoryNode, type HistoryPriceRow, type OcrTask, type OcrTaskListItem } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
+
+import { CategorySelect } from "../components/CategorySelect";
 
 interface Row {
   key: number;
@@ -13,6 +16,8 @@ interface Row {
   material_code: string;
   spec: string;
   unit: string;
+  category_id: number | undefined;
+  category_name: string;
   qty: string;
   price: string;
   amount: string;
@@ -39,6 +44,49 @@ export function DeliveryOcrPage() {
   const [histTitle, setHistTitle] = useState("");
   const [histRows, setHistRows] = useState<HistoryPriceRow[]>([]);
   const [histLoading, setHistLoading] = useState(false);
+  // 查询任务单：页面刷新后从后端任务表找回识别任务继续处理（结果保留 1 小时）
+  const [taskListOpen, setTaskListOpen] = useState(false);
+  const [taskList, setTaskList] = useState<OcrTaskListItem[]>([]);
+  const [taskListLoading, setTaskListLoading] = useState(false);
+  const [resumingId, setResumingId] = useState<string | undefined>(undefined);
+  // 系统分类树（供明细「分类」列选择/新增/编辑；识别出的分类名命中后自动回填）
+  const [catTree, setCatTree] = useState<CategoryNode[]>([]);
+
+  /** 分类树刷新（新增/编辑分类后由 CategorySelect 通知调用）。 */
+  const reloadCats = useCallback(() => {
+    baseApi.categories().then(setCatTree).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    reloadCats();
+  }, [reloadCats]);
+
+  // 分类树拍平（名称 → id，用于识别结果回填）
+  const catFlat = useMemo(() => {
+    const out: { id: number; name: string }[] = [];
+    const walk = (nodes: CategoryNode[]) => {
+      for (const n of nodes) {
+        out.push({ id: n.id, name: n.name });
+        if (n.children?.length) walk(n.children);
+      }
+    };
+    walk(catTree);
+    return out;
+  }, [catTree]);
+
+  // 识别出的分类名命中系统分类 → 自动回填选中；「未分类」/系统不存在 → 清空待人工选择或新增
+  useEffect(() => {
+    if (!catFlat.length) return;
+    setRows((rs) =>
+      rs.map((r) => {
+        if (r.category_id !== undefined || !r.category_name.trim()) return r;
+        const name = r.category_name.trim();
+        if (name === "未分类") return { ...r, category_name: "" };
+        const hit = catFlat.find((c) => c.name === name);
+        return hit ? { ...r, category_id: hit.id } : { ...r, category_name: "" };
+      })
+    );
+  }, [catFlat]);
 
   async function handleUpload(file: File): Promise<boolean> {
     try {
@@ -69,33 +117,12 @@ export function DeliveryOcrPage() {
         const t = await ocrApi.taskStatus(id);
         if (t.status === "done") {
           clearInterval(timerRef.current);
-          setTask(t);
           setPolling(false);
-          const s = t.structured;
-          setSupplierName(s?.supplier_name ?? "");
-          setBillNo(s?.bill_no ?? "");
-          // OCR 原文（整理：过滤空白行）——无论是否结构化成功都展示
-          setLines((s?.lines ?? []).filter((l) => l.trim()));
-          if (s?.items?.length) {
-            setRows(
-              s.items.map((it, i) => ({
-                key: i,
-                product_name: it.product_name ?? "",
-                material_code: it.material_code ?? "",
-                spec: it.spec ?? "",
-                unit: it.unit ?? "",
-                qty: it.qty ?? "1",
-                price: it.price ?? "0",
-                amount: it.amount ?? "",
-              }))
-            );
-          } else {
-            // 无结构化条目：明细留空，由下方"添加明细"手动录入
-          }
+          applyTaskResult(t);
         } else if (t.status === "failed") {
           clearInterval(timerRef.current);
           setPolling(false);
-          message.error(t.error ?? "识别失败");
+          message.error(t.error ? "识别失败，请重试（详情见系统日志）" : "识别失败");
         }
       } catch (e) {
         clearInterval(timerRef.current);
@@ -114,6 +141,75 @@ export function DeliveryOcrPage() {
 
   function setRow(key: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+  }
+
+  /** 应用任务结果到页面（轮询完成与「查询任务单」恢复共用）。 */
+  function applyTaskResult(t: OcrTask) {
+    setTask(t);
+    const s = t.structured;
+    setSupplierName(s?.supplier_name ?? "");
+    setBillNo(s?.bill_no ?? "");
+    // OCR 原文（整理：过滤空白行）——无论是否结构化成功都展示
+    setLines((s?.lines ?? []).filter((l) => l.trim()));
+    if (s?.items?.length) {
+      setRows(
+        s.items.map((it, i) => ({
+          key: i,
+          product_name: it.product_name ?? "",
+          material_code: it.material_code ?? "",
+          spec: it.spec ?? "",
+          unit: it.unit ?? "",
+          category_id: undefined,
+          category_name: it.category_name ?? "",
+          qty: it.qty ?? "1",
+          price: it.price ?? "0",
+          amount: it.amount ?? "",
+        }))
+      );
+    } else {
+      // 无结构化条目：明细留空，由下方"添加明细"手动录入
+      setRows([]);
+    }
+  }
+
+  /** 打开「查询任务单」：列出当前用户的识别任务（识别中/已完成/失败）。 */
+  async function openTaskList() {
+    setTaskListOpen(true);
+    setTaskListLoading(true);
+    try {
+      const r = await ocrApi.tasks();
+      setTaskList(r.tasks);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "查询失败");
+    } finally {
+      setTaskListLoading(false);
+    }
+  }
+
+  /** 从任务单恢复：识别中继续轮询，已完成直接展示结果；同时恢复原图参考。 */
+  async function resumeTask(t: OcrTaskListItem) {
+    setTaskListOpen(false);
+    setResumingId(t.task_id);
+    // 清空当前页面状态，避免旧结果残留
+    setTask(null);
+    setRows([]);
+    setLines([]);
+    setSupplierName("");
+    setBillNo("");
+    if (t.file_id) setUploadUrl(fileUrl(t.file_id));
+    try {
+      const st = await ocrApi.taskStatus(t.task_id);
+      if (st.status === "running") {
+        setPolling(true);
+        poll(t.task_id);
+      } else {
+        applyTaskResult(st);
+      }
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "恢复任务失败");
+    } finally {
+      setResumingId(undefined);
+    }
   }
 
   /** 材料名称历史价格查询：按名称匹配系统材料 → 查历史价格（可按供应商过滤）。 */
@@ -158,28 +254,31 @@ export function DeliveryOcrPage() {
     setConfirming(true);
     try {
       // 供应商落库 + 物料自动匹配/新增 + 记录回写；返回 items（含 product_id）带入入库单
+      const validRows = rows.filter((r) => r.product_name.trim()); // 跳过手动添加但未填名称的空行
       const data = await ocrApi.deliveryConfirm({
         record_id: task?.record_id ?? 0,
         supplier_name: supplierName.trim(),
         bill_no: billNo.trim(),
-        items: rows
-          .filter((r) => r.product_name.trim()) // 跳过手动添加但未填名称的空行
-          .map((r) => ({
-            product_name: r.product_name.trim(),
-            material_code: r.material_code.trim(),
-            spec: r.spec.trim(),
-            unit: r.unit.trim(),
-            qty: r.qty,
-            price: r.price,
-            amount: r.amount,
-          })),
+        items: validRows.map((r) => ({
+          product_name: r.product_name.trim(),
+          material_code: r.material_code.trim(),
+          spec: r.spec.trim(),
+          unit: r.unit.trim(),
+          category_name: r.category_name.trim(),
+          qty: r.qty,
+          price: r.price,
+          amount: r.amount,
+        })),
       });
-      const items = data.items.map((it) => ({
+      // 预填数据带分类（行内所选 category_id/category_name），保证「新建入库」明细直接回显
+      const items = data.items.map((it, i) => ({
         product_id: it.product_id,
         product_name: it.product_name,
         material_code: it.material_code ?? "",
         spec: it.spec ?? "",
         unit: it.unit ?? "",
+        category_id: validRows[i]?.category_id,
+        category_name: validRows[i]?.category_name ?? "",
         qty: it.qty ?? "1",
         price: it.price ?? "0",
       }));
@@ -208,7 +307,7 @@ export function DeliveryOcrPage() {
 
   /** 手动补录 OCR 未捕获的条目（漏识行）。 */
   function addRow() {
-    setRows((rs) => [...rs, { key: nextKey, product_name: "", material_code: "", spec: "", unit: "", qty: "1", price: "0", amount: "" }]);
+    setRows((rs) => [...rs, { key: nextKey, product_name: "", material_code: "", spec: "", unit: "", category_id: undefined, category_name: "", qty: "1", price: "0", amount: "" }]);
     setNextKey((k) => k + 1);
   }
 
@@ -218,6 +317,21 @@ export function DeliveryOcrPage() {
     { title: "材料名称", dataIndex: "product_name", render: (v: string, r) => <Input value={v} onChange={(e) => setRow(r.key, { product_name: e.target.value })} /> },
     { title: "规格型号", dataIndex: "spec", width: 140, render: (v: string, r) => <Input value={v} onChange={(e) => setRow(r.key, { spec: e.target.value })} /> },
     { title: "单位", dataIndex: "unit", width: 70, render: (v: string, r) => <Input value={v} onChange={(e) => setRow(r.key, { unit: e.target.value })} /> },
+    {
+      title: "分类",
+      dataIndex: "category_name",
+      width: 170,
+      render: (_, r) => (
+        <CategorySelect
+          style={{ width: "100%" }}
+          value={r.category_id}
+          tree={catTree}
+          onReload={reloadCats}
+          placeholder="选择分类 / 新增"
+          onChange={(id, name) => setRow(r.key, { category_id: id, category_name: name })}
+        />
+      ),
+    },
     {
       title: "数量",
       dataIndex: "qty",
@@ -257,12 +371,13 @@ export function DeliveryOcrPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: 0, marginBottom: 16 }}>送货单识别入库</h2>
+      <h2 style={{ margin: "0 0 16px" }}>送货单识别入库</h2>
 
       <Space style={{ marginBottom: 8 }} align="center" wrap>
         <Upload beforeUpload={handleUpload} showUploadList={false} accept="image/*">
           <Button type="primary" loading={polling} icon={<span>📷</span>}>上传送货单照片</Button>
         </Upload>
+        <Button icon={<SearchOutlined />} onClick={() => void openTaskList()}>查询任务单</Button>
         <Tag color="blue">识别方式：SiliconFlow 视觉识别（视觉大模型）</Tag>
       </Space>
       <Alert
@@ -309,14 +424,14 @@ export function DeliveryOcrPage() {
                     onClick={() => setPreview(uploadUrl)}
                     style={{ maxWidth: 320, maxHeight: 220, borderRadius: 8, border: "1px solid #e5e6eb", cursor: "zoom-in", display: "block", marginTop: 6 }}
                   />
-                  <div style={{ fontSize: 11, color: "#86909c", marginTop: 4 }}>点击图片放大查看</div>
+                  <div style={{ fontSize: 11, color: "#646a73", marginTop: 4 }}>点击图片放大查看</div>
                 </>
               ) : (
                 <Tag>图片 —</Tag>
               )}
             </div>
             <div style={{ flex: 1, minWidth: 260 }}>
-              <div style={{ fontSize: 12, color: "#86909c", marginBottom: 6 }}>OCR 原文（{lines.length} 行）</div>
+              <div style={{ fontSize: 12, color: "#646a73", marginBottom: 6 }}>OCR 原文（{lines.length} 行）</div>
               {lines.length ? (
                 <pre style={{ background: "#f6f8fa", padding: 12, borderRadius: 8, whiteSpace: "pre-wrap", fontSize: 12, lineHeight: 1.8, margin: 0 }}>
                   {lines.map((l, i) => `${String(i + 1).padStart(2, "0")}  ${l}`).join("\n")}
@@ -336,12 +451,12 @@ export function DeliveryOcrPage() {
               <Space style={{ marginBottom: 8 }}>
                 <Tag color="blue">视觉识别（SiliconFlow + DeepSeek 分类）</Tag>
                 <Tag color="green">识别到 {rows.length} 项材料</Tag>
-                <span style={{ fontSize: 12, color: "#86909c" }}>漏识条目可点击下方「+ 添加明细」手动补录；确认时系统不存在物料将自动新增</span>
+                <span style={{ fontSize: 12, color: "#646a73" }}>漏识条目可点击下方「+ 添加明细」手动补录；确认时系统不存在物料将自动新增</span>
               </Space>
               <Space style={{ marginBottom: 8 }} wrap>
                 <span>供应商：</span>
                 <Input style={{ width: 260 }} placeholder="从识别结果提取，可修改" value={supplierName} onChange={(e) => setSupplierName(e.target.value)} />
-                <span style={{ fontSize: 11, color: "#86909c" }}>输入系统中不存在的供应商名时，确认后将自动创建新供应商</span>
+                <span style={{ fontSize: 11, color: "#646a73" }}>输入系统中不存在的供应商名时，确认后将自动创建新供应商</span>
                 <span>送货单号：</span>
                 <Input style={{ width: 220 }} placeholder="可空" value={billNo} onChange={(e) => setBillNo(e.target.value)} />
               </Space>
@@ -355,7 +470,7 @@ export function DeliveryOcrPage() {
                 footer={() => (
                   <Space style={{ width: "100%", justifyContent: "space-between" }}>
                     <Button size="small" onClick={addRow}>+ 添加明细（手动补录漏识条目）</Button>
-                    <span style={{ color: "#86909c", fontSize: 12 }}>
+                    <span style={{ color: "#646a73", fontSize: 12 }}>
                       共 {rows.length} 项 ｜ 总金额：
                       <b style={{ color: "#1f2329" }}>
                         {rows.reduce((s, r) => s + (Number(r.price) || 0) * (Number(r.qty) || 0), 0).toFixed(2)}
@@ -402,6 +517,46 @@ export function DeliveryOcrPage() {
           dataSource={histRows}
         />
       </Drawer>
+
+      {/* 查询任务单：页面刷新后找回识别任务继续处理（结果保留 1 小时） */}
+      <Modal title="查询任务单（识别结果保留 1 小时）" open={taskListOpen} onCancel={() => setTaskListOpen(false)} footer={null} width={620} destroyOnHidden>
+        <DataTable
+          rowKey="task_id"
+          size="small"
+          loading={taskListLoading}
+          locale={{ emptyText: "暂无识别任务（识别结果保留 1 小时，超时或被后端重启清理后不可恢复）" }}
+          pagination={false}
+          columns={[
+            {
+              title: "状态",
+              dataIndex: "status",
+              width: 90,
+              render: (s: string) =>
+                s === "done" ? <Tag color="green">已完成</Tag> : s === "running" ? <Tag color="processing">识别中</Tag> : <Tag color="error">失败</Tag>,
+            },
+            { title: "创建时间", dataIndex: "created_ts", width: 170, render: (v: number) => (v ? new Date(v * 1000).toLocaleString() : "-") },
+            {
+              title: "原图",
+              dataIndex: "file_id",
+              width: 70,
+              render: (v: number) => (v ? <img src={fileUrl(v)} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 4 }} /> : "-"),
+            },
+            {
+              title: "操作",
+              width: 120,
+              render: (_, r) =>
+                r.status === "failed" ? (
+                  <span style={{ color: "#c9cdd4", fontSize: 12 }}>已失败</span>
+                ) : (
+                  <Button size="small" type="primary" ghost loading={resumingId === r.task_id} onClick={() => void resumeTask(r)}>
+                    {r.status === "done" ? "查看结果" : "继续等待"}
+                  </Button>
+                ),
+            },
+          ]}
+          dataSource={taskList}
+        />
+      </Modal>
 
       {/* 送货单图片放大查看 */}
       <Modal open={Boolean(preview)} footer={null} onCancel={() => setPreview("")} width={860} title="送货单原图">

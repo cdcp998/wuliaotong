@@ -9,6 +9,10 @@ const CERT_DIR = "../../../backend/certs/dev";
 
 export default defineConfig(({ command }) => ({
   plugins: [react()],
+  // workspace 源码包不参与依赖预构建：@wlt/shared 改动即时 HMR（否则 dev server 用旧缓存，改动不生效）
+  optimizeDeps: {
+    exclude: ["@wlt/shared"],
+  },
   // 生产构建部署在 /m/ 前缀（Nginx 分发：/ → 电脑端，/m → 手机端）；开发端口直跑根路径
   base: command === "build" ? "/m/" : "/",
   server: {

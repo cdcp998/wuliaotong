@@ -11,13 +11,18 @@ from sqlalchemy.orm import Session
 
 from app.core.response import BizError
 from app.models.sys import SysConfig
-from app.services.llm import LLMNotConfigured, get_llm
+from app.services.llm import LLMNotConfigured, chat_text_with_fallback
 
 CORRECT_PROMPT = (
     "你是OCR文字纠错助手。以下是从图片识别出的文本行，可能包含错别字、乱码、全半角混杂、多余空格、"
     "单位写法不规范（如 件/PC、千克/kg、毫米/mm）。请逐行修正为规范中文："
     "保持原语义、不增删行、不合并拆分、每行输出一条，只输出修正后的行，用换行分隔，不要解释。\n文本行：\n"
 )
+
+
+def _chat_text_with_fallback(db: Session, system: str, user: str, scene: str = "") -> str:
+    """多模态大模型（豆包）文本主用 → 文本模型（DeepSeek）备用（任务开关关闭时直接走备用）。"""
+    return chat_text_with_fallback(db, system, user, scene=scene)
 
 
 def correct_texts(db: Session, lines: list[str]) -> list[str]:
@@ -32,12 +37,8 @@ def correct_texts(db: Session, lines: list[str]) -> list[str]:
     if len(blob) < 4 or len(blob) > 4000:
         return lines
     try:
-        llm = get_llm(db, "deepseek")
-    except LLMNotConfigured:
-        return lines
-    try:
-        content = llm.chat_text("只输出修正后的文本行，不要解释", CORRECT_PROMPT + "\n".join(lines), scene="ocr_correct")
-    except BizError:
+        content = _chat_text_with_fallback(db, "只输出修正后的文本行，不要解释", CORRECT_PROMPT + "\n".join(lines), scene="ocr_correct")
+    except (LLMNotConfigured, BizError):
         return lines
     out = [ln.strip() for ln in content.splitlines() if ln.strip()]
     # 模型增删行会导致行与原文错位 → 丢弃修正结果，回退原样（保证行对齐）

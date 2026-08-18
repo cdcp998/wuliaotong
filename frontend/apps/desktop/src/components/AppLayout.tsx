@@ -18,26 +18,34 @@ import {
   AppstoreOutlined,
   ApartmentOutlined,
   AuditOutlined,
+  BankOutlined,
   BellOutlined,
+  ContactsOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   EditOutlined,
   ExportOutlined,
   FileSearchOutlined,
+  FileTextOutlined,
   FundOutlined,
   HddOutlined,
   InboxOutlined,
   KeyOutlined,
+  LineChartOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MobileOutlined,
+  NumberOutlined,
   ProfileOutlined,
   RobotOutlined,
+  SafetyCertificateOutlined,
   SearchOutlined,
   SettingOutlined,
   ShopOutlined,
   SwapOutlined,
+  TableOutlined,
+  TagsOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 
@@ -67,10 +75,10 @@ export const MENU: MenuNode[] = [
     icon: <ShopOutlined />,
     children: [
       { key: "/materials", label: "材料管理", icon: <AppstoreOutlined />, perm: "base:product" },
-      { key: "/categories", label: "分类管理", icon: <AppstoreOutlined />, perm: "base:category" },
-      { key: "/suppliers", label: "供应商管理", icon: <ShopOutlined />, perm: "base:supplier" },
-      { key: "/units", label: "材料单位管理", icon: <ProfileOutlined />, perm: "base:product" },
-      { key: "/warehouses", label: "仓库与货架", icon: <ShopOutlined />, perm: "base:warehouse" },
+      { key: "/categories", label: "分类管理", icon: <TagsOutlined />, perm: "base:category" },
+      { key: "/suppliers", label: "供应商管理", icon: <ContactsOutlined />, perm: "base:supplier" },
+      { key: "/units", label: "材料单位管理", icon: <NumberOutlined />, perm: "base:product" },
+      { key: "/warehouses", label: "仓库与货架", icon: <BankOutlined />, perm: "base:warehouse" },
     ],
   },
   {
@@ -87,10 +95,9 @@ export const MENU: MenuNode[] = [
     label: "库存管理",
     icon: <DatabaseOutlined />,
     children: [
-      { key: "/stock", label: "库存查询", icon: <DatabaseOutlined />, perm: "stk:query" },
-      { key: "/history-price", label: "历史价格管理", icon: <DatabaseOutlined />, perm: "stk:query" },
+      { key: "/stock", label: "库存查询", icon: <TableOutlined />, perm: "stk:query" },
+      { key: "/history-price", label: "历史价格管理", icon: <LineChartOutlined />, perm: "stk:query" },
       { key: "/transfers", label: "库存调拨", icon: <SwapOutlined />, perm: "stk:transfer" },
-      { key: "/history-price", label: "历史价格管理", icon: <DatabaseOutlined />, perm: "stk:query" },
       { key: "/other-io", label: "其他出入库", icon: <ExportOutlined />, perm: "stk:other" },
     ],
   },
@@ -109,7 +116,7 @@ export const MENU: MenuNode[] = [
     label: "报表中心",
     icon: <FundOutlined />,
     children: [
-      { key: "/reports", label: "物料通报表", icon: <FundOutlined />, perm: "report:view" },
+      { key: "/reports", label: "报表中心", icon: <FundOutlined />, perm: "report:view" },
       { key: "/checks", label: "盘点", icon: <ProfileOutlined />, perm: "stk:check" },
       { key: "/ai-suggestions", label: "AI 建议处理", icon: <RobotOutlined />, perm: "ai:suggestion" },
     ],
@@ -120,10 +127,10 @@ export const MENU: MenuNode[] = [
     icon: <SettingOutlined />,
     children: [
       { key: "/system/users", label: "用户管理", icon: <UserOutlined />, perm: "sys:user" },
-      { key: "/system/roles", label: "用户权限设置", icon: <ShopOutlined />, perm: "sys:role" },
+      { key: "/system/roles", label: "用户权限设置", icon: <SafetyCertificateOutlined />, perm: "sys:role" },
       { key: "/system/register-applies", label: "注册审核", icon: <AuditOutlined />, perm: "sys:user" },
       { key: "/system/departments", label: "单位管理", icon: <ApartmentOutlined />, perm: "dept:manage" },
-      { key: "/system/logs", label: "操作日志", icon: <AppstoreOutlined />, perm: "sys:log" },
+      { key: "/system/logs", label: "操作日志", icon: <FileTextOutlined />, perm: "sys:log" },
       { key: "/system/backups", label: "备份管理", icon: <HddOutlined />, perm: "sys:backup" },
       { key: "/llm-logs", label: "AI 调用日志", icon: <RobotOutlined />, perm: "sys:llm-log" },
       { key: "/system/settings", label: "系统设置", icon: <SettingOutlined />, perm: "sys:config" },
@@ -148,7 +155,7 @@ const TITLES: Record<string, string> = {
   "/requisitions/query": "领用申请单查询",
   "/other-io": "其他出入库",
   "/requisitions": "领用审计",
-  "/reports": "物料通报表",
+  "/reports": "报表中心",
   "/ai-suggestions": "AI 建议处理",
   "/system/settings": "系统设置",
   "/system/users": "用户管理",
@@ -259,7 +266,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
 
   return (
     <>
-      <Layout style={{ minHeight: "100vh" }}>
+      <Layout style={{ minHeight: "100dvh" }}>
       <Sider
         collapsible
         collapsed={collapsed}
@@ -346,7 +353,12 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
           }}
         >
           <Button type="text" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed(!collapsed)} />
-          <div style={{ fontSize: 15, fontWeight: 600 }}>{TITLES[selectedKey] ?? "工作台"}</div>
+          {/* 顶栏面包屑：当前页面名（页面内 h2 为视觉主标题，避免两处大标题重复） */}
+          <div style={{ fontSize: 14, whiteSpace: "nowrap" }}>
+            <span style={{ color: token.colorTextTertiary }}>物料通</span>
+            <span style={{ margin: "0 8px", color: token.colorTextQuaternary }}>/</span>
+            <span style={{ color: token.colorText, fontWeight: 500 }}>{TITLES[selectedKey] ?? "工作台"}</span>
+          </div>
           <Input.Search
             placeholder="搜索材料 / 单号 / 条码…"
             allowClear
@@ -362,7 +374,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
           <Dropdown
             trigger={["click"]}
             popupRender={() => (
-              <div style={{ width: 340, background: "#fff", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,.12)", overflow: "hidden" }}>
+              <div style={{ width: 340, background: token.colorBgContainer, borderRadius: 8, boxShadow: token.boxShadowSecondary, overflow: "hidden" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
                   <span style={{ fontWeight: 600 }}>站内通知</span>
                   <Button type="link" size="small" onClick={() => { notificationApi.markReadAll().then(() => { setUnread(0); setNotices([]); }); }}>
@@ -373,6 +385,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
                 {notices.map((n) => (
                   <div
                     key={n.id}
+                    className="wlt-notice-item"
                     style={{ padding: "10px 16px", borderBottom: `1px solid ${token.colorBorderSecondary}`, cursor: "pointer" }}
                     onClick={() => {
                       // 点击条目 = 标记已读：本地立即移除并更新徽标，后端持久化
@@ -425,7 +438,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
               },
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer", padding: "4px 8px", borderRadius: 8 }}>
+            <div className="wlt-user-chip" style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer", padding: "4px 8px", borderRadius: 8 }}>
               <div style={{ width: 30, height: 30, borderRadius: "50%", background: token.colorPrimary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600 }}>
                 {(user?.real_name ?? "用")[0]}
               </div>
@@ -436,7 +449,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
             </div>
           </Dropdown>
         </Header>
-        <Content style={{ background: "#f5f6f8", overflow: "auto" }}>
+        <Content style={{ background: token.colorBgLayout, overflow: "auto" }}>
           {children}
         </Content>
       </Layout>

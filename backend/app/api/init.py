@@ -331,7 +331,9 @@ def do_init(req: InitReq, request: Request) -> dict:
     # 连接验证：数据库必须可用（阻止安装）；Redis 失败仅提示（缓存层优雅降级）
     db_err = _test_db_conn(req.db_host, req.db_port, req.db_user, req.db_password, req.db_name)
     if db_err:
-        raise BizError(E_PARAM, f"数据库连接失败：{db_err}")
+        # 原始错误仅进日志（脱敏）；对外只保留可操作指引
+        hint = "；数据库不存在时请先手动创建该库再重试" if "不存在" in db_err else ""
+        raise BizError(E_PARAM, f"数据库连接失败，请检查数据库地址/账号/密码（详情见系统日志）{hint}")
     redis_err = _test_redis_conn(req.redis_host, req.redis_port, req.redis_password, req.redis_db)
 
     # 业务写入必须落在目标库（用户填写的库）：用独立会话，不使用启动时旧引擎，
@@ -385,7 +387,7 @@ def do_init(req: InitReq, request: Request) -> dict:
         raise
     except Exception as exc:  # noqa: BLE001 落库失败需返回可读原因
         logger.error("初始化业务数据写入目标库失败：%s", exc)
-        raise BizError(E_PARAM, f"初始化数据写入目标库失败（{exc}）") from exc
+        raise BizError(E_PARAM, "初始化数据写入目标库失败（详情见系统日志）") from exc
     finally:
         target_engine.dispose()
 
@@ -394,17 +396,17 @@ def do_init(req: InitReq, request: Request) -> dict:
         _write_env_config(req)
     except OSError as exc:
         logger.error("初始化配置写入 .env 失败：%s", exc)
-        raise BizError(E_FILE_FAILED, f"数据库/Redis 配置写入 backend/.env 失败（{exc}），请检查目录写入权限后重试") from exc
+        raise BizError(E_FILE_FAILED, "数据库/Redis 配置写入 backend/.env 失败，请检查目录写入权限后重试（详情见系统日志）") from exc
     # 热切换进程内连接到目标库：当前进程立即生效，无需重启后端
     try:
         _apply_runtime_config(_build_db_url(req), _build_redis_url(req))
     except Exception as exc:  # noqa: BLE001 切换失败需给出可操作提示
         logger.error("初始化后数据库热切换失败：%s", exc)
-        raise BizError(E_FILE_FAILED, f"配置已保存但数据库连接切换失败（{exc}），请重启后端后生效") from exc
+        raise BizError(E_FILE_FAILED, "配置已保存但数据库连接切换失败，请重启后端后生效（详情见系统日志）") from exc
     try:
         _write_mark_file()
     except OSError as exc:
         logger.error("初始化完成标记文件写入失败：%s", exc)
-        raise BizError(E_FILE_FAILED, f"初始化完成标记写入失败（{exc}），请检查 {MARK_FILE.parent} 目录写入权限后重试") from exc
+        raise BizError(E_FILE_FAILED, f"初始化完成标记写入失败，请检查 {MARK_FILE.parent} 目录写入权限后重试（详情见系统日志）") from exc
     logger.info("系统初始化完成：site_name=%s admin=%s redis_ok=%s", req.site_name, req.admin_username, redis_err is None)
     return ok({"redis_connected": redis_err is None, "redis_warning": redis_err})

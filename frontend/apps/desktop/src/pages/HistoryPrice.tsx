@@ -55,8 +55,8 @@ export function HistoryPricePage() {
 
   return (
     <div style={{ padding: 24 }}>
+      <h2 style={{ margin: "0 0 16px" }}>历史价格管理</h2>
       <Space style={{ marginBottom: 16 }} wrap>
-        <h2 style={{ margin: 0 }}>历史价格管理</h2>
         <Input.Search
           placeholder="材料名称 / 编码 / 物料编码 / 规格"
           allowClear
@@ -74,7 +74,7 @@ export function HistoryPricePage() {
           onChange={(v) => { setSupplierId(v ?? 0); setPage(1); }}
         />
         <Button onClick={() => { setKeyword(""); setSupplierId(0); setPage(1); }}>重置</Button>
-        <span style={{ color: "#86909c", fontSize: 12 }}>共 {total} 条历史采购记录（按入库日期倒序）</span>
+        <span style={{ color: "#646a73", fontSize: 12 }}>共 {total} 条历史采购记录（按入库日期倒序）</span>
       </Space>
       <DataTable
         rowKey={(r) => `${r.bill_no}-${r.product_id}`}

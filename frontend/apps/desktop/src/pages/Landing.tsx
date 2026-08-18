@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
+import { Button, theme } from "antd";
 
 import { detectDevice, getEntryPreference, initApi, otherEndUrl, setEntryPreference, useAuthStore } from "@wlt/shared";
 
@@ -11,6 +12,7 @@ import { detectDevice, getEntryPreference, initApi, otherEndUrl, setEntryPrefere
 export function LandingPage() {
   const navigate = useNavigate();
   const fetchMe = useAuthStore((s) => s.fetchMe);
+  const { token } = theme.useToken();
 
   useEffect(() => {
     let alive = true;
@@ -55,34 +57,49 @@ export function LandingPage() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        background: "#f0f2f5",
-        gap: 20,
+        background: token.colorBgLayout,
+        gap: 24,
+        padding: 24,
       }}
     >
-      <h2 style={{ margin: 0 }}>物料通管理系统</h2>
-      <p style={{ color: "#999" }}>正在识别设备类型，自动跳转…</p>
-      <div style={{ display: "flex", gap: 12 }}>
-        <button
-          style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: "#1677ff", color: "#fff", fontSize: 15, cursor: "pointer" }}
+      <div
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: 14,
+          background: token.colorPrimary,
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 26,
+          fontWeight: 700,
+          boxShadow: `0 8px 20px rgba(22, 104, 220, 0.28)`,
+        }}
+      >
+        物
+      </div>
+      <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: "-0.01em" }}>物料通管理系统</h2>
+      <p style={{ color: token.colorTextSecondary, margin: "8px 0 0" }}>正在识别设备类型，自动跳转…</p>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+        <Button
+          type="primary"
+          size="large"
           onClick={() => {
             setEntryPreference("desktop");
             navigate("/login");
           }}
         >
           进入电脑版
-        </button>
-        <a
-          href={otherEndUrl("mobile")}
-          onClick={() => setEntryPreference("mobile")}
-          style={{ padding: "10px 24px", borderRadius: 8, border: "1px solid #1677ff", color: "#1677ff", fontSize: 15, textDecoration: "none" }}
-        >
+        </Button>
+        <Button size="large" href={otherEndUrl("mobile")} onClick={() => setEntryPreference("mobile")}>
           进入手机版
-        </a>
+        </Button>
       </div>
     </div>
   );

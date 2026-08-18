@@ -1,6 +1,7 @@
 """基础资料请求/响应模型。金额/数量按《后端API设计.md》约定以字符串传输。"""
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -106,6 +107,12 @@ class ProductReq(BaseModel):
         return v
 
 
+class ProductCategoryReq(BaseModel):
+    """单独更新材料分类（分类管理页「取消挂载/改挂」用）：0 = 取消挂载（未分类）。"""
+
+    category_id: int = 0
+
+
 class ProductOut(BaseModel):
     id: int
     code: str
@@ -123,6 +130,7 @@ class ProductOut(BaseModel):
     max_stock: Decimal
     status: int
     remark: str
+    created_at: datetime | None = None
     units: list[dict[str, Any]] = []
     supplier_ids: list[int] = []
     supplier_names: list[str] = []
@@ -137,6 +145,13 @@ class WarehouseReq(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     address: str = ""
     manager_id: int = 0
+    remark: str = ""
+
+
+class WarehouseUpdateReq(BaseModel):
+    """编辑仓库：编码不允许修改（界面不展示编码），名称/地址/备注可更新。"""
+    name: str = Field(min_length=1, max_length=100)
+    address: str = ""
     remark: str = ""
 
 
@@ -178,6 +193,7 @@ class LocationOut(BaseModel):
     shelf_id: int
     layer_no: int
     code: str
+    display: str = ""  # 友好库位名：仓库名-货架编码-层号（界面显示用，避免 WH 编码混淆）
     remark: str
 
 

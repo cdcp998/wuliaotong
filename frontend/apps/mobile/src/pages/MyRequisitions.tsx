@@ -62,7 +62,7 @@ export function MyRequisitionsPage() {
   }, []);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate("/")}>我的申请</NavBar>
       <List>
         {list.map((r) => (

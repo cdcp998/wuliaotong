@@ -93,19 +93,32 @@ export function HomePage() {
 
   return (
     <div style={{ padding: 12, paddingBottom: 8 }}>
-      {/* Hero 问候条 */}
+      {/* Hero 问候条（主色纯色底，不用渐变，《UI设计方案.md》§2.1） */}
       <div
         style={{
-          background: "linear-gradient(135deg,#0d2b52 0%,#1668dc 100%)",
+          background: "#1668dc",
           borderRadius: 12,
           padding: 16,
           color: "#fff",
+          position: "relative",
+          overflow: "hidden",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           marginBottom: 12,
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            right: -34,
+            top: -40,
+            width: 130,
+            height: 130,
+            borderRadius: "50%",
+            border: "18px solid rgba(255,255,255,.10)",
+          }}
+        />
         <div>
           <div style={{ fontSize: 15, fontWeight: 600 }}>你好，{user?.real_name}</div>
           <div style={{ fontSize: 11.5, opacity: 0.75, marginTop: 3 }}>
@@ -135,7 +148,7 @@ export function HomePage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <span style={{ fontSize: 13.5, fontWeight: 600, color: "#1f2329" }}>快捷操作</span>
         <span
-          style={{ fontSize: 12, color: editMode ? "#1668dc" : "#86909c", cursor: "pointer", padding: "4px 2px" }}
+          style={{ fontSize: 12, color: editMode ? "#1668dc" : "#646a73", cursor: "pointer", padding: "4px 2px" }}
           onClick={() => setEditMode((v) => !v)}
         >
           {editMode ? "完成" : "编辑"}
@@ -147,6 +160,7 @@ export function HomePage() {
           return (
             <div
               key={a.key}
+              className="wlt-action-cell"
               onClick={() => (editMode ? toggleHidden(a.key) : navigate(a.path))}
               style={{
                 position: "relative",
@@ -204,7 +218,7 @@ export function HomePage() {
                 {r.bill_no}
                 <Tag color={STATUS[r.status]?.color} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, lineHeight: 1.4 }}>{STATUS[r.status]?.text ?? r.status}</Tag>
               </div>
-              <div style={{ fontSize: 11.5, color: "#86909c", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {r.use_location} · {r.use_reason} · {r.created_at.slice(0, 16)}
               </div>
             </div>
@@ -219,7 +233,7 @@ export function HomePage() {
           <span>通知</span>
           <span style={{ fontSize: 11.5, color: "#1668dc", fontWeight: 400, cursor: "pointer" }} onClick={() => navigate("/notifications")}>全部 ›</span>
         </div>
-        <div style={{ padding: "14px 14px", color: "#86909c", fontSize: 12.5, lineHeight: 1.7 }}>
+        <div style={{ padding: "14px 14px", color: "#646a73", fontSize: 12.5, lineHeight: 1.7 }}>
           {unread > 0 ? <>有 <b style={{ color: "#1668dc" }}>{unread}</b> 条未读通知：领用审计结果、库存预警、OCR 完成提醒均在此查看。</> : "暂无未读通知，预警与审批结果将在此提醒。"}
         </div>
       </div>

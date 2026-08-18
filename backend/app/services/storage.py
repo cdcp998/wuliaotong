@@ -98,7 +98,7 @@ def save_uploaded_image(db: Session, data: bytes, original_name: str, biz_type: 
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
         (root / rel).write_bytes(payload)
     except OSError as e:
-        raise BizError(E_FILE_FAILED, f"写入存储失败：{e}")
+        raise BizError(E_FILE_FAILED, "写入存储失败（详情见系统日志）")
 
     f = SysFile(
         biz_type=biz_type or "other",

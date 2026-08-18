@@ -128,7 +128,7 @@ class _OpenAICompatClient:
 
     def chat_image(self, image_bytes: bytes, prompt: str, scene: str = "", user_id: int | None = None) -> str:
         if not self.vision:
-            raise BizError(E_LLM_FAILED, "当前模型不支持图像输入（请配置豆包视觉模型）")
+            raise BizError(E_LLM_FAILED, "当前模型不支持图像输入（请配置多模态大模型）")
         b64 = base64.b64encode(image_bytes).decode()
         return self._request([
             {
@@ -164,15 +164,62 @@ class SiliconFlowClient(_OpenAICompatClient):
         super().__init__(base_url, api_key, model, vision=True)
 
 
+# 模型承担的业务任务开关：sys_config llm.{model}.scene.{scene}.enabled（1 启用 / 0 关闭该任务跳过此模型）
+# 场景与 quota.SCENE_META 的 scene 一致；未配置视为启用
+
+
+def model_scene_enabled(db: Session, model: str, scene: str) -> bool:
+    """任务开关：指定模型是否承担该任务（默认开启；关闭后该模型不参与此任务，直接走其他模型/降级）。"""
+    if not scene:
+        return True
+    return _get_config(db, f"llm.{model}.scene.{scene}.enabled") != "0"
+
+
+def chat_image_with_fallback(db: Session, image_bytes: bytes, prompt: str, scene: str = "") -> str:
+    """多模态大模型（豆包）主用 → 视觉模型（SiliconFlow）备用；各模型任务开关关闭时跳过对应模型。"""
+    last_err: Exception | None = None
+    for name in ("doubao", "siliconflow"):
+        if not model_scene_enabled(db, name, scene):
+            last_err = LLMNotConfigured(f"{name} 未承担该任务（任务开关已关闭）")
+            continue
+        try:
+            llm = get_llm(db, name)
+            return llm.chat_image(image_bytes, prompt, scene=scene)
+        except (LLMNotConfigured, BizError) as e:
+            last_err = e
+            continue
+    if isinstance(last_err, BizError):
+        raise last_err
+    raise LLMNotConfigured("多模态/视觉大模型均未配置或调用失败")
+
+
+def chat_text_with_fallback(db: Session, system: str, user: str, scene: str = "") -> str:
+    """多模态大模型（豆包）文本主用 → 文本模型（DeepSeek）备用；各模型任务开关关闭时跳过对应模型。"""
+    last_err: Exception | None = None
+    for name in ("doubao", "deepseek"):
+        if not model_scene_enabled(db, name, scene):
+            last_err = LLMNotConfigured(f"{name} 未承担该任务（任务开关已关闭）")
+            continue
+        try:
+            llm = get_llm(db, name)
+            return llm.chat_text(system, user, scene=scene)
+        except (LLMNotConfigured, BizError) as e:
+            last_err = e
+            continue
+    if isinstance(last_err, BizError):
+        raise last_err
+    raise LLMNotConfigured("多模态/文本大模型均未配置或调用失败")
+
+
 def get_llm(db: Session, name: str = "") -> LLMClient:
     """按 sys_config 创建大模型客户端；未配置或开关关闭抛 LLMNotConfigured。"""
     name = name or "doubao"
     if name == "doubao":
         if _get_config(db, "llm.doubao.enabled") == "0":
-            raise LLMNotConfigured("豆包大模型已关闭（系统设置 → OCR 与大模型 → 启用开关）")
+            raise LLMNotConfigured("多模态大模型已关闭（系统设置 → OCR 与大模型 → 启用开关）")
         key = _get_config(db, "llm.doubao.api_key")
         if not key:
-            raise LLMNotConfigured("豆包大模型未配置（系统设置 → 大模型）")
+            raise LLMNotConfigured("多模态大模型未配置（系统设置 → 大模型）")
         return DoubaoClient(
             api_key=key,
             base_url=_get_config(db, "llm.doubao.base_url") or "https://ark.cn-beijing.volces.com/api/v3",

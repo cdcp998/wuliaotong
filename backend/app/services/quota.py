@@ -26,9 +26,9 @@ logger = logging.getLogger("app.quota")
 PROVIDERS = ("siliconflow", "deepseek", "doubao")
 
 PROVIDER_LABELS = {
-    "siliconflow": "视觉模型（SiliconFlow）",
-    "deepseek": "文本模型（DeepSeek）",
-    "doubao": "豆包视觉模型（兜底）",
+    "doubao": "多模态大模型 (主用)",
+    "siliconflow": "视觉模型（视觉识别）",
+    "deepseek": "文本模型（文字结构化 / 材料分类）",
 }
 
 # 模型参与的工作任务（与代码调用点保持一致；主用=优先调用，备用=主用不可用时兜底）
@@ -43,21 +43,24 @@ SCENE_META = {
 }
 
 MODEL_SCENES: dict[str, list[tuple[str, str]]] = {
-    "siliconflow": [
-        ("vision_delivery", "主用"),
-        ("vision_product", "主用"),
-        ("vision_text", "主用"),
-        ("match_vision", "备用"),
-    ],
     "doubao": [
         ("match_vision", "主用"),
+        ("vision_product", "主用"),
+        ("classify_items", "主用"),
+        ("ocr_correct", "主用"),
+        ("vision_text", "主用"),
+        ("structured", "主用"),
+    ],
+    "siliconflow": [
+        ("vision_delivery", "备用"),
         ("vision_product", "备用"),
         ("vision_text", "备用"),
+        ("match_vision", "备用"),
     ],
     "deepseek": [
-        ("ocr_correct", "主用"),
-        ("classify_items", "主用"),
-        ("structured", "主用"),
+        ("ocr_correct", "备用"),
+        ("classify_items", "备用"),
+        ("structured", "备用"),
     ],
 }
 
@@ -100,7 +103,7 @@ def _http_error_text(exc: httpx.HTTPError, resp_text: str = "") -> str:
         status = exc.response.status_code
         hint = {400: "请求参数错误", 401: "API Key 无效或已过期", 403: "无权限访问", 404: "接口不存在", 429: "请求过于频繁"}.get(status, "")
         return f"HTTP {status}{'：' + hint if hint else ''}"
-    return f"{exc.__class__.__name__}: {exc}"
+    return "网络请求失败，请检查网络连接（详情见系统日志）"
 
 
 def _status_text(status: str | None) -> str | None:
@@ -208,7 +211,7 @@ _KNOWN_QUOTA_HOSTS = {
 }
 
 QUOTA_UNAVAILABLE_MSG = (
-    "该服务商不提供标准的余额/配额查询接口。配额查询仅支持 SiliconFlow、DeepSeek、火山方舟（豆包）"
+    "该服务商不提供标准的余额/配额查询接口。配额查询仅支持 SiliconFlow、DeepSeek、火山方舟"
     "等提供官方余额接口的服务商；其他 OpenAI 兼容服务商（自建 vLLM/Ollama/第三方网关等）"
     "可正常用于识别，但无法获取配额，也不会参与配额告警。"
 )
@@ -246,7 +249,7 @@ def fetch_provider_quota(db: Session, provider: str) -> dict:
     except httpx.HTTPError as exc:
         return {"provider": provider, "ok": False, "fetched_at": now, "error": f"请求失败：{_http_error_text(exc)}"}
     except Exception as exc:  # noqa: BLE001 解析/网络等任何异常都优雅降级
-        return {"provider": provider, "ok": False, "fetched_at": now, "error": f"获取失败：{exc}"}
+        return {"provider": provider, "ok": False, "fetched_at": now, "error": "获取失败，请稍后重试（详情见系统日志）"}
 
 
 def _drop_quota_snapshot(db: Session, provider: str) -> None:
@@ -377,7 +380,7 @@ def refresh_quota_snapshots() -> dict:
         return {"checked": fetched, "ok": ok_count, "skipped": skipped}
     except Exception as exc:  # noqa: BLE001 定时任务失败不影响主流程
         logger.error("配额自动获取失败：%s", exc)
-        return {"checked": 0, "error": str(exc)}
+        return {"checked": 0, "error": "配额自动获取失败（详情见系统日志）"}
     finally:
         db.close()
 
@@ -446,6 +449,6 @@ def check_quota_warnings() -> dict:
             db.rollback()
         except Exception:
             pass
-        return {"checked": 0, "error": str(exc)}
+        return {"checked": 0, "error": "配额检查失败（详情见系统日志）"}
     finally:
         db.close()

@@ -47,14 +47,14 @@ export function MinePage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar>我的</NavBar>
       <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, padding: 16, margin: 12 }}>
         <div
           style={{
             width: 48,
             height: 48,
-            borderRadius: "50%",
+            borderRadius: 14,
             background: "#1668dc",
             color: "#fff",
             display: "flex",
@@ -69,7 +69,7 @@ export function MinePage() {
         </div>
         <div>
           <div style={{ fontSize: 15.5, fontWeight: 600 }}>{user?.real_name}</div>
-          <div style={{ fontSize: 12, color: "#86909c", marginTop: 3 }}>{user?.role?.name}</div>
+          <div style={{ fontSize: 12, color: "#646a73", marginTop: 3 }}>{user?.role?.name}</div>
         </div>
       </div>
 
@@ -99,7 +99,7 @@ export function MinePage() {
       </div>
 
       {/* 修改密码：全屏弹层界面（标题栏 + 账号提示 + 表单卡片 + 底部主按钮） */}
-      <Popup visible={pwdVisible} onMaskClick={() => setPwdVisible(false)} bodyStyle={{ height: "100vh" }} destroyOnClose>
+      <Popup visible={pwdVisible} onMaskClick={() => setPwdVisible(false)} bodyStyle={{ height: "100dvh" }} destroyOnClose>
         <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#f5f6f8" }}>
           <NavBar
             onBack={() => setPwdVisible(false)}
@@ -125,7 +125,7 @@ export function MinePage() {
                 alignItems: "center",
               }}
             >
-              <span style={{ fontSize: 13, color: "#86909c" }}>当前账号</span>
+              <span style={{ fontSize: 13, color: "#646a73" }}>当前账号</span>
               <span style={{ fontSize: 14, fontWeight: 500 }}>{user?.username}</span>
             </div>
             {/* 表单卡片 */}
@@ -140,7 +140,7 @@ export function MinePage() {
                 <Form.Item label="原密码">
                   <Input type={showPwd ? "text" : "password"} placeholder="请输入原密码" value={oldPwd} onChange={setOldPwd} />
                 </Form.Item>
-                <Form.Item label="新密码" extra={<span style={{ fontSize: 11, color: "#86909c" }}>至少 6 位</span>}>
+                <Form.Item label="新密码" extra={<span style={{ fontSize: 11, color: "#646a73" }}>至少 6 位</span>}>
                   <Input type={showPwd ? "text" : "password"} placeholder="请输入新密码" value={newPwd} onChange={setNewPwd} />
                 </Form.Item>
                 <Form.Item label="确认新密码">

@@ -506,6 +506,7 @@ CREATE TABLE pch_purchase_in (
   bill_date    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '单据日期',
   operator_id  BIGINT       NOT NULL DEFAULT 0,
   ocr_record_id BIGINT      NOT NULL DEFAULT 0 COMMENT '来源送货单 OCR 识别记录 → ocr_record.id（0=手工录入）',
+  ocr_bill_no   VARCHAR(60) NOT NULL DEFAULT '' COMMENT '送货单号（OCR 识别/手工填写，可空）',
   remark       VARCHAR(255) NOT NULL DEFAULT '',
   created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

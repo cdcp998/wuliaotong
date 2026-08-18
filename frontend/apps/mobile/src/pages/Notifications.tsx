@@ -48,7 +48,7 @@ export function NotificationsPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar
         onBack={() => navigate("/")}
         right={

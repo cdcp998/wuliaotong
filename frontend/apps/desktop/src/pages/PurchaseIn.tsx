@@ -11,6 +11,8 @@ import { DataTable } from "../components/DataTable";
 
 import { BillDetailDrawer } from "../components/BillDetailDrawer";
 
+import { CategorySelect } from "../components/CategorySelect";
+
 interface Row {
   key: number;
   product: Product | null; // 选中材料快照
@@ -25,13 +27,15 @@ interface Row {
   price: number; // 金额（进价）
 }
 
-/** OCR 预填条目（送货单确认结果带入：含 product_id=已匹配/自动新增的物料）。 */
+/** OCR 预填条目（送货单确认结果带入：含 product_id=已匹配/自动新增的物料，及确认时选择的分类）。 */
 interface PrefillItem {
   product_id?: number;
   product_name: string;
   material_code?: string;
   spec?: string;
   unit?: string;
+  category_id?: number; // 送货单确认时行内选择的分类（带入明细行回显）
+  category_name?: string;
   qty?: string;
   price?: string;
 }
@@ -53,7 +57,7 @@ export function PurchaseInPage() {
   const [units, setUnits] = useState<{ id: number; name: string }[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [locs, setLocs] = useState<{ id: number; code: string }[]>([]);
+  const [locs, setLocs] = useState<{ id: number; display: string }[]>([]);
   const [shelves, setShelves] = useState<Shelf[]>([]); // 当前仓库货架（创建新仓位用）
   // 送货单 OCR 预填（sessionStorage 消费后即删，防重复导入；兼容 URL 参数直达）
   const [prefillItems, setPrefillItems] = useState<PrefillItem[]>([]);
@@ -94,19 +98,15 @@ export function PurchaseInPage() {
   // 材料名称查询：行 → Select 候选（服务端防抖搜索，全库匹配，候选含完整材料）
   const [nameOptions, setNameOptions] = useState<Record<number, { value: number; label: string; product: Product }[]>>({});
   const nameDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // 系统分类（扁平化，供明细「分类」列选择/回显）
-  const [cats, setCats] = useState<{ id: number; name: string }[]>([]);
+  // 系统分类树（供明细「分类」列选择/新增/编辑，页面级共享）
+  const [catTree, setCatTree] = useState<CategoryNode[]>([]);
   // 分类自动识别中（行 key）
   const [classifyingKey, setClassifyingKey] = useState<number | undefined>(undefined);
 
-  /** 系统分类树扁平化（含子级）。 */
-  function flattenCats(nodes: CategoryNode[], out: { id: number; name: string }[] = []): { id: number; name: string }[] {
-    for (const n of nodes) {
-      out.push({ id: n.id, name: n.name });
-      if (n.children?.length) flattenCats(n.children, out);
-    }
-    return out;
-  }
+  /** 分类树刷新（新增/编辑分类后由 CategorySelect 通知调用）。 */
+  const reloadCats = useCallback(() => {
+    baseApi.categories().then(setCatTree).catch(() => undefined);
+  }, []);
 
   /** 分类自动识别：按材料名称+规格调大模型，命中系统分类则填入当前行（可再手动修改）。 */
   async function classifyRow(key: number) {
@@ -119,8 +119,19 @@ export function PurchaseInPage() {
     try {
       const r = await ocrApi.classifyProduct({ name: row.product.name, spec: row.spec });
       if (r.matched && r.category_id) {
-        setRow(key, { category_id: r.category_id, category_name: r.category_name });
-        message.success(`已识别分类：${r.category_name}`);
+        // 规则：材料只能挂二级分类——命中的若是顶级分类，只提示不填入
+        let node: CategoryNode | undefined;
+        for (const n of catTree) {
+          if (n.id === r.category_id) { node = n; break; }
+          const c = n.children?.find((x) => x.id === r.category_id);
+          if (c) { node = c; break; }
+        }
+        if (node && node.parent_id === 0) {
+          message.warning(`建议分类「${r.category_name}」是顶级分类（仅作分组），材料只能挂二级/三级分类，请手动选择`);
+        } else {
+          setRow(key, { category_id: r.category_id, category_name: r.category_name });
+          message.success(`已识别分类：${r.category_name}`);
+        }
       } else if (r.category_name) {
         message.warning(`大模型建议分类「${r.category_name}」（系统中不存在），请手动选择或先创建该分类`);
       } else {
@@ -216,7 +227,7 @@ export function PurchaseInPage() {
     // 材料下拉加载更多（前 500 条），避免预填/选择时查不到材料导致单位/规格显示不全
     baseApi.products("", 1, { pageSize: 500 }).then((p) => setProducts(p.list)).catch(() => undefined);
     // 系统分类（明细「分类」列候选；大模型识别结果需命中系统分类）
-    baseApi.categories().then((nodes) => setCats(flattenCats(nodes))).catch(() => undefined);
+    baseApi.categories().then(setCatTree).catch(() => undefined);
     // 送货单 OCR 带入：优先 sessionStorage（消费即删，保证只导入一次），兼容 URL 参数直达。
     // StrictMode（dev）会双执行本 effect：sessionStorage 首次消费后即被删除，若第二次再走
     // else 分支会把 supplierId/ocrRecordId 覆盖回 URL 参数（无参数即 0）→ 用 ref 保证只消费一次。
@@ -287,8 +298,9 @@ export function PurchaseInPage() {
           spec: it.spec || p?.spec || "",
           unit: it.unit || p?.unit_name || "",
           barcode: p?.barcode ?? "",
-          category_id: p?.category_id || undefined,
-          category_name: p?.category_name || "",
+          // 分类优先用送货单确认时选择的（识别/人工所选），其次物料资料自带
+          category_id: it.category_id ?? (p?.category_id || undefined),
+          category_name: it.category_name || p?.category_name || "",
           location_id: undefined,
           qty: Number(it.qty ?? 1),
           price: Number(it.price ?? 0),
@@ -302,7 +314,7 @@ export function PurchaseInPage() {
   }, [prefill, open]);
 
   async function loadLocs(whId: number) {
-    setLocs((await baseApi.locations(whId)).map((l) => ({ id: l.id, code: l.code })));
+    setLocs((await baseApi.locations(whId)).map((l) => ({ id: l.id, display: l.display ?? l.code })));
     baseApi.shelves(whId).then(setShelves).catch(() => undefined);
   }
 
@@ -322,9 +334,9 @@ export function PurchaseInPage() {
         layer_no: v.layer_no,
         remark: (v.remark ?? "").trim(),
       });
-      setLocs((ls) => [...ls, { id: loc.id, code: loc.code }]);
+      setLocs((ls) => [...ls, { id: loc.id, display: loc.display ?? loc.code }]);
       setRow(locModal.rowKey, { location_id: loc.id });
-      message.success(`仓位已创建并选中：${loc.code}`);
+      message.success(`仓位已创建并选中：${loc.display ?? loc.code}`);
       setLocModal(null);
       locForm.resetFields();
     } catch (e) {
@@ -467,7 +479,7 @@ export function PurchaseInPage() {
       .map((r) => ({ product_id: r.product!.id, qty: String(r.qty), price: String(r.price || 0), location_id: r.location_id!, category_id: r.category_id ?? 0 }));
     if (!items.length) return message.warning("请至少填写一条数量大于 0 的明细");
     try {
-      const data = await purchaseIn(warehouseId, items, remark, supplierId, billDate || undefined, ocrRecordId);
+      const data = await purchaseIn(warehouseId, items, remark, supplierId, billDate || undefined, ocrRecordId, ocrBillNo.trim());
       sessionStorage.removeItem("purchaseInPrefill"); // 预填已消费，清除防止刷新重复导入
       message.success(`入库成功：${data.bill_no}`);
       setOpen(false);
@@ -501,6 +513,7 @@ export function PurchaseInPage() {
     },
     { title: "仓库", dataIndex: "warehouse_name" },
     { title: "供应商", dataIndex: "supplier_name" },
+    { title: "送货单号", dataIndex: "ocr_bill_no", render: (v?: string) => v || "-" },
     { title: "数量", dataIndex: "total_qty" },
     { title: "金额", dataIndex: "total_amount" },
     { title: "日期", dataIndex: "bill_date" },
@@ -521,7 +534,7 @@ export function PurchaseInPage() {
       title: "物料编码",
       dataIndex: "material_code",
       key: "material_code",
-      width: 190,
+      width: 200,
       render: (v: string, r) => (
         <AutoComplete
           style={{ width: "100%" }}
@@ -557,7 +570,7 @@ export function PurchaseInPage() {
       title: "条形码",
       dataIndex: "barcode",
       key: "barcode",
-      width: 170,
+      width: 240,
       render: (v: string, r) => (
         <Space.Compact style={{ width: "100%" }}>
           <Input
@@ -575,7 +588,7 @@ export function PurchaseInPage() {
       title: "材料名称",
       dataIndex: "product",
       key: "product",
-      width: 240,
+      width: 280,
       render: (_p: Product | null, r) => (
         <Space.Compact style={{ width: "100%" }}>
           <Select
@@ -631,7 +644,7 @@ export function PurchaseInPage() {
       title: "规格型号",
       dataIndex: "spec",
       key: "spec",
-      width: 180,
+      width: 190,
       render: (v: string, r) => <Input value={v} onChange={(e) => setRow(r.key, { spec: e.target.value })} placeholder="可空" />,
     },
     {
@@ -645,21 +658,16 @@ export function PurchaseInPage() {
       title: "分类",
       dataIndex: "category_name",
       key: "category_name",
-      width: 200,
+      width: 260,
       render: (_v: string, r) => (
         <Space.Compact style={{ width: "100%" }}>
-          <Select
+          <CategorySelect
             style={{ flex: 1 }}
-            showSearch
-            allowClear
-            placeholder="选择分类 / ⚡自动识别"
             value={r.category_id}
-            options={cats.map((c) => ({ value: c.id, label: c.name }))}
-            optionFilterProp="label"
-            onChange={(x) => {
-              const c = cats.find((it) => it.id === x);
-              setRow(r.key, { category_id: x, category_name: c?.name ?? "" });
-            }}
+            tree={catTree}
+            onReload={reloadCats}
+            placeholder="选择分类 / ⚡自动识别"
+            onChange={(id, name) => setRow(r.key, { category_id: id, category_name: name })}
           />
           <Button icon={<ThunderboltOutlined />} title="按材料名称+规格自动识别分类" loading={classifyingKey === r.key} onClick={() => void classifyRow(r.key)} />
         </Space.Compact>
@@ -683,14 +691,14 @@ export function PurchaseInPage() {
       title: "库位",
       dataIndex: "location_id",
       key: "location_id",
-      width: 130,
+      width: 220,
       render: (v: number | undefined, r) => (
         <Select
           style={{ width: "100%" }}
           placeholder="必选"
           showSearch
           options={locs}
-          fieldNames={{ label: "code", value: "id" }}
+          fieldNames={{ label: "display", value: "id" }}
           value={v}
           status={submitTried && !v ? "error" : undefined}
           onChange={(x) => setRow(r.key, { location_id: x })}
@@ -716,8 +724,8 @@ export function PurchaseInPage() {
 
   return (
     <div style={{ padding: 24 }}>
+      <h2 style={{ margin: "0 0 16px" }}>材料入库</h2>
       <Space style={{ marginBottom: 16 }} wrap>
-        <h2 style={{ margin: 0 }}>材料入库</h2>
         <Button type="primary" onClick={() => { setRows([]); setSupplierId(0); setOcrRecordId(0); setOcrBillNo(""); setBillDate(""); setRemark(""); setSubmitTried(false); setOpen(true); }}>新建入库</Button>
         <Button onClick={() => navigate("/ocr/delivery")}>送货单识别入库</Button>
       </Space>
@@ -742,6 +750,7 @@ export function PurchaseInPage() {
         statusTag={detail ? <Tag color={detail.status === 1 ? "green" : "default"}>{detail.status === 1 ? "已入库" : "已作废"}</Tag> : undefined}
         fields={[
           { label: "单号", value: detail?.bill_no },
+          { label: "送货单号", value: detail?.ocr_bill_no },
           { label: "仓库", value: detail?.warehouse_name },
           { label: "供应商", value: detail?.supplier_name },
           { label: "入库日期", value: detail?.bill_date?.slice(0, 16) },
@@ -751,7 +760,7 @@ export function PurchaseInPage() {
           { label: "备注", value: detail?.remark, span: 2 },
         ]}
         columns={[
-          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
+          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#646a73" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
           { title: "库位", dataIndex: "location_code", width: 120 },
           { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
           { title: "单价", dataIndex: "price", width: 90, align: "right" as const },
@@ -761,18 +770,32 @@ export function PurchaseInPage() {
       />
 
       {/* ===== 新建入库：表头 + 可编辑明细表格 ===== */}
-      <Modal title="新建入库" open={open} onOk={() => void create()} onCancel={() => setOpen(false)} width="min(1180px, calc(100vw - 48px))" destroyOnHidden>
+      <Modal
+        title="新建入库"
+        open={open}
+        onOk={() => void create()}
+        onCancel={() => setOpen(false)}
+        width="min(1760px, 97vw)"
+        destroyOnHidden
+        styles={{
+          body: {
+            maxHeight: "calc(100dvh - 240px)",
+            overflow: "auto", // 明细多/屏幕小时弹窗内滚动，避免整体超出屏幕
+          },
+        }}
+      >
         <div style={{ padding: 12, border: "1px solid #e5e6eb", borderRadius: 8, background: "#fafbfc", marginBottom: 12 }}>
           <Space wrap>
             <span>入库仓库</span>
-            <Select style={{ width: 180 }} placeholder="选择" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={warehouseId} onChange={(v) => { setWarehouseId(v); void loadLocs(v); }} />
+            <Select style={{ width: 200 }} placeholder="选择" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={warehouseId} onChange={(v) => { setWarehouseId(v); void loadLocs(v); }} />
             <span>供应商</span>
-            <Select style={{ width: 190 }} placeholder="可选" allowClear options={supplierOptions} value={supplierId || undefined} onChange={(v) => setSupplierId(v ?? 0)} />
+            <Select style={{ width: 200 }} placeholder="可选" allowClear options={supplierOptions} value={supplierId || undefined} onChange={(v) => setSupplierId(v ?? 0)} />
             <span>入库日期</span>
             <DatePicker value={billDate ? dayjs(billDate) : undefined} onChange={(d) => setBillDate(d ? d.format("YYYY-MM-DDTHH:mm:ss") : "")} placeholder="默认今天" />
             <span>备注</span>
-            <Input style={{ width: 150 }} placeholder="可选" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={255} />
-            {ocrBillNo && <Tag color="blue">送货单：{ocrBillNo}</Tag>}
+            <Input style={{ width: 180 }} placeholder="可选" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={255} />
+            <span>送货单号</span>
+            <Input style={{ width: 240 }} placeholder="OCR 带入 / 可编辑" value={ocrBillNo} onChange={(e) => setOcrBillNo(e.target.value)} maxLength={60} />
           </Space>
         </div>
         <DataTable
@@ -782,12 +805,12 @@ export function PurchaseInPage() {
           dataSource={rows}
           pagination={false}
           locale={{ emptyText: "暂无明细" }}
-          scroll={{ x: 1300 }}
+          scroll={{ x: 1750 }}
           footer={() => (
             <Space wrap>
               <Button size="small" onClick={addEmptyRow}>+ 添加明细</Button>
-              <span style={{ color: "#86909c", fontSize: 12 }}>
-                表头右侧可拖拽调整列宽；条码/名称列支持拍照/相册识别；名称未匹配自动大模型兜底分析；合计金额：{rows.reduce((s, r) => s + (r.qty > 0 ? r.qty * (r.price || 0) : 0), 0).toFixed(2)}
+              <span style={{ color: "#646a73", fontSize: 12 }}>
+                条码/名称列支持拍照/相册识别；名称未匹配自动大模型兜底分析；合计金额：{rows.reduce((s, r) => s + (r.qty > 0 ? r.qty * (r.price || 0) : 0), 0).toFixed(2)}
               </span>
             </Space>
           )}
@@ -806,7 +829,7 @@ export function PurchaseInPage() {
         width={440}
         destroyOnHidden
       >
-        <p style={{ color: "#86909c", fontSize: 12, marginTop: 0 }}>
+        <p style={{ color: "#646a73", fontSize: 12, marginTop: 0 }}>
           新仓位将立即保存并选中当前明细行；编码自动生成（仓库编码-货架编码-层号）。
         </p>
         <Form form={locForm} layout="vertical">
@@ -828,7 +851,7 @@ export function PurchaseInPage() {
 
       {/* 无材料新增（条码/OCR 未匹配） */}
       <Modal title="材料不存在，是否新增材料？" open={materialModal.open} onOk={() => void createMaterial()} onCancel={() => setMaterialModal((s) => ({ ...s, open: false }))} width={480} destroyOnHidden>
-        <p style={{ color: "#86909c", fontSize: 12, marginTop: 0 }}>系统未匹配到该条码/名称对应的材料，确认信息后新增（条码可选），保存后自动带入当前明细行。</p>
+        <p style={{ color: "#646a73", fontSize: 12, marginTop: 0 }}>系统未匹配到该条码/名称对应的材料，确认信息后新增（条码可选），保存后自动带入当前明细行。</p>
         <Form form={materialForm} layout="vertical">
           <Form.Item name="name" label="材料名称" rules={[{ required: true, message: "请输入材料名称" }]} initialValue={materialModal.name}>
             <Input placeholder="如：轴承6204" maxLength={100} />

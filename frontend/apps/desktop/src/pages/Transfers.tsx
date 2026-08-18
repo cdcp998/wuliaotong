@@ -39,7 +39,7 @@ export function TransfersPage() {
   const [open, setOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
   const [products, setProducts] = useState<{ id: number; name: string; code: string }[]>([]);
-  const [locs, setLocs] = useState<Record<number, { id: number; code: string }[]>>({});
+  const [locs, setLocs] = useState<Record<number, { id: number; display: string }[]>>({});
   const [form, setForm] = useState({ from_warehouse_id: 0, to_warehouse_id: 0, rows: [] as Row[] });
 
   const load = useCallback(async () => {
@@ -66,7 +66,7 @@ export function TransfersPage() {
   async function loadLocs(whId: number) {
     if (locs[whId]) return;
     const data = await baseApi.locations(whId);
-    setLocs((m) => ({ ...m, [whId]: data.map((l) => ({ id: l.id, code: l.code })) }));
+    setLocs((m) => ({ ...m, [whId]: data.map((l) => ({ id: l.id, display: l.display ?? l.code })) }));
   }
 
   function setRow(i: number, patch: Partial<Row>) {
@@ -123,8 +123,8 @@ export function TransfersPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Space style={{ marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>库存调拨</h2>
+      <h2 style={{ margin: "0 0 16px" }}>库存调拨</h2>
+      <Space style={{ marginBottom: 16 }} wrap>
         <Radio.Group value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} optionType="button" size="small">
           <Radio.Button value={undefined}>全部</Radio.Button>
           <Radio.Button value={0}>草稿</Radio.Button>
@@ -155,7 +155,7 @@ export function TransfersPage() {
           { label: "备注", value: detail?.remark, span: 2 },
         ]}
         columns={[
-          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}</div></div> },
+          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#646a73" }}>{r.code}</div></div> },
           { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
           { title: "调出库位", dataIndex: "from_location_code", width: 130 },
           { title: "调入库位", dataIndex: "to_location_code", width: 130 },
@@ -173,8 +173,8 @@ export function TransfersPage() {
         {form.rows.map((r, i) => (
           <Space key={i} style={{ marginBottom: 8 }}>
             <Select style={{ width: 200 }} showSearch placeholder="材料" options={products} fieldNames={{ label: "name", value: "id" }} filterOption={(input, o) => String((o as { name?: string }).name ?? "").includes(input)} value={r.product_id} onChange={(v) => setRow(i, { product_id: v })} />
-            <Select style={{ width: 130 }} placeholder="出库位" options={locs[form.from_warehouse_id] ?? []} fieldNames={{ label: "code", value: "id" }} value={r.from_location_id} onChange={(v) => setRow(i, { from_location_id: v })} />
-            <Select style={{ width: 130 }} placeholder="入库位" options={locs[form.to_warehouse_id] ?? []} fieldNames={{ label: "code", value: "id" }} value={r.to_location_id} onChange={(v) => setRow(i, { to_location_id: v })} />
+            <Select style={{ width: 130 }} placeholder="出库位" options={locs[form.from_warehouse_id] ?? []} fieldNames={{ label: "display", value: "id" }} value={r.from_location_id} onChange={(v) => setRow(i, { from_location_id: v })} />
+            <Select style={{ width: 130 }} placeholder="入库位" options={locs[form.to_warehouse_id] ?? []} fieldNames={{ label: "display", value: "id" }} value={r.to_location_id} onChange={(v) => setRow(i, { to_location_id: v })} />
             <InputNumber min={0.001} placeholder="数量" value={r.qty} onChange={(v) => setRow(i, { qty: v ?? 0 })} />
             <Button size="small" danger onClick={() => setForm((f) => ({ ...f, rows: f.rows.filter((_, idx) => idx !== i) }))}>删</Button>
           </Space>

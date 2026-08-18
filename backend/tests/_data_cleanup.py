@@ -37,6 +37,7 @@ from app.models.base import (
     BaseProductUnit,
     BaseShelf,
     BaseSupplier,
+    BaseUnit,
     BaseWarehouse,
 )
 from app.models.ocr import AiSuggestion, OcrRecord
@@ -68,7 +69,7 @@ SUPPLIER_CODE_OCR = re.compile(r"^OCR\d+$")
 PRODUCT_MATERIAL = re.compile(r"^(CM|MC)[0-9a-f]{6}")
 # 公司模板导入商品：code=CM{hex}01
 PRODUCT_CODE_CM = re.compile(r"^CM[0-9a-f]{6}\d+$")
-CATEGORY_NAME = re.compile(r"^(机械件|轴承类|标准件|P2测试分类)[0-9a-fA-F]{6,8}$")
+CATEGORY_NAME = re.compile(r"^(机械件|轴承类|标准件|P2测试分类|类|三)[0-9a-fA-F]{6,8}(二|三|四|子)?$")
 # 部门（单位自动编码测试）：自动码{hex}[改|2]；机加车间（所属单位测试）
 DEPT_NAME = re.compile(r"^(自动码[0-9a-f]{6,8}(改|2)?|机加车间)$")
 # 测试角色：冒烟角色 role{ts} / AI 处理员(测试) ai_only_AI{hex} / 所属单位角色 dp{hex}
@@ -89,11 +90,15 @@ TEST_PRODUCT_NAMES = (
     "缓存测试商品", "缓存测试2改", "缓存测试商品改名", "容量型硬盘录像机", "业无线WiFi 6", "PTZ枪球一体 机", "硬盘录像机", "X",
     "预警文案测试物料", "模板学习测试物料",
 )
+# 测试单位（名称带 6 位 hex 后缀 + x 尾巴，如 件{hex}x；仅删未被材料引用的）
+UNIT_NAME = re.compile(r"^(件|个|套)[0-9a-fA-F]{6,8}x$")
 # 供应商名：{hex}五金 或 {hex}五金有限公司 / {hex}送货单供应商
 SUPPLIER_NAME = re.compile(r"^[0-9a-fA-F]{6,8}(五金(有限公司)?|送货单供应商)$")
 
 # 商品名含 tag 的匹配（轴承{hex} / 条码材料{hex} / P2P{hex} / 查重材料{hex} 等）
 PRODUCT_NAME_TAGGED = re.compile(r"^(轴承|条码材料|条码品|条码未命中|P2P|材料|查重材料|关联材料|自动新增物料|冒烟关联材料|螺丝|不锈钢螺丝)[0-9a-fA-F]{6,8}")
+# 三级分类测试商品：三{hex}料A/B/C
+PRODUCT_NAME_3LVL = re.compile(r"^三[0-9a-fA-F]{6,8}料[ABC]$")
 
 
 def _match_ids(db, model, id_field, ids: set[int]) -> None:
@@ -125,6 +130,7 @@ def cleanup_test_data() -> None:
             for p in products
             if p.name in TEST_PRODUCT_NAMES
             or PRODUCT_NAME_TAGGED.match(p.name)
+            or PRODUCT_NAME_3LVL.match(p.name)
             or PRODUCT_CODE_OLD.match(p.code)
             or PRODUCT_CODE_AI.match(p.code)
             or PRODUCT_CODE_CM.match(p.code)
@@ -282,10 +288,25 @@ def cleanup_test_data() -> None:
         }
         _match_ids(db, SysRolePermission, SysRolePermission.role_id, test_role_ids)
         _match_ids(db, SysRole, SysRole.id, test_role_ids)
-        # 分类（先子后父：父分类可能被子分类引用）
-        sub = {c.id for c in db.scalars(select(BaseCategory)).all() if c.parent_id in test_cat_ids}
+        # 分类（先子后父：父分类可能被子分类引用；三级体系递归收集全部子孙）
+        sub: set[int] = set()
+        queue = list(test_cat_ids)
+        while queue:
+            cur = queue.pop()
+            children = {
+                c.id for c in db.scalars(select(BaseCategory)).all() if c.parent_id == cur
+            }
+            new = children - sub - test_cat_ids
+            sub |= new
+            queue.extend(new)
         _match_ids(db, BaseCategory, BaseCategory.id, sub)
         _match_ids(db, BaseCategory, BaseCategory.id, test_cat_ids)
+        # 测试单位（在商品删除之后执行，未被任何材料引用的才删）
+        used_units = {u.unit_id for u in db.scalars(select(BaseProduct)).all()}
+        test_unit_ids = {
+            u.id for u in db.scalars(select(BaseUnit)).all() if UNIT_NAME.match(u.name) and u.id not in used_units
+        }
+        _match_ids(db, BaseUnit, BaseUnit.id, test_unit_ids)
         # OCR / AI 建议（按文件/商品/用户关联）
         bill_ids = pch_ids | req_ids | trf_ids | chk_ids | oio_ids | opn_ids
         test_file_ids = {

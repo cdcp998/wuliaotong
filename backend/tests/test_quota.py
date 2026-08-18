@@ -229,7 +229,7 @@ def test_quota_warning_email_send_once_then_recover(monkeypatch) -> None:
         r1 = q.check_quota_warnings()
         assert r1["emails"] == 2 and r1["providers"] == ["siliconflow"]
         assert len(sent) == 2
-        assert "SiliconFlow" in sent[0][2]  # 正文包含服务商中文名与配置的模型名
+        assert "视觉模型" in sent[0][2]  # 正文包含服务商中文名与配置的模型名（标签已中文化）
         assert "配额预警" in sent[0][1]
 
         # 第二次检查：仍低于阈值但已通知过 → 不再发

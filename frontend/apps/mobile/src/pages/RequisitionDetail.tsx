@@ -134,12 +134,12 @@ export function RequisitionDetailPage() {
     });
   }
 
-  if (!detail) return <div style={{ minHeight: "100vh", background: "#f5f6f8", textAlign: "center", paddingTop: 80, color: "#86909c" }}>加载中…</div>;
+  if (!detail) return <div style={{ minHeight: "100dvh", background: "#f5f6f8", textAlign: "center", paddingTop: 80, color: "#646a73" }}>加载中…</div>;
 
   const st = STATUS[detail.status];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate(-1)}>申请详情</NavBar>
       <div style={{ padding: 12 }}>
         {/* 单头信息 */}
@@ -154,12 +154,12 @@ export function RequisitionDetailPage() {
             </div>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px", marginTop: 12, fontSize: 12.5 }}>
-            <div><div style={{ color: "#86909c" }}>申请人</div><div style={{ marginTop: 2 }}>{detail.applicant_name}</div></div>
-            <div><div style={{ color: "#86909c" }}>仓库</div><div style={{ marginTop: 2 }}>{detail.warehouse_name}</div></div>
-            <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#86909c" }}>使用地点（必填）</div><div style={{ marginTop: 2, fontWeight: 500 }}>{detail.use_location}</div></div>
-            <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#86909c" }}>因何使用（必填）</div><div style={{ marginTop: 2, fontWeight: 500 }}>{detail.use_reason}</div></div>
-            <div><div style={{ color: "#86909c" }}>申请时间</div><div style={{ marginTop: 2 }}>{detail.created_at.slice(0, 16)}</div></div>
-            <div><div style={{ color: "#86909c" }}>总数量</div><div style={{ marginTop: 2 }}>{detail.total_qty}</div></div>
+            <div><div style={{ color: "#646a73" }}>申请人</div><div style={{ marginTop: 2 }}>{detail.applicant_name}</div></div>
+            <div><div style={{ color: "#646a73" }}>仓库</div><div style={{ marginTop: 2 }}>{detail.warehouse_name}</div></div>
+            <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#646a73" }}>使用地点（必填）</div><div style={{ marginTop: 2, fontWeight: 500 }}>{detail.use_location}</div></div>
+            <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#646a73" }}>因何使用（必填）</div><div style={{ marginTop: 2, fontWeight: 500 }}>{detail.use_reason}</div></div>
+            <div><div style={{ color: "#646a73" }}>申请时间</div><div style={{ marginTop: 2 }}>{detail.created_at.slice(0, 16)}</div></div>
+            <div><div style={{ color: "#646a73" }}>总数量</div><div style={{ marginTop: 2 }}>{detail.total_qty}</div></div>
           </div>
         </div>
 
@@ -167,7 +167,7 @@ export function RequisitionDetailPage() {
         {detail.status === 1 && isOwner && (
           <div style={{ background: "#fff", border: "1px solid #e8f1fd", borderRadius: 12, padding: 14, marginBottom: 10 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, color: "#1668dc", marginBottom: 6 }}>完成工作（拍照留痕）</div>
-            <div style={{ fontSize: 12, color: "#86909c", lineHeight: 1.7, marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: "#646a73", lineHeight: 1.7, marginBottom: 10 }}>
               材料已领用，请在工作完成后于工作地点拍照。系统读取手机定位，下载照片时自动添加地点/时间/坐标水印（原始照片不保存水印）。
             </div>
             <PhotoUpload bizType="requisition_work" fileId={workFileId} onChange={setWorkFileId} />
@@ -178,7 +178,7 @@ export function RequisitionDetailPage() {
               <Button size="small" fill="outline" color="primary" loading={locating} onClick={getLocation}>
                 获取定位
               </Button>
-              <span style={{ fontSize: 11.5, color: lat ? "#389e0d" : "#86909c", flex: 1 }}>
+              <span style={{ fontSize: 11.5, color: lat ? "#389e0d" : "#646a73", flex: 1 }}>
                 {locText || (lat ? `已获取：${lat}, ${lng}` : "点击获取手机定位（水印坐标）")}
               </span>
             </div>
@@ -193,7 +193,7 @@ export function RequisitionDetailPage() {
           <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, padding: 14, marginBottom: 10 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 8 }}>完成工作照片（工作地点留痕）</div>
             <FileImage fileId={detail.work_photo_file_id} size={140} alt="完成工作照片" />
-            <div style={{ fontSize: 11.5, color: "#86909c", marginTop: 6 }}>
+            <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 6 }}>
               {detail.work_done_at ? `完成时间：${detail.work_done_at.slice(0, 16)}` : ""}
               {detail.work_lat ? `　定位：${detail.work_lat}, ${detail.work_lng}` : "　未获取定位"}
             </div>
@@ -212,7 +212,7 @@ export function RequisitionDetailPage() {
             <div key={it.id} style={{ padding: "11px 14px", borderBottom: "1px solid #f5f6f8", display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 500 }}>{it.product_name}</div>
-                <div style={{ fontSize: 11.5, color: "#86909c", marginTop: 2 }}>
+                <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 2 }}>
                   {it.location_code}
                   {it.spec ? ` · ${it.spec}` : ""}
                 </div>

@@ -7,6 +7,20 @@ export interface Settings {
   "ocr.engine": string;
   "ocr.model_version": string;
   "llm.doubao.enabled": string;
+  // 模型承担任务开关（1 启用 / 0 关闭该任务跳过此模型）
+  "llm.doubao.scene.match_vision": string;
+  "llm.doubao.scene.vision_product": string;
+  "llm.doubao.scene.classify_items": string;
+  "llm.doubao.scene.ocr_correct": string;
+  "llm.doubao.scene.vision_text": string;
+  "llm.doubao.scene.structured": string;
+  "llm.siliconflow.scene.vision_delivery": string;
+  "llm.siliconflow.scene.vision_product": string;
+  "llm.siliconflow.scene.vision_text": string;
+  "llm.siliconflow.scene.match_vision": string;
+  "llm.deepseek.scene.ocr_correct": string;
+  "llm.deepseek.scene.classify_items": string;
+  "llm.deepseek.scene.structured": string;
   "llm.deepseek.enabled": string;
   "llm.doubao.api_key": string;
   "llm.doubao.base_url": string;

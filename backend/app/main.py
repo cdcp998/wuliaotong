@@ -13,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api import auth as auth_api
@@ -34,7 +35,7 @@ from app.core.deps import resolve_session_user
 from app.core.logging_config import configure_logging, set_log_level
 from app.core.loop_guard import install_loop_guard, install_proactor_accept_patch
 from app.core.ratelimit import RateLimitMiddleware
-from app.core.response import BizError, E_PARAM, biz_error_handler, err
+from app.core.response import BizError, E_NOT_FOUND, E_NO_PERMISSION, E_PARAM, E_RATE_LIMITED, biz_error_handler, err
 from app.db import SessionLocal, engine
 from app.models.sys import SysConfig, SysOperationLog
 from app.scheduler import start_scheduler, stop_scheduler
@@ -90,15 +91,81 @@ app = FastAPI(
 app.add_exception_handler(BizError, biz_error_handler)
 
 
+def _zh_validation_msg(e: dict) -> str:
+    """pydantic v2 校验错误 → 中文提示（面向用户，避免英文原文透传）。"""
+    t = e.get("type", "")
+    ctx = e.get("ctx") or {}
+    if t == "value_error":  # 业务自定义 ValueError：消息已是业务中文
+        return str(e.get("msg", "参数错误")).removeprefix("Value error, ")
+    if t == "missing":
+        return "该字段必填"
+    if t == "extra_forbidden":
+        return "不允许的字段"
+    if t in ("int_parsing", "int_from_float"):
+        return "必须是整数"
+    if t in ("float_parsing", "decimal_parsing"):
+        return "必须是数字"
+    if t == "bool_parsing":
+        return "必须是布尔值"
+    if t == "string_type":
+        return "必须是字符串"
+    if t == "string_too_long":
+        return f"长度不能超过 {ctx.get('max_length', '')}"
+    if t == "string_too_short":
+        return f"长度不能少于 {ctx.get('min_length', '')}"
+    if t == "string_pattern_mismatch":
+        return "格式不正确"
+    if t == "json_invalid":
+        return "请求体不是有效的 JSON"
+    if t == "less_than":
+        return f"数值必须小于 {ctx.get('lt', '')}"
+    if t == "less_than_equal":
+        return f"数值不能超过 {ctx.get('le', '')}"
+    if t == "greater_than":
+        return f"数值必须大于 {ctx.get('gt', '')}"
+    if t == "greater_than_equal":
+        return f"数值不能小于 {ctx.get('ge', '')}"
+    if t in ("date_parsing", "datetime_parsing"):
+        return "日期格式不正确"
+    if t in ("enum", "literal_error"):
+        return "取值不在允许范围内"
+    if t in ("list_type", "dict_type", "tuple_type"):
+        return "类型不正确"
+    return str(e.get("msg", "参数错误"))
+
+
 async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    """参数校验失败统一转 4006（《后端API设计.md》§11.8）。"""
+    """参数校验失败统一转 4006（《后端API设计.md》§11.8），错误消息中文化，HTTP 400。"""
     first = exc.errors()[0] if exc.errors() else {}
     loc = ".".join(str(x) for x in first.get("loc", []))
-    msg = f"{loc}: {first.get('msg', '参数错误')}" if loc else "参数校验失败"
-    return JSONResponse(status_code=200, content=err(E_PARAM, msg))
+    msg = _zh_validation_msg(first)
+    return JSONResponse(status_code=400, content=err(E_PARAM, f"{loc}: {msg}" if loc else msg))
+
+
+async def http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """HTTP 层异常（404/405/401 等）→ 中文提示 + 语义化业务码，HTTP 状态透传（不再统一 200）。"""
+    status = getattr(exc, "status_code", 500)
+    msg = {
+        400: "请求参数错误",
+        401: "未登录或会话已过期",
+        403: "无权限执行该操作",
+        404: "资源不存在",
+        405: "请求方法不允许",
+        429: "请求过于频繁，请稍后重试",
+    }.get(status, f"请求失败（HTTP {status}）")
+    code = {400: E_PARAM, 401: 4004, 403: E_NO_PERMISSION, 404: E_NOT_FOUND, 405: E_PARAM, 429: E_RATE_LIMITED}.get(status, 500)
+    return JSONResponse(status_code=status, content=err(code, msg))
+
+
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """未捕获异常兜底：面向用户只给中文提示，详情进日志（含异常原文，供排障）。"""
+    logger.exception("未处理异常：%s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content=err(500, "服务器内部错误，请稍后重试（详情见系统日志）"))
 
 
 app.add_exception_handler(RequestValidationError, validation_error_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 
 _AUDIT_MAX_PENDING = 500  # 审计落库任务并发上限（防 executor 队列无界堆积）

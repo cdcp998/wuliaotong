@@ -14,11 +14,24 @@ from sqlalchemy.orm import Session
 
 from app.core.cache import cache_delete_pattern
 from app.core.response import BizError, E_NOT_FOUND, E_STOCK_NOT_ENOUGH
-from app.models.base import BaseLocation, BaseProduct
+from app.models.base import BaseLocation, BaseProduct, BaseShelf, BaseWarehouse
 from app.models.stock import StkStock, StkStockLog
 
 _DEC2 = Decimal("0.01")
 _DEC3 = Decimal("0.001")
+
+
+def loc_display(db: Session, loc_id: int) -> str:
+    """库位显示名：仓库名-货架编码-层号（如「一号仓-A01-01」）。
+
+    界面统一用仓库名称展示，避免暴露 WH 仓库编码造成混淆；库位内部 code 不变。
+    """
+    loc = db.get(BaseLocation, loc_id)
+    if loc is None:
+        return ""
+    wh = db.get(BaseWarehouse, loc.warehouse_id)
+    shelf = db.get(BaseShelf, loc.shelf_id)
+    return f"{wh.name if wh else ''}-{shelf.code if shelf else ''}-{loc.layer_no:02d}"
 
 
 def post_stock_change(

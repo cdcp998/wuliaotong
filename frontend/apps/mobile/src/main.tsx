@@ -5,6 +5,8 @@ import { RouterProvider, createBrowserRouter } from "react-router";
 
 // 电脑/宽屏浏览器（≥768px）打开移动端时的「应用窗口化」适配（限宽居中+弹层限宽）
 import "./styles/widescreen.css";
+// 全局基础样式（字体栈/焦点环/宫格按压反馈，见《UI设计方案.md》§2 设计系统）
+import "./styles/global.css";
 
 import { RequireAuth } from "./components/RequireAuth";
 import { TabLayout } from "./components/TabLayout";
@@ -69,7 +71,7 @@ unstableSetRender((node, container) => {
 });
 
 function PageLoading() {
-  return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#86909c" }}><DotLoading /></div>;
+  return <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", color: "#646a73" }}><DotLoading /></div>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

@@ -28,7 +28,7 @@ def decode_barcode(data: bytes) -> str:
     try:
         img = Image.open(io.BytesIO(data)).convert("L")
     except Exception as e:
-        raise BizError(E_PARAM, f"图片解析失败：{e}")
+        raise BizError(E_PARAM, "图片解析失败，请确认图片格式正确")
     results = zxingcpp.read_barcodes(img)
     for r in results:
         text = (r.text or "").strip()

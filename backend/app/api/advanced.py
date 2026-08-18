@@ -32,7 +32,7 @@ from app.models.advanced import (
     StkTransfer,
     StkTransferItem,
 )
-from app.models.base import BaseCategory, BaseLocation, BaseProduct, BaseUnit, BaseWarehouse
+from app.models.base import BaseCategory, BaseLocation, BaseProduct, BaseShelf, BaseUnit, BaseWarehouse
 from app.models.stock import StkStock, StkStockLog
 from app.models.sys import SysUser
 from app.schemas.advanced import (
@@ -68,8 +68,13 @@ def _user_name(db: Session, uid: int) -> str:
 
 
 def _loc_code(db: Session, loc_id: int) -> str:
+    """库位显示名：仓库名-货架编码-层号（界面不显示 WH 仓库编码，避免混淆）。"""
     loc = db.get(BaseLocation, loc_id)
-    return loc.code if loc else ""
+    if loc is None:
+        return ""
+    wh = db.get(BaseWarehouse, loc.warehouse_id)
+    shelf = db.get(BaseShelf, loc.shelf_id)
+    return f"{wh.name if wh else ''}-{shelf.code if shelf else ''}-{loc.layer_no:02d}"
 
 
 def _item_out(db: Session, product_id: int, location_id: int, qty: Decimal, item_id: int) -> dict:
@@ -121,7 +126,7 @@ def create_transfer(
         except IntegrityError as exc:
             db.rollback()
             if not bill_no_conflict(exc):
-                raise BizError(E_PARAM, f"调拨单保存失败：{exc.orig}") from exc
+                raise BizError(E_PARAM, "调拨单保存失败，请重试（详情见系统日志）") from exc
     raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
@@ -286,7 +291,7 @@ def create_check(
         except IntegrityError as exc:
             db.rollback()
             if not bill_no_conflict(exc):
-                raise BizError(E_PARAM, f"盘点单保存失败：{exc.orig}") from exc
+                raise BizError(E_PARAM, "盘点单保存失败，请重试（详情见系统日志）") from exc
     raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
@@ -642,7 +647,7 @@ def create_other_io(
         except IntegrityError as exc:
             db.rollback()
             if not bill_no_conflict(exc):
-                raise BizError(E_PARAM, f"其他出入库单保存失败：{exc.orig}") from exc
+                raise BizError(E_PARAM, "其他出入库单保存失败，请重试（详情见系统日志）") from exc
     raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 

@@ -3,7 +3,7 @@
  *
  * 移动端 App 在电脑/宽屏浏览器（≥768px）打开时，手机式单列页面被无限拉宽会很难看。
  * 本文件用媒体查询做「应用窗口化」适配：内容限宽居中、两侧灰底、弹层同步限宽，
- * 一套 CSS 覆盖全部页面（页面根容器均带 height/min-height:100vh 内联样式，
+ * 一套 CSS 覆盖全部页面（页面根容器均带 height/min-height:100dvh 内联样式，
  * 用属性选择器命中；弹层用 antd-mobile 稳定类名），≤767px 手机端不受任何影响。
  *
  * 覆盖策略与《前端设计.md》桌面端适配约定一致：仅依赖稳定类名/结构特征，不逐页改组件。
@@ -16,8 +16,8 @@
     margin: 0;
   }
 
-  /* 页面根容器限宽居中（页面根 div 均带 height/min-height:100vh 内联样式，为 #root 直接子级） */
-  #root > div[style*="100vh"] {
+  /* 页面根容器限宽居中（页面根 div 均带 height/min-height:100dvh 内联样式，为 #root 直接子级） */
+  #root > div[style*="100dvh"] {
     max-width: 720px;
     margin: 0 auto;
     box-shadow: 0 2px 16px rgba(0, 0, 0, 0.07);

@@ -95,7 +95,7 @@ export function RequisitionQueryPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: 0, marginBottom: 16 }}>领用申请单查询</h2>
+      <h2 style={{ margin: "0 0 16px" }}>领用申请单查询</h2>
       <Space wrap style={{ marginBottom: 16 }}>
         <Select
           value={status}
@@ -122,7 +122,7 @@ export function RequisitionQueryPage() {
           }}
           style={{ width: 260 }}
         />
-        <span style={{ color: "#86909c", fontSize: 12 }}>流程：领用申请 → 完成工作拍照（含定位水印）→ 审计 → 完成</span>
+        <span style={{ color: "#646a73", fontSize: 12 }}>流程：领用申请 → 完成工作拍照（含定位水印）→ 审计 → 完成</span>
       </Space>
       <DataTable
         rowKey="id"
@@ -138,19 +138,19 @@ export function RequisitionQueryPage() {
         {detail && (
           <div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", background: "#fafbfc", border: "1px solid #f0f1f3", borderRadius: 8, padding: "12px 14px" }}>
-              <div><div style={{ fontSize: 12, color: "#86909c" }}>单号</div><div style={{ fontWeight: 600 }}>{detail.bill_no}</div></div>
-              <div><div style={{ fontSize: 12, color: "#86909c" }}>申请人</div><div>{detail.applicant_name}</div></div>
-              <div><div style={{ fontSize: 12, color: "#86909c" }}>出库仓库</div><div>{detail.warehouse_name}</div></div>
-              <div><div style={{ fontSize: 12, color: "#86909c" }}>状态</div><div><Tag color={STATUS[detail.status]?.color}>{STATUS[detail.status]?.text ?? detail.status}</Tag></div></div>
-              <div><div style={{ fontSize: 12, color: "#86909c" }}>申请时间</div><div>{detail.created_at?.slice(0, 16) ?? "-"}</div></div>
-              <div><div style={{ fontSize: 12, color: "#86909c" }}>总数量</div><div>{detail.total_qty}</div></div>
+              <div><div style={{ fontSize: 12, color: "#646a73" }}>单号</div><div style={{ fontWeight: 600 }}>{detail.bill_no}</div></div>
+              <div><div style={{ fontSize: 12, color: "#646a73" }}>申请人</div><div>{detail.applicant_name}</div></div>
+              <div><div style={{ fontSize: 12, color: "#646a73" }}>出库仓库</div><div>{detail.warehouse_name}</div></div>
+              <div><div style={{ fontSize: 12, color: "#646a73" }}>状态</div><div><Tag color={STATUS[detail.status]?.color}>{STATUS[detail.status]?.text ?? detail.status}</Tag></div></div>
+              <div><div style={{ fontSize: 12, color: "#646a73" }}>申请时间</div><div>{detail.created_at?.slice(0, 16) ?? "-"}</div></div>
+              <div><div style={{ fontSize: 12, color: "#646a73" }}>总数量</div><div>{detail.total_qty}</div></div>
               <div style={{ gridColumn: "1/-1" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: 12, color: "#86909c" }}>使用地点（水印/记录用）</div>
+                  <div style={{ fontSize: 12, color: "#646a73" }}>使用地点（水印/记录用）</div>
                   <Button size="small" type="link" onClick={() => setLocOpen(true)}>编辑 GPS 与地点</Button>
                 </div>
                 <div style={{ fontWeight: 500 }}>{detail.use_location || "-"}</div>
-                <div style={{ fontSize: 11.5, color: "#86909c", marginTop: 2 }}>
+                <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 2 }}>
                   GPS：{detail.work_lat && detail.work_lng ? `${detail.work_lat}, ${detail.work_lng}` : "未记录"}
                   {detail.work_lat && detail.work_lng && (
                     <span style={{ marginLeft: 8 }}>（可通过 GPS 反查地址补全）</span>
@@ -158,7 +158,7 @@ export function RequisitionQueryPage() {
                 </div>
               </div>
               <div style={{ gridColumn: "1/-1" }}>
-                <div style={{ fontSize: 12, color: "#86909c" }}>因何使用</div>
+                <div style={{ fontSize: 12, color: "#646a73" }}>因何使用</div>
                 <div style={{ fontWeight: 500 }}>
                   {detail.use_reason}
                   {detail.is_private === 1 && <Tag color="red" style={{ marginLeft: 8 }}>私用</Tag>}
@@ -177,10 +177,10 @@ export function RequisitionQueryPage() {
 
             {detail.work_photo_file_id > 0 && (
               <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 12, color: "#86909c", marginBottom: 6 }}>完成工作照片（工作地点留痕，下载时自动添加地点/时间/定位水印）</div>
+                <div style={{ fontSize: 12, color: "#646a73", marginBottom: 6 }}>完成工作照片（工作地点留痕，下载时自动添加地点/时间/定位水印）</div>
                 <Space>
                   <FileImage fileId={detail.work_photo_file_id} size={96} alt="完成工作照片" />
-                  <div style={{ fontSize: 12, color: "#86909c" }}>
+                  <div style={{ fontSize: 12, color: "#646a73" }}>
                     <div>{detail.work_done_at ? `完成时间：${detail.work_done_at.slice(0, 16)}` : ""}</div>
                     <div>{detail.work_lat ? `定位：${detail.work_lat}, ${detail.work_lng}` : "未获取定位"}</div>
                     <Button size="small" style={{ marginTop: 6 }} onClick={() => { window.open(requisitionApi.workPhotoUrl(detail.id), "_self"); }}>
@@ -198,7 +198,7 @@ export function RequisitionQueryPage() {
               pagination={false}
               dataSource={detail.items}
               columns={[
-                { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
+                { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#646a73" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
                 { title: "库位", dataIndex: "location_code", width: 120 },
                 { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
               ]}
@@ -228,7 +228,7 @@ export function RequisitionQueryPage() {
       >
         {detail && (
           <div>
-            <div style={{ fontSize: 12, color: "#86909c", marginBottom: 10, lineHeight: 1.7 }}>
+            <div style={{ fontSize: 12, color: "#646a73", marginBottom: 10, lineHeight: 1.7 }}>
               适用场景：完成工作照片没有原始地点记录时，输入 GPS 坐标反查地址补全；保存后水印照片将按新地点/坐标生成。
             </div>
             <GeoAddressPanel

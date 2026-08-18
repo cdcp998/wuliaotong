@@ -114,7 +114,7 @@ export function GeoAddressPanel({
         </Space>
       </div>
 
-      {hint && <div style={{ fontSize: 12, color: hint.includes("失败") || hint.includes("错误") || hint.includes("为空") ? "#cf1322" : "#86909c" }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 12, color: hint.includes("失败") || hint.includes("错误") || hint.includes("为空") ? "#cf1322" : "#646a73" }}>{hint}</div>}
 
       <Space>
         <Button type="primary" loading={saving} onClick={() => void save()}>

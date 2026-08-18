@@ -36,7 +36,7 @@ from app.models.base import (
     BaseUnit,
     BaseWarehouse,
 )
-from app.models.stock import PchPurchaseIn
+from app.models.stock import PchPurchaseIn, StkStock
 from app.models.sys import SysRole, SysUser
 from app.schemas.admin import DeptOut, DeptReq, DeptShelvesReq, DeptUpdateReq
 from app.schemas.base import (
@@ -45,6 +45,7 @@ from app.schemas.base import (
     LocationOut,
     LocationReq,
     PageData,
+    ProductCategoryReq,
     ProductOut,
     ProductReq,
     ShelfOut,
@@ -55,6 +56,7 @@ from app.schemas.base import (
     UnitReq,
     WarehouseOut,
     WarehouseReq,
+    WarehouseUpdateReq,
 )
 
 router = APIRouter(tags=["基础资料"], dependencies=[Depends(get_current_user)])
@@ -113,11 +115,35 @@ def list_categories(db: Session = Depends(get_db)) -> dict:
                 tree.append(node)
         return tree
 
-    return ok(cache_aside("dict:categories", _DICT_TTL, _load))
+    tree: list[dict] = cache_aside("dict:categories", _DICT_TTL, _load)
+
+    # 已挂材料数实时统计（不进树缓存，避免创建/改挂材料后数字滞后）
+    counts = dict(
+        db.execute(
+            select(BaseProduct.category_id, func.count())
+            .where(BaseProduct.category_id > 0, BaseProduct.status == 1)
+            .group_by(BaseProduct.category_id)
+        ).all()
+    )
+
+    def _attach(nodes: list[dict]) -> None:
+        for n in nodes:
+            n["product_count"] = counts.get(n["id"], 0)
+            if n.get("children"):
+                _attach(n["children"])
+
+    _attach(tree)
+    return ok(tree)
 
 
 @router.post("/categories", dependencies=[Depends(require_any_permission("base:category", "ai:suggestion"))])
 def create_category(req: CategoryReq, db: Session = Depends(get_db)) -> dict:
+    if req.parent_id:
+        parent = db.get(BaseCategory, req.parent_id)
+        if parent is None:
+            raise BizError(E_PARAM, "父分类不存在")
+        if _cat_depth(parent) >= 3:
+            raise BizError(E_PARAM, "分类最多三级，三级分类下不能再建子分类")
     cat = BaseCategory(
         parent_id=req.parent_id,
         name=req.name,
@@ -138,6 +164,18 @@ def update_category(cat_id: int, req: CategoryReq, db: Session = Depends(get_db)
         raise BizError(E_NOT_FOUND, "分类不存在")
     if req.parent_id == cat_id:
         raise BizError(E_PARAM, "父分类不能是自己")
+    if req.parent_id != cat.parent_id:
+        parent = db.get(BaseCategory, req.parent_id) if req.parent_id else None
+        if req.parent_id and parent is None:
+            raise BizError(E_PARAM, "父分类不存在")
+        if parent and _cat_depth(parent) >= 3:
+            raise BizError(E_PARAM, "分类最多三级，三级分类下不能再建子分类")
+        # 父分类不能是自己的子孙（防环）；移动后最深子孙不得超过三级
+        if parent and _is_descendant(db, parent.id, cat.id):
+            raise BizError(E_PARAM, "父分类不能是自己的子分类")
+        new_depth = (_cat_depth(parent) if parent else 0) + 1
+        if new_depth + _subtree_height(db, cat) - 1 > 3:
+            raise BizError(E_PARAM, "该分类下有子分类，移动后层级将超过三级")
     cat.parent_id = req.parent_id
     cat.name = req.name
     cat.sort = req.sort
@@ -151,15 +189,49 @@ def update_category(cat_id: int, req: CategoryReq, db: Session = Depends(get_db)
 def delete_category(cat_id: int, db: Session = Depends(get_db)) -> dict:
     cat = db.get(BaseCategory, cat_id)
     if cat is None:
-        raise BizError(E_NOT_FOUND, "分类不存在")
+        raise BizError(E_NOT_FOUND, "分类不存在", http_status=404)
     child_cnt = db.scalar(select(func.count()).select_from(BaseCategory).where(BaseCategory.parent_id == cat_id)) or 0
     product_cnt = db.scalar(select(func.count()).select_from(BaseProduct).where(BaseProduct.category_id == cat_id)) or 0
     if child_cnt or product_cnt:
-        raise BizError(E_PARAM, "分类下存在子分类或商品，禁止删除")
+        raise BizError(E_PARAM, "分类下存在子分类或商品，禁止删除", http_status=409)
     db.delete(cat)
     db.commit()
     cache_delete("dict:categories")  # 分类树缓存失效
     return ok()
+
+
+def _cat_depth(cat: BaseCategory) -> int:
+    """分类层级：path 每段一个祖先（"/" 顶级=1、"/a/" 二级=2、"/a/b/" 三级=3）。"""
+    return len([p for p in cat.path.split("/") if p]) + 1
+
+
+def _is_descendant(db: Session, node_id: int, ancestor_id: int) -> bool:
+    """node_id 是否为 ancestor_id 的子孙。"""
+    node = db.get(BaseCategory, node_id)
+    cur = node.parent_id if node else 0
+    while cur:
+        if cur == ancestor_id:
+            return True
+        cur_node = db.get(BaseCategory, cur)
+        cur = cur_node.parent_id if cur_node else 0
+    return False
+
+
+def _subtree_height(db: Session, cat: BaseCategory) -> int:
+    """以 cat 为根的子分类树最大深度（根记 1）。"""
+    children = db.scalars(select(BaseCategory).where(BaseCategory.parent_id == cat.id)).all()
+    if not children:
+        return 1
+    return 1 + max(_subtree_height(db, c) for c in children)
+
+
+def _require_leaf_category(db: Session, category_id: int) -> None:
+    """材料分类规则（三级体系）：材料只能挂二级/三级分类（parent_id != 0），顶级分类仅作分组。"""
+    cat = db.get(BaseCategory, category_id)
+    if cat is None:
+        raise BizError(E_NOT_FOUND, "分类不存在")
+    if cat.parent_id == 0:
+        raise BizError(E_PARAM, "顶级分类仅作分组，材料请挂到其二级或三级子分类")
 
 
 # ============================ 单位 ============================
@@ -434,7 +506,7 @@ def _product_out(db: Session, p: BaseProduct) -> dict:
         category_id=p.category_id, category_name=cat.name if cat else "",
         spec=p.spec, unit_id=p.unit_id, unit_name=unit.name if unit else "",
         purchase_price=p.purchase_price, min_stock=p.min_stock, max_stock=p.max_stock,
-        status=p.status, remark=p.remark,
+        status=p.status, remark=p.remark, created_at=p.created_at,
         units=[{"id": u.id, "unit_id": u.unit_id, "unit_name": (db.get(BaseUnit, u.unit_id).name if db.get(BaseUnit, u.unit_id) else ""), "rate": format(u.rate, "f"), "is_default": u.is_default} for u in units],
         supplier_ids=[s.id for s in sups], supplier_names=[s.name for s in sups],
     ).model_dump()
@@ -557,8 +629,21 @@ def list_products(
                 stmt = base.where(or_(*conds))
                 total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(BaseProduct.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
+    # 分类维度查询（分类管理页挂载材料表格）附带全仓库存合计（数量列），避免前端 N+1
+    stock_qty_map: dict[int, Decimal] = {}
+    if category_id and rows:
+        stock_qty_map = dict(
+            db.execute(
+                select(StkStock.product_id, func.sum(StkStock.qty))
+                .where(StkStock.product_id.in_([p.id for p in rows]))
+                .group_by(StkStock.product_id)
+            ).all()
+        )
     data = PageData(
-        list=[_product_out(db, p) for p in rows],
+        list=[
+            {**_product_out(db, p), "stock_qty": str(stock_qty_map.get(p.id, Decimal(0)))}
+            for p in rows
+        ],
         total=total, page=page, page_size=page_size,
     ).model_dump()
     if ai_keywords:
@@ -574,6 +659,8 @@ def create_product(req: ProductReq, db: Session = Depends(get_db)) -> dict:
         raise BizError(E_PARAM, "商品编码已存在")
     if db.get(BaseUnit, req.unit_id) is None:
         raise BizError(E_PARAM, "基本单位不存在")
+    if req.category_id:
+        _require_leaf_category(db, req.category_id)
     if req.barcode.strip() and db.scalar(select(BaseProduct.id).where(BaseProduct.barcode == req.barcode.strip())):
         raise BizError(E_PARAM, "条码已存在，请勿重复录入")
     p = BaseProduct(
@@ -621,6 +708,9 @@ def update_product(product_id: int, req: ProductReq, db: Session = Depends(get_d
     # 编码留空 = 保持原编码（编辑时可不填）；supplier_ids 走关联表写入
     data = req.model_dump(exclude={"units", "code", "supplier_ids"}) if not req.code else req.model_dump(exclude={"units", "supplier_ids"})
     data["barcode"] = data["barcode"].strip()
+    # 材料分类规则：仅二级分类可挂材料；历史数据保持原值（分类变更时才校验）
+    if data.get("category_id") and data["category_id"] != p.category_id:
+        _require_leaf_category(db, data["category_id"])
     for k, v in data.items():
         setattr(p, k, _parse_dec(v, k) if k in ("purchase_price", "min_stock", "max_stock") else v)
     try:
@@ -631,6 +721,20 @@ def update_product(product_id: int, req: ProductReq, db: Session = Depends(get_d
     except IntegrityError:
         db.rollback()
         raise BizError(E_PARAM, "商品编码已存在")
+    cache_delete_pattern("product:*")  # 商品详情/条码缓存失效
+    return ok()
+
+
+@router.put("/products/{product_id}/category", dependencies=[Depends(require_any_permission("base:category", "base:product"))])
+def update_product_category(product_id: int, req: ProductCategoryReq, db: Session = Depends(get_db)) -> dict:
+    """单独更新材料分类（分类管理页「取消挂载」）：category_id=0 取消挂载，>0 改挂二级/三级分类。"""
+    p = db.get(BaseProduct, product_id)
+    if p is None:
+        raise BizError(E_NOT_FOUND, "商品不存在", http_status=404)
+    if req.category_id:
+        _require_leaf_category(db, req.category_id)
+    p.category_id = req.category_id
+    db.commit()
     cache_delete_pattern("product:*")  # 商品详情/条码缓存失效
     return ok()
 
@@ -834,8 +938,9 @@ def list_warehouses(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/warehouses", dependencies=[Depends(require_permission("base:warehouse"))])
 def create_warehouse(req: WarehouseReq, db: Session = Depends(get_db)) -> dict:
+    # 新建仓库编码=仓库名称（界面不展示编码，避免 WH 编码混淆）；重名即编码冲突
     if db.scalar(select(BaseWarehouse.id).where(BaseWarehouse.code == req.code)):
-        raise BizError(E_PARAM, "仓库编码已存在")
+        raise BizError(E_PARAM, "仓库已存在（名称重复）")
     w = BaseWarehouse(**req.model_dump())
     db.add(w)
     db.commit()
@@ -845,12 +950,14 @@ def create_warehouse(req: WarehouseReq, db: Session = Depends(get_db)) -> dict:
 
 
 @router.put("/warehouses/{wh_id}", dependencies=[Depends(require_permission("base:warehouse"))])
-def update_warehouse(wh_id: int, req: WarehouseReq, db: Session = Depends(get_db)) -> dict:
+def update_warehouse(wh_id: int, req: WarehouseUpdateReq, db: Session = Depends(get_db)) -> dict:
     w = db.get(BaseWarehouse, wh_id)
     if w is None:
         raise BizError(E_NOT_FOUND, "仓库不存在")
-    if db.scalar(select(BaseWarehouse.id).where(BaseWarehouse.code == req.code, BaseWarehouse.id != wh_id)):
-        raise BizError(E_PARAM, "仓库编码已存在")
+    # 名称改动后同步编码（编码=名称，保持唯一与一致）
+    if db.scalar(select(BaseWarehouse.id).where(BaseWarehouse.code == req.name.strip(), BaseWarehouse.id != wh_id)):
+        raise BizError(E_PARAM, "仓库已存在（名称重复）")
+    w.code = req.name.strip()
     for k, v in req.model_dump().items():
         setattr(w, k, v)
     db.commit()
@@ -937,6 +1044,22 @@ def delete_shelf(shelf_id: int, db: Session = Depends(get_db)) -> dict:
     return ok()
 
 
+def _loc_out(db: Session, rows: list[BaseLocation]) -> list[dict]:
+    """库位输出（含 display 友好名：仓库名-货架编码-层号，界面不显示 WH 仓库编码）。"""
+    if not rows:
+        return []
+    whs = {w.id: w for w in db.scalars(select(BaseWarehouse).where(BaseWarehouse.id.in_({r.warehouse_id for r in rows}))).all()}
+    shelves = {s.id: s for s in db.scalars(select(BaseShelf).where(BaseShelf.id.in_({r.shelf_id for r in rows}))).all()}
+    out = []
+    for l in rows:
+        d = LocationOut.model_validate(l, from_attributes=True).model_dump()
+        wh = whs.get(l.warehouse_id)
+        shelf = shelves.get(l.shelf_id)
+        d["display"] = f"{wh.name if wh else ''}-{shelf.code if shelf else ''}-{l.layer_no:02d}"
+        out.append(d)
+    return out
+
+
 @router.get("/locations")
 def list_locations(
     warehouse_id: int = Query(0),
@@ -950,7 +1073,7 @@ def list_locations(
         if shelf_id:
             stmt = stmt.where(BaseLocation.shelf_id == shelf_id)
         rows = db.scalars(stmt.order_by(BaseLocation.code)).all()
-        return [LocationOut.model_validate(l, from_attributes=True).model_dump() for l in rows]
+        return _loc_out(db, rows)
 
     return ok(cache_aside(f"dict:locations:{warehouse_id}:{shelf_id}", _DICT_TTL, _load))
 
@@ -971,7 +1094,7 @@ def create_location(req: LocationReq, db: Session = Depends(get_db)) -> dict:
     db.commit()
     db.refresh(loc)
     cache_delete_pattern("dict:locations*", "stock:locsum:*")  # 货架图缓存同失效
-    return ok(LocationOut.model_validate(loc, from_attributes=True).model_dump())
+    return ok(_loc_out(db, [loc])[0])
 
 
 @router.put("/locations/{loc_id}", dependencies=[Depends(require_permission("base:stock-location"))])

@@ -92,7 +92,7 @@ export function TabLayout() {
   const visibleTabs = TABS.filter((t) => (t.key === "apply" ? hasPerm("req:apply") || user?.role?.code === "super_admin" : true));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#f5f6f8" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#f5f6f8" }}>
       <div style={{ flex: 1, overflowY: "auto" }}>
         <Outlet />
       </div>

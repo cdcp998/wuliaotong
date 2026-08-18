@@ -49,7 +49,7 @@ export function LogsPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: 0, marginBottom: 16 }}>操作日志</h2>
+      <h2 style={{ margin: "0 0 16px" }}>操作日志</h2>
       <Space style={{ marginBottom: 16 }} wrap>
         <Input.Search placeholder="用户名" allowClear style={{ width: 160 }} onSearch={(v) => { setUsername(v); setPage(1); }} />
         <Select

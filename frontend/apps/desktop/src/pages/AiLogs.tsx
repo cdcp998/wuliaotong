@@ -125,7 +125,7 @@ export function AiLogsPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Typography.Title level={4} style={{ marginTop: 0 }}>AI 调用日志</Typography.Title>
+      <h2 style={{ margin: "0 0 8px" }}>AI 调用日志</h2>
       <Typography.Text type="secondary">大模型调用输入/输出/耗时/成败全部记录，供后期调整提示词与学习；点击行「详情」可查看完整输入/输出内容。</Typography.Text>
       <Space style={{ margin: "12px 0" }} wrap>
         <Select

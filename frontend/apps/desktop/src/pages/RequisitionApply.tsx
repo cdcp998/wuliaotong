@@ -111,7 +111,7 @@ export function RequisitionApplyPage() {
             }}
           />
           {r.product && (
-            <div style={{ fontSize: 12, color: "#86909c", marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: "#646a73", marginTop: 4 }}>
               物料编码：{r.product.material_code || "-"} ｜ 规格：{r.product.spec || "-"} ｜ 单位：{r.product.unit_name || "-"}
             </div>
           )}
@@ -125,7 +125,7 @@ export function RequisitionApplyPage() {
         <Select
           style={{ width: "100%" }}
           placeholder="选择"
-          options={locs.map((l) => ({ label: l.code, value: l.id }))}
+          options={locs.map((l) => ({ label: l.display ?? l.code, value: l.id }))}
           value={r.location_id}
           onChange={(v) => setRow(i, { location_id: v })}
         />
@@ -143,8 +143,8 @@ export function RequisitionApplyPage() {
 
   return (
     <div style={{ padding: 24, maxWidth: 980 }}>
+      <h2 style={{ margin: "0 0 16px" }}>领用申请</h2>
       <Space style={{ marginBottom: 16 }} align="center">
-        <h2 style={{ margin: 0 }}>领用申请</h2>
         <Tag color="blue">提交即自动出库；随后需在使用者手机端「完成工作拍照」进入审计</Tag>
       </Space>
 
@@ -161,7 +161,7 @@ export function RequisitionApplyPage() {
                 value={applicantId || undefined}
                 onChange={(v) => setApplicantId(v ?? 0)}
               />
-              <span style={{ color: "#86909c", fontSize: 12 }}>仓管员/管理员可代使用者提交</span>
+              <span style={{ color: "#646a73", fontSize: 12 }}>仓管员/管理员可代使用者提交</span>
             </>
           )}
           <span>出库仓库</span>
@@ -207,7 +207,7 @@ export function RequisitionApplyPage() {
         <Button type="primary" size="large" loading={submitting} onClick={() => void submit()} style={{ minWidth: 180 }}>
           提交申请
         </Button>
-        <span style={{ color: "#86909c", fontSize: 12 }}>
+        <span style={{ color: "#646a73", fontSize: 12 }}>
           已填 {validCount}/{rows.length} 项材料，合计数量 {totalQty}
         </span>
       </Space>

@@ -17,9 +17,9 @@ function flattenCats(nodes: CategoryNode[]): CategoryNode[] {
   return out;
 }
 
-/** 分类树转 Select options（顶级=0；二级显示「父/子」）。 */
+/** 分类树转父分类候选（新增/编辑分类弹窗用：顶级 + 一级 + 二级，三级下不能再建）。 */
 function catOptions(nodes: CategoryNode[]): { value: number; label: string }[] {
-  const out: { value: number; label: string }[] = [{ value: 0, label: "顶级分类" }];
+  const out = [{ value: 0, label: "顶级分类" }];
   for (const n of nodes) {
     out.push({ value: n.id, label: n.name });
     n.children?.forEach((c) => out.push({ value: c.id, label: `${n.name}/${c.name}` }));
@@ -47,6 +47,29 @@ export function AiSuggestionsPage() {
 
   const catFlat = useMemo(() => flattenCats(catTree), [catTree]);
   const catSelOptions = useMemo(() => catOptions(catTree), [catTree]);
+  // 材料挂载候选（三级体系）：二级 + 三级分类，显示完整路径；编辑目标候选：全部节点
+  const catLeaf = useMemo(() => {
+    const out: { id: number; name: string }[] = [];
+    for (const n of catTree) {
+      n.children?.forEach((c) => {
+        out.push({ id: c.id, name: `${n.name}/${c.name}` });
+        c.children?.forEach((g) => out.push({ id: g.id, name: `${n.name}/${c.name}/${g.name}` }));
+      });
+    }
+    return out;
+  }, [catTree]);
+  const catEditOptions = useMemo(
+    () => [
+      ...catSelOptions.filter((o) => o.value !== 0),
+      ...catTree.flatMap((n) =>
+        (n.children ?? []).flatMap((c) => [
+          { value: c.id, label: `${n.name}/${c.name}` },
+          ...(c.children ?? []).map((g) => ({ value: g.id, label: `${n.name}/${c.name}/${g.name}` })),
+        ])
+      ),
+    ],
+    [catSelOptions, catTree]
+  );
 
   const load = useCallback(async () => {
     setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
@@ -131,8 +154,9 @@ export function AiSuggestionsPage() {
         await reloadCats(form.category_id || undefined);
       } else {
         const created = await baseApi.createCategory(body);
-        message.success("分类已创建");
-        await reloadCats(created.id); // 新分类自动选中给当前材料
+        // 规则：材料只能挂二级分类；新建的顶级分类不自动选中，需先建其子分类
+        message.success(created.parent_id !== 0 ? "分类已创建" : "分类已创建（顶级分类仅作分组，请再创建其子分类后挂材料）");
+        await reloadCats(created.parent_id !== 0 ? created.id : 0);
       }
       setCatOpen(false);
     } catch (e) {
@@ -168,20 +192,20 @@ export function AiSuggestionsPage() {
       {/* 页头：图标 + 标题 + 说明，右侧待确认数 */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 280, flex: 1 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: "#1677ff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, flexShrink: 0 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: "#1668dc", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, flexShrink: 0 }}>
             <RobotOutlined />
           </div>
           <div>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, letterSpacing: "-0.01em", color: "#1f2733" }}>AI 建议处理</h2>
-            <p style={{ margin: "4px 0 0", fontSize: 12.5, lineHeight: 1.6, color: "#667085" }}>
+            <h2 style={{ margin: 0 }}>AI 建议处理</h2>
+            <p style={{ margin: "4px 0 0", fontSize: 12.5, lineHeight: 1.6, color: "#646a73" }}>
               拍照识别中未匹配到系统资料的材料，由视觉识别后生成建议；
-              <strong style={{ color: "#3d4757", fontWeight: 600 }}>人工确认后才新增材料</strong>
+              <strong style={{ color: "#1f2329", fontWeight: 600 }}>人工确认后才新增材料</strong>
               （可在系统设置配置模型配置）。
             </p>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", borderRadius: 999, background: "#eef4ff", border: "1px solid #d6e4ff", flexShrink: 0 }}>
-          <RobotOutlined style={{ color: "#1677ff", fontSize: 15 }} />
+          <RobotOutlined style={{ color: "#1668dc", fontSize: 15 }} />
           <span style={{ fontSize: 13, color: "#3d5a8f", fontWeight: 500 }}>待确认</span>
           <strong style={{ fontSize: 18, color: "#0958d9", lineHeight: 1 }}>{total}</strong>
           <span style={{ fontSize: 13, color: "#3d5a8f" }}>条</span>
@@ -209,7 +233,7 @@ export function AiSuggestionsPage() {
 
       {/* 确认新增材料 */}
       <Modal
-        title={<Space size={8}><RobotOutlined style={{ color: "#1677ff" }} />确认新增材料</Space>}
+        title={<Space size={8}><RobotOutlined style={{ color: "#1668dc" }} />确认新增材料</Space>}
         open={Boolean(accepting)}
         onOk={() => void doAccept()}
         okText="确认新增"
@@ -223,10 +247,10 @@ export function AiSuggestionsPage() {
             <Input placeholder="缺省用 AI 建议名" maxLength={100} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
           </Form.Item>
           <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr", gap: 12 }}>
-            <Form.Item label="分类" style={{ marginBottom: 0 }} extra="下拉底部可新增 / 编辑分类，新增后自动选中">
+            <Form.Item label="分类" style={{ marginBottom: 0 }} extra="二级/三级分类可挂材料；下拉底部可新增 / 编辑分类">
               <Select
                 placeholder="选择分类"
-                options={catFlat}
+                options={form.category_id && !catLeaf.some((o) => o.id === form.category_id) ? [{ id: form.category_id, name: "原分类（顶级，请改挂二级/三级）" }, ...catLeaf] : catLeaf}
                 fieldNames={{ label: "name", value: "id" }}
                 value={form.category_id || undefined}
                 onChange={(v) => setForm((f) => ({ ...f, category_id: v }))}
@@ -279,7 +303,7 @@ export function AiSuggestionsPage() {
             <Form.Item label="选择分类" required>
               <Select
                 placeholder="选择要编辑的分类"
-                options={catSelOptions.filter((o) => o.value !== 0)}
+                options={catEditOptions}
                 value={catTarget?.id}
                 onChange={(id) => {
                   const c = catFlat.find((x) => x.id === id);

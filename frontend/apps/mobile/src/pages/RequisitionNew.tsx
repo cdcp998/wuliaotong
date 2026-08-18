@@ -110,7 +110,7 @@ export function RequisitionNewPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f6f8", paddingBottom: 84 }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f6f8", paddingBottom: 84 }}>
       <NavBar onBack={() => navigate("/")}>领用申请</NavBar>
       <div style={{ padding: 12 }}>
         {/* 出库仓库 */}
@@ -134,7 +134,7 @@ export function RequisitionNewPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 500 }}>{r.product.name}</div>
-                <div style={{ fontSize: 11, color: "#86909c", marginTop: 1 }}>
+                <div style={{ fontSize: 11, color: "#646a73", marginTop: 1 }}>
                   {r.product.code}
                   {r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}
                 </div>
@@ -145,11 +145,11 @@ export function RequisitionNewPage() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
               <Tag color="primary" fill="outline" style={{ padding: "5px 10px", borderRadius: 7, marginRight: 0 }} onClick={() => void pickLocation(i)}>
-                {r.location ? r.location.code : "选库位"}
+                {r.location ? r.location.display ?? r.location.code : "选库位"}
               </Tag>
               <div style={{ flex: 1 }} />
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 12, color: "#86909c" }}>数量</span>
+                <span style={{ fontSize: 12, color: "#646a73" }}>数量</span>
                 <Stepper min={1} value={Number(r.qty) || 1} onChange={(v) => updateRow(i, { qty: String(v) })} />
               </div>
             </div>
@@ -206,11 +206,11 @@ export function RequisitionNewPage() {
               fontFamily: "inherit",
               resize: "none",
               background: isPrivate ? "#fafbfd" : "transparent",
-              color: isPrivate ? "#86909c" : "inherit",
+              color: isPrivate ? "#646a73" : "inherit",
             }}
           />
           {isPrivate && (
-            <div style={{ fontSize: 11, color: "#86909c", marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: "#646a73", marginTop: 4 }}>
               已锁定为私用：对外显示为固定话术，真实状态仅管理员可见。
             </div>
           )}
@@ -225,7 +225,7 @@ export function RequisitionNewPage() {
         {/* 出库拍照留痕 */}
         <div style={{ fontSize: 12.5, fontWeight: 600, color: "#4e5969", margin: "14px 2px 8px" }}>出库拍照留痕（选填）</div>
         <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 10, padding: 12, marginBottom: 8 }}>
-          <div style={{ fontSize: 12, color: "#86909c", marginBottom: 10 }}>拍材料本身，照片随申请提交供仓管员审计核对（不强制）。</div>
+          <div style={{ fontSize: 12, color: "#646a73", marginBottom: 10 }}>拍材料本身，照片随申请提交供仓管员审计核对（不强制）。</div>
           <PhotoUpload translucent bizType="requisition_item" fileId={rows[0]?.photoFileId} onChange={(fid) => rows[0] && updateRow(0, { photoFileId: fid })} />
         </div>
       </div>
@@ -245,7 +245,7 @@ export function RequisitionNewPage() {
           zIndex: 20,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", fontSize: 13, color: "#86909c", paddingLeft: 4, minWidth: 90 }}>
+        <div style={{ display: "flex", alignItems: "center", fontSize: 13, color: "#646a73", paddingLeft: 4, minWidth: 90 }}>
           共 <b style={{ color: "#1f2329", fontSize: 15 }}>{totalQty}</b> 件
         </div>
         <Button block color="primary" loading={submitting} style={{ height: 44, fontSize: 15, borderRadius: 10, flex: 1 }} onClick={() => void submit()}>
@@ -272,7 +272,7 @@ export function RequisitionNewPage() {
                 setLocPicker((s) => ({ ...s, open: false }));
               }}
             >
-              {l.code}
+              {l.display ?? l.code}
             </List.Item>
           ))}
           {!locPicker.locations.length && <List.Item>该仓库暂无库位</List.Item>}

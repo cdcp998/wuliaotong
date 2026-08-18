@@ -27,7 +27,7 @@ export function OtherIoPage() {
   const [open, setOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
   const [products, setProducts] = useState<{ id: number; name: string; code: string }[]>([]);
-  const [locs, setLocs] = useState<{ id: number; code: string }[]>([]);
+  const [locs, setLocs] = useState<{ id: number; display: string }[]>([]);
   const [form, setForm] = useState({ ioType: IO_TYPES[0], warehouse_id: 0, rows: [] as Row[] });
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState<OtherIoDetail | null>(null);
@@ -63,7 +63,7 @@ export function OtherIoPage() {
   }, []);
 
   async function loadLocs(whId: number) {
-    setLocs((await baseApi.locations(whId)).map((l) => ({ id: l.id, code: l.code })));
+    setLocs((await baseApi.locations(whId)).map((l) => ({ id: l.id, display: l.display ?? l.code })));
   }
 
   function setRow(i: number, patch: Partial<Row>) {
@@ -105,8 +105,8 @@ export function OtherIoPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Space style={{ marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>其他出入库</h2>
+      <h2 style={{ margin: "0 0 16px" }}>其他出入库</h2>
+      <Space style={{ marginBottom: 16 }} wrap>
         <Radio.Group value={ioType} onChange={(e) => { setIoType(e.target.value); setPage(1); }} optionType="button" size="small">
           <Radio.Button value={undefined}>全部</Radio.Button>
           {IO_TYPES.map((t) => (
@@ -131,7 +131,7 @@ export function OtherIoPage() {
           { label: "备注", value: detail?.remark, span: 2 },
         ]}
         columns={[
-          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#86909c" }}>{r.spec || "-"}</div></div> },
+          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#646a73" }}>{r.spec || "-"}</div></div> },
           { title: "库位", dataIndex: "location_code", width: 120 },
           { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
         ]}
@@ -148,7 +148,7 @@ export function OtherIoPage() {
         {form.rows.map((r, i) => (
           <Space key={i} style={{ marginBottom: 8 }}>
             <Select style={{ width: 200 }} showSearch placeholder="材料" options={products} fieldNames={{ label: "name", value: "id" }} filterOption={(input, o) => String((o as { name?: string }).name ?? "").includes(input)} value={r.product_id} onChange={(v) => setRow(i, { product_id: v })} />
-            <Select style={{ width: 140 }} placeholder="库位" options={locs} fieldNames={{ label: "code", value: "id" }} value={r.location_id} onChange={(v) => setRow(i, { location_id: v })} />
+            <Select style={{ width: 140 }} placeholder="库位" options={locs} fieldNames={{ label: "display", value: "id" }} value={r.location_id} onChange={(v) => setRow(i, { location_id: v })} />
             <InputNumber min={0.001} placeholder="数量" value={r.qty} onChange={(v) => setRow(i, { qty: v ?? 0 })} />
             <Button size="small" danger onClick={() => setForm((f) => ({ ...f, rows: f.rows.filter((_, idx) => idx !== i) }))}>删</Button>
           </Space>

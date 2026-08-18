@@ -41,7 +41,7 @@ from app.schemas.requisition import (
     WorkDoneReq,
     WorkLocationReq,
 )
-from app.services.stock import bill_no_conflict, generate_bill_no, post_stock_change
+from app.services.stock import bill_no_conflict, generate_bill_no, loc_display, post_stock_change
 from app.services.storage import resolve_storage_path
 from app.services.watermark import (
     WATERMARK_DEFAULT_POSITION,
@@ -127,8 +127,6 @@ def _req_out_batch(db: Session, rows: list[OutRequisition], viewer: SysUser | No
     item_list = [it for its in items_by_req.values() for it in its]
     product_ids = {it.product_id for it in item_list}
     prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(product_ids)))} if product_ids else {}
-    loc_ids = {it.location_id for it in item_list}
-    loc_map = {l.id: l for l in db.scalars(select(BaseLocation).where(BaseLocation.id.in_(loc_ids)))} if loc_ids else {}
 
     # 私用脱敏：管理员判断整批只做一次（原逐行 _is_admin_user 每行都查库）
     viewer_is_admin = viewer is not None and _is_admin_user(db, viewer)
@@ -167,7 +165,7 @@ def _req_out_batch(db: Session, rows: list[OutRequisition], viewer: SysUser | No
                         product_name=(p.name if (p := prod_map.get(it.product_id)) else ""),
                         code=(p.code if (p := prod_map.get(it.product_id)) else ""),
                         spec=(p.spec if (p := prod_map.get(it.product_id)) else ""),
-                        location_id=it.location_id, location_code=(loc.code if (loc := loc_map.get(it.location_id)) else ""),
+                        location_id=it.location_id, location_code=loc_display(db, it.location_id) if it.location_id else "",
                         qty=it.qty, photo_file_id=it.photo_file_id,
                     )
                     for it in its
@@ -305,7 +303,7 @@ def create_requisition(
         except IntegrityError as exc:
             db.rollback()
             if not bill_no_conflict(exc):
-                raise BizError(E_PARAM, f"领用单保存失败：{exc.orig}") from exc
+                raise BizError(E_PARAM, "领用单保存失败，请重试（详情见系统日志）") from exc
     raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 

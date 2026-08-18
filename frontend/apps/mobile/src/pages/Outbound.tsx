@@ -82,7 +82,7 @@ export function OutboundPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate("/")}>其他出库</NavBar>
       <List header="出库类型">
         <List.Item>
@@ -117,7 +117,7 @@ export function OutboundPage() {
               <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <Tag color="primary" fill="outline" onClick={() => void pickLocation(i)}>
-                    {r.location ? r.location.code : "选库位"}
+                    {r.location ? r.location.display ?? r.location.code : "选库位"}
                   </Tag>
                   <Input
                     placeholder="数量"
@@ -136,7 +136,7 @@ export function OutboundPage() {
                   <Tag color="danger" fill="outline" onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>
                     删除
                   </Tag>
-                  <span style={{ color: "#999", fontSize: 12 }}>
+                  <span style={{ color: "#646a73", fontSize: 12 }}>
                     {r.product.code}
                     {r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}
                   </span>
@@ -181,7 +181,7 @@ export function OutboundPage() {
                 setLocPicker((s) => ({ ...s, open: false }));
               }}
             >
-              {l.code}
+              {l.display ?? l.code}
             </List.Item>
           ))}
           {!locPicker.locations.length && <List.Item>该仓库暂无库位</List.Item>}

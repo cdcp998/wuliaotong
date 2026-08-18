@@ -127,7 +127,7 @@ def test_ocr_quick_fallback_to_vision(monkeypatch):
         "app.api.ocr.get_ocr_engine", lambda db: (_ for _ in ()).throw(ValueError("识别引擎已关闭"))
     )
     monkeypatch.setattr(
-        "app.api.ocr.get_llm",
+        "app.services.llm.get_llm",
         lambda db, name="deepseek": _FakeDoubao("轴承6204\n数量 10"),
     )
     r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
@@ -142,7 +142,7 @@ def test_ocr_quick_unavailable_when_vision_off(monkeypatch):
     monkeypatch.setattr(
         "app.api.ocr.get_ocr_engine", lambda db: (_ for _ in ()).throw(ValueError("识别引擎已关闭"))
     )
-    monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured("未配置")))
+    monkeypatch.setattr("app.services.llm.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured("未配置")))
     r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
     assert r.json()["code"] == 5001
     assert "不可用" in r.json()["message"]
@@ -167,7 +167,7 @@ def test_ocr_recognize_task(monkeypatch):
         def chat_text(self, system: str, user: str, scene: str = "", user_id: int | None = None) -> str:
             return '[{"product_name": "轴承6204", "qty": "10", "price": "8.50", "amount": "85.00", "category_name": "轴承类"}]'
 
-    monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": _FakeVision())
+    monkeypatch.setattr("app.services.llm.get_llm", lambda db, name="deepseek": _FakeVision())
     monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine([]))  # 本地 OCR 空行，走视觉分支
     r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1")
     assert r.json()["code"] == 0, r.text
@@ -186,7 +186,7 @@ def test_ocr_recognize_task(monkeypatch):
     assert st["bill_no"] == "X001"
     assert st["items"][0]["product_name"] == "轴承6204"
     assert st["items"][0]["category_name"] == "轴承类"
-    assert st["_engine"] == "siliconflow+deepseek"
+    assert st["_engine"] == "siliconflow"
     assert "lines" in st and len(st["lines"]) >= 1
     # 识别记录落库
     recs = client.get("/api/v1/ocr/records").json()["data"]
@@ -197,7 +197,7 @@ def test_ocr_recognize_task(monkeypatch):
 
 
 def test_ocr_recognize_template_first(monkeypatch):
-    """已知格式（物料编码锚点）：本地规则模板命中 → 不再调用视觉/DeepSeek（兼容不变）。"""
+    """已知格式（物料编码锚点）：mode=template 本地规则模板命中 → 不调用视觉/DeepSeek。"""
     _login_admin()
     file_id = _upload_img()
     lines = [
@@ -209,7 +209,7 @@ def test_ocr_recognize_template_first(monkeypatch):
         "85.00",
     ]
     monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine(lines))
-    monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured()))
+    monkeypatch.setattr("app.services.llm.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured()))
     monkeypatch.setattr(
         "app.api.ocr._delivery_by_vision", lambda db, data: (_ for _ in ()).throw(AssertionError("模板命中不应调用视觉"))
     )
@@ -217,7 +217,7 @@ def test_ocr_recognize_template_first(monkeypatch):
         "app.api.ocr._structured_by_deepseek", lambda db, texts: (_ for _ in ()).throw(AssertionError("模板命中不应调用 DeepSeek"))
     )
 
-    r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1&mode=auto")
+    r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1&mode=template")
     assert r.json()["code"] == 0, r.text
     task_id = r.json()["data"]["task_id"]
     for _ in range(20):
@@ -233,7 +233,7 @@ def test_ocr_recognize_template_first(monkeypatch):
 
 
 def test_ocr_recognize_generic_fallback(monkeypatch):
-    """未知格式（无物料编码列）：通用字段提取命中 → engine=generic，不调视觉。"""
+    """未知格式（无物料编码列）：mode=template 通用字段提取命中 → engine=generic，不调视觉。"""
     _login_admin()
     file_id = _upload_img()
     lines = ["名称", "数量", "金额", "轴承", "2", "10", "螺丝", "3", "15"]
@@ -243,12 +243,12 @@ def test_ocr_recognize_generic_fallback(monkeypatch):
         [100, 280, 300, 320], [400, 280, 500, 320], [600, 280, 700, 320],
     ]
     monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine(lines, boxes))
-    monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured()))
+    monkeypatch.setattr("app.services.llm.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured()))
     monkeypatch.setattr(
         "app.api.ocr._delivery_by_vision", lambda db, data: (_ for _ in ()).throw(AssertionError("通用解析命中不应调用视觉"))
     )
 
-    r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1&mode=auto")
+    r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1&mode=template")
     assert r.json()["code"] == 0, r.text
     task_id = r.json()["data"]["task_id"]
     for _ in range(20):
@@ -268,7 +268,7 @@ def test_ocr_recognize_unconfigured(monkeypatch):
     """SiliconFlow 未配置：任务 done 且无结构化（前端人工录入），不报错。"""
     _login_admin()
     file_id = _upload_img()
-    monkeypatch.setattr("app.api.ocr.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured()))
+    monkeypatch.setattr("app.services.llm.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured()))
     monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine([]))  # 本地 OCR 空行，无结构化
     r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1")
     assert r.json()["code"] == 0, r.text
@@ -291,6 +291,8 @@ def test_ocr_recognize_failed(monkeypatch):
             raise RuntimeError("engine down")
 
     monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _Broken())
+    # 视觉/多模态不可用，确保走到本地 OCR（最低优先级）并暴露引擎故障
+    monkeypatch.setattr("app.services.llm.get_llm", lambda db, name="": (_ for _ in ()).throw(LLMNotConfigured()))
     r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=2")
     task_id = r.json()["data"]["task_id"]
     for _ in range(20):

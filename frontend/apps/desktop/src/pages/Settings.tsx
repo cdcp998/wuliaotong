@@ -56,6 +56,20 @@ const EMPTY: Settings = {
   "ocr.engine": "paddle",
   "ocr.model_version": "PP-OCRv6",
   "llm.doubao.enabled": "1",
+  // 模型承担任务开关默认全开（主用/备用）
+  "llm.doubao.scene.match_vision": "1",
+  "llm.doubao.scene.vision_product": "1",
+  "llm.doubao.scene.classify_items": "1",
+  "llm.doubao.scene.ocr_correct": "1",
+  "llm.doubao.scene.vision_text": "1",
+  "llm.doubao.scene.structured": "1",
+  "llm.siliconflow.scene.vision_delivery": "1",
+  "llm.siliconflow.scene.vision_product": "1",
+  "llm.siliconflow.scene.vision_text": "1",
+  "llm.siliconflow.scene.match_vision": "1",
+  "llm.deepseek.scene.ocr_correct": "1",
+  "llm.deepseek.scene.classify_items": "1",
+  "llm.deepseek.scene.structured": "1",
   "llm.deepseek.enabled": "1",
   "watermark.template": "",
   "watermark.position": "bottom",
@@ -147,7 +161,7 @@ export function SettingsPage() {
   // DeepSeek（文本模型）模型列表
   const [dsModels, setDsModels] = useState<{ id: string; owned_by: string }[]>([]);
   const [dsLoading, setDsLoading] = useState(false);
-  // 豆包模型列表
+  // 多模态大模型（火山方舟）模型列表
   const [doubaoModels, setDoubaoModels] = useState<{ id: string; owned_by: string }[]>([]);
   const [doubaoLoading, setDoubaoLoading] = useState(false);
   // PP-OCR 自动安装状态（后台线程安装，前端轮询）
@@ -338,7 +352,7 @@ export function SettingsPage() {
   const LLM_META: Record<LlmKind, { label: string; enableLabel: string; api: () => Promise<{ models: { id: string; owned_by: string }[] }> }> = {
     siliconflow: { label: "视觉模型", enableLabel: "启用视觉模型", api: systemApi.listSiliconflowModels },
     deepseek: { label: "文本模型", enableLabel: "启用文本模型", api: systemApi.listDeepseekModels },
-    doubao: { label: "豆包大模型", enableLabel: "启用豆包大模型", api: systemApi.listDoubaoModels },
+    doubao: { label: "多模态大模型 (主用)", enableLabel: "启用多模态大模型", api: systemApi.listDoubaoModels },
   };
 
   async function fetchModelList(kind: LlmKind, opts?: { skipCheck?: boolean }) {
@@ -392,7 +406,7 @@ export function SettingsPage() {
   const QUOTA_META: Record<string, { label: string; enabledKey: keyof Settings; unitHint: string }> = {
     siliconflow: { label: "视觉模型（SiliconFlow）", enabledKey: "llm.siliconflow.enabled", unitHint: "元" },
     deepseek: { label: "文本模型（DeepSeek）", enabledKey: "llm.deepseek.enabled", unitHint: "元" },
-    doubao: { label: "豆包视觉模型（兜底）", enabledKey: "llm.doubao.enabled", unitHint: "与服务商返回数值同单位" },
+    doubao: { label: "多模态大模型 (主用)", enabledKey: "llm.doubao.enabled", unitHint: "与服务商返回数值同单位" },
   };
 
   /** 立即从服务商获取配额/余额；未启用或未配置 API Key 时不查询（直接提示），
@@ -888,6 +902,42 @@ export function SettingsPage() {
       </Section>
 
       <Section
+        icon={<ThunderboltOutlined />}
+        title="多模态大模型 (主用)"
+        desc="多模态大模型（主用，支持外网/内网 API）。"
+        extra={doubaoEnabled === "0" ? <Tag>未启用</Tag> : <Tag color="green">已启用</Tag>}
+      >
+        <Form.Item
+          name="llm.doubao.enabled"
+          label="启用多模态大模型"
+          valuePropName="checked"
+          getValueProps={(v) => ({ checked: v !== "0" })}
+          normalize={(v) => (v ? "1" : "0")}
+        >
+          <Switch />
+        </Form.Item>
+        {keyField("llm.doubao.api_key", "多模态大模型 API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
+        <Form.Item name="llm.doubao.base_url" label="多模态大模型 Base URL" extra="支持任意 OpenAI 兼容服务商（含自建内网服务），填其 Base URL 即可；不填默认火山方舟">
+          <Input style={{ maxWidth: 560 }} placeholder="https://ark.cn-beijing.volces.com/api/v3" />
+        </Form.Item>
+        <Form.Item name="llm.doubao.model" label="多模态大模型名称" extra="保存多模态大模型 API Key 后自动获取模型列表，也可点右侧按钮手动刷新">
+          <Space.Compact style={{ width: "100%", maxWidth: 640 }}>
+            <Select
+              style={{ flex: 1 }}
+              showSearch
+              allowClear
+              value={doubaoModel}
+              onChange={(v) => form.setFieldValue("llm.doubao.model", v)}
+              placeholder="如：doubao-1-5-vision-pro-32k-250115"
+              options={doubaoModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
+              optionFilterProp="label"
+            />
+            <Button loading={doubaoLoading} onClick={() => void fetchModelList("doubao")}>获取模型列表</Button>
+          </Space.Compact>
+        </Form.Item>
+      </Section>
+
+      <Section
         icon={<EyeOutlined />}
         title="视觉模型（视觉识别）"
         desc="识别统一走视觉模型（支持外网/内网 API）。"
@@ -960,42 +1010,6 @@ export function SettingsPage() {
       </Section>
 
       <Section
-        icon={<ThunderboltOutlined />}
-        title="豆包视觉模型（兜底）"
-        desc="豆包大模型（兜底视觉，支持外网/内网 API）。"
-        extra={doubaoEnabled === "0" ? <Tag>未启用</Tag> : <Tag color="green">已启用</Tag>}
-      >
-        <Form.Item
-          name="llm.doubao.enabled"
-          label="启用豆包大模型"
-          valuePropName="checked"
-          getValueProps={(v) => ({ checked: v !== "0" })}
-          normalize={(v) => (v ? "1" : "0")}
-        >
-          <Switch />
-        </Form.Item>
-        {keyField("llm.doubao.api_key", "豆包 API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
-        <Form.Item name="llm.doubao.base_url" label="豆包 Base URL" extra="支持任意 OpenAI 兼容服务商（含自建内网服务），填其 Base URL 即可；不填默认火山方舟">
-          <Input style={{ maxWidth: 560 }} placeholder="https://ark.cn-beijing.volces.com/api/v3" />
-        </Form.Item>
-        <Form.Item name="llm.doubao.model" label="豆包模型" extra="保存豆包 API Key 后自动获取模型列表，也可点右侧按钮手动刷新">
-          <Space.Compact style={{ width: "100%", maxWidth: 640 }}>
-            <Select
-              style={{ flex: 1 }}
-              showSearch
-              allowClear
-              value={doubaoModel}
-              onChange={(v) => form.setFieldValue("llm.doubao.model", v)}
-              placeholder="如：doubao-1-5-vision-pro-32k-250115"
-              options={doubaoModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
-              optionFilterProp="label"
-            />
-            <Button loading={doubaoLoading} onClick={() => void fetchModelList("doubao")}>获取模型列表</Button>
-          </Space.Compact>
-        </Form.Item>
-      </Section>
-
-      <Section
         icon={<AlertOutlined />}
         title="配额与预警（云端服务商）"
         desc="自动获取各服务商剩余配额，低于阈值时邮件预警；需先在「基础设置 → 邮件服务」分区配置 SMTP。"
@@ -1005,7 +1019,7 @@ export function SettingsPage() {
           系统遵循 OpenAI Chat Completions 兼容标准（POST 「Base URL」/chat/completions + Bearer 鉴权），
           上方三个模型槽位可填入任意 OpenAI 兼容服务商（SiliconFlow / DeepSeek / 火山方舟 / 通义 / 智谱 / 自建 vLLM / Ollama / 第三方网关等），
           Base URL、API Key、模型名均可自由指定，不受供应商限制。
-          配额查询依赖服务商官方余额接口，仅 SiliconFlow、DeepSeek、火山方舟（豆包）提供；
+          配额查询依赖服务商官方余额接口，仅 SiliconFlow、DeepSeek、火山方舟提供；
           其他兼容服务商可正常用于识别，但无法获取配额（界面会明确提示），也不参与配额告警。
           配额按下方「获取间隔」自动获取（默认 60 分钟，可自定义；即使未启用预警也会更新），
           也可点各服务商「获取配额」立即刷新。剩余配额低于各服务商阈值时向收件人发送邮件；
@@ -1040,7 +1054,7 @@ export function SettingsPage() {
       <Section
         icon={<ApartmentOutlined />}
         title="模型与工作任务"
-        desc="各模型参与的业务任务（主用 = 优先调用，备用 = 主用不可用时兜底）；上方开关控制模型是否启用，即「指定使用哪些模型」。"
+        desc="各模型参与的业务任务可单独开关（主用 = 优先调用，备用 = 主用不可用时兜底）；关闭后该模型不参与对应任务：主用关闭走备用，备用关闭则无兜底（直接降级）。"
       >
         <Space orientation="vertical" style={{ width: "100%" }} size={6}>
           {scenes.map((m) => (
@@ -1049,9 +1063,20 @@ export function SettingsPage() {
                 <Typography.Text strong>{m.label}</Typography.Text>
                 {m.enabled ? <Tag color="green">已启用</Tag> : <Tag>未启用</Tag>}
                 {m.scenes.map((s) => (
-                  <Tag key={s.scene} color={s.role === "主用" ? "blue" : "default"} title={s.desc}>
-                    {s.label}（{s.role}）
-                  </Tag>
+                  <Form.Item
+                    key={s.scene}
+                    name={`llm.${m.name}.scene.${s.scene}`}
+                    valuePropName="checked"
+                    getValueProps={(v) => ({ checked: v !== "0" })}
+                    normalize={(v) => (v ? "1" : "0")}
+                    style={{ marginBottom: 0 }}
+                    tooltip={`${s.desc}；关闭后该模型不参与此任务（${s.role === "主用" ? "自动走备用模型" : "无备用兜底，直接降级"}）`}
+                  >
+                    <Space size={6}>
+                      <Switch size="small" />
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>{s.label}（{s.role}）</Typography.Text>
+                    </Space>
+                  </Form.Item>
                 ))}
               </Space>
             </div>

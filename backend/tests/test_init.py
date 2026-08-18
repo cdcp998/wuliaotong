@@ -458,7 +458,7 @@ def test_init_reconfigure_fail_blocks(monkeypatch, tmp_path):
 
 
 def test_init_auto_create_fail_blocks(monkeypatch, tmp_path):
-    """自动建库失败 → 4006 阻止安装（提示含手动建库指引），不写 .env 与标记文件。"""
+    """自动建库失败 → 4006 阻止安装（提示含手动建库指引，原始错误仅进日志脱敏），不写 .env 与标记文件。"""
     state = _save_state()
     try:
         _mock_env(monkeypatch, tmp_path)
@@ -467,7 +467,7 @@ def test_init_auto_create_fail_blocks(monkeypatch, tmp_path):
         r = client.post("/api/v1/init", json=_payload())
         assert r.json()["code"] == 4006
         assert "数据库连接失败" in r.json()["message"]
-        assert "自动创建失败" in r.json()["message"]
+        assert "手动创建" in r.json()["message"]
         assert MARK_FILE.exists() is False
         assert (tmp_path / ".env").exists() is False
     finally:
