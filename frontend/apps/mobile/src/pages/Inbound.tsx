@@ -5,6 +5,7 @@ import { baseApi, fileApi, ocrApi, purchaseIn, resolveByBarcode, type Location, 
 import { CameraAlbum } from "../components/CameraAlbum";
 import { BarcodeScanner } from "../components/BarcodeScanner";
 import { ProductPicker } from "../components/ProductPicker";
+import { AlbumIcon, CameraIcon } from "../components/icons";
 
 interface Row {
   product: Product;
@@ -142,8 +143,22 @@ export function InboundPage() {
   function openOcrSheet() {
     ActionSheet.show({
       actions: [
-        { key: "camera", text: "📷 拍照送货单" },
-        { key: "album", text: "🖼 从相册选择" },
+        {
+          key: "camera",
+          text: (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <CameraIcon size={18} /> 拍照送货单
+            </span>
+          ),
+        },
+        {
+          key: "album",
+          text: (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <AlbumIcon size={18} /> 从相册选择
+            </span>
+          ),
+        },
       ],
       cancelText: "取消",
       onAction: (a) => {

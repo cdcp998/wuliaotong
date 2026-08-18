@@ -21,11 +21,13 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import {
   DeleteOutlined,
+  DisconnectOutlined,
   EditOutlined,
   FolderOpenOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
+  SwapOutlined,
   TagsOutlined,
 } from "@ant-design/icons";
 
@@ -89,6 +91,10 @@ export function CategoriesPage() {
   const [matPage, setMatPage] = useState(1);
   const [matLoading, setMatLoading] = useState(false);
   const [detaching, setDetaching] = useState<number | undefined>(undefined);
+  // 移动材料：选择目标分类（二级/三级，不含当前分类）
+  const [moveTarget, setMoveTarget] = useState<Product | null>(null);
+  const [moveCatId, setMoveCatId] = useState<number | undefined>(undefined);
+  const [moving, setMoving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -273,6 +279,46 @@ export function CategoriesPage() {
     }
   }
 
+  /** 移动材料到其他二级/三级分类（排除当前分类）。 */
+  const moveOptions = useMemo(() => {
+    if (!sel) return [];
+    const out: { value: number; label: string }[] = [];
+    for (const n of list) {
+      n.children?.forEach((c) => {
+        if (c.id !== sel.id) out.push({ value: c.id, label: `${n.name}/${c.name}` });
+        c.children?.forEach((g) => {
+          if (g.id !== sel.id) out.push({ value: g.id, label: `${n.name}/${c.name}/${g.name}` });
+        });
+      });
+    }
+    return out;
+  }, [list, sel]);
+
+  async function doMove() {
+    if (!moveTarget) return;
+    if (moveCatId === undefined) {
+      message.warning("请选择目标分类");
+      return;
+    }
+    setMoving(true);
+    try {
+      await baseApi.updateProductCategory(moveTarget.id, moveCatId);
+      message.success(`已将「${moveTarget.name}」移动到新分类`);
+      setMoveTarget(null);
+      if (mats.length === 1 && matPage > 1) setMatPage(matPage - 1);
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "移动失败");
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  // 选中分类层级与"新建子分类"可用性：
+  // 1) 三级分类不能再建子分类；2) 二级分类已挂材料时不能再建子分类（挂材料与建子分类二选一）
+  const selDepth = sel ? catDepth(sel.id) : 0;
+  const childBlocked = sel ? selDepth >= 3 || (selDepth === 2 && (sel.product_count ?? 0) > 0) : false;
+
   const matColumns: ColumnsType<Product> = [
     { title: "材料名称", dataIndex: "name", render: (v: string) => <b>{v}</b> },
     { title: "物料编码", dataIndex: "material_code", width: 140, render: (v: string) => v || "-" },
@@ -284,17 +330,22 @@ export function CategoriesPage() {
     { title: "添加时间", dataIndex: "created_at", width: 150, render: (v?: string) => (v ? v.slice(0, 16) : "-") },
     {
       title: "操作",
-      width: 100,
+      width: 140,
       render: (_, p) => (
-        <Popconfirm
-          title={`确认将「${p.name}」从该分类取消挂载？`}
-          description="取消后材料变为未分类，可在材料管理中重新挂载"
-          onConfirm={() => void detach(p)}
-        >
-          <Button size="small" type="link" danger loading={detaching === p.id} style={{ padding: 0 }}>
-            取消挂载
-          </Button>
-        </Popconfirm>
+        <Space size={4}>
+          <Tooltip title="移动材料">
+            <Button type="text" size="small" icon={<SwapOutlined />} style={{ color: token.colorPrimary }} onClick={() => setMoveTarget(p)} />
+          </Tooltip>
+          <Popconfirm
+            title={`确认将「${p.name}」从该分类取消挂载？`}
+            description="取消后材料变为未分类，可在材料管理中重新挂载"
+            onConfirm={() => void detach(p)}
+          >
+            <Tooltip title="取消挂载">
+              <Button type="text" size="small" danger icon={<DisconnectOutlined />} loading={detaching === p.id} />
+            </Tooltip>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -424,13 +475,21 @@ export function CategoriesPage() {
                   <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(sel)}>
                     编辑
                   </Button>
-                  <Tooltip title={catDepth(sel.id) >= 3 ? "分类最多三级，三级分类下不能再建子分类" : ""}>
+                  <Tooltip
+                    title={
+                      selDepth >= 3
+                        ? "分类最多三级，三级分类下不能再建子分类"
+                        : childBlocked
+                          ? "该分类已挂载材料，不能再创建子分类"
+                          : ""
+                    }
+                  >
                     <Button
                       size="small"
                       type="primary"
                       ghost
                       icon={<PlusOutlined />}
-                      disabled={catDepth(sel.id) >= 3}
+                      disabled={childBlocked}
                       onClick={() => openCreate(sel.id)}
                     >
                       新建子分类
@@ -480,7 +539,7 @@ export function CategoriesPage() {
                       </div>
                     </div>
                   ))}
-                  {catDepth(sel.id) < 3 && (
+                  {!childBlocked && (
                     <button
                       className="wlt-cat-add"
                       onClick={() => openCreate(sel.id)}
@@ -503,26 +562,24 @@ export function CategoriesPage() {
                     </button>
                   )}
                 </div>
-              ) : catDepth(sel.id) < 3 ? (
+              ) : (
                 <div
                   style={{
                     border: `1px dashed ${token.colorBorder}`,
                     borderRadius: 8,
                     padding: "24px 20px",
                     textAlign: "center",
-                    color: token.colorTextSecondary,
+                    color: token.colorTextTertiary,
                     fontSize: 13,
                     marginBottom: 16,
                   }}
                 >
-                  该分类下还没有子分类
-                  <div style={{ marginTop: 12 }}>
-                    <Button type="primary" ghost icon={<PlusOutlined />} onClick={() => openCreate(sel.id)}>
-                      新建第一个子分类
-                    </Button>
-                  </div>
+                  暂无子分类
+                  {childBlocked && selDepth === 2 ? (
+                    <div style={{ fontSize: 12, marginTop: 6 }}>该分类已挂载材料，不能再创建子分类</div>
+                  ) : null}
                 </div>
-              ) : null}
+              )}
 
               {/* 挂载材料表格：仅二级/三级分类展示；顶级分类不展示挂载区 */}
               {sel.parent_id !== 0 && (
@@ -573,7 +630,7 @@ export function CategoriesPage() {
         }}
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="parent_id" label="父分类" rules={[{ required: true, message: "请选择父分类" }]} extra="可挂到顶级、二级分类下；三级分类下不能再建子分类">
+          <Form.Item name="parent_id" label="父分类" rules={[{ required: true, message: "请选择父分类" }]} extra="可挂到顶级、二级分类下；三级分类下不能再建子分类，已挂材料的二级分类也不能再建子分类">
             <Select options={parentOptions} />
           </Form.Item>
           <Form.Item name="name" label="分类名称" rules={[{ required: true, message: "请输入分类名称" }, { max: 50, message: "不超过 50 字" }]}>
@@ -583,6 +640,34 @@ export function CategoriesPage() {
             <InputNumber min={0} style={{ width: "100%" }} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 移动材料：改挂到其他二级/三级分类 */}
+      <Modal
+        title={`移动材料：${moveTarget?.name ?? ""}`}
+        open={Boolean(moveTarget)}
+        onOk={() => void doMove()}
+        okText="移动"
+        confirmLoading={moving}
+        onCancel={() => setMoveTarget(null)}
+        width={420}
+        destroyOnHidden
+        afterOpenChange={(o) => {
+          if (o) setMoveCatId(undefined);
+        }}
+      >
+        <div style={{ fontSize: 13, color: token.colorTextSecondary, marginBottom: 8 }}>
+          当前分类：{sel?.name ?? "-"} · 目标分类可选二级/三级（不含当前分类）
+        </div>
+        <Select
+          style={{ width: "100%" }}
+          placeholder="选择目标分类"
+          showSearch
+          optionFilterProp="label"
+          value={moveCatId}
+          options={moveOptions}
+          onChange={(v) => setMoveCatId(v)}
+        />
       </Modal>
     </div>
   );

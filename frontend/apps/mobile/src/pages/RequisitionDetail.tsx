@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router";
 import { fileApi, FileImage, requisitionApi, useAuthStore, type RequisitionDetail } from "@wlt/shared";
 
 import { PhotoUpload } from "../components/PhotoUpload";
+import { WarnIcon } from "../components/icons";
 
 const STATUS: Record<number, { text: string; color: string }> = {
   1: { text: "待完成工作", color: "warning" },
@@ -150,7 +151,12 @@ export function RequisitionDetailPage() {
           </div>
           {detail.is_private === 1 && isAdmin && (
             <div style={{ background: "#fff1f0", border: "1px solid #ffccc7", color: "#cf1322", borderRadius: 10, padding: "10px 12px", fontSize: 12.5, marginTop: 10, lineHeight: 1.6 }}>
-              <b>⚠ 私用申请</b>：因何使用已锁定为「私用」；对外显示：{detail.display_reason} / {detail.display_location}（仅管理员可见真实状态）
+              <b>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <WarnIcon size={14} /> 私用申请
+                </span>
+              </b>
+              ：因何使用已锁定为「私用」；对外显示：{detail.display_reason} / {detail.display_location}（仅管理员可见真实状态）
             </div>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px", marginTop: 12, fontSize: 12.5 }}>

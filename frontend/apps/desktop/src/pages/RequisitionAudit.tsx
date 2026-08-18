@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { App, Button, Drawer, Input, Modal, Popconfirm, Select, Space, Tag, Typography } from "antd";
+import { ExclamationCircleFilled } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { requisitionApi, FileImage, type RequisitionBill, type RequisitionDetail } from "@wlt/shared";
@@ -264,7 +265,9 @@ export function RequisitionAuditPage() {
 
             {detail.is_private === 1 && (
               <div style={{ background: "#fff1f0", border: "1px solid #ffccc7", borderRadius: 8, padding: "10px 12px", marginTop: 10, fontSize: 13 }}>
-                <b style={{ color: "#cf1322" }}>⚠ 私用申请（特殊标记）</b>
+                <b style={{ color: "#cf1322", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <ExclamationCircleFilled /> 私用申请（特殊标记）
+                </b>
                 <div style={{ color: "#873800", marginTop: 4, lineHeight: 1.7 }}>
                   该申请已触发「私用」：因何使用锁定为「私用」且不可编辑；非管理员（含申请人）看到的「使用地点 / 因何使用」为下方固定话术，真实状态仅管理员可见。
                 </div>

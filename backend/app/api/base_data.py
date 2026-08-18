@@ -144,6 +144,9 @@ def create_category(req: CategoryReq, db: Session = Depends(get_db)) -> dict:
             raise BizError(E_PARAM, "父分类不存在")
         if _cat_depth(parent) >= 3:
             raise BizError(E_PARAM, "分类最多三级，三级分类下不能再建子分类")
+        # 规则：二级分类已挂材料时不能再建子分类（挂材料与建子分类二选一）
+        if parent.parent_id != 0 and _product_cnt(db, parent.id) > 0:
+            raise BizError(E_PARAM, "该分类已挂载材料，不能再创建子分类（请先取消挂载材料或另建分类）", http_status=409)
     cat = BaseCategory(
         parent_id=req.parent_id,
         name=req.name,
@@ -170,6 +173,9 @@ def update_category(cat_id: int, req: CategoryReq, db: Session = Depends(get_db)
             raise BizError(E_PARAM, "父分类不存在")
         if parent and _cat_depth(parent) >= 3:
             raise BizError(E_PARAM, "分类最多三级，三级分类下不能再建子分类")
+        # 规则：二级分类已挂材料时不能再建子分类（防止通过移动绕过创建校验）
+        if parent and parent.parent_id != 0 and _product_cnt(db, parent.id) > 0:
+            raise BizError(E_PARAM, "该分类已挂载材料，不能再创建子分类（请先取消挂载材料或另建分类）", http_status=409)
         # 父分类不能是自己的子孙（防环）；移动后最深子孙不得超过三级
         if parent and _is_descendant(db, parent.id, cat.id):
             raise BizError(E_PARAM, "父分类不能是自己的子分类")
@@ -198,6 +204,15 @@ def delete_category(cat_id: int, db: Session = Depends(get_db)) -> dict:
     db.commit()
     cache_delete("dict:categories")  # 分类树缓存失效
     return ok()
+
+
+def _product_cnt(db: Session, category_id: int) -> int:
+    """分类下启用材料数（与 /categories 的 product_count 同口径）。"""
+    return db.scalar(
+        select(func.count()).select_from(BaseProduct).where(
+            BaseProduct.category_id == category_id, BaseProduct.status == 1
+        )
+    ) or 0
 
 
 def _cat_depth(cat: BaseCategory) -> int:

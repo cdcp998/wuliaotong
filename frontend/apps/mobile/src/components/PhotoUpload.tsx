@@ -4,6 +4,7 @@ import { ActionSheet, Button, Toast } from "antd-mobile";
 import { apiBase, fileApi, FileImage } from "@wlt/shared";
 
 import { CameraAlbum } from "./CameraAlbum";
+import { AlbumIcon, CameraIcon } from "./icons";
 
 /** 拍照/相册上传（可选）：返回 file_id，展示已拍缩略图。
  * 拍照走 capture="environment" 直达相机，相册走不带 capture 的 input（移动端可正常选图）。 */
@@ -40,8 +41,22 @@ export function PhotoUpload({
   function retake() {
     ActionSheet.show({
       actions: [
-        { key: "camera", text: "📷 拍照" },
-        { key: "album", text: "🖼 从相册选择" },
+        {
+          key: "camera",
+          text: (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <CameraIcon size={18} /> 拍照
+            </span>
+          ),
+        },
+        {
+          key: "album",
+          text: (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <AlbumIcon size={18} /> 从相册选择
+            </span>
+          ),
+        },
       ],
       cancelText: "取消",
       onAction: (a) => {

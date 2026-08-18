@@ -5,6 +5,7 @@ import { useNavigate } from "react-router";
 import { resolveByBarcode, type Product } from "@wlt/shared";
 
 import { BarcodeScanner } from "../components/BarcodeScanner";
+import { CameraIcon } from "../components/icons";
 
 /** 扫码页（扫码 Tab / 首页扫码入口）：进入页面即直接全屏相机扫码（无中间选择页、无确认弹窗）。
  * 扫码/拍照识别到条码 → 自动查材料：命中展示结果（可直接带入入库/出库），未命中提示重新扫码。 */
@@ -82,7 +83,9 @@ export function OcrScanPage() {
             可在「入库」页扫码后直接新增材料，或点击下方重新扫码
           </p>
           <Button block color="primary" onClick={rescan} style={{ height: 44 }}>
-            📷 重新扫码 / 拍照识别
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <CameraIcon size={15} /> 重新扫码 / 拍照识别
+            </span>
           </Button>
         </div>
       )}

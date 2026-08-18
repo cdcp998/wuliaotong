@@ -6,6 +6,7 @@ import { baseApi, requisitionApi, type Location, type Product, type Warehouse } 
 
 import { PhotoUpload } from "../components/PhotoUpload";
 import { ProductPicker } from "../components/ProductPicker";
+import { PlusIcon } from "../components/icons";
 
 interface Row {
   product: Product;
@@ -175,7 +176,9 @@ export function RequisitionNewPage() {
           }}
           onClick={() => setPickerOpen(true)}
         >
-          ＋ 添加材料（扫码 / 搜索 / 拍照快查）
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <PlusIcon size={15} /> 添加材料（扫码 / 搜索 / 拍照快查）
+          </span>
         </div>
 
         {/* 使用信息 */}

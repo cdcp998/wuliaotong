@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { App, Alert, Button, Drawer, Input, InputNumber, Modal, Space, Spin, Tag, Upload } from "antd";
-import { SearchOutlined } from "@ant-design/icons";
+import { CameraOutlined, CheckCircleFilled, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router";
 
@@ -375,7 +375,7 @@ export function DeliveryOcrPage() {
 
       <Space style={{ marginBottom: 8 }} align="center" wrap>
         <Upload beforeUpload={handleUpload} showUploadList={false} accept="image/*">
-          <Button type="primary" loading={polling} icon={<span>📷</span>}>上传送货单照片</Button>
+          <Button type="primary" loading={polling} icon={<CameraOutlined />}>上传送货单照片</Button>
         </Upload>
         <Button icon={<SearchOutlined />} onClick={() => void openTaskList()}>查询任务单</Button>
         <Tag color="blue">识别方式：SiliconFlow 视觉识别（视觉大模型）</Tag>
@@ -417,7 +417,7 @@ export function DeliveryOcrPage() {
             <div>
               {uploadUrl ? (
                 <>
-                  <Tag color="green">图片 ✓</Tag>
+                  <Tag color="green" icon={<CheckCircleFilled />}>图片</Tag>
                   <img
                     src={uploadUrl}
                     alt="送货单"

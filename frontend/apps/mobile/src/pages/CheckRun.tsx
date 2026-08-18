@@ -6,6 +6,7 @@ import { checkApi, type CheckBill, type CheckItem, type Product } from "@wlt/sha
 
 import { PhotoUpload } from "../components/PhotoUpload";
 import { ProductPicker } from "../components/ProductPicker";
+import { PlusIcon } from "../components/icons";
 
 interface ExtraRow {
   key: number;
@@ -133,7 +134,9 @@ export function CheckRunPage() {
               }}
               onClick={() => setPickerOpen(true)}
             >
-              ＋ 当场新增账外物料（盘点发现但账面没有的实物）
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <PlusIcon size={15} /> 当场新增账外物料（盘点发现但账面没有的实物）
+              </span>
             </div>
           </List.Item>
         )}

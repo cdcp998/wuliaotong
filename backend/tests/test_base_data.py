@@ -83,6 +83,10 @@ def test_category_three_level_and_delete_404():
     assert p1["category_id"] == l2 and p2["category_id"] == l3
     assert client.post("/api/v1/products", json={"name": tag + "料C", "unit_id": unit, "category_id": l1}).json()["code"] == 4006
 
+    # 二级分类已挂材料 → 不能再建子分类（409/4006）
+    r = client.post("/api/v1/categories", json={"parent_id": l2, "name": tag + "二新"})
+    assert r.status_code == 409 and r.json()["code"] == 4006, r.text
+
     # 分类维度商品查询附带挂载材料明细（含数量列）
     rows = client.get(f"/api/v1/products?category_id={l3}").json()["data"]
     assert rows["total"] == 1 and rows["list"][0]["id"] == p2["id"]
@@ -93,6 +97,11 @@ def test_category_three_level_and_delete_404():
     assert client.get(f"/api/v1/products/{p1['id']}").json()["data"]["category_id"] == 0
     assert client.put(f"/api/v1/products/{p1['id']}/category", json={"category_id": l3}).json()["code"] == 0
     assert client.put(f"/api/v1/products/{p1['id']}/category", json={"category_id": l1}).json()["code"] == 4006
+
+    # 取消挂载后二级分类可再建子分类（规则仅约束"已挂材料时"）
+    r = client.post("/api/v1/categories", json={"parent_id": l2, "name": tag + "二新"})
+    assert r.json()["code"] == 0, r.text
+    assert client.delete(f"/api/v1/categories/{r.json()['data']['id']}").json()["code"] == 0
 
     # 删除不存在的分类：HTTP 404 + code=4003
     r = client.delete("/api/v1/categories/999999999")

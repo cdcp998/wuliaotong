@@ -66,7 +66,7 @@ export function PurchaseInPage() {
   const prefillConsumed = useRef(false); // 防 StrictMode/dev 双执行导致 sessionStorage 消费后 supplierId 被 URL 参数覆盖
   // 明细表格：列宽拖拽 + 行高密度
   const [submitTried, setSubmitTried] = useState(false); // 提交校验失败后高亮缺失项（材料/库位）
-  // 创建新仓位：库位下拉「＋ 创建新仓位」→ 弹窗（货架+层号）→ 保存后立即选中
+  // 创建新仓位：库位下拉「+ 创建新仓位」→ 弹窗（货架+层号）→ 保存后立即选中
   const [locModal, setLocModal] = useState<{ open: boolean; rowKey: number } | null>(null);
   const [locSaving, setLocSaving] = useState(false);
   const [locForm] = Form.useForm();
@@ -666,7 +666,7 @@ export function PurchaseInPage() {
             value={r.category_id}
             tree={catTree}
             onReload={reloadCats}
-            placeholder="选择分类 / ⚡自动识别"
+            placeholder="选择分类 / 可自动识别"
             onChange={(id, name) => setRow(r.key, { category_id: id, category_name: name })}
           />
           <Button icon={<ThunderboltOutlined />} title="按材料名称+规格自动识别分类" loading={classifyingKey === r.key} onClick={() => void classifyRow(r.key)} />

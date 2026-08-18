@@ -1,6 +1,8 @@
 import { useRef } from "react";
 import { Button, Space } from "antd-mobile";
 
+import { AlbumIcon, CameraIcon } from "./icons";
+
 /** 相机拍摄 / 相册选择双按钮。
  * 关键：相册 input 不能带 capture（带 capture 时移动端浏览器强制只打开相机，
  * 用户无法从相册选图）；拍照 input 保留 capture="environment" 直达后置相机。
@@ -30,8 +32,16 @@ export function CameraAlbum({ onPick, loading, translucent }: { onPick: (f: File
       <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={pick} />
       <input ref={albRef} type="file" accept="image/*" style={{ display: "none" }} onChange={pick} />
       <Space wrap>
-        <Button fill="outline" disabled={loading} style={translucentStyle} onClick={() => camRef.current?.click()}>📷 拍照</Button>
-        <Button fill="outline" disabled={loading} style={translucentStyle} onClick={() => albRef.current?.click()}>🖼 相册</Button>
+        <Button fill="outline" disabled={loading} style={translucentStyle} onClick={() => camRef.current?.click()}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <CameraIcon size={15} /> 拍照
+          </span>
+        </Button>
+        <Button fill="outline" disabled={loading} style={translucentStyle} onClick={() => albRef.current?.click()}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <AlbumIcon size={15} /> 相册
+          </span>
+        </Button>
       </Space>
     </>
   );

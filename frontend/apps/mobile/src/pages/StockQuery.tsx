@@ -5,6 +5,7 @@ import { useNavigate } from "react-router";
 import { stockApi, type StockRow } from "@wlt/shared";
 
 import { BarcodeScanner } from "../components/BarcodeScanner";
+import { CameraIcon } from "../components/icons";
 
 /** 库存查询（手机端）：关键词/条码 → 商品库存位置列表（《UI设计方案.md》§5.7）。 */
 export function StockQueryPage() {
@@ -55,7 +56,9 @@ export function StockQueryPage() {
             onClick={() => setScanOpen(true)}
             style={{ height: 42, minWidth: 88, borderRadius: 9, fontSize: 13 }}
           >
-            📷 扫码
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <CameraIcon size={15} /> 扫码
+            </span>
           </Button>
         </div>
         <div style={{ fontSize: 11.5, color: "#646a73", marginBottom: 8, padding: "0 2px" }}>扫码 / 条码查询更快捷，也可点击「扫码」按钮调用摄像头</div>
