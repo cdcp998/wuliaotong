@@ -16,7 +16,8 @@ export function CableMapPage() {
   const [cables, setCables] = useState<CableItem[]>([]);
   const [faults, setFaults] = useState<FaultItem[]>([]);
   const [markersByCable, setMarkersByCable] = useState<Record<number, MarkerItem[]>>({});
-  const [layers, setLayers] = useState({ cables: true, faults: true, markers: true });
+  const [layers, setLayers] = useState({ cables: true, faults: true, markers: true, devices: true });
+  const [devices, setDevices] = useState<{ id: number; lat: number | null; lng: number | null; name: string; status: number }[]>([]);
   const [selCable, setSelCable] = useState<number | undefined>();
   const [distance, setDistance] = useState<number | undefined>();
   const [measureResult, setMeasureResult] = useState<MeasureResult | null>(null);
@@ -50,6 +51,14 @@ export function CableMapPage() {
         }),
       );
       setMarkersByCable(byCable);
+      // 设备层（device 模块启用时；未启用/无权限静默忽略）
+      try {
+        const dev = await import("../device/api");
+        const devResp = await dev.deviceApi.list({ page_size: 200 });
+        setDevices(devResp.items.map((d) => ({ id: d.id, lat: d.lat, lng: d.lng, name: d.name, status: d.status })));
+      } catch {
+        setDevices([]);
+      }
     } catch (e) {
       message.error(e instanceof Error ? e.message : "加载地图数据失败");
     }
@@ -60,12 +69,15 @@ export function CableMapPage() {
   }, [load]);
 
   const overlays = useMemo(
-    () => ({
-      cables: layers.cables ? cables : [],
-      faults: layers.faults ? faults : [],
-      markersByCable: layers.markers ? markersByCable : {},
-    }),
-    [cables, faults, markersByCable, layers],
+    () => {
+      const base = {
+        cables: layers.cables ? cables : [],
+        faults: layers.faults ? faults : [],
+        markersByCable: layers.markers ? markersByCable : {},
+      };
+      return layers.devices ? { ...base, devices } : base;
+    },
+    [cables, faults, markersByCable, devices, layers],
   );
 
   const doMeasure = async () => {
@@ -126,6 +138,10 @@ export function CableMapPage() {
             <Space>
               <Switch checked={layers.markers} onChange={(v) => setLayers((s) => ({ ...s, markers: v }))} />
               <span>标记点层</span>
+            </Space>
+            <Space>
+              <Switch checked={layers.devices} onChange={(v) => setLayers((s) => ({ ...s, devices: v }))} />
+              <span>设备层（{devices.length}）</span>
             </Space>
           </Space>
         </Card>

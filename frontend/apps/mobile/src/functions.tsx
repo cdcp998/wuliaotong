@@ -107,6 +107,38 @@ export const FUNCTIONS: MobileFunction[] = [
     perm: "",
     icon: stroke(<><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></>),
   },
+  {
+    key: "cable-map",
+    title: "地图",
+    sub: "故障上报/导航",
+    path: "/cable/map",
+    perm: "cable:view",
+    icon: stroke(<><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c3 3.5 3 14 0 18-3-3.5-3-14 0-18" /></>),
+  },
+  {
+    key: "my-tasks",
+    title: "我的任务",
+    sub: "接单/完成",
+    path: "/tasks/mine",
+    perm: "task:process",
+    icon: stroke(<><path d="M9 11l3 3 8-8" /><rect x="4" y="4" width="16" height="16" rx="3" /></>),
+  },
+  {
+    key: "knowledge",
+    title: "知识",
+    sub: "维修参考",
+    path: "/knowledge",
+    perm: "knowledge:view",
+    icon: stroke(<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13z" /><path d="M8 8h8M8 12h6" /></>),
+  },
+  {
+    key: "devices",
+    title: "设备",
+    sub: "定位/状态",
+    path: "/devices",
+    perm: "device:task,device:manage",
+    icon: stroke(<><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></>),
+  },
 ];
 
 /** 每用户首页快捷操作「已隐藏」集合的 localStorage key。 */

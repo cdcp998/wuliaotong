@@ -20,6 +20,8 @@ export interface MapOverlayData {
   faults: FaultItem[];
   /** cable_id → 标记点 */
   markersByCable: Record<number, MarkerItem[]>;
+  /** 设备地图标记（device 模块；无坐标的设备自动跳过） */
+  devices?: { id: number; lat: number | null; lng: number | null; name: string; status: number }[];
 }
 
 interface MapViewProps {
@@ -54,6 +56,13 @@ const navIcon = L.divIcon({
   html: '<div style="width:16px;height:16px;border-radius:50%;background:#fa541c;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [16, 16],
   iconAnchor: [8, 8],
+});
+
+const deviceIcon = L.divIcon({
+  className: "wlt-map-marker",
+  html: '<div style="width:13px;height:13px;border-radius:3px;background:#722ed1;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  iconSize: [13, 13],
+  iconAnchor: [6, 6],
 });
 
 function ClickCatcher({ onPick, space }: { onPick?: (lat: number, lng: number) => void; space: string }) {
@@ -123,6 +132,10 @@ export function MapView({
       ),
     [overlays.markersByCable],
   );
+  const devicePoints = useMemo(
+    () => (overlays.devices ?? []).filter((d) => d.lat != null && d.lng != null),
+    [overlays.devices],
+  );
 
   if (!Object.keys(sources).length) {
     return <Empty style={{ marginTop: 80 }} description="未配置地图源（系统管理 → 安装模块 → cable 模块配置）" />;
@@ -174,6 +187,19 @@ export function MapView({
                   <b>{m.label || m.marker_type || "标记点"}</b>
                   <div>累计 {m.cumulative_distance.toFixed(1)} m</div>
                   {m.remark && <div>{m.remark}</div>}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+        {devicePoints.map((d) => {
+          const [dlng, dlat] = toDisplaySpace(d.lng!, d.lat!, space);
+          return (
+            <Marker key={`dev${d.id}`} position={[dlat, dlng]} icon={deviceIcon}>
+              <Popup>
+                <div>
+                  <b>{d.name}</b>
+                  <div>{["", "在用", "维修中", "闲置", "报废"][d.status] ?? d.status}</div>
                 </div>
               </Popup>
             </Marker>
