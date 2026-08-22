@@ -97,6 +97,7 @@ class SysMenu(TimestampMixin, Base):
     perm_code: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     visible: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    module_code: Mapped[str] = mapped_column(String(50), nullable=False, default="")  # 归属模块（空=核心菜单）；模块未启用时菜单不可见
     remark: Mapped[str] = mapped_column(String(255), nullable=False, default="")
 
 
@@ -120,6 +121,7 @@ class SysPermission(TimestampMixin, Base):
     code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     type: Mapped[int] = mapped_column(Integer, nullable=False, default=2)  # 1菜单 2按钮
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    module_code: Mapped[str] = mapped_column(String(50), nullable=False, default="")  # 归属模块（空=核心权限）；模块停用时权限点不生效
 
 
 class SysRolePermission(Base):
@@ -198,7 +200,71 @@ class SysNotification(TimestampMixin, Base):
     content: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     biz_type: Mapped[str] = mapped_column(String(30), nullable=False, default="")  # 预警/待办/审批
     link: Mapped[str] = mapped_column(String(255), nullable=False, default="")  # 业务联动跳转目标（移动端路由），兼作业务去重/自动已读的唯一键
+    channels: Mapped[str] = mapped_column(String(50), nullable=False, default="internal")  # 投递渠道（逗号分隔）：internal/email/sms
     is_read: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class SysModule(Base):
+    """功能模块注册表（线缆和设备插件方案 §2.2）。
+
+    state：NOT_INSTALLED/INSTALLING/INSTALLED/ENABLED/DISABLED/ERROR/UPGRADING；
+    schema_version：已执行的模块 SQL 结构版本（migration 序号，baseline=0 起点）。
+    """
+
+    __tablename__ = "sys_module"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="NOT_INSTALLED")
+    schema_version: Mapped[str] = mapped_column(String(20), nullable=False, default="0")
+    depends: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON 数组
+    config: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    description: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    last_error: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    installed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class SysModuleMigration(Base):
+    """模块 migration 执行记录（checksum 拦截漂移/重复执行）。"""
+
+    __tablename__ = "sys_module_migration"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    module_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    version: Mapped[str] = mapped_column(String(50), nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    success: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    executed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+
+class SysNotificationDelivery(Base):
+    """通知投递记录（三渠道实际触达与状态，线缆和设备插件方案 §4.1）。
+
+    biz_type/biz_id 为业务键冗余：通知被用户删除后投递记录仍可定位业务对象（审计对账）。
+    """
+
+    __tablename__ = "sys_notification_delivery"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    notification_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    biz_type: Mapped[str] = mapped_column(String(30), nullable=False, default="")
+    biz_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    channel: Mapped[str] = mapped_column(String(10), nullable=False)  # internal/email/sms
+    recipient: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="pending")
+    provider: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    provider_message_id: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
 
 class SysBackupLog(Base):

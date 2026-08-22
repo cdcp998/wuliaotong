@@ -25,6 +25,7 @@ from app.api import files as files_api
 from app.api import geo as geo_api
 from app.api import init as init_api
 from app.api import menu as menu_api
+from app.api import modules as modules_api
 from app.api import notification as notification_api
 from app.api import ocr as ocr_api
 from app.api import requisition as requisition_api
@@ -36,6 +37,7 @@ from app.config import settings
 from app.core.deps import resolve_session_user
 from app.core.logging_config import configure_logging, set_log_level
 from app.core.loop_guard import install_loop_guard, install_proactor_accept_patch
+from app.core.modules import register_modules
 from app.core.ratelimit import RateLimitMiddleware
 from app.core.response import BizError, E_NOT_FOUND, E_NO_PERMISSION, E_PARAM, E_RATE_LIMITED, biz_error_handler, err
 from app.db import SessionLocal, engine
@@ -184,7 +186,7 @@ _AUDIT_MODULES = {
     "users": "用户", "roles": "角色", "register-applies": "注册审核", "logs": "日志",
     "backups": "备份", "products": "材料", "categories": "分类", "suppliers": "供应商",
     "units": "单位", "warehouses": "仓库", "shelves": "货架", "locations": "库位",
-    "departments": "组织单位", "delete-reviews": "删除审核", "menus": "导航管理",
+    "departments": "组织单位", "delete-reviews": "删除审核", "menus": "导航管理", "modules": "模块",
     "purchase-in": "采购入库", "purchase-plans": "采购计划", "opening": "期初",
     "transfers": "库存调拨", "checks": "盘点", "other-io": "其他出入库",
     "requisitions": "领用申请", "notifications": "通知", "ocr": "OCR/大模型",
@@ -294,13 +296,22 @@ _AUDIT_ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/backups"): "创建数据备份",
     ("DELETE", "/backups/{id}"): "删除备份文件",
     ("POST", "/ocr/install-paddle"): "安装 PP-OCR 引擎",
+    ("POST", "/modules/{code}/install"): "安装模块",
+    ("POST", "/modules/{code}/enable"): "启用模块",
+    ("POST", "/modules/{code}/disable"): "停用模块",
+    ("POST", "/modules/{code}/upgrade"): "升级模块",
+    ("POST", "/modules/{code}/uninstall"): "卸载模块",
+    ("POST", "/modules/rescan"): "重新扫描模块源码",
 }
 
 
 def _audit_normalize_path(path: str) -> str:
-    """归一化路径：去掉 api 前缀，数字段 → {id}（如 /api/v1/products/123/category → /products/{id}/category）。"""
+    """归一化路径：去掉 api 前缀，数字段 → {id}（如 /api/v1/products/123/category → /products/{id}/category）；
+    模块管理路由 /modules/{code}/... → /modules/{code}/...（code 为字符段，需显式归一）。"""
     p = path.removeprefix(settings.api_prefix)
     segs = ["{id}" if seg.isdigit() else seg for seg in p.split("/") if seg]
+    if len(segs) >= 3 and segs[0] == "modules":
+        segs[1] = "{code}"
     return "/" + "/".join(segs) if segs else "/"
 
 
@@ -407,3 +418,20 @@ app.include_router(files_api.router, prefix=settings.api_prefix)
 app.include_router(storage_api.router, prefix=settings.api_prefix)
 app.include_router(system_api.router, prefix=settings.api_prefix)
 app.include_router(geo_api.router, prefix=settings.api_prefix)
+app.include_router(modules_api.router, prefix=settings.api_prefix)
+
+# 模块插件加载器（线缆和设备插件方案 §2.2）：
+# - 登记源码已部署模块（NOT_INSTALLED，不自动安装）
+# - 挂载模块路由（模块 router 自带 require_module_enabled 依赖：未启用即时 403）
+# - sys_module 表不存在/数据库不可用 → 静默跳过（核心启动不受影响）
+_module_register_summary = register_modules(app)
+if _module_register_summary["modules"]:
+    from app.core.modules import module_audit_labels
+
+    _AUDIT_MODULES.update(module_audit_labels())
+    logger.info(
+        "模块插件加载完成：%s（登记 %d，挂载 %d）",
+        ",".join(_module_register_summary["modules"]),
+        _module_register_summary["registered"],
+        len(_module_register_summary["mounted"]),
+    )

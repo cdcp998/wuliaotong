@@ -17,7 +17,7 @@ import os
 import re
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.db import SessionLocal
 from app.models.advanced import (
@@ -367,6 +367,27 @@ def cleanup_test_data() -> None:
                 except OSError:
                     pass
                 db.delete(f)
+        # ---- 模块插件（cable）测试数据：按 T- 前缀精确清理（表由模块 install.sql 创建）----
+        from app.core.migration_utils import table_exists
+
+        def _exec(sql: str) -> None:
+            try:
+                db.execute(text(sql))
+            except Exception:  # noqa: BLE001 表不存在/列缺失时静默（模块未安装过）
+                db.rollback()
+
+        if table_exists(db, "cable"):
+            _exec("DELETE FROM cable_point WHERE cable_id IN (SELECT id FROM cable WHERE code LIKE 'T-%')")
+            _exec("DELETE FROM cable_marker WHERE cable_id IN (SELECT id FROM cable WHERE code LIKE 'T-%')")
+            _exec("DELETE FROM cable_fault WHERE cable_id IN (SELECT id FROM cable WHERE code LIKE 'T-%') OR description LIKE 'T-%'")
+            _exec("DELETE FROM fault_file WHERE fault_id NOT IN (SELECT id FROM cable_fault)")
+            _exec("DELETE FROM map_download_task WHERE region_id IN (SELECT id FROM map_cache_region WHERE name LIKE 'T-%')")
+            _exec("DELETE FROM map_cache_region WHERE name LIKE 'T-%'")
+            _exec("DELETE FROM cable WHERE code LIKE 'T-%'")
+        # 隔离测试库：模块状态/配置复位（cable 安装/启停/地图源配置不影响其他测试；migration 记录保留）
+        if os.getenv("TEST_DB_URL", "") and table_exists(db, "sys_module"):
+            db.execute(text("UPDATE sys_module SET state='NOT_INSTALLED', last_error='', config=NULL WHERE code='cable' AND (state <> 'NOT_INSTALLED' OR config IS NOT NULL)"))
+            db.commit()
         db.commit()
     finally:
         db.close()

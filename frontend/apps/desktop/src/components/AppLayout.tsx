@@ -295,6 +295,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const menus = useAuthStore((s) => s.menus);
   const fetchMenus = useAuthStore((s) => s.fetchMenus);
+  const fetchModules = useAuthStore((s) => s.fetchModules);
   const hasPerm = useAuthStore((s) => s.hasPerm);
   const hasAnyPerm = useAuthStore((s) => s.hasAnyPerm);
   const logout = useAuthStore((s) => s.logout);
@@ -304,9 +305,12 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
   // 内容滚动容器：路由切换（点击侧边导航/顶栏搜索）后回到顶端，避免保留上一页滚动位置
   const contentRef = useRef<HTMLElement | null>(null);
 
-  // 登录后拉取动态菜单（导航管理；未拉取/失败回退硬编码 MENU）
+  // 登录后拉取动态菜单与模块状态（模块停用 → 菜单/权限过滤；未拉取/失败回退硬编码 MENU）
   useEffect(() => {
-    if (user && menus.length === 0) void fetchMenus();
+    if (user) {
+      if (menus.length === 0) void fetchMenus();
+      void fetchModules();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 

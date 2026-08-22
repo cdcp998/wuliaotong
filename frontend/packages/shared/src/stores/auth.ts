@@ -1,25 +1,30 @@
-/** 认证全局状态（Zustand）：登录态、权限点、动态菜单、hasPerm 校验。 */
+/** 认证全局状态（Zustand）：登录态、权限点、动态菜单、模块状态、hasPerm 校验。 */
 
 import { create } from "zustand";
 
 import { authApi, type UserInfo } from "../api/auth";
 import { menuApi, type MenuNode } from "../api/menu";
+import { moduleApi, type ModuleInfo } from "../api/modules";
 
 interface AuthState {
   user: UserInfo | null;
   menus: MenuNode[]; // 当前用户可见菜单树（动态导航渲染）
+  modules: ModuleInfo[]; // 模块插件状态（系统管理「安装模块」页 + RequireModule 守卫）
   loading: boolean;
   login: (username: string, password: string, captchaId?: string, captchaCode?: string, remember?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   fetchMe: () => Promise<void>;
   fetchMenus: () => Promise<void>;
+  fetchModules: () => Promise<void>;
   hasPerm: (code: string) => boolean;
   hasAnyPerm: (codes: string[]) => boolean;
+  moduleEnabled: (code: string) => boolean;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   menus: [],
+  modules: [],
   loading: false,
 
   login: async (username: string, password: string, captchaId = "", captchaCode = "", remember = false) => {
@@ -36,7 +41,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await authApi.logout();
     } finally {
-      set({ user: null, menus: [] });
+      set({ user: null, menus: [], modules: [] });
     }
   },
 
@@ -54,6 +59,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  fetchModules: async () => {
+    try {
+      const modules = await moduleApi.list();
+      set({ modules });
+    } catch {
+      set({ modules: [] }); // 无 module:manage 权限/接口不可用时静默（不影响主流程）
+    }
+  },
+
   hasPerm: (code) => {
     const user = get().user;
     if (!user) return false;
@@ -66,5 +80,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!user) return false;
     if (user.role?.code === "super_admin") return true;
     return codes.some((code) => user.permissions.includes(code));
+  },
+
+  moduleEnabled: (code) => {
+    const mod = get().modules.find((m) => m.code === code);
+    return mod?.state === "ENABLED";
   },
 }));

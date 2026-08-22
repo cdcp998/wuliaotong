@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -138,8 +139,45 @@ def start_scheduler() -> None:
             replace_existing=True,
             next_run_time=datetime.now(),
         )
+        _register_module_jobs()
         scheduler.start()
         logger.info("scheduler started: stock_alerts(1min), daily_backup(02:00), quota_refresh+check(5min trigger)")
+
+
+def _register_module_jobs() -> None:
+    """注册模块提供的定时任务（线缆和设备插件方案 §2.2/§13.1.5）。
+
+    模块约定：ModuleDef.jobs 中每个 Callable 可带属性 interval_minutes（分钟，缺省 1）；
+    每次触发先检查模块 ENABLED，未启用直接跳过（tick 检查 ENABLED）。
+    """
+    from app.core.modules import get_module_defs, module_enabled
+
+    for d in get_module_defs().values():
+        for job in d.jobs:
+            minutes = getattr(job, "interval_minutes", 1) or 1
+            code = d.code
+
+            def _runner(job_fn: Callable = job, mod_code: str = code) -> None:
+                db = SessionLocal()
+                try:
+                    if module_enabled(db, mod_code):
+                        job_fn()
+                    else:
+                        logger.debug("模块 %s 未启用，跳过定时任务 %s", mod_code, job_fn.__name__)
+                except Exception:  # noqa: BLE001 模块任务异常隔离，只记日志
+                    logger.exception("模块定时任务 %s/%s 执行失败", mod_code, job_fn.__name__)
+                finally:
+                    db.close()
+
+            scheduler.add_job(
+                _runner,
+                "interval",
+                minutes=minutes,
+                id=f"mod:{code}:{job.__name__}",
+                replace_existing=True,
+                next_run_time=datetime.now(),
+            )
+            logger.info("scheduler registered module job: mod:%s:%s (%dmin)", code, job.__name__, minutes)
 
 
 def stop_scheduler() -> None:

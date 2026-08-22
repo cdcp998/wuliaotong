@@ -55,3 +55,6 @@ dsh-usage/
 /启动桌面端.bat
 /start_all.bat
 /stop_all.bat
+
+# 模块插件运行时目录（scripts/build_modules.py 生成，禁止手工修改；源码在 backend/modules/）
+backend/app/modules/

@@ -151,20 +151,30 @@ def _gen_reset_code() -> str:
 
 
 def _permission_codes(db: Session, user: SysUser) -> list[str]:
-    """返回用户权限点 code 列表；超级管理员返回全部。"""
+    """返回用户权限点 code 列表；超级管理员返回全部。
+
+    模块权限点过滤（线缆和设备插件方案 §13.1.5）：module_code 非空且模块未启用 → 权限点不生效
+    （禁用模块后按钮级权限自动失效；模块数据仍由 require_module_enabled 在接口层兜底 403）。
+    """
+    from app.core.modules import enabled_module_codes
+
+    enabled_mods = enabled_module_codes(db)
     role = db.get(SysRole, user.role_id)
     if role and role.code == SUPER_ADMIN_ROLE_CODE:
-        codes = db.scalars(
-            select(SysPermission.code).order_by(SysPermission.id)
+        rows = db.scalars(
+            select(SysPermission).order_by(SysPermission.id)
         ).all()
     else:
-        codes = db.scalars(
-            select(SysPermission.code)
+        rows = db.scalars(
+            select(SysPermission)
             .join(SysRolePermission, SysRolePermission.permission_id == SysPermission.id)
             .where(SysRolePermission.role_id == user.role_id)
             .order_by(SysPermission.id)
         ).all()
-    return list(codes)
+    return [
+        p.code for p in rows
+        if not p.module_code or p.module_code in enabled_mods
+    ]
 
 
 def build_user_info(db: Session, user: SysUser) -> UserInfo:

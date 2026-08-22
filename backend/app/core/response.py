@@ -32,6 +32,7 @@ E_RATE_LIMITED = 4008  # 请求过于频繁（接口限流触发，HTTP 429）
 E_OCR_UNAVAILABLE = 5001  # OCR 引擎未初始化
 E_LLM_FAILED = 5002  # 大模型调用失败
 E_FILE_FAILED = 5003  # 文件处理失败
+E_MODULE_DISABLED = 4009  # 模块未启用（线缆和设备插件方案 §13.1.2，HTTP 403）
 
 # 业务错误码 → HTTP 状态语义化映射（避免统一返回 200）：
 # - 资源不存在 → 404；参数错误 → 400；权限 → 403；限流 → 429；冲突（库存/状态） → 409；服务端 → 500。
@@ -43,6 +44,7 @@ _STATUS_BY_CODE: dict[int, int] = {
     E_BILL_STATUS: 409,
     E_NOT_FOUND: 404,
     E_NO_PERMISSION: 403,
+    E_MODULE_DISABLED: 403,
     E_PARAM: 400,
     E_CAPTCHA: 400,
     E_RATE_LIMITED: 429,

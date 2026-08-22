@@ -71,13 +71,19 @@ def _is_descendant(db: Session, node_id: int, ancestor_id: int) -> bool:
 
 @router.get("/menus")
 def my_menus(user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
-    """当前用户可见菜单树（动态导航渲染）：visible=1 且权限匹配；无子项的父级自动剔除。"""
+    """当前用户可见菜单树（动态导航渲染）：visible=1 且权限匹配且（无 module_code 或模块已启用）；
+    无子项的父级自动剔除。"""
     perms = set(_permission_codes(db, user))
+    from app.core.modules import enabled_module_codes
+
+    enabled_mods = enabled_module_codes(db)
     all_menus = db.scalars(select(SysMenu).order_by(SysMenu.sort, SysMenu.id)).all()
 
     def _visible(m: SysMenu) -> bool:
         if m.visible != 1:
             return False
+        if m.module_code and m.module_code not in enabled_mods:
+            return False  # 模块未启用 → 菜单隐藏（方案 §13.1.5）
         if not m.perm_code:
             return True  # 公开菜单
         return any(code in perms for code in (c.strip() for c in m.perm_code.split(",") if c.strip()))

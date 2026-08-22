@@ -25,6 +25,7 @@ const InitPage = lazy(() => import("./pages/Init").then((m) => ({ default: m.Ini
 const LandingPage = lazy(() => import("./pages/Landing").then((m) => ({ default: m.LandingPage })));
 const LogsPage = lazy(() => import("./pages/Logs").then((m) => ({ default: m.LogsPage })));
 const MenusPage = lazy(() => import("./pages/Menus").then((m) => ({ default: m.MenusPage })));
+const ModulesPage = lazy(() => import("./pages/Modules").then((m) => ({ default: m.ModulesPage })));
 const LoginPage = lazy(() => import("./pages/Login").then((m) => ({ default: m.LoginPage })));
 const MaterialsDataPage = lazy(() => import("./pages/MaterialsData").then((m) => ({ default: m.MaterialsDataPage })));
 const DeleteReviewsPage = lazy(() => import("./pages/DeleteReviews").then((m) => ({ default: m.DeleteReviewsPage })));
@@ -97,6 +98,7 @@ const router = createBrowserRouter(
   { path: "/system/users", element: withLayout(<UsersPage />) },
   { path: "/system/roles", element: withLayout(<RolesPage />) },
   { path: "/system/menus", element: withLayout(<MenusPage />) },
+  { path: "/system/modules", element: withLayout(<ModulesPage />) },
   { path: "/system/logs", element: withLayout(<LogsPage />) },
   { path: "/system/backups", element: withLayout(<BackupsPage />) },
   { path: "/system/register-applies", element: withLayout(<RegisterAppliesPage />) },

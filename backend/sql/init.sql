@@ -93,6 +93,7 @@ CREATE TABLE sys_permission (
   code      VARCHAR(50) NOT NULL COMMENT '权限点编码（《后端API设计.md》§10）',
   type      TINYINT     NOT NULL DEFAULT 2 COMMENT '1 菜单 / 2 按钮',
   sort      INT         NOT NULL DEFAULT 0,
+  module_code VARCHAR(50) NOT NULL DEFAULT '' COMMENT '归属模块编码（线缆和设备插件方案 v2.1）：cable/task/knowledge/device，空=核心权限；模块停用时其权限点不生效',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -170,6 +171,7 @@ CREATE TABLE sys_notification (
   content    VARCHAR(500) NOT NULL DEFAULT '',
   biz_type   VARCHAR(30) NOT NULL DEFAULT '' COMMENT '预警/待办/审批',
   link       VARCHAR(255) NOT NULL DEFAULT '' COMMENT '业务联动跳转目标（移动端路由），兼作业务去重/自动已读唯一键',
+  channels   VARCHAR(50) NOT NULL DEFAULT 'internal' COMMENT '投递渠道（逗号分隔）：internal/email/sms（缺省仅站内）',
   is_read    TINYINT     NOT NULL DEFAULT 0 COMMENT '1 已读 / 0 未读',
   created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -224,6 +226,60 @@ CREATE TABLE sys_storage (
   updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='存储位置（多存储地址）';
+
+-- ============================ 2.5 功能模块插件（线缆和设备插件方案 §2.2） ============================
+
+DROP TABLE IF EXISTS sys_module;
+CREATE TABLE sys_module (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code        VARCHAR(50)  NOT NULL COMMENT '模块编码，如 cable',
+  name        VARCHAR(100) NOT NULL COMMENT '模块名称',
+  version     VARCHAR(20)  NOT NULL DEFAULT '1.0.0' COMMENT '插件版版本号（SemVer）',
+  state       VARCHAR(20)  NOT NULL DEFAULT 'NOT_INSTALLED'
+              COMMENT 'NOT_INSTALLED/INSTALLING/INSTALLED/ENABLED/DISABLED/ERROR/UPGRADING',
+  schema_version VARCHAR(20) NOT NULL DEFAULT '0' COMMENT '已执行的模块 SQL 结构版本（migration 序号）',
+  depends     JSON         NULL COMMENT '依赖约束（JSON 数组，如 ["cable>=1.2.0,<2.0.0"]；SemVer 校验）',
+  config      JSON         NULL COMMENT '模块配置（JSON，敏感字段脱敏）',
+  description VARCHAR(255) NOT NULL DEFAULT '',
+  last_error  VARCHAR(500) NOT NULL DEFAULT '' COMMENT '最近异常信息（ERROR 态）',
+  last_error_at DATETIME   NULL COMMENT '最近异常时间',
+  installed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='功能模块注册表';
+
+DROP TABLE IF EXISTS sys_module_migration;
+CREATE TABLE sys_module_migration (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  module_code VARCHAR(50)  NOT NULL COMMENT '→ sys_module.code',
+  version     VARCHAR(50)  NOT NULL COMMENT 'migration 标识（如 0001_initial / baseline）',
+  checksum    VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'migration 文件 sha256',
+  success     TINYINT      NOT NULL DEFAULT 1 COMMENT '1 成功 / 0 失败',
+  executed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_module_version (module_code, version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='模块 migration 执行记录';
+
+DROP TABLE IF EXISTS sys_notification_delivery;
+CREATE TABLE sys_notification_delivery (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  notification_id BIGINT   NULL COMMENT '→ sys_notification.id（ON DELETE SET NULL 语义，逻辑引用）',
+  biz_type    VARCHAR(30)  NOT NULL DEFAULT '' COMMENT '业务类型冗余（通知被删后仍可定位业务对象）',
+  biz_id      BIGINT       NOT NULL DEFAULT 0 COMMENT '业务 id 冗余（审计对账）',
+  channel     VARCHAR(10)  NOT NULL COMMENT 'internal/email/sms',
+  recipient   VARCHAR(100) NOT NULL DEFAULT '' COMMENT '接收方（user_id/邮箱/手机号）',
+  status      VARCHAR(10)  NOT NULL DEFAULT 'pending' COMMENT 'pending/sending/success/failed/cancelled',
+  provider    VARCHAR(20)  NOT NULL DEFAULT '' COMMENT '短信/邮件服务商',
+  provider_message_id VARCHAR(100) NOT NULL DEFAULT '' COMMENT '服务商回执 id',
+  idempotency_key VARCHAR(64) NOT NULL DEFAULT '' COMMENT '幂等键（防重复发送）',
+  retry_count INT          NOT NULL DEFAULT 0,
+  last_error  VARCHAR(500) NOT NULL DEFAULT '',
+  sent_at     DATETIME     NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_notification (notification_id),
+  KEY idx_biz (biz_type, biz_id),
+  KEY idx_status (status),
+  UNIQUE KEY uk_idempotency (idempotency_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通知投递记录（三渠道实际触达与状态）';
 
 -- ============================ 3. 基础资料 ============================
 
@@ -807,6 +863,7 @@ CREATE TABLE sys_menu (
   perm_code   VARCHAR(100) NOT NULL DEFAULT '' COMMENT '权限码；逗号分隔=任一命中可见；空=公开',
   visible     TINYINT      NOT NULL DEFAULT 1 COMMENT '1 显示 / 0 隐藏',
   sort        INT          NOT NULL DEFAULT 0 COMMENT '排序（小在前）',
+  module_code VARCHAR(50)  NOT NULL DEFAULT '' COMMENT '归属模块编码（cable/task/knowledge/device），空=核心菜单；模块未启用时菜单自动隐藏',
   remark      VARCHAR(255) NOT NULL DEFAULT '',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -823,7 +880,9 @@ INSERT INTO sys_role (id, code, name, description, is_builtin) VALUES
   (1, 'super_admin', '超级管理员', '全部权限 + 系统设置', 1),
   (2, 'manager',     '管理者',     '查看报表、经营数据', 1),
   (3, 'storekeeper', '仓管员',     '出入库/盘点/调拨/库存查询/领用审计', 1),
-  (4, 'user',        '使用者',     '材料领用申请（使用地点、因何使用必填）', 1);
+  (4, 'user',        '使用者',     '材料领用申请（使用地点、因何使用必填）', 1),
+  (5, 'dispatcher',  '调度员',     '线缆/故障/地图缓存/任务派发验收/设备管理/知识（线缆和设备插件方案 §8.2，模块权限随模块安装授予）', 1),
+  (6, 'repairer',    '维修人员',   '领用申请、库存查询、线缆查看、故障上报、任务处理、设备任务、知识查看（合并原使用者+巡检）', 1);
 
 -- 权限点（《后端API设计.md》§10，id 固定）
 INSERT INTO sys_permission (id, name, code, type, sort) VALUES
@@ -852,7 +911,8 @@ INSERT INTO sys_permission (id, name, code, type, sort) VALUES
   (23, '备份管理',      'sys:backup',          2, 74),
   (24, '单位管理',      'dept:manage',         2, 75),
   (25, 'AI 调用日志',   'sys:llm-log',         2, 76),
-  (26, 'AI 建议处理',   'ai:suggestion',       2, 62);
+  (26, 'AI 建议处理',   'ai:suggestion',       2, 62),
+  (27, '安装模块',      'module:manage',       2, 77);
 
 -- 角色-权限映射
 -- 超级管理员：全部
@@ -869,6 +929,9 @@ INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 -- 使用者：领用申请 + 库存查询（自己相关）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
   (4, 13), (4, 8);
+-- 维修人员：核心权限（领用申请 + 库存查询）；线缆/故障/任务/设备/知识权限随模块安装授予
+INSERT INTO sys_role_permission (role_id, permission_id) VALUES
+  (6, 13), (6, 8);
 
 -- 导航菜单种子（id 固定；perm_code 逗号分隔=任一命中可见；后续可在「系统管理 → 导航管理」动态调整）
 INSERT INTO sys_menu (id, parent_id, name, path, icon, perm_code, visible, sort) VALUES
@@ -906,7 +969,8 @@ INSERT INTO sys_menu (id, parent_id, name, path, icon, perm_code, visible, sort)
   (32, 26, '操作日志', '/system/logs', 'FileTextOutlined', 'sys:log', 1, 50),
   (33, 26, '备份管理', '/system/backups', 'HddOutlined', 'sys:backup', 1, 60),
   (34, 26, 'AI 调用日志', '/llm-logs', 'RobotOutlined', 'sys:llm-log', 1, 70),
-  (35, 26, '系统设置', '/system/settings', 'SettingOutlined', 'sys:config', 1, 80);
+  (35, 26, '系统设置', '/system/settings', 'SettingOutlined', 'sys:config', 1, 80),
+  (36, 26, '安装模块', '/system/modules', 'AppstoreAddOutlined', 'module:manage', 1, 25);
 
 -- 初始管理员占位（不可登录）：密码哈希为无效值，必须通过「初始化安装向导」设置密码后方可登录。
 -- 若手工导入本脚本部署，请执行安装向导（删除 backend/data/.initialized 后访问系统入口），
@@ -930,7 +994,12 @@ INSERT INTO sys_config (config_key, config_value, remark) VALUES
   ('smtp.port',            '465',           'SMTP 端口'),
   ('smtp.user',            '',              'SMTP 账号'),
   ('smtp.password',        '',              'SMTP 密码（secret）'),
-  ('smtp.from',            '',              '发件人邮箱');
+  ('smtp.from',            '',              '发件人邮箱'),
+  ('sms.provider',         '',              '短信服务商：aliyun/tencent/ronglian/http（线缆和设备插件方案 §4.6）'),
+  ('sms.key',              '',              '短信 AccessKey（secret，接口脱敏）'),
+  ('sms.secret',           '',              '短信 AccessKey Secret（secret，接口脱敏）'),
+  ('sms.sign',             '',              '短信签名'),
+  ('sms.endpoint',         '',              '短信接口地址（通用 HTTP 服务商）');
 
 -- 注：初始化完成状态不再存 sys_config（sys.initialized 已移除）——改为文件系统标记
 -- backend/data/.initialized 判断（见《后端API设计.md》§1.1），数据库重建/备份恢复不会
