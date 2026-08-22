@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Button, Dialog, NavBar, Popup, Tag, Toast } from "antd-mobile";
 import { useNavigate, useParams } from "react-router";
 
@@ -191,6 +191,39 @@ export function RequisitionDetailPage() {
             <div><div style={{ color: "#5B6478" }}>申请时间</div><div style={{ marginTop: 2 }}>{detail.created_at.slice(0, 16)}</div></div>
             <div><div style={{ color: "#5B6478" }}>总数量</div><div style={{ marginTop: 2 }}>{detail.total_qty}</div></div>
           </div>
+
+          {/* 进度时间线（设计页 M11：提交✓→拍照→审计→完成） */}
+          {[1, 2, 3].includes(detail.status) && (
+            <div style={{ display: "flex", marginTop: 14, paddingTop: 12, borderTop: "1px solid #f0f1f3" }}>
+              {(() => {
+                const cur = detail.status === 1 ? 1 : detail.status === 2 ? 2 : -1;
+                const steps = [
+                  { label: "提交", done: true },
+                  { label: "拍照", done: detail.status >= 2 },
+                  { label: "审计", done: detail.status >= 3 },
+                  { label: "完成", done: detail.status === 3 },
+                ];
+                return steps.map((s, i) => (
+                  <Fragment key={s.label}>
+                    <span style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 48, flexShrink: 0 }}>
+                      <span
+                        style={{
+                          width: 14, height: 14, borderRadius: "50%", flexShrink: 0,
+                          background: s.done ? "#22C55E" : i === cur ? "#5B7FFF" : "#E4EAF6",
+                          boxShadow: s.done ? "0 0 0 3px #E8F9EF" : i === cur ? "0 0 0 3px #EAEFFF" : "none",
+                          display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, lineHeight: 1,
+                        }}
+                      >
+                        {s.done ? "✓" : i === cur ? "•" : ""}
+                      </span>
+                      <span style={{ fontSize: 10.5, marginTop: 4, color: s.done ? "#15803D" : i === cur ? "#5B7FFF" : "#8A93A8", whiteSpace: "nowrap" }}>{s.label}</span>
+                    </span>
+                    {i < steps.length - 1 && <span style={{ flex: 1, height: 2, background: s.done ? "#22C55E" : "#E4EAF6", marginTop: 6 }} />}
+                  </Fragment>
+                ));
+              })()}
+            </div>
+          )}
         </div>
 
         {/* 完成工作（拍照留痕 + 定位水印）—— 待完成工作状态、本人操作 */}
