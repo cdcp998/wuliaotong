@@ -53,3 +53,5 @@ dsh-usage/
 /启动后端.bat
 /启动手机端.bat
 /启动桌面端.bat
+/start_all.bat
+/stop_all.bat
