@@ -31,7 +31,8 @@ export function OtherIoPage() {
   const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
   const [products, setProducts] = useState<{ id: number; name: string; code: string }[]>([]);
   const [locs, setLocs] = useState<{ id: number; display: string }[]>([]);
-  const [form, setForm] = useState({ ioType: IO_TYPES[0], warehouse_id: 0, rows: [] as Row[] });
+  const [form, setForm] = useState({ ioType: IO_TYPES[0], warehouse_id: 0, remark: "", rows: [] as Row[] });
+  const [borrows, setBorrows] = useState<{ id: number; bill_no: string; created_at: string }[]>([]); // 未归还的借出单（设计页23 归还配对）
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState<OtherIoDetail | null>(null);
   const rowFileRef = useRef<HTMLInputElement>(null); // 报损明细照片上传输入
@@ -71,6 +72,17 @@ export function OtherIoPage() {
     setLocs((await baseApi.locations(whId)).map((l) => ({ id: l.id, display: l.display ?? l.code })));
   }
 
+  /** 拉取未归还的借出单（用于「归还」关联借出 配对）。 */
+  async function loadBorrows() {
+    try {
+      const d = await otherIoApi.list("借出", 1, 1, 100);
+      setBorrows(d.list.map((b) => ({ id: b.id, bill_no: b.bill_no, created_at: b.created_at })));
+      if (d.list.length === 0) setForm((f) => ({ ...f, remark: "" }));
+    } catch {
+      /* 借出单获取失败不阻塞 */
+    }
+  }
+
   function setRow(i: number, patch: Partial<Row>) {
     setForm((f) => ({ ...f, rows: f.rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) }));
   }
@@ -81,10 +93,10 @@ export function OtherIoPage() {
     if (form.ioType === "报损" && items.some((r) => !r.photo_file_id)) return message.warning("报损需为每条明细附现场照片");
     const payload = items.map((r) => ({ product_id: r.product_id!, qty: String(r.qty), location_id: r.location_id!, photo_file_id: r.photo_file_id ?? 0 }));
     try {
-      const data = await otherIoApi.create(form.ioType, form.warehouse_id, payload);
+      const data = await otherIoApi.create(form.ioType, form.warehouse_id, payload, form.remark);
       message.success(`${form.ioType}成功：${data.bill_no}`);
       setOpen(false);
-      setForm({ ioType: IO_TYPES[0], warehouse_id: 0, rows: [] });
+      setForm({ ioType: IO_TYPES[0], warehouse_id: 0, remark: "", rows: [] });
       void load();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "操作失败");
@@ -166,6 +178,23 @@ export function OtherIoPage() {
           <span>仓库</span>
           <Select style={{ width: 180 }} placeholder="选择" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={form.warehouse_id || undefined} onChange={(v) => { setForm((f) => ({ ...f, warehouse_id: v })); void loadLocs(v); }} />
         </Space>
+        {form.ioType === "归还" && (
+          <div style={{ marginBottom: 12 }}>
+            <span style={{ marginRight: 8 }}>关联借出单</span>
+            <Select
+              style={{ width: 380 }}
+              placeholder="选择对应借出单（未归还）"
+              options={borrows.map((b) => ({ label: `${b.bill_no}（${b.created_at}）`, value: b.id }))}
+              value={borrows.find((b) => `借出单号:${b.bill_no}` === form.remark)?.id}
+              onChange={(v) => {
+                const b = borrows.find((x) => x.id === v);
+                setForm((f) => ({ ...f, remark: b ? `借出单号:${b.bill_no}` : "" }));
+              }}
+              onDropdownVisibleChange={(o) => { if (o) void loadBorrows(); }}
+            />
+            <span style={{ fontSize: 11.5, color: "#8A93A8", marginLeft: 8 }}>归还时关联原借出单，实现借出/归还配对</span>
+          </div>
+        )}
         {form.rows.map((r, i) => (
           <Space key={i} style={{ marginBottom: 8 }} wrap>
             <Select style={{ width: 200 }} showSearch placeholder="材料" options={products} fieldNames={{ label: "name", value: "id" }} filterOption={(input, o) => String((o as { name?: string }).name ?? "").includes(input)} value={r.product_id} onChange={(v) => setRow(i, { product_id: v })} />
