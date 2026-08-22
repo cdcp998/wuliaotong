@@ -17,7 +17,7 @@ jobs:
     runs-on: windows-latest
     services:
       mysql:
-        image: mysql:5.7
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test123
           MYSQL_DATABASE: wuliaotong
@@ -32,10 +32,10 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: 后端环境
         shell: bash
         run: |
@@ -85,7 +85,7 @@ jobs:
     runs-on: windows-latest
     services:
       mysql:
-        image: mysql:5.7
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test123
           MYSQL_DATABASE: wuliaotong
@@ -98,10 +98,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: 后端环境
         shell: bash
         run: |
