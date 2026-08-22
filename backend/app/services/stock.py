@@ -121,11 +121,14 @@ def post_stock_change(
     return log
 
 
-def generate_bill_no(db: Session, prefix: str, model) -> str:
-    """生成单据编号 {prefix}{yyyyMMdd}{4位流水}；调用方需在唯一键冲突时重试。"""
+def generate_bill_no(db: Session, prefix: str, model, field: str = "bill_no") -> str:
+    """生成单据编号 {prefix}{yyyyMMdd}{4位流水}；调用方需在唯一键冲突时重试。
+
+    field：编号字段名（默认 bill_no；任务单号等用 task_no）。
+    """
     today = datetime.now().strftime("%Y%m%d")
     like = f"{prefix}{today}%"
-    cnt = db.scalar(select(func.count()).select_from(model).where(model.bill_no.like(like))) or 0
+    cnt = db.scalar(select(func.count()).select_from(model).where(getattr(model, field).like(like))) or 0
     return f"{prefix}{today}{cnt + 1:04d}"
 
 

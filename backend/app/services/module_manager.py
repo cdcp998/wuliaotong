@@ -205,8 +205,8 @@ def uninstall_module(db: Session, code: str, ctx: ModuleContext | None = None) -
         raise BizError(E_BILL_STATUS, "模块已启用，请先停用再卸载")
     if row.state == ST_NOT_INSTALLED:
         return row  # 幂等
-    # 被依赖检查：任何其他模块的依赖（已登记）引用本模块 → 禁止卸载
-    dependents = db.scalars(select(SysModule).where(SysModule.depends.is_not(None))).all()
+    # 被依赖检查：任何已部署（非 NOT_INSTALLED）模块的依赖引用本模块 → 禁止卸载
+    dependents = db.scalars(select(SysModule).where(SysModule.depends.is_not(None), SysModule.state != ST_NOT_INSTALLED)).all()
     for m in dependents:
         try:
             deps = json.loads(m.depends or "[]")
