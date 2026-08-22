@@ -6,14 +6,14 @@ export interface Settings {
   "session.expire_hours": string;
   "ocr.engine": string;
   "ocr.model_version": string;
-  "llm.doubao.enabled": string;
+  "llm.mm_llm.enabled": string;
   // 模型承担任务开关（1 启用 / 0 关闭该任务跳过此模型）
-  "llm.doubao.scene.match_vision": string;
-  "llm.doubao.scene.vision_product": string;
-  "llm.doubao.scene.classify_items": string;
-  "llm.doubao.scene.ocr_correct": string;
-  "llm.doubao.scene.vision_text": string;
-  "llm.doubao.scene.structured": string;
+  "llm.mm_llm.scene.match_vision": string;
+  "llm.mm_llm.scene.vision_product": string;
+  "llm.mm_llm.scene.classify_items": string;
+  "llm.mm_llm.scene.ocr_correct": string;
+  "llm.mm_llm.scene.vision_text": string;
+  "llm.mm_llm.scene.structured": string;
   "llm.siliconflow.scene.vision_delivery": string;
   "llm.siliconflow.scene.vision_product": string;
   "llm.siliconflow.scene.vision_text": string;
@@ -22,9 +22,9 @@ export interface Settings {
   "llm.deepseek.scene.classify_items": string;
   "llm.deepseek.scene.structured": string;
   "llm.deepseek.enabled": string;
-  "llm.doubao.api_key": string;
-  "llm.doubao.base_url": string;
-  "llm.doubao.model": string;
+  "llm.mm_llm.api_key": string;
+  "llm.mm_llm.base_url": string;
+  "llm.mm_llm.model": string;
   "llm.deepseek.api_key": string;
   "llm.deepseek.base_url": string;
   "llm.deepseek.model": string;
@@ -49,7 +49,7 @@ export interface Settings {
   "quota.refresh.interval_minutes": string;
   "quota.warning.threshold.siliconflow": string;
   "quota.warning.threshold.deepseek": string;
-  "quota.warning.threshold.doubao": string;
+  "quota.warning.threshold.mm_llm": string;
 }
 
 /** PP-OCR 自动安装状态（设置页轮询）；done 时 mode 表示 paddle 是否启用 CUDA（cpu/gpu）。 */
@@ -92,8 +92,8 @@ export const systemApi = {
   listSiliconflowModels: () => http.post<{ models: { id: string; owned_by: string }[] }>("/llm/siliconflow/models"),
   /** 用已保存的 DeepSeek Key 拉取模型列表（保存设置后调用）。 */
   listDeepseekModels: () => http.post<{ models: { id: string; owned_by: string }[] }>("/llm/deepseek/models"),
-  /** 用已保存的豆包 Key 拉取模型列表（保存设置后调用）。 */
-  listDoubaoModels: () => http.post<{ models: { id: string; owned_by: string }[] }>("/llm/doubao/models"),
+  /** 用已保存的多模态大模型 Key 拉取模型列表（保存设置后调用）。 */
+  listMmLlmModels: () => http.post<{ models: { id: string; owned_by: string }[] }>("/llm/mm_llm/models"),
   installPaddle: () => http.post<OcrInstallState>("/ocr/install-paddle"),
   /** 大模型调用日志（P9）：按场景/状态筛选分页查询。 */
   llmLogs: (scene = "", status = "", page = 1, pageSize = 20) => {
@@ -129,18 +129,22 @@ export interface NotificationItem {
   title: string;
   content: string;
   biz_type: string; // 预警 / 待办 / 审批
+  link: string; // 业务联动跳转目标（移动端路由）；空表示无跳转（如删除审核在电脑端处理）
   is_read: number;
   created_at: string;
 }
 
 export const notificationApi = {
-  list: (isRead?: number, page = 1) =>
+  list: (isRead?: number, page = 1, pageSize = 20) =>
     http.get<PageData<NotificationItem>>(
-      `/notifications${isRead !== undefined ? `?is_read=${isRead}` : ""}${isRead !== undefined ? "&" : "?"}page=${page}&page_size=20`
+      `/notifications${isRead !== undefined ? `?is_read=${isRead}` : ""}${isRead !== undefined ? "&" : "?"}page=${page}&page_size=${pageSize}`
     ),
   unreadCount: () => http.get<{ unread_count: number }>("/notifications/unread-count"),
   markRead: (id: number) => http.put<null>(`/notifications/${id}/read`),
   markReadAll: () => http.put<null>("/notifications/read-all"),
+  remove: (id: number) => http.delete<null>(`/notifications/${id}`),
+  removeMany: (ids: number[]) => http.post<{ deleted: number }>("/notifications/delete", { ids }),
+  removeAll: () => http.delete<{ deleted: number }>("/notifications"),
 };
 
 /** 存储位置（多存储地址管理，《后端API设计.md》§7）。 */

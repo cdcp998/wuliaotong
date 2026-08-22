@@ -4,6 +4,9 @@ import { Badge, Tag } from "antd-mobile";
 
 import { notificationApi, requisitionApi, useAuthStore, type RequisitionBill } from "@wlt/shared";
 
+import { FUNCTIONS, loadHomeHidden, loadHomeOrder, mergeOrder, reorderVisible, saveHomeHidden, saveHomeOrder, sortByOrder } from "../functions";
+import { ReorderList } from "../components/ReorderList";
+
 const STATUS: Record<number, { text: string; color: string }> = {
   1: { text: "待完成工作", color: "warning" },
   2: { text: "待审计", color: "primary" },
@@ -11,32 +14,6 @@ const STATUS: Record<number, { text: string; color: string }> = {
   4: { text: "已驳回", color: "danger" },
   5: { text: "已取消", color: "default" },
 };
-
-const stroke = (path: React.ReactNode) => (
-  <svg viewBox="0 0 24 24" width={22} height={22} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-    {path}
-  </svg>
-);
-
-interface Action {
-  key: string;
-  title: string;
-  sub: string;
-  path: string;
-  perm: string;
-  icon: React.ReactNode;
-}
-
-const ACTIONS: Action[] = [
-  { key: "apply", title: "领用申请", sub: "扫码加料", path: "/requisitions/new", perm: "req:apply", icon: stroke(<><path d="M12 3v18M3 12h18" /></>) },
-  { key: "stock", title: "库存查询", sub: "扫码快查", path: "/stock/query", perm: "stk:query", icon: stroke(<><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>) },
-  { key: "scan", title: "拍照识别", sub: "OCR 快查", path: "/ocr/scan", perm: "ocr:use", icon: stroke(<><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><rect x="7" y="7" width="10" height="10" rx="2" /></>) },
-  { key: "mine-req", title: "我的申请", sub: "进度留痕", path: "/requisitions/list", perm: "req:apply", icon: stroke(<><path d="M9 11l3 3 8-8" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></>) },
-  { key: "inbound", title: "入库", sub: "拍照留底", path: "/inbound", perm: "pch:in", icon: stroke(<><path d="M12 3v18M3 12h18" /></>) },
-  { key: "outbound", title: "其他出库", sub: "报废/赠品", path: "/outbound", perm: "stk:other", icon: stroke(<><path d="M12 3v18M5 12h14" /></>) },
-  { key: "checks", title: "库存盘点", sub: "录实盘", path: "/checks", perm: "stk:check", icon: stroke(<><path d="M9 11l3 3 8-8" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></>) },
-  { key: "notify", title: "通知", sub: "预警/审批", path: "/notifications", perm: "", icon: stroke(<><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></>) },
-];
 
 /** 手机端首页工作台（TabBar 第 1 项）：hero + 快捷宫格 + 我的申请状态 + 通知摘要（《UI设计方案.md》§5.2）。
  * 快捷宫格支持编辑（长按/点「编辑」）：按用户隐藏不常用功能，偏好保存在本机 localStorage。 */
@@ -48,20 +25,18 @@ export function HomePage() {
   const [reqs, setReqs] = useState<RequisitionBill[]>([]);
   const [editMode, setEditMode] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [order, setOrder] = useState<string[]>([]); // 共享显示顺序（首页快捷操作与功能页）
 
   const isSuper = user?.role?.code === "super_admin";
-  const visibleActions = ACTIONS.filter((a) => !a.perm || hasPerm(a.perm) || isSuper);
-  const gridActions = visibleActions.filter((a) => !hidden.has(a.key));
+  const visibleActions = FUNCTIONS.filter((a) => !a.perm || hasPerm(a.perm) || isSuper);
+  const orderedActions = sortByOrder(visibleActions, order);
+  const gridActions = orderedActions.filter((a) => !hidden.has(a.key));
 
-  // 每用户的本机宫格偏好（仅隐藏集，不随权限变化丢失）
+  // 每用户的本机宫格偏好（隐藏集 + 显示顺序，均不随权限变化丢失）
   useEffect(() => {
     if (!user) return;
-    try {
-      const raw = localStorage.getItem(`wlt.mobile.home.actions.${user.id}`);
-      if (raw) setHidden(new Set(JSON.parse(raw) as string[]));
-    } catch {
-      /* 忽略损坏数据 */
-    }
+    setHidden(loadHomeHidden(user.id));
+    setOrder(mergeOrder(loadHomeOrder(user.id), FUNCTIONS.map((f) => f.key)));
   }, [user?.id]);
 
   function toggleHidden(key: string) {
@@ -72,13 +47,7 @@ export function HomePage() {
       } else {
         next.add(key);
       }
-      if (user) {
-        try {
-          localStorage.setItem(`wlt.mobile.home.actions.${user.id}`, JSON.stringify([...next]));
-        } catch {
-          /* 存储不可用时仅本次生效 */
-        }
-      }
+      if (user) saveHomeHidden(user.id, next);
       return next;
     });
   }
@@ -95,6 +64,7 @@ export function HomePage() {
     <div style={{ padding: 12, paddingBottom: 8 }}>
       {/* Hero 问候条（主色纯色底，不用渐变，《UI设计方案.md》§2.1） */}
       <div
+        className="wlt-hero"
         style={{
           background: "#1668dc",
           borderRadius: 12,
@@ -145,7 +115,7 @@ export function HomePage() {
       </div>
 
       {/* 快捷操作宫格（按权限过滤，触屏 ≥44px；可编辑：隐藏/恢复常用功能） */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+      <div className="wlt-home-section-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <span style={{ fontSize: 13.5, fontWeight: 600, color: "#1f2329" }}>快捷操作</span>
         <span
           style={{ fontSize: 12, color: editMode ? "#1668dc" : "#646a73", cursor: "pointer", padding: "4px 2px" }}
@@ -154,14 +124,64 @@ export function HomePage() {
           {editMode ? "完成" : "编辑"}
         </span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
-        {(editMode ? visibleActions : gridActions).map((a) => {
-          const isHidden = hidden.has(a.key);
-          return (
+      {editMode ? (
+        /* 编辑模式：竖向列表 + 拖拽手柄调整顺序、− 隐藏 / + 恢复 */
+        <ReorderList
+          items={orderedActions}
+          onChange={(next) => {
+            setOrder((prev) => reorderVisible(prev, orderedActions.map((x) => x.key), next.map((x) => x.key)));
+          }}
+          onDrop={(next) => {
+            if (!user) return;
+            setOrder((prev) => {
+              const n = reorderVisible(prev, orderedActions.map((x) => x.key), next.map((x) => x.key));
+              saveHomeOrder(user.id, n);
+              return n;
+            });
+          }}
+          renderContent={(a) => {
+            const isHidden = hidden.has(a.key);
+            return (
+              <>
+                <span style={{ color: "#1668dc" }}>{a.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{a.title}</div>
+                  <div style={{ fontSize: 10.5, color: isHidden ? "#ff4d4f" : "#c9cdd4" }}>{isHidden ? "已隐藏（点 + 恢复）" : a.sub}</div>
+                </div>
+                <span
+                  data-nodrag
+                  onClick={() => toggleHidden(a.key)}
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: "50%",
+                    background: isHidden ? "#52c41a" : "#ff4d4f",
+                    color: "#fff",
+                    fontSize: 13,
+                    lineHeight: "20px",
+                    textAlign: "center",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  {isHidden ? "+" : "−"}
+                </span>
+              </>
+            );
+          }}
+          footer={
+            <div style={{ fontSize: 11, color: "#c9cdd4", lineHeight: 1.7, padding: "2px 4px" }}>
+              按住卡片上下拖动调整功能顺序（与「功能」页同步）；点 − 从首页快捷操作隐藏，点 + 恢复。
+            </div>
+          }
+        />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
+          {gridActions.map((a) => (
             <div
               key={a.key}
               className="wlt-action-cell"
-              onClick={() => (editMode ? toggleHidden(a.key) : navigate(a.path))}
+              onClick={() => navigate(a.path)}
               style={{
                 position: "relative",
                 background: "#fff",
@@ -174,38 +194,18 @@ export function HomePage() {
                 gap: 7,
                 cursor: "pointer",
                 minHeight: 76,
-                opacity: editMode && isHidden ? 0.35 : 1,
               }}
             >
-              {editMode && (
-                <span
-                  style={{
-                    position: "absolute",
-                    top: 4,
-                    right: 4,
-                    width: 18,
-                    height: 18,
-                    borderRadius: "50%",
-                    background: isHidden ? "#c9cdd4" : "#f5222d",
-                    color: "#fff",
-                    fontSize: 11,
-                    lineHeight: "18px",
-                    textAlign: "center",
-                  }}
-                >
-                  {isHidden ? "+" : "−"}
-                </span>
-              )}
               <span style={{ color: "#1668dc" }}>{a.icon}</span>
               <span style={{ fontSize: 11.5, color: "#1f2329", fontWeight: 500 }}>{a.title}</span>
               <span style={{ fontSize: 9.5, color: "#c9cdd4" }}>{a.sub}</span>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* 我的申请状态 */}
-      <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+      <div className="wlt-section" style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", borderBottom: "1px solid #f5f6f8", fontSize: 13.5, fontWeight: 600 }}>
           <span>我的申请</span>
           <span style={{ fontSize: 11.5, color: "#1668dc", fontWeight: 400, cursor: "pointer" }} onClick={() => navigate("/requisitions/list")}>全部 ›</span>
@@ -228,7 +228,7 @@ export function HomePage() {
       </div>
 
       {/* 通知摘要 */}
-      <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, overflow: "hidden" }}>
+      <div className="wlt-section" style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, overflow: "hidden" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", borderBottom: "1px solid #f5f6f8", fontSize: 13.5, fontWeight: 600 }}>
           <span>通知</span>
           <span style={{ fontSize: 11.5, color: "#1668dc", fontWeight: 400, cursor: "pointer" }} onClick={() => navigate("/notifications")}>全部 ›</span>

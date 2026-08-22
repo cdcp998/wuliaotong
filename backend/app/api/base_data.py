@@ -14,12 +14,19 @@ from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook, load_workbook
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.cache import cache_aside, cache_delete, cache_delete_pattern
-from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_any_permission, require_permission
+from app.core.deps import (
+    SUPER_ADMIN_ROLE_CODE,
+    get_current_user,
+    require_any_permission,
+    require_manager_role,
+    require_permission,
+)
 from app.core.excel_guard import safe_excel_value
 from app.core.response import BizError, E_NOT_FOUND, E_PARAM, ok
 from app.db import get_db
@@ -37,11 +44,14 @@ from app.models.base import (
     BaseWarehouse,
 )
 from app.models.stock import PchPurchaseIn, StkStock
-from app.models.sys import SysRole, SysUser
+from app.models.sys import SysDeleteReview, SysNotification, SysRole, SysUser
 from app.schemas.admin import DeptOut, DeptReq, DeptShelvesReq, DeptUpdateReq
 from app.schemas.base import (
     CategoryNode,
     CategoryReq,
+    DeleteReviewOut,
+    DeleteReviewRejectReq,
+    DeleteReviewReq,
     LocationOut,
     LocationReq,
     PageData,
@@ -94,6 +104,13 @@ def _rebuild_path(db: Session, cat: BaseCategory) -> None:
     children = db.scalars(select(BaseCategory).where(BaseCategory.parent_id == cat.id)).all()
     for child in children:
         _rebuild_path(db, child)
+
+
+def _subtree_category_ids(db: Session, cat: BaseCategory) -> list[int]:
+    """分类子树全部 id（含自身）：path 只存祖先链（如 "/2/5/"），子孙 path LIKE "path/自身id/%"。"""
+    prefix = f"{cat.path}{cat.id}/"
+    ids = list(db.scalars(select(BaseCategory.id).where(BaseCategory.path.like(prefix + "%"))).all())
+    return [cat.id] + ids
 
 
 # ============================ 分类 ============================
@@ -588,6 +605,8 @@ def _expand_keywords_local(keyword: str, max_kw: int = 25) -> list[str]:
 def list_products(
     keyword: str = Query("", max_length=100),
     category_id: int = Query(0),
+    descendants: int = Query(0, description="1 时 category_id 按子树过滤（含全部子孙分类，物料数据管理选中顶级分类用）"),
+    uncategorized: int = Query(0, description="1 时过滤未分类材料（category_id=0，物料数据管理「未分类」入口）"),
     barcode: str = Query("", max_length=50),
     status: int = Query(1, description="1 启用（默认） / 0 停用；全部数据见导出接口"),
     page: int = Query(1, ge=1),
@@ -616,8 +635,19 @@ def list_products(
     if keyword:
         like = f"%{keyword}%"
         stmt = stmt.where(or_(BaseProduct.name.like(like), BaseProduct.code.like(like), BaseProduct.material_code.like(like), BaseProduct.spec.like(like), BaseProduct.sku.like(like), BaseProduct.barcode.like(like)))
-    if category_id:
-        stmt = stmt.where(BaseProduct.category_id == category_id)
+    if uncategorized:
+        stmt = stmt.where(BaseProduct.category_id == 0)
+    elif category_id:
+        if descendants:
+            # 子树聚合：该分类及全部子孙分类下的材料（path LIKE 一次查询）
+            cat = db.get(BaseCategory, category_id)
+            if cat is None:
+                stmt = stmt.where(BaseProduct.category_id == -1)  # 分类不存在 → 空结果
+            else:
+                subtree = _subtree_category_ids(db, cat)
+                stmt = stmt.where(BaseProduct.category_id.in_(subtree))
+        else:
+            stmt = stmt.where(BaseProduct.category_id == category_id)
     if barcode:
         stmt = stmt.where(BaseProduct.barcode == barcode)
     if status is not None:
@@ -630,8 +660,15 @@ def list_products(
         ai_keywords = _expand_keywords_local(keyword)
         if ai_keywords:
             base = select(BaseProduct)
-            if category_id:
-                base = base.where(BaseProduct.category_id == category_id)
+            if uncategorized:
+                base = base.where(BaseProduct.category_id == 0)
+            elif category_id:
+                if descendants:
+                    cat = db.get(BaseCategory, category_id)
+                    if cat is not None:
+                        base = base.where(BaseProduct.category_id.in_(_subtree_category_ids(db, cat)))
+                else:
+                    base = base.where(BaseProduct.category_id == category_id)
             if barcode:
                 base = base.where(BaseProduct.barcode == barcode)
             if status is not None:
@@ -644,9 +681,9 @@ def list_products(
                 stmt = base.where(or_(*conds))
                 total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(BaseProduct.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
-    # 分类维度查询（分类管理页挂载材料表格）附带全仓库存合计（数量列），避免前端 N+1
+    # 全仓库存合计（数量列）：单条按页内商品 id 分组查询，避免 N+1
     stock_qty_map: dict[int, Decimal] = {}
-    if category_id and rows:
+    if rows:
         stock_qty_map = dict(
             db.execute(
                 select(StkStock.product_id, func.sum(StkStock.qty))
@@ -946,7 +983,29 @@ def export_products(db: Session = Depends(get_db)) -> StreamingResponse:
 def list_warehouses(db: Session = Depends(get_db)) -> dict:
     def _load() -> list[dict]:
         rows = db.scalars(select(BaseWarehouse).order_by(BaseWarehouse.id)).all()
-        return [WarehouseOut.model_validate(w, from_attributes=True).model_dump() for w in rows]
+        if not rows:
+            return []
+        wh_ids = [w.id for w in rows]
+        shelf_cnt = dict(db.execute(
+            select(BaseShelf.warehouse_id, func.count()).where(BaseShelf.warehouse_id.in_(wh_ids)).group_by(BaseShelf.warehouse_id)
+        ).all())
+        loc_cnt = dict(db.execute(
+            select(BaseLocation.warehouse_id, func.count()).where(BaseLocation.warehouse_id.in_(wh_ids)).group_by(BaseLocation.warehouse_id)
+        ).all())
+        # 库内有货材料种数：该仓库有库存的不同材料数
+        kind_cnt = dict(db.execute(
+            select(StkStock.warehouse_id, func.count(func.distinct(StkStock.product_id)))
+            .where(StkStock.warehouse_id.in_(wh_ids), StkStock.qty != 0)
+            .group_by(StkStock.warehouse_id)
+        ).all())
+        out = []
+        for w in rows:
+            d = WarehouseOut.model_validate(w, from_attributes=True).model_dump()
+            d["shelf_count"] = shelf_cnt.get(w.id, 0)
+            d["location_count"] = loc_cnt.get(w.id, 0)
+            d["product_kind_count"] = kind_cnt.get(w.id, 0)
+            out.append(d)
+        return out
 
     return ok(cache_aside("dict:warehouses", _DICT_TTL, _load))
 
@@ -982,12 +1041,16 @@ def update_warehouse(wh_id: int, req: WarehouseUpdateReq, db: Session = Depends(
 
 @router.delete("/warehouses/{wh_id}", dependencies=[Depends(require_permission("base:warehouse"))])
 def delete_warehouse(wh_id: int, db: Session = Depends(get_db)) -> dict:
+    """停用仓库：有启用货架或库存时禁止（确认规则：仓库有启用货架/库存禁停用）。"""
     w = db.get(BaseWarehouse, wh_id)
     if w is None:
         raise BizError(E_NOT_FOUND, "仓库不存在")
-    shelf_cnt = db.scalar(select(func.count()).select_from(BaseShelf).where(BaseShelf.warehouse_id == wh_id)) or 0
-    if shelf_cnt:
-        raise BizError(E_PARAM, "仓库下存在货架，禁止删除")
+    enabled_shelf = db.scalar(select(BaseShelf.id).where(BaseShelf.warehouse_id == wh_id).limit(1))
+    if enabled_shelf:
+        raise BizError(E_PARAM, "仓库下存在货架，禁止停用（请先删除货架）")
+    stock_cnt = db.scalar(select(func.count()).select_from(StkStock).where(StkStock.warehouse_id == wh_id, StkStock.qty != 0)) or 0
+    if stock_cnt:
+        raise BizError(E_PARAM, "仓库存在库存，禁止停用（请先移走库存）")
     w.status = 0  # 软删除
     db.commit()
     cache_delete("dict:warehouses")
@@ -1000,7 +1063,8 @@ def list_shelves(
     user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """仓库货架列表；wh_id=0 返回全部货架（单位管理页一次拉取，避免逐仓库请求）；非超管按所属单位过滤。"""
+    """仓库货架列表；wh_id=0 返回全部货架（单位管理页一次拉取，避免逐仓库请求）；非超管按所属单位过滤。
+    每个货架附带实际维度（layers/rows/cols，由库位推导），供 2.5D 货架视图布局。"""
     stmt = select(BaseShelf)
     if wh_id:
         stmt = stmt.where(BaseShelf.warehouse_id == wh_id)
@@ -1011,26 +1075,68 @@ def list_shelves(
     if visible is None:
         def _load() -> list[dict]:
             rows = db.scalars(stmt.order_by(BaseShelf.code)).all()
-            return [ShelfOut.model_validate(s, from_attributes=True).model_dump() for s in rows]
+            return _shelves_out(db, rows)
 
         return ok(cache_aside(f"dict:shelves:{wh_id}", _DICT_TTL, _load))
     rows = db.scalars(stmt.order_by(BaseShelf.code)).all()
-    return ok([ShelfOut.model_validate(s, from_attributes=True).model_dump() for s in rows])
+    return ok(_shelves_out(db, rows))
+
+
+def _shelves_out(db: Session, rows: list[BaseShelf]) -> list[dict]:
+    """货架输出：附带实际维度（由库位最大层/行/列推导）。"""
+    if not rows:
+        return []
+    shelf_ids = [s.id for s in rows]
+    loc_rows = db.execute(
+        select(BaseLocation.shelf_id, func.max(BaseLocation.layer_no), func.max(BaseLocation.row_no), func.max(BaseLocation.col_no))
+        .where(BaseLocation.shelf_id.in_(shelf_ids))
+        .group_by(BaseLocation.shelf_id)
+    ).all()
+    dims = {sid: (layers, rows_, cols) for sid, layers, rows_, cols in loc_rows}
+    out = []
+    for s in rows:
+        layers, rows_, cols = dims.get(s.id, (1, 1, 1))
+        d = ShelfOut.model_validate(s, from_attributes=True).model_dump()
+        d["layers"] = layers
+        d["rows"] = rows_
+        d["cols"] = cols
+        out.append(d)
+    return out
 
 
 @router.post("/shelves", dependencies=[Depends(require_permission("base:warehouse"))])
 def create_shelf(req: ShelfReq, db: Session = Depends(get_db)) -> dict:
+    """新建货架；提供 layers/rows/cols 时按 层×行×列 批量生成库位（隔，2.5D 视图用）。"""
     if db.get(BaseWarehouse, req.warehouse_id) is None:
         raise BizError(E_PARAM, "仓库不存在")
     dup = db.scalar(select(BaseShelf.id).where(BaseShelf.warehouse_id == req.warehouse_id, BaseShelf.code == req.code))
     if dup:
         raise BizError(E_PARAM, "同仓库下货架编码已存在")
-    s = BaseShelf(**req.model_dump())
+    s = BaseShelf(warehouse_id=req.warehouse_id, code=req.code, name=req.name, remark=req.remark)
     db.add(s)
+    db.flush()
+    if req.layers is not None and req.rows is not None and req.cols is not None:
+        _generate_shelf_cells(db, s, req.layers, req.rows, req.cols)
     db.commit()
     db.refresh(s)
-    cache_delete_pattern("dict:shelves*", "stock:locsum:*")  # 货架图缓存同失效
-    return ok(ShelfOut.model_validate(s, from_attributes=True).model_dump())
+    cache_delete_pattern("dict:shelves*", "dict:locations*", "stock:locsum:*")  # 货架图缓存同失效
+    dims = _shelves_out(db, [s])[0]
+    return ok(dims)
+
+
+def _generate_shelf_cells(db: Session, shelf: BaseShelf, layers: int, rows: int, cols: int) -> None:
+    """按 层×行×列 批量生成货架库位（隔），编码：仓库编码-货架编码-L{层}R{行}C{列}。"""
+    wh = db.get(BaseWarehouse, shelf.warehouse_id)
+    wh_code = wh.code if wh else "WH"
+    for layer in range(1, layers + 1):
+        for row in range(1, rows + 1):
+            for col in range(1, cols + 1):
+                code = f"{wh_code}-{shelf.code}-L{layer}R{row}C{col}"
+                if not db.scalar(select(BaseLocation.id).where(BaseLocation.code == code)):
+                    db.add(BaseLocation(
+                        warehouse_id=shelf.warehouse_id, shelf_id=shelf.id,
+                        layer_no=layer, row_no=row, col_no=col, code=code,
+                    ))
 
 
 @router.put("/shelves/{shelf_id}", dependencies=[Depends(require_permission("base:warehouse"))])
@@ -1038,8 +1144,11 @@ def update_shelf(shelf_id: int, req: ShelfReq, db: Session = Depends(get_db)) ->
     s = db.get(BaseShelf, shelf_id)
     if s is None:
         raise BizError(E_NOT_FOUND, "货架不存在")
-    for k, v in req.model_dump().items():
-        setattr(s, k, v)
+    # 只更新可编辑字段（名称/备注/编码）；层行列维度由库位推导，不在编辑范围
+    for k in ("code", "name", "remark"):
+        v = getattr(req, k)
+        if v is not None:
+            setattr(s, k, v)
     db.commit()
     cache_delete_pattern("dict:shelves*", "stock:locsum:*")  # 货架图缓存同失效
     return ok()
@@ -1060,7 +1169,7 @@ def delete_shelf(shelf_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 def _loc_out(db: Session, rows: list[BaseLocation]) -> list[dict]:
-    """库位输出（含 display 友好名：仓库名-货架编码-层号，界面不显示 WH 仓库编码）。"""
+    """库位输出（含 display 友好名：仓库名-货架编码-L{层}R{行}C{列}，界面不显示 WH 仓库编码）。"""
     if not rows:
         return []
     whs = {w.id: w for w in db.scalars(select(BaseWarehouse).where(BaseWarehouse.id.in_({r.warehouse_id for r in rows}))).all()}
@@ -1070,7 +1179,7 @@ def _loc_out(db: Session, rows: list[BaseLocation]) -> list[dict]:
         d = LocationOut.model_validate(l, from_attributes=True).model_dump()
         wh = whs.get(l.warehouse_id)
         shelf = shelves.get(l.shelf_id)
-        d["display"] = f"{wh.name if wh else ''}-{shelf.code if shelf else ''}-{l.layer_no:02d}"
+        d["display"] = f"{wh.name if wh else ''}-{shelf.code if shelf else ''}-L{l.layer_no}R{l.row_no}C{l.col_no}"
         out.append(d)
     return out
 
@@ -1095,16 +1204,28 @@ def list_locations(
 
 @router.post("/locations", dependencies=[Depends(require_permission("base:stock-location"))])
 def create_location(req: LocationReq, db: Session = Depends(get_db)) -> dict:
+    """新建库位（隔）：货架内 层×行×列 定位；同货架同坐标重复 → 报错。"""
     shelf = db.get(BaseShelf, req.shelf_id)
     if shelf is None:
         raise BizError(E_PARAM, "货架不存在")
     if shelf.warehouse_id != req.warehouse_id:
         raise BizError(E_PARAM, "货架与仓库不匹配")
     wh = db.get(BaseWarehouse, req.warehouse_id)
-    code = req.code or f"{wh.code}-{shelf.code}-{req.layer_no:02d}"
+    dup_coord = db.scalar(select(BaseLocation.id).where(
+        BaseLocation.shelf_id == req.shelf_id,
+        BaseLocation.layer_no == req.layer_no,
+        BaseLocation.row_no == req.row_no,
+        BaseLocation.col_no == req.col_no,
+    ))
+    if dup_coord:
+        raise BizError(E_PARAM, f"货架 {shelf.code} 已存在 {req.layer_no}层{req.row_no}行{req.col_no}列的库位")
+    code = req.code or f"{wh.code if wh else 'WH'}-{shelf.code}-L{req.layer_no}R{req.row_no}C{req.col_no}"
     if db.scalar(select(BaseLocation.id).where(BaseLocation.code == code)):
         raise BizError(E_PARAM, f"库位编码 {code} 已存在")
-    loc = BaseLocation(warehouse_id=req.warehouse_id, shelf_id=req.shelf_id, layer_no=req.layer_no, code=code, remark=req.remark)
+    loc = BaseLocation(
+        warehouse_id=req.warehouse_id, shelf_id=req.shelf_id,
+        layer_no=req.layer_no, row_no=req.row_no, col_no=req.col_no, code=code, remark=req.remark,
+    )
     db.add(loc)
     db.commit()
     db.refresh(loc)
@@ -1244,7 +1365,7 @@ def update_department_shelves(dept_id: int, req: DeptShelvesReq, db: Session = D
 
 @router.post("/products/dedupe-scan", dependencies=[Depends(require_permission("base:product"))])
 def products_dedupe_scan(db: Session = Depends(get_db)) -> dict:
-    """材料查重扫描：名称精确重复 + DeepSeek 判断名称相似候选 → 疑似重复分组（仅建议，不落库）。"""
+    """材料查重扫描：名称精确重复 + 本地相似规则分组 → 疑似重复分组（仅建议，不落库）。"""
     from app.services.ai.dedupe import dedupe_scan as _scan
 
     return ok({"groups": _scan(db)})
@@ -1260,3 +1381,169 @@ def mark_product_duplicate(product_id: int, db: Session = Depends(get_db)) -> di
     p.remark = f"{mark}{p.remark or ''}"
     db.commit()
     return ok()
+
+
+# ============================ 删除审核（物料/分类删除审批流） ============================
+# 物料数据管理 → 删除不直接执行：先提交删除申请，管理者及以上角色审核通过后才真正执行删除
+# （材料删除 = 停用 status=0；分类删除 = 物理删除，仍受「有子分类/有材料禁删」保护）。
+
+_MANAGER_ROLES = ("super_admin", "manager")
+
+
+def _notify_managers(db: Session, title: str, content: str, exclude_user_id: int = 0, link: str = "") -> None:
+    """站内通知管理者及以上角色（删除申请待审核）。link=业务联动目标，兼作自动已读唯一键。"""
+    role_ids = db.scalars(select(SysRole.id).where(SysRole.code.in_(_MANAGER_ROLES))).all()
+    uids = db.scalars(
+        select(SysUser.id).where(SysUser.role_id.in_(role_ids), SysUser.status == 1)
+    ).all()
+    for uid in uids:
+        if uid != exclude_user_id:
+            db.add(SysNotification(user_id=uid, title=title, content=content, biz_type="待办", link=link))
+
+
+def _clear_delete_review_todo(db: Session, review_id: int) -> None:
+    """删除申请已处理（通过/驳回）后，自动把管理者们的「删除申请待审核」待办标记已读，
+    避免已处理完的待办长期残留（业务联动的一部分）。"""
+    db.execute(
+        SysNotification.__table__.update()
+        .where(
+            SysNotification.link == f"/delete-reviews?review={review_id}",
+            SysNotification.title == "删除申请待审核",
+            SysNotification.is_read == 0,
+        )
+        .values(is_read=1)
+    )
+
+
+def _review_out(r: SysDeleteReview) -> dict:
+    return DeleteReviewOut(
+        id=r.id, biz_type=r.biz_type, target_id=r.target_id, target_name=r.target_name,
+        target_desc=r.target_desc, reason=r.reason, status=r.status,
+        applicant_id=r.applicant_id, applicant_name=r.applicant_name,
+        handled_by=r.handled_by, handled_at=r.handled_at, review_remark=r.review_remark,
+        created_at=r.created_at,
+    ).model_dump()
+
+
+@router.post("/delete-reviews", dependencies=[Depends(require_any_permission("base:product", "base:category"))])
+def create_delete_review(req: DeleteReviewReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """提交删除申请（材料停用 / 分类删除）：生成待审核记录并通知管理者；不直接执行删除。"""
+    now = datetime.now()
+    if req.biz_type == "product":
+        p = db.get(BaseProduct, req.target_id)
+        if p is None:
+            raise BizError(E_NOT_FOUND, "材料不存在")
+        if p.status == 0:
+            raise BizError(E_PARAM, "该材料已停用，无需再申请删除")
+        name, desc = p.name, f"编码 {p.code or '-'} · 规格 {p.spec or '-'}"
+    elif req.biz_type == "category":
+        c = db.get(BaseCategory, req.target_id)
+        if c is None:
+            raise BizError(E_NOT_FOUND, "分类不存在")
+        name, desc = c.name, f"路径 {c.path or '/'}"
+    else:
+        raise BizError(E_PARAM, "未知删除类型")
+    pending = db.scalar(
+        select(SysDeleteReview.id).where(
+            SysDeleteReview.biz_type == req.biz_type,
+            SysDeleteReview.target_id == req.target_id,
+            SysDeleteReview.status == 0,
+        )
+    )
+    if pending:
+        raise BizError(E_PARAM, "该对象已有待审核的删除申请，请等待审核结果")
+    review = SysDeleteReview(
+        biz_type=req.biz_type, target_id=req.target_id, target_name=name[:200], target_desc=desc[:500],
+        reason=req.reason.strip()[:500], status=0,
+        applicant_id=user.id, applicant_name=user.real_name or user.username,
+    )
+    db.add(review)
+    db.commit()
+    db.refresh(review)
+    _notify_managers(db, "删除申请待审核", f"{user.real_name or user.username} 申请删除{('材料：' + name) if req.biz_type == 'product' else ('分类：' + name)}：{req.reason}", exclude_user_id=user.id, link=f"/delete-reviews?review={review.id}")
+    db.commit()
+    return ok(_review_out(review))
+
+
+@router.get("/delete-reviews", dependencies=[Depends(require_any_permission("base:product", "base:category"))])
+def list_delete_reviews(
+    status: int = Query(0, ge=0, le=2, description="0 待审核 / 1 已通过 / 2 已驳回"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> dict:
+    """删除审核列表（按状态筛选；申请人可查看自己提交的申请进度）。"""
+    stmt = select(SysDeleteReview).order_by(SysDeleteReview.id.desc())
+    if status is not None:
+        stmt = stmt.where(SysDeleteReview.status == status)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.scalars(stmt.offset((page - 1) * page_size).limit(page_size)).all()
+    return ok({
+        "list": [_review_out(r) for r in rows],
+        "total": total, "page": page, "page_size": page_size,
+    })
+
+
+@router.post("/delete-reviews/{review_id}/approve", dependencies=[Depends(require_manager_role())])
+def approve_delete_review(review_id: int, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """审核通过：执行删除（材料 → 停用；分类 → 删除，仍受子分类/材料保护，不满足则自动驳回）。"""
+    review = db.get(SysDeleteReview, review_id)
+    if review is None:
+        raise BizError(E_NOT_FOUND, "删除申请不存在")
+    if review.status != 0:
+        raise BizError(E_PARAM, "该申请已处理，请勿重复操作")
+    now = datetime.now()
+    reviewer = user.real_name or user.username
+    if review.biz_type == "product":
+        p = db.get(BaseProduct, review.target_id)
+        if p is not None and p.status == 1:
+            p.status = 0  # 软删除：停用
+            cache_delete_pattern("product:*")
+    elif review.biz_type == "category":
+        c = db.get(BaseCategory, review.target_id)
+        if c is not None:
+            child_cnt = db.scalar(select(func.count()).select_from(BaseCategory).where(BaseCategory.parent_id == c.id)) or 0
+            product_cnt = db.scalar(select(func.count()).select_from(BaseProduct).where(BaseProduct.category_id == c.id)) or 0
+            if child_cnt or product_cnt:
+                # 审核时已不满足删除条件 → 自动驳回（有子分类或材料）
+                review.status = 2
+                review.handled_by = user.id
+                review.handled_at = now
+                review.review_remark = "审核未通过：分类下仍有子分类或材料，无法删除"
+                db.commit()
+                _notify(db, review.applicant_id, "删除申请未通过", f"分类「{review.target_name}」删除申请被驳回：{review.review_remark}", "审批", link=f"/delete-reviews?review={review.id}")
+                _clear_delete_review_todo(db, review.id)
+                return ok(_review_out(review))
+            db.delete(c)
+            cache_delete("dict:categories")
+    review.status = 1
+    review.handled_by = user.id
+    review.handled_at = now
+    review.review_remark = review.review_remark or "审核通过"
+    db.commit()
+    _notify(db, review.applicant_id, "删除申请已通过", f"「{review.target_name}」已由 {reviewer} 审核通过并删除", "审批", link=f"/delete-reviews?review={review.id}")
+    _clear_delete_review_todo(db, review.id)
+    return ok(_review_out(review))
+
+
+@router.post("/delete-reviews/{review_id}/reject", dependencies=[Depends(require_manager_role())])
+def reject_delete_review(review_id: int, req: DeleteReviewRejectReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """审核驳回：不执行删除。"""
+    review = db.get(SysDeleteReview, review_id)
+    if review is None:
+        raise BizError(E_NOT_FOUND, "删除申请不存在")
+    if review.status != 0:
+        raise BizError(E_PARAM, "该申请已处理，请勿重复操作")
+    review.status = 2
+    review.handled_by = user.id
+    review.handled_at = datetime.now()
+    review.review_remark = req.remark.strip()[:500]
+    db.commit()
+    _notify(db, review.applicant_id, "删除申请被驳回", f"「{review.target_name}」删除申请被驳回：{review.review_remark}", "审批", link=f"/delete-reviews?review={review.id}")
+    _clear_delete_review_todo(db, review.id)
+    return ok(_review_out(review))
+
+
+def _notify(db: Session, user_id: int, title: str, content: str, biz_type: str, link: str = "") -> None:
+    """站内通知（调用方事务内）。"""
+    db.add(SysNotification(user_id=user_id, title=title, content=content, biz_type=biz_type, link=link))

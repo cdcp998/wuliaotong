@@ -7,5 +7,6 @@ export * from "./api/base";
 export * from "./api/business";
 export * from "./api/system";
 export * from "./api/report";
+export * from "./api/menu";
 export * from "./stores/auth";
 export * from "./utils/device";

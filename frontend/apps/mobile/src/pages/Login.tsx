@@ -251,6 +251,10 @@ export function LoginPage() {
             大屏操作请前往 <a href={otherEndUrl("desktop")} style={{ color: "#1668dc" }}>电脑版入口</a>
           </div>
         )}
+
+        <div style={{ textAlign: "center", fontSize: 10.5, color: "#c9cdd4", marginTop: 16 }}>
+          物料通管理系统 v{__APP_VERSION__}
+        </div>
       </div>
     </div>
   );

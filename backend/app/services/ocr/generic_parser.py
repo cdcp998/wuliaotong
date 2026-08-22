@@ -14,7 +14,7 @@
 5. 合计行（合计/总计/大写金额）与无名称行剔除。
 box 缺失时退化为行文本启发式拆分（不同引擎兜底）。
 
-sanitize_items()：所有识别来源（模板/通用/视觉/DeepSeek）共用的容错校验——
+sanitize_items()：所有识别来源（模板/通用/视觉/文本模型）共用的容错校验——
 剔除表头词/合计词/无名称行、qty 非正数或超界剔除、price/amount 缺失互推、
 数值归一去尾零、金额与 qty×price 偏差过大记 warning（保留单据原值）。
 """
@@ -179,7 +179,7 @@ def _estimate_slope(pts: list[tuple[float, float]]) -> float:
 def parse_delivery_generic(lines: list[str], boxes: list | None = None) -> dict | None:
     """通用字段提取送货单文本行（含坐标）；命中返回 dict，否则 None。
 
-    返回结构同 DeepSeek：{"supplier_name", "bill_no", "items": [...]}（items 含 unit），
+    返回结构同大模型文本结构化：{"supplier_name", "bill_no", "items": [...]}（items 含 unit），
     另附 "warnings"（容错提示）。调用方负责 sanitize_items 与 _engine 标注。
     """
     supplier_name, bill_no = _extract_header_fields(lines)

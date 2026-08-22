@@ -1,16 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
   App,
   AutoComplete,
   Badge,
   Button,
+  Checkbox,
+  Drawer,
   Dropdown,
+  Empty,
   Form,
   Input,
   Layout,
   Menu,
   Modal,
+  Popconfirm,
+  Spin,
+  Tabs,
+  Tag,
   theme,
   type MenuProps,
 } from "antd";
@@ -34,6 +41,7 @@ import {
   LineChartOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
+  MenuOutlined,
   MenuUnfoldOutlined,
   MobileOutlined,
   NumberOutlined,
@@ -45,24 +53,32 @@ import {
   ShopOutlined,
   SwapOutlined,
   TableOutlined,
-  TagsOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 
-import { authApi, notificationApi, otherEndUrl, useAuthStore, type NotificationItem } from "@wlt/shared";
+import { authApi, notificationApi, otherEndUrl, useAuthStore, type MenuNode, type NotificationItem } from "@wlt/shared";
 
 const { Sider, Header, Content } = Layout;
 
-interface MenuNode {
+/** 硬编码菜单定义（动态菜单未就绪时的兜底渲染）。 */
+interface MenuNodeDef {
   key: string;
   label: string;
   icon?: React.ReactNode;
-  perm?: string;
-  children?: MenuNode[];
+  /** 权限点：单个字符串或数组（数组=任一命中即可见，如合并页「物料数据管理」）。 */
+  perm?: string | string[];
+  children?: MenuNodeDef[];
+}
+
+/** 菜单可见性校验：无 perm 恒可见；单个按 hasPerm；数组按任一命中。 */
+function menuVisible(perm: string | string[] | undefined, hasPerm: (c: string) => boolean, hasAnyPerm: (cs: string[]) => boolean): boolean {
+  if (!perm) return true;
+  if (Array.isArray(perm)) return hasAnyPerm(perm);
+  return hasPerm(perm);
 }
 
 /** 侧边导航分组（《UI设计方案.md》§3.2）：按权限点过滤。 */
-export const MENU: MenuNode[] = [
+export const MENU: MenuNodeDef[] = [
   {
     key: "work",
     label: "工作台",
@@ -74,11 +90,10 @@ export const MENU: MenuNode[] = [
     label: "基础资料",
     icon: <ShopOutlined />,
     children: [
-      { key: "/materials", label: "材料管理", icon: <AppstoreOutlined />, perm: "base:product" },
-      { key: "/categories", label: "分类管理", icon: <TagsOutlined />, perm: "base:category" },
+      { key: "/materials-data", label: "物料数据管理", icon: <AppstoreOutlined />, perm: ["base:product", "base:category"] },
+      { key: "/delete-reviews", label: "删除审核", icon: <AuditOutlined />, perm: ["base:product", "base:category"] },
       { key: "/suppliers", label: "供应商管理", icon: <ContactsOutlined />, perm: "base:supplier" },
       { key: "/units", label: "材料单位管理", icon: <NumberOutlined />, perm: "base:product" },
-      { key: "/warehouses", label: "仓库与货架", icon: <BankOutlined />, perm: "base:warehouse" },
     ],
   },
   {
@@ -86,6 +101,7 @@ export const MENU: MenuNode[] = [
     label: "入库管理",
     icon: <InboxOutlined />,
     children: [
+      { key: "/purchase-plans", label: "采购计划单", icon: <FileTextOutlined />, perm: "pch:in" },
       { key: "/purchase-in", label: "材料入库", icon: <InboxOutlined />, perm: "pch:in" },
       { key: "/ocr/delivery", label: "送货单识别入库", icon: <FileSearchOutlined />, perm: "pch:ocr" },
     ],
@@ -96,6 +112,7 @@ export const MENU: MenuNode[] = [
     icon: <DatabaseOutlined />,
     children: [
       { key: "/stock", label: "库存查询", icon: <TableOutlined />, perm: "stk:query" },
+      { key: "/warehouses", label: "仓库与货架", icon: <BankOutlined />, perm: "base:warehouse" },
       { key: "/history-price", label: "历史价格管理", icon: <LineChartOutlined />, perm: "stk:query" },
       { key: "/transfers", label: "库存调拨", icon: <SwapOutlined />, perm: "stk:transfer" },
       { key: "/other-io", label: "其他出入库", icon: <ExportOutlined />, perm: "stk:other" },
@@ -128,6 +145,7 @@ export const MENU: MenuNode[] = [
     children: [
       { key: "/system/users", label: "用户管理", icon: <UserOutlined />, perm: "sys:user" },
       { key: "/system/roles", label: "用户权限设置", icon: <SafetyCertificateOutlined />, perm: "sys:role" },
+      { key: "/system/menus", label: "导航管理", icon: <MenuOutlined />, perm: "sys:role" },
       { key: "/system/register-applies", label: "注册审核", icon: <AuditOutlined />, perm: "sys:user" },
       { key: "/system/departments", label: "单位管理", icon: <ApartmentOutlined />, perm: "dept:manage" },
       { key: "/system/logs", label: "操作日志", icon: <FileTextOutlined />, perm: "sys:log" },
@@ -138,14 +156,22 @@ export const MENU: MenuNode[] = [
   },
 ];
 
+/** 通知分类标签样式（与手机端一致）。 */
+const BIZ_STYLE: Record<string, { text: string; color: string }> = {
+  "预警": { text: "预警", color: "red" },
+  "待办": { text: "待办", color: "orange" },
+  "审批": { text: "审批", color: "blue" },
+};
+
 const TITLES: Record<string, string> = {
   "/dashboard": "统计面板",
-  "/materials": "材料管理",
-  "/categories": "分类管理",
+  "/materials-data": "物料数据管理",
+  "/delete-reviews": "删除审核",
   "/suppliers": "供应商管理",
   "/units": "材料单位管理",
   "/warehouses": "仓库与货架",
   "/purchase-in": "材料入库",
+  "/purchase-plans": "采购计划单",
   "/ocr/delivery": "送货单识别入库",
   "/stock": "库存查询",
   "/checks": "盘点",
@@ -160,90 +186,329 @@ const TITLES: Record<string, string> = {
   "/system/settings": "系统设置",
   "/system/users": "用户管理",
   "/system/roles": "用户权限设置",
+  "/system/menus": "导航管理",
   "/system/logs": "操作日志",
   "/system/backups": "备份管理",
   "/llm-logs": "AI 调用日志",
 };
 
-/** 电脑端应用骨架：侧边导航 + 顶栏（《UI设计方案.md》§3.2/§4）。 */
+/** 图标注册表：导航菜单 icon 字段（字符串名）→ 组件；未注册的显示占位。 */
+const ICON_MAP: Record<string, React.ReactNode> = {
+  DashboardOutlined: <DashboardOutlined />,
+  ShopOutlined: <ShopOutlined />,
+  AppstoreOutlined: <AppstoreOutlined />,
+  AuditOutlined: <AuditOutlined />,
+  ContactsOutlined: <ContactsOutlined />,
+  NumberOutlined: <NumberOutlined />,
+  BankOutlined: <BankOutlined />,
+  InboxOutlined: <InboxOutlined />,
+  FileTextOutlined: <FileTextOutlined />,
+  FileSearchOutlined: <FileSearchOutlined />,
+  DatabaseOutlined: <DatabaseOutlined />,
+  TableOutlined: <TableOutlined />,
+  LineChartOutlined: <LineChartOutlined />,
+  SwapOutlined: <SwapOutlined />,
+  ExportOutlined: <ExportOutlined />,
+  EditOutlined: <EditOutlined />,
+  SearchOutlined: <SearchOutlined />,
+  FundOutlined: <FundOutlined />,
+  ProfileOutlined: <ProfileOutlined />,
+  RobotOutlined: <RobotOutlined />,
+  SettingOutlined: <SettingOutlined />,
+  UserOutlined: <UserOutlined />,
+  SafetyCertificateOutlined: <SafetyCertificateOutlined />,
+  ApartmentOutlined: <ApartmentOutlined />,
+  HddOutlined: <HddOutlined />,
+  MenuOutlined: <MenuOutlined />,
+};
+
+/** 导航项（动态菜单 / 硬编码 MENU 统一形态）。 */
+interface NavItem {
+  key: string;
+  label: string;
+  icon?: React.ReactNode;
+  path?: string;
+  children?: NavItem[];
+}
+
+function menuIcon(name?: string): React.ReactNode {
+  return (name && ICON_MAP[name]) || <AppstoreOutlined />;
+}
+
+/** 动态菜单（DB sys_menu）→ 导航项；分组 key=menu-{id}，叶子 key=path。 */
+function toNavItem(m: MenuNode): NavItem {
+  const children = m.children?.length ? m.children.map(toNavItem) : undefined;
+  const isGroup = Boolean(children?.length);
+  return {
+    key: isGroup ? `menu-${m.id}` : (m.path || `menu-${m.id}`),
+    label: m.name,
+    icon: menuIcon(m.icon),
+    path: m.path,
+    children,
+  };
+}
+
+/** 拍平叶子（导航搜索 / 路径→标题）。 */
+function flattenNav(nav: NavItem[]): { path: string; label: string; group: string }[] {
+  const out: { path: string; label: string; group: string }[] = [];
+  const walk = (ns: NavItem[], group: string) => {
+    for (const n of ns) {
+      if (n.children?.length) walk(n.children, group || n.label);
+      else if (n.path) out.push({ path: n.path, label: n.label, group });
+    }
+  };
+  walk(nav, "");
+  return out;
+}
+
+/** 导航树是否包含指定 key（含子孙，用于定位当前所属分组）。 */
+function containsNavKey(n: NavItem, key: string): boolean {
+  return n.key === key || (n.children?.some((c) => containsNavKey(c, key)) ?? false);
+}
+
+/** 通知 link（移动端路由形态）→ 桌面对应页面；无对应页面返回空（仅标记已读不跳转）。 */
+function desktopLink(link: string): string {
+  if (!link) return "";
+  if (link.startsWith("/requisitions/")) return "/requisitions"; // 领用详情 → 领用审计列表
+  if (link === "/stock/query") return "/stock";
+  if (link.startsWith("/delete-reviews")) return "/delete-reviews";
+  return "";
+}
+
+/** 电脑端应用骨架：侧边导航 + 顶栏（《UI设计方案.md》§3.2/§4）。
+ * 通知中心：顶栏铃铛 → 抽屉，与手机端通知页同功能（未读/全部、标记已读、删除、全选一键删除、清空、点击联动）。 */
 export function AppLayout({ children }: { children?: React.ReactNode }) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   // 移动端（≤768px，与 mobile.css 断点一致）默认折叠为 64px 图标栏，避免展开导航遮住内容；
   // 桌面端保持默认展开。折叠状态切换仍由顶栏按钮控制。
   const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth <= 768);
+  const [noticeOpen, setNoticeOpen] = useState(false); // 通知中心抽屉
   const [notices, setNotices] = useState<NotificationItem[]>([]);
+  const [noticeTab, setNoticeTab] = useState<"unread" | "all">("unread"); // 未读 / 全部
+  const [noticeLoading, setNoticeLoading] = useState(false);
+  const [noticeSelected, setNoticeSelected] = useState<Set<number>>(new Set());
   const [unread, setUnread] = useState(0);
   const [search, setSearch] = useState("");
   const [pwdOpen, setPwdOpen] = useState(false);
   const [pwdSaving, setPwdSaving] = useState(false);
   const [pwdForm] = Form.useForm();
   const user = useAuthStore((s) => s.user);
+  const menus = useAuthStore((s) => s.menus);
+  const fetchMenus = useAuthStore((s) => s.fetchMenus);
   const hasPerm = useAuthStore((s) => s.hasPerm);
+  const hasAnyPerm = useAuthStore((s) => s.hasAnyPerm);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const location = useLocation();
   const { token } = theme.useToken();
+  // 内容滚动容器：路由切换（点击侧边导航/顶栏搜索）后回到顶端，避免保留上一页滚动位置
+  const contentRef = useRef<HTMLElement | null>(null);
+
+  // 登录后拉取动态菜单（导航管理；未拉取/失败回退硬编码 MENU）
+  useEffect(() => {
+    if (user && menus.length === 0) void fetchMenus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // 统一导航树：动态菜单优先，硬编码 MENU 兜底（无权限子项过滤）
+  const navTree = useMemo<NavItem[]>(() => {
+    if (menus.length) return menus.map(toNavItem);
+    return MENU.map((g) => ({
+      key: g.key,
+      label: g.label,
+      icon: g.icon,
+      children: g.children
+        ?.filter((c) => menuVisible(c.perm, hasPerm, hasAnyPerm))
+        .map((c) => ({ key: c.key, label: c.label, icon: c.icon, path: c.key, children: undefined })),
+    })).filter((g) => (g.children?.length ?? 0) > 0) as NavItem[];
+  }, [menus, hasPerm, hasAnyPerm]);
+
+  /** 滚动到顶端：兼容「内容区自身滚动」与「页面(窗口)滚动」两种布局。 */
+  function scrollContentTop() {
+    contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
 
   useEffect(() => {
-    notificationApi
-      .list(0)
-      .then((d) => setNotices(d.list.slice(0, 5)))
-      .catch(() => undefined);
+    scrollContentTop();
+  }, [location.pathname]);
+
+  useEffect(() => {
     notificationApi
       .unreadCount()
       .then((d) => setUnread(d.unread_count))
       .catch(() => undefined);
   }, [location.pathname]);
 
+  // ==================== 通知中心（与手机端同功能） ====================
+
+  /** 拉取通知列表（按当前 tab：未读 / 全部，取前 50 条）。 */
+  const loadNotices = useCallback(
+    (tab: "unread" | "all" = noticeTab) => {
+      setNoticeLoading(true);
+      notificationApi
+        .list(tab === "unread" ? 0 : undefined, 1, 50)
+        .then((d) => setNotices(d.list))
+        .catch(() => message.error("通知加载失败"))
+        .finally(() => setNoticeLoading(false));
+    },
+    [noticeTab, message]
+  );
+
+  /** 刷新未读徽标。 */
+  const refreshUnread = useCallback(() => {
+    notificationApi
+      .unreadCount()
+      .then((d) => setUnread(d.unread_count))
+      .catch(() => undefined);
+  }, []);
+
+  // 打开抽屉即加载；tab 切换重新加载
+  useEffect(() => {
+    if (noticeOpen) {
+      loadNotices();
+      refreshUnread();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noticeOpen, noticeTab]);
+
+  /** 通知点击：未读先标记已读；有联动链接则跳转桌面对应页面。 */
+  function onNoticeClick(n: NotificationItem) {
+    if (!n.is_read) {
+      notificationApi
+        .markRead(n.id)
+        .then(() => {
+          setNotices((ns) => ns.map((x) => (x.id === n.id ? { ...x, is_read: 1 } : x)));
+          refreshUnread();
+        })
+        .catch(() => undefined);
+    }
+    const link = desktopLink(n.link);
+    if (link) navigate(link);
+  }
+
+  function toggleNoticeSelect(id: number) {
+    setNoticeSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const allSelected = notices.length > 0 && noticeSelected.size === notices.length;
+
+  function toggleSelectAll() {
+    setNoticeSelected(allSelected ? new Set() : new Set(notices.map((n) => n.id)));
+  }
+
+  /** 删除选中的通知（一键）。 */
+  async function deleteSelectedNotices() {
+    const ids = [...noticeSelected];
+    if (!ids.length) return;
+    const ok = await modal.confirm({
+      title: "删除通知",
+      content: `确定删除选中的 ${ids.length} 条通知？`,
+      okText: "删除",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+    });
+    if (!ok) return;
+    try {
+      await notificationApi.removeMany(ids);
+      setNotices((ns) => ns.filter((x) => !noticeSelected.has(x.id)));
+      setNoticeSelected(new Set());
+      refreshUnread();
+      message.success(`已删除 ${ids.length} 条通知`);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "删除失败");
+    }
+  }
+
+  /** 清空全部通知。 */
+  async function clearAllNotices() {
+    const ok = await modal.confirm({
+      title: "清空通知",
+      content: "确定清空全部通知？此操作不可恢复。",
+      okText: "清空",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+    });
+    if (!ok) return;
+    try {
+      const r = await notificationApi.removeAll();
+      setNotices([]);
+      setNoticeSelected(new Set());
+      refreshUnread();
+      message.success(`已清空 ${r.deleted} 条通知`);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "清空失败");
+    }
+  }
+
+  /** 单条删除。 */
+  async function removeOneNotice(n: NotificationItem) {
+    try {
+      await notificationApi.remove(n.id);
+      setNotices((ns) => ns.filter((x) => x.id !== n.id));
+      setNoticeSelected((s) => {
+        const next = new Set(s);
+        next.delete(n.id);
+        return next;
+      });
+      refreshUnread();
+      message.success("已删除");
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "删除失败");
+    }
+  }
+
   // 可折叠导航：主导航分类渲染为内联子菜单（点击标题展开/收起其子项），
   // 无权限子项过滤、空分类隐藏；展开状态由 antd 内部维护，选中项所在分类自动展开
   // 导航搜索：匹配菜单项（含权限过滤），选中直接跳转
+  const navLeaves = useMemo(() => flattenNav(navTree), [navTree]);
   const [navKw, setNavKw] = useState("");
   const navOptions = useMemo(() => {
     const kw = navKw.trim().toLowerCase();
     if (!kw) return [];
-    const out: { value: string; label: string }[] = [];
-    for (const g of MENU) {
-      for (const c of g.children ?? []) {
-        if (c.perm && !hasPerm(c.perm)) continue;
-        if (g.label.toLowerCase().includes(kw) || c.label.toLowerCase().includes(kw)) {
-          out.push({ value: c.key, label: `${g.label} / ${c.label}` });
-        }
-      }
-    }
-    return out.slice(0, 10);
-  }, [navKw, hasPerm]);
+    return navLeaves
+      .filter((l) => l.group.toLowerCase().includes(kw) || l.label.toLowerCase().includes(kw))
+      .slice(0, 10)
+      .map((l) => ({ value: l.path, label: `${l.group} / ${l.label}` }));
+  }, [navKw, navLeaves]);
 
   const menuItems: MenuProps["items"] = useMemo(
     () =>
-      MENU.map((g) => ({
-        key: g.key,
-        icon: g.icon,
-        label: g.label,
-        children: g.children
-          ?.filter((c) => !c.perm || hasPerm(c.perm))
-          .map((c) => ({ key: c.key, icon: c.icon, label: c.label })),
-      })).filter((g) => (g.children?.length ?? 0) > 0),
-    [hasPerm]
+      navTree.map((n) => ({
+        key: n.key,
+        icon: n.icon,
+        label: n.label,
+        children: n.children?.map((c) => ({ key: c.key, icon: c.icon, label: c.label })),
+      })),
+    [navTree]
   );
 
+  // 当前路由选中项：叶子路径最长前缀匹配
   const selectedKey = useMemo(() => {
-    const hit = Object.keys(TITLES).find((k) => location.pathname.startsWith(k));
-    return hit ?? "/dashboard";
-  }, [location.pathname]);
+    let best = "";
+    for (const l of navLeaves) {
+      if (location.pathname.startsWith(l.path) && l.path.length > best.length) best = l.path;
+    }
+    return best || "/dashboard";
+  }, [navLeaves, location.pathname]);
 
   // 当前路由所属分类 key（移动端只展开当前分类，避免全部分类铺开）
-  const currentGroupKey = useMemo(
-    () => MENU.find((g) => (g.children ?? []).some((c) => c.key === selectedKey))?.key,
-    [selectedKey]
-  );
+  const currentGroupKey = useMemo(() => {
+    const hit = navTree.find((g) => containsNavKey(g, selectedKey));
+    return hit?.key;
+  }, [navTree, selectedKey]);
 
   // 菜单展开状态（受控）：桌面默认全部分类展开（原设计）；移动端只展开当前分类，
   // 路径切换时跟随（收起侧栏再展开不会回到"全部展开"）
   const [openKeys, setOpenKeys] = useState<string[]>(() => {
     const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
     if (isMobile && currentGroupKey) return [currentGroupKey];
-    return MENU.map((g) => g.key);
+    return navTree.map((g) => g.key);
   });
 
   useEffect(() => {
@@ -336,6 +601,8 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
           onClick={({ key }) => {
             navigate(key);
             collapseOnMobile();
+            // 点击侧边导航：无论是否同一页面都回到顶端
+            scrollContentTop();
           }}
           style={{ borderInlineEnd: "none", padding: "8px 0" }}
         />
@@ -357,7 +624,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
           <div style={{ fontSize: 14, whiteSpace: "nowrap" }}>
             <span style={{ color: token.colorTextTertiary }}>物料通</span>
             <span style={{ margin: "0 8px", color: token.colorTextQuaternary }}>/</span>
-            <span style={{ color: token.colorText, fontWeight: 500 }}>{TITLES[selectedKey] ?? "工作台"}</span>
+            <span style={{ color: token.colorText, fontWeight: 500 }}>{navLeaves.find((l) => l.path === selectedKey)?.label ?? TITLES[selectedKey] ?? "工作台"}</span>
           </div>
           <Input.Search
             placeholder="搜索材料 / 单号 / 条码…"
@@ -371,58 +638,9 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
             style={{ width: 260, marginLeft: 8 }}
           />
           <div style={{ flex: 1 }} />
-          <Dropdown
-            trigger={["click"]}
-            popupRender={() => (
-              <div style={{ width: 340, background: token.colorBgContainer, borderRadius: 8, boxShadow: token.boxShadowSecondary, overflow: "hidden" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
-                  <span style={{ fontWeight: 600 }}>站内通知</span>
-                  <Button type="link" size="small" onClick={() => { notificationApi.markReadAll().then(() => { setUnread(0); setNotices([]); }); }}>
-                    全部已读
-                  </Button>
-                </div>
-                {notices.length === 0 && <div style={{ padding: 28, textAlign: "center", color: token.colorTextTertiary, fontSize: 13 }}>暂无未读通知</div>}
-                {notices.map((n) => (
-                  <div
-                    key={n.id}
-                    className="wlt-notice-item"
-                    style={{ padding: "10px 16px", borderBottom: `1px solid ${token.colorBorderSecondary}`, cursor: "pointer" }}
-                    onClick={() => {
-                      // 点击条目 = 标记已读：本地立即移除并更新徽标，后端持久化
-                      notificationApi.markRead(n.id).then(() => {
-                        setUnread((u) => Math.max(0, u - 1));
-                        setNotices((ns) => ns.filter((x) => x.id !== n.id));
-                      }).catch(() => undefined);
-                    }}
-                  >
-                    <div style={{ fontWeight: 500, fontSize: 13 }}>{n.title}</div>
-                    <div style={{ fontSize: 12, color: token.colorTextSecondary, marginTop: 2, lineHeight: 1.5 }}>{n.content}</div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                      <span style={{ fontSize: 11, color: token.colorTextTertiary }}>{n.created_at.slice(0, 16)}</span>
-                      <Button
-                        type="link"
-                        size="small"
-                        style={{ padding: 0, fontSize: 12 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          notificationApi.markRead(n.id).then(() => {
-                            setUnread((u) => Math.max(0, u - 1));
-                            setNotices((ns) => ns.filter((x) => x.id !== n.id));
-                          }).catch(() => undefined);
-                        }}
-                      >
-                        标记已读
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          >
-            <Badge count={unread} size="small">
-              <Button type="text" icon={<BellOutlined style={{ fontSize: 17 }} />} />
-            </Badge>
-          </Dropdown>
+          <Badge count={unread} size="small">
+            <Button type="text" icon={<BellOutlined style={{ fontSize: 17 }} />} onClick={() => setNoticeOpen(true)} />
+          </Badge>
           <Dropdown
             menu={{
               items: [
@@ -449,11 +667,133 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
             </div>
           </Dropdown>
         </Header>
-        <Content style={{ background: token.colorBgLayout, overflow: "auto" }}>
+        <Content ref={contentRef} style={{ background: token.colorBgLayout, overflow: "auto" }}>
           {children}
         </Content>
       </Layout>
     </Layout>
+
+    <Drawer
+      title="通知中心"
+      width={440}
+      open={noticeOpen}
+      onClose={() => setNoticeOpen(false)}
+      destroyOnHidden
+      extra={
+        <Button
+          type="link"
+          size="small"
+          onClick={() => {
+            notificationApi.markReadAll().then(() => {
+              setUnread(0);
+              setNotices((ns) => ns.map((n) => ({ ...n, is_read: 1 })));
+            }).catch(() => undefined);
+          }}
+        >
+          全部已读
+        </Button>
+      }
+    >
+      <Tabs
+        activeKey={noticeTab}
+        onChange={(k) => {
+          setNoticeTab(k as "unread" | "all");
+          setNoticeSelected(new Set());
+        }}
+        items={[
+          { key: "unread", label: `未读${unread > 0 ? `（${unread}）` : ""}` },
+          { key: "all", label: "全部" },
+        ]}
+      />
+      {/* 工具栏：全选 / 删除选中 / 清空全部（与手机端同功能） */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "4px 2px 10px", borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={toggleSelectAll}>
+          <Checkbox checked={allSelected} />
+          <span style={{ fontSize: 13 }}>全选</span>
+        </span>
+        <span style={{ fontSize: 12, color: token.colorTextTertiary }}>已选 {noticeSelected.size} 条</span>
+        <span style={{ flex: 1 }} />
+        <Button size="small" danger disabled={noticeSelected.size === 0} onClick={() => void deleteSelectedNotices()}>
+          删除选中（{noticeSelected.size}）
+        </Button>
+        <Button size="small" onClick={() => void clearAllNotices()}>
+          清空全部
+        </Button>
+      </div>
+      <div style={{ minHeight: 320 }}>
+        {noticeLoading && (
+          <div style={{ padding: 60, textAlign: "center" }}>
+            <Spin />
+          </div>
+        )}
+        {!noticeLoading && notices.length === 0 && <Empty style={{ padding: "48px 0" }} description="暂无通知" />}
+        {!noticeLoading &&
+          notices.map((n) => {
+            const style = BIZ_STYLE[n.biz_type] ?? { text: n.biz_type, color: "default" };
+            return (
+              <div
+                key={n.id}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  padding: "10px 2px",
+                  borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                  background: noticeSelected.has(n.id) ? "rgba(22,119,255,.06)" : undefined,
+                }}
+              >
+                <Checkbox checked={noticeSelected.has(n.id)} onChange={() => toggleNoticeSelect(n.id)} style={{ paddingTop: 3 }} />
+                <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => onNoticeClick(n)}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontWeight: n.is_read ? 400 : 600, fontSize: 13.5 }}>{n.title}</span>
+                    <Tag color={style.color} style={{ marginInlineEnd: 0 }}>
+                      {style.text}
+                    </Tag>
+                  </div>
+                  <div style={{ fontSize: 12, color: token.colorTextSecondary, marginTop: 3, lineHeight: 1.5, wordBreak: "break-all" }}>{n.content}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                    <span style={{ fontSize: 11, color: token.colorTextTertiary }}>
+                      {n.created_at.slice(0, 16)}
+                      {desktopLink(n.link) ? " · 点击查看详情" : ""}
+                    </span>
+                    <span style={{ display: "inline-flex", gap: 4 }}>
+                      {!n.is_read && (
+                        <Button
+                          type="link"
+                          size="small"
+                          style={{ padding: 0, fontSize: 12 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            notificationApi
+                              .markRead(n.id)
+                              .then(() => {
+                                setNotices((ns) => ns.map((x) => (x.id === n.id ? { ...x, is_read: 1 } : x)));
+                                refreshUnread();
+                              })
+                              .catch(() => undefined);
+                          }}
+                        >
+                          标记已读
+                        </Button>
+                      )}
+                      <Popconfirm
+                        title="删除该通知？"
+                        okText="删除"
+                        okButtonProps={{ danger: true }}
+                        cancelText="取消"
+                        onConfirm={() => void removeOneNotice(n)}
+                      >
+                        <Button type="link" size="small" style={{ padding: 0, fontSize: 12, color: token.colorError }} onClick={(e) => e.stopPropagation()}>
+                          删除
+                        </Button>
+                      </Popconfirm>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+      </div>
+    </Drawer>
 
     <Modal
       title="修改密码"

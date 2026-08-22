@@ -1,8 +1,8 @@
 """定时任务（APScheduler）：库存预警扫描（《数据库设计.md》决策7、API 设计 §9）。
 
 每分钟扫描 stk_stock 与商品上下限，生成站内通知（接收人：超管/管理者/仓管员）。
-幂等：同一商品同一类型预警在最近 1 小时内存在未读通知则不重复生成。
-"""
+幂等：同一商品同一类型预警在最近 1 小时内已通知过则不重复生成（与已读状态无关——
+避免用户点「全部已读」后同一持续预警被每分钟重新刷屏）。"""
 from __future__ import annotations
 
 import logging
@@ -54,13 +54,13 @@ def scan_stock_alerts() -> dict:
                 ),
             )
         ).all()
-        # 一次拉取近期未读预警，内存按标题+内容判断去重（替代每个商品一次 LIKE 查询）
+        # 一次拉取近期预警，内存按标题+内容判断去重（替代每个商品一次 LIKE 查询）；
+        # 只看时间窗口、不看已读状态：标记已读不应让同一持续预警在窗口内重新生成
         recent = db.execute(
             select(SysNotification.title, SysNotification.content)
             .where(
                 SysNotification.biz_type == "预警",
                 SysNotification.created_at >= cutoff,
-                SysNotification.is_read == 0,
             )
         ).all()
         existing: dict[str, list[str]] = {}
@@ -78,7 +78,7 @@ def scan_stock_alerts() -> dict:
                 if any(f"（{product.code}）" in c or f"({product.code})" in c for c in existing.get(title, [])):
                     continue
                 for uid in receivers:
-                    db.add(SysNotification(user_id=uid, title=title, content=content, biz_type="预警"))
+                    db.add(SysNotification(user_id=uid, title=title, content=content, biz_type="预警", link="/stock/query"))
                 created += 1
                 existing.setdefault(title, []).append(content)
         db.commit()

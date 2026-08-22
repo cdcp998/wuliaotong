@@ -7,6 +7,7 @@ import { baseApi, requisitionApi, type Location, type Product, type Warehouse } 
 import { PhotoUpload } from "../components/PhotoUpload";
 import { ProductPicker } from "../components/ProductPicker";
 import { PlusIcon } from "../components/icons";
+import { useBackToClose } from "../hooks/useBackToClose";
 
 interface Row {
   product: Product;
@@ -36,6 +37,9 @@ export function RequisitionNewPage() {
   const [isPrivate, setIsPrivate] = useState(false); // 私用标记（隐藏触发，仅管理员可见）
   const tapCountRef = useRef(0); // 「因何使用」连续点击计数
   const lastTapRef = useRef(0);
+
+  // 返回键（硬件/浏览器）关闭「选择库位」弹层
+  useBackToClose(locPicker.open, () => setLocPicker((s) => ({ ...s, open: false })));
 
   // 隐藏触发：在「因何使用」字段上连续点击 15 次（间隔 ≤1.5s）→ 确认后锁定为「私用」
   function onReasonTap() {
@@ -111,7 +115,7 @@ export function RequisitionNewPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8", paddingBottom: 84 }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f6f8", paddingBottom: "calc(84px + env(safe-area-inset-bottom))" }}>
       <NavBar onBack={() => navigate("/")}>领用申请</NavBar>
       <div style={{ padding: 12 }}>
         {/* 出库仓库 */}
@@ -233,25 +237,30 @@ export function RequisitionNewPage() {
         </div>
       </div>
 
-      {/* 底部固定提交栏 */}
+      {/* 底部固定提交栏（居中 + 限宽，宽屏「应用窗口化」时不横跨整个视口；boxSizing 保证限宽含内边距） */}
       <div
         style={{
           position: "fixed",
-          left: 0,
-          right: 0,
+          left: "50%",
+          transform: "translateX(-50%)",
           bottom: 0,
+          width: "100%",
+          maxWidth: 720,
           background: "#fff",
           borderTop: "1px solid #f0f1f3",
           padding: "10px 12px",
+          paddingBottom: "calc(10px + env(safe-area-inset-bottom))",
           display: "flex",
+          alignItems: "center",
           gap: 10,
+          boxSizing: "border-box",
           zIndex: 20,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", fontSize: 13, color: "#646a73", paddingLeft: 4, minWidth: 90 }}>
-          共 <b style={{ color: "#1f2329", fontSize: 15 }}>{totalQty}</b> 件
+        <div style={{ display: "flex", alignItems: "center", fontSize: 13, color: "#646a73", paddingLeft: 4, whiteSpace: "nowrap", flexShrink: 0 }}>
+          共 <b style={{ color: "#1f2329", fontSize: 15, margin: "0 2px" }}>{totalQty}</b> 件
         </div>
-        <Button block color="primary" loading={submitting} style={{ height: 44, fontSize: 15, borderRadius: 10, flex: 1 }} onClick={() => void submit()}>
+        <Button block color="primary" loading={submitting} style={{ height: 44, fontSize: 15, borderRadius: 10, flex: 1, minWidth: 0 }} onClick={() => void submit()}>
           提交申请
         </Button>
       </div>

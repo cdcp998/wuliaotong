@@ -44,6 +44,10 @@ export function BarcodeScanner({
   /** 扫码成功后是否自动关闭（默认 true）；调用方需要异步处理后自行关闭时传 false。 */
   autoClose?: boolean;
 }) {
+  // 注意：这里【不】用 useBackToClose（历史条目 push+back 会与路由懒加载导航竞态，
+  // 在 OcrScan「挂载即打开」场景下导致 React Router 索引损坏 → 页面自动退回首页）。
+  // 相机是全屏覆盖层，硬件/浏览器返回键走浏览器默认返回即可（返回上一页）。
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanTimerRef = useRef<number>(0); // 手动帧循环定时器

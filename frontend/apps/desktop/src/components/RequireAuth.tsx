@@ -1,30 +1,55 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 
-import { initApi, useAuthStore } from "@wlt/shared";
+import { initApi, useAuthStore, type MenuNode } from "@wlt/shared";
 
 import { MENU } from "./AppLayout";
+
+/** 拍平菜单树 → {path, perm} 叶子列表（动态菜单优先，硬编码 MENU 兜底）。 */
+function menuLeaves(menus: MenuNode[]): { path: string; perm: string }[] {
+  const out: { path: string; perm: string }[] = [];
+  const walk = (ns: MenuNode[]) => {
+    for (const n of ns) {
+      if (n.children?.length) walk(n.children);
+      else if (n.path) out.push({ path: n.path, perm: n.perm_code });
+    }
+  };
+  walk(menus);
+  return out;
+}
 
 /** 路由守卫：未初始化跳 /init；未登录跳 /login；已登录但无当前页面权限时回入口（《前端设计.md》§6）。 */
 export function RequireAuth({ children }: { children: ReactNode }) {
   const user = useAuthStore((s) => s.user);
+  const menus = useAuthStore((s) => s.menus);
   const fetchMe = useAuthStore((s) => s.fetchMe);
   const hasPerm = useAuthStore((s) => s.hasPerm);
+  const hasAnyPerm = useAuthStore((s) => s.hasAnyPerm);
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 当前路径所需权限（取最长前缀匹配的菜单项）
+  // 当前路径所需权限（取最长前缀匹配的菜单项；perm 逗号分隔=任一命中即可进；无 perm=公开）
   const requiredPerm = useMemo(() => {
-    let best: string | undefined;
-    for (const g of MENU) {
-      for (const c of g.children ?? []) {
-        if (c.perm && location.pathname.startsWith(c.key)) {
-          if (!best || c.key.length > best.length) best = c.perm;
+    let best: { perm: string | undefined; len: number } | undefined;
+    const leaves = menus.length ? menuLeaves(menus) : [];
+    if (leaves.length) {
+      for (const l of leaves) {
+        if (l.perm && location.pathname.startsWith(l.path)) {
+          if (!best || l.path.length > best.len) best = { perm: l.perm, len: l.path.length };
+        }
+      }
+    } else {
+      for (const g of MENU) {
+        for (const c of g.children ?? []) {
+          if (c.perm && location.pathname.startsWith(c.key)) {
+            const perm = Array.isArray(c.perm) ? c.perm.join(",") : c.perm;
+            if (!best || c.key.length > best.len) best = { perm, len: c.key.length };
+          }
         }
       }
     }
-    return best;
-  }, [location.pathname]);
+    return best?.perm;
+  }, [location.pathname, menus]);
 
   useEffect(() => {
     let alive = true;
@@ -51,10 +76,14 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   }, [user, fetchMe, navigate]);
 
   useEffect(() => {
-    if (user && requiredPerm && !hasPerm(requiredPerm)) {
-      navigate("/", { replace: true }); // 无权限：回入口（Landing 按角色展示可选功能）
+    if (user && requiredPerm) {
+      const codes = requiredPerm.split(",").map((c) => c.trim()).filter(Boolean);
+      const ok = codes.length === 1 ? hasPerm(codes[0]) : hasAnyPerm(codes);
+      if (!ok) {
+        navigate("/", { replace: true }); // 无权限：回入口（Landing 按角色展示可选功能）
+      }
     }
-  }, [user, requiredPerm, hasPerm, navigate]);
+  }, [user, requiredPerm, hasPerm, hasAnyPerm, navigate]);
 
   if (!user) return null;
   return <>{children}</>;

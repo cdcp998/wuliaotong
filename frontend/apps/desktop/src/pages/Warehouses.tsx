@@ -1,18 +1,93 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router";
-import { App, Button, Card, Empty, Form, Input, InputNumber, Modal, Popconfirm, Space, Spin, Tag } from "antd";
+import { App, Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Space, Spin, Tag } from "antd";
+import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 
-import { baseApi, type Location, type Shelf, type Warehouse } from "@wlt/shared";
+import { baseApi, reportApi, type LocationStock, type Shelf, type Warehouse } from "@wlt/shared";
 
-/** 仓库与货架管理（电脑端）：左侧仓库列表（CRUD）+ 右侧选中仓库的货架/库位（CRUD），自适应填充。 */
+const ALERT_COLOR: Record<string, string> = {
+  low: "#f5222d",
+  high: "#faad14",
+  normal: "#52c41a",
+};
+const ALERT_TEXT: Record<string, string> = {
+  low: "低于下限",
+  high: "高于上限",
+  normal: "正常",
+};
+
+/** 库位格状态 → 2.5D 单元格颜色（空=灰 / 正常=绿 / 低=红 / 高=黄）。 */
+function cellStyle(items: LocationStock["items"]): { bg: string; border: string } {
+  if (!items.length) return { bg: "#f5f5f5", border: "#d9d9d9" };
+  if (items.some((i) => i.alert === "low")) return { bg: "#fff1f0", border: ALERT_COLOR.low };
+  if (items.some((i) => i.alert === "high")) return { bg: "#fffbe6", border: ALERT_COLOR.high };
+  return { bg: "#f6ffed", border: ALERT_COLOR.normal };
+}
+
+/** 2.5D 货架视图（仓库与货架页内嵌，无独立页）：层×行×列 → 隔（3D 方块格子），格子内直接展示物料+数量。 */
+function Shelf25D({ shelf, cells, onCell }: {
+  shelf: Shelf;
+  cells: Map<string, LocationStock>;
+  onCell: (loc: LocationStock) => void;
+}) {
+  const layers = shelf.layers ?? 1;
+  const rows = shelf.rows ?? 1;
+  const cols = shelf.cols ?? 1;
+  const layerKeys = Array.from({ length: layers }, (_, i) => layers - i); // 顶→底（顶层最亮）
+  return (
+    <>
+      <div style={{ fontSize: 12, color: "#646a73", marginBottom: 8 }}>
+        {layers}层 × {rows}行 × {cols}列 · 格子内直接显示物料，点击格子查看完整明细
+      </div>
+      {/* 层从顶到底堆叠，每层一个托盘面板；格子为 3D 方块（loc-cell3d） */}
+      {layerKeys.map((layer) => (
+        <div key={layer} className="rack-layer">
+          <div className="rack-layer-title">第 {layer} 层</div>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(96px, 1fr))`, gap: 12 }}>
+            {Array.from({ length: rows }, (_, ri) => ri + 1).map((row) =>
+              Array.from({ length: cols }, (_, ci) => ci + 1).map((col) => {
+                const loc = cells.get(`${shelf.id}-${layer}-${row}-${col}`);
+                const st = cellStyle(loc?.items ?? []);
+                return (
+                  <div
+                    key={`${row}-${col}`}
+                    className={loc ? "loc-cell3d" : "loc-cell3d loc-cell3d-empty"}
+                    onClick={() => loc && onCell(loc)}
+                    title={loc ? `${loc.location_code}（${loc.items.length ? `${loc.items.length} 种材料` : "空"}）` : "空位（未创建库位）"}
+                    style={{ background: st.bg, borderColor: st.border }}
+                  >
+                    <div className="loc-cell3d-label">R{row}C{col}</div>
+                    {loc && loc.items.length > 0 ? (
+                      <>
+                        {loc.items.slice(0, 2).map((it) => (
+                          <div key={it.product_id} className="loc-cell3d-mat" title={`${it.name}${it.spec ? `（${it.spec}）` : ""}`}>
+                            <span className="loc-cell3d-mat-name">{it.name}</span>
+                            <span className="loc-cell3d-mat-qty">×{it.qty}</span>
+                          </div>
+                        ))}
+                        {loc.items.length > 2 && <div className="loc-cell3d-more">+{loc.items.length - 2} 种…</div>}
+                      </>
+                    ) : (
+                      <div className="loc-cell3d-empty-text">{loc ? "空" : "未建"}</div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** 仓库与货架（电脑端，库存管理分组，base:warehouse）：左侧仓库列表（含汇总）→ 右侧 2.5D 货架视图（内嵌，无独立页）。 */
 export function WarehousesPage() {
   const { message } = App.useApp();
-  const navigate = useNavigate();
   const [whs, setWhs] = useState<Warehouse[]>([]);
   const [whLoading, setWhLoading] = useState(false);
   const [selectedWh, setSelectedWh] = useState<Warehouse | null>(null);
   const [shelves, setShelves] = useState<Shelf[]>([]);
-  const [locs, setLocs] = useState<Location[]>([]);
+  const [cellMap, setCellMap] = useState<Map<string, LocationStock>>(new Map());
   const [busy, setBusy] = useState(false);
   const [whModal, setWhModal] = useState<{ open: boolean; editing: Warehouse | null }>({ open: false, editing: null });
   const [shelfModal, setShelfModal] = useState<{ open: boolean; editing: Shelf | null }>({ open: false, editing: null });
@@ -20,6 +95,8 @@ export function WarehousesPage() {
   const [whForm] = Form.useForm();
   const [shelfForm] = Form.useForm();
   const [locForm] = Form.useForm();
+  // 单元格明细
+  const [detail, setDetail] = useState<LocationStock | null>(null);
 
   const loadWhs = useCallback(async (keepSelectedId?: number) => {
     setWhLoading(true);
@@ -44,11 +121,23 @@ export function WarehousesPage() {
   useEffect(() => {
     if (!selectedWh) {
       setShelves([]);
-      setLocs([]);
+      setCellMap(new Map());
       return;
     }
-    baseApi.shelves(selectedWh.id).then(setShelves).catch(() => undefined);
-    baseApi.locations(selectedWh.id).then(setLocs).catch(() => undefined);
+    let alive = true;
+    Promise.all([
+      baseApi.shelves(selectedWh.id),
+      reportApi.locationSummary(selectedWh.id),
+    ])
+      .then(([shs, sum]) => {
+        if (!alive) return;
+        setShelves(shs);
+        setCellMap(new Map(sum.map((s) => [`${s.shelf_id}-${s.layer_no}-${s.row_no}-${s.col_no}`, s])));
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
   }, [selectedWh]);
 
   // ---------- 仓库 ----------
@@ -60,7 +149,6 @@ export function WarehousesPage() {
         await baseApi.updateWarehouse(whModal.editing.id, { name: v.name, address: v.address ?? "", remark: v.remark ?? "" });
         message.success("仓库已保存");
       } else {
-        // 仓库编码直接用仓库名称（界面不展示编码，避免 WH 编码混淆）；名称唯一由数据库约束
         await baseApi.createWarehouse({ code: v.name.trim(), name: v.name, address: v.address ?? "", remark: v.remark ?? "" });
         message.success("仓库已创建");
       }
@@ -83,11 +171,12 @@ export function WarehousesPage() {
         await baseApi.updateShelf(shelfModal.editing.id, { name: v.name ?? "", remark: v.remark ?? "" });
         message.success("货架已保存");
       } else {
-        await baseApi.createShelf({ warehouse_id: selectedWh.id, code: v.code, name: v.name ?? "", remark: v.remark ?? "" });
-        message.success("货架已创建");
+        // 批量生成：按 层×行×列 一次性创建全部库位（隔）
+        const s = await baseApi.createShelf({ warehouse_id: selectedWh.id, code: v.code, name: v.name ?? "", remark: v.remark ?? "", layers: v.layers ?? 1, rows: v.rows ?? 1, cols: v.cols ?? 1 });
+        message.success(`货架已创建（${s.layers}层 × ${s.rows}行 × ${s.cols}列，共 ${(s.layers ?? 1) * (s.rows ?? 1) * (s.cols ?? 1)} 个库位）`);
       }
       setShelfModal({ open: false, editing: null });
-      setShelves(await baseApi.shelves(selectedWh.id));
+      await refreshSelected();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "保存失败");
     } finally {
@@ -95,45 +184,62 @@ export function WarehousesPage() {
     }
   }
 
-  // ---------- 库位 ----------
+  // ---------- 库位（单格） ----------
   async function saveLocation() {
     if (!selectedWh || !locModal.shelf) return;
     const v = await locForm.validateFields();
     setBusy(true);
     try {
-      await baseApi.createLocation({ warehouse_id: selectedWh.id, shelf_id: locModal.shelf.id, layer_no: v.layer_no, remark: v.remark ?? "" });
+      await baseApi.createLocation({ warehouse_id: selectedWh.id, shelf_id: locModal.shelf.id, layer_no: v.layer_no, row_no: v.row_no, col_no: v.col_no, remark: v.remark ?? "" });
       message.success("库位已创建");
       setLocModal({ open: false, shelf: null });
-      setLocs(await baseApi.locations(selectedWh.id));
+      await refreshSelected();
     } catch (e) {
-      message.error(e instanceof Error ? e.message : "保存失败");
+      message.error(e instanceof Error ? e.message : "创建失败");
     } finally {
       setBusy(false);
     }
   }
 
+  /** 刷新选中仓库的货架 + 2.5D 数据。 */
+  const refreshSelected = useCallback(async () => {
+    if (!selectedWh) return;
+    const [shs, sum] = await Promise.all([
+      baseApi.shelves(selectedWh.id),
+      reportApi.locationSummary(selectedWh.id),
+    ]);
+    setShelves(shs);
+    setCellMap(new Map(sum.map((s) => [`${s.shelf_id}-${s.layer_no}-${s.row_no}-${s.col_no}`, s])));
+  }, [selectedWh]);
+
+  // 图例
+  const legend = (
+    <Space size={14} wrap style={{ fontSize: 12, color: "#666", marginBottom: 12 }}>
+      <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#f6ffed", border: `1px solid ${ALERT_COLOR.normal}`, borderRadius: 3, marginRight: 4 }} />正常</span>
+      <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#fff1f0", border: `1px solid ${ALERT_COLOR.low}`, borderRadius: 3, marginRight: 4 }} />低于下限</span>
+      <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#fffbe6", border: `1px solid ${ALERT_COLOR.high}`, borderRadius: 3, marginRight: 4 }} />高于上限</span>
+      <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#f5f5f5", border: "1px solid #d9d9d9", borderRadius: 3, marginRight: 4 }} />空/未建库位</span>
+    </Space>
+  );
+
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>仓库与货架</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>仓库与货架</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#646a73" }}>
+            点击仓库直接查看其 2.5D 货架视图（层 × 行 × 列 → 隔）；新建货架时按层行列批量生成库位；删除有保护
+          </p>
+        </div>
         <Space>
-          {selectedWh && (
-            <Button onClick={() => navigate(`/warehouses/${selectedWh.id}/map`)}>查看 2D 货架图</Button>
-          )}
-          <Button
-            type="primary"
-            onClick={() => {
-              setWhModal({ open: true, editing: null });
-            }}
-          >
-            新建仓库
-          </Button>
+          <Button icon={<ReloadOutlined />} onClick={() => void loadWhs()}>刷新</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setWhModal({ open: true, editing: null })}>新建仓库</Button>
         </Space>
       </div>
 
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-        {/* 左：仓库列表 */}
-        <div style={{ flex: "0 0 240px", maxHeight: "calc(100dvh - 180px)", overflow: "auto" }}>
+        {/* 左：仓库列表（含汇总） */}
+        <div style={{ flex: "0 0 250px", maxHeight: "calc(100dvh - 200px)", overflow: "auto" }}>
           <Spin spinning={whLoading}>
             {whs.map((w) => (
               <div
@@ -152,22 +258,27 @@ export function WarehousesPage() {
                   <b>{w.name}</b>
                   {w.status === 1 ? <Tag color="green" style={{ marginInlineEnd: 0 }}>启用</Tag> : <Tag style={{ marginInlineEnd: 0 }}>停用</Tag>}
                 </div>
-                <div style={{ fontSize: 12, color: "#646a73" }}>{w.address}</div>
+                <div style={{ fontSize: 12, color: "#646a73", marginTop: 2 }}>
+                  {w.shelf_count ?? 0} 货架 · {w.location_count ?? 0} 库位 · {w.product_kind_count ?? 0} 种材料
+                </div>
+                {w.address && <div style={{ fontSize: 12, color: "#c0c4cc" }}>{w.address}</div>}
               </div>
             ))}
             {!whs.length && !whLoading && <Empty description="暂无仓库" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
           </Spin>
         </div>
 
-        {/* 右：选中仓库的货架/库位 */}
+        {/* 右：选中仓库的 2.5D 货架视图（内嵌，无独立页） */}
         <div style={{ flex: 1, minWidth: 0 }}>
           {selectedWh ? (
             <>
-              <Space style={{ marginBottom: 12 }} wrap>
-                <span style={{ fontWeight: 600 }}>{selectedWh.name}</span>
-                <Button size="small" onClick={() => { setWhModal({ open: true, editing: selectedWh }); }}>编辑仓库</Button>
+              <Space style={{ marginBottom: 10 }} wrap>
+                <span style={{ fontWeight: 600, fontSize: 15 }}>{selectedWh.name}</span>
+                <Tag>{selectedWh.shelf_count ?? 0} 货架 / {selectedWh.location_count ?? 0} 库位 / {selectedWh.product_kind_count ?? 0} 种材料</Tag>
+                <Button size="small" onClick={() => setWhModal({ open: true, editing: selectedWh })}>编辑仓库</Button>
                 <Popconfirm
                   title="停用该仓库？"
+                  description="有货架或库存时会被系统拒绝"
                   onConfirm={async () => {
                     try {
                       await baseApi.deleteWarehouse(selectedWh.id);
@@ -180,68 +291,44 @@ export function WarehousesPage() {
                 >
                   <Button size="small" danger>停用</Button>
                 </Popconfirm>
-                <Button
-                  size="small"
-                  type="primary"
-                  ghost
-                  onClick={() => { setShelfModal({ open: true, editing: null }); }}
-                >
-                  + 新建货架
-                </Button>
+                <Button size="small" type="primary" ghost icon={<PlusOutlined />} onClick={() => setShelfModal({ open: true, editing: null })}>新建货架</Button>
               </Space>
 
-              {shelves.length === 0 && <Empty description="暂无货架，点击「新建货架」创建" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
-                {shelves.map((s) => {
-                  const shelfLocs = locs.filter((l) => l.shelf_id === s.id);
-                  return (
-                    <Card key={s.id} size="small" title={`${s.code}${s.name ? ` ${s.name}` : ""}`}
-                      extra={
-                        <Space>
-                          <Button size="small" onClick={() => { setShelfModal({ open: true, editing: s }); }}>编辑</Button>
+              {legend}
+
+              {shelves.length === 0 ? (
+                <Empty description="暂无货架，点击「新建货架」（按层×行×列批量生成库位）" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(560px, 1fr))", gap: 14 }}>
+                  {shelves.map((s) => (
+                    <div key={s.id} style={{ border: "1px solid #e5e6eb", borderRadius: 10, background: "#fafbfc", padding: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                        <b>{s.code}{s.name ? ` ${s.name}` : ""}</b>
+                        <Space size={4}>
+                          <Button size="small" icon={<EditOutlined />} onClick={() => setShelfModal({ open: true, editing: s })}>编辑</Button>
+                          <Button size="small" icon={<PlusOutlined />} onClick={() => setLocModal({ open: true, shelf: s })}>新建库位</Button>
                           <Popconfirm
-                            title="删除该货架？"
+                            title={`删除货架「${s.code}」？`}
+                            description="有库位时会被系统拒绝"
                             onConfirm={async () => {
                               try {
                                 await baseApi.deleteShelf(s.id);
                                 message.success("已删除");
-                                setShelves(await baseApi.shelves(selectedWh.id));
+                                await refreshSelected();
                               } catch (e) {
                                 message.error(e instanceof Error ? e.message : "删除失败");
                               }
                             }}
                           >
-                            <Button size="small" danger>删除</Button>
+                            <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
                           </Popconfirm>
-                          <Button size="small" type="primary" ghost onClick={() => { setLocModal({ open: true, shelf: s }); }}>+ 库位</Button>
                         </Space>
-                      }
-                    >
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {shelfLocs.map((l) => (
-                          <span key={l.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: "#f0f1f3", borderRadius: 6, fontSize: 12 }}>
-                            {l.display ?? l.code}（{l.layer_no} 层）
-                            <a
-                              style={{ color: "#cf1322", marginLeft: 2 }}
-                              onClick={async () => {
-                                try {
-                                  await baseApi.deleteLocation(l.id);
-                                  setLocs(await baseApi.locations(selectedWh.id));
-                                } catch (e) {
-                                  message.error(e instanceof Error ? e.message : "删除失败");
-                                }
-                              }}
-                            >
-                              ✕
-                            </a>
-                          </span>
-                        ))}
-                        {!shelfLocs.length && <span style={{ fontSize: 12, color: "#c9cdd4" }}>暂无库位</span>}
                       </div>
-                    </Card>
-                  );
-                })}
-              </div>
+                      <Shelf25D shelf={s} cells={cellMap} onCell={setDetail} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           ) : (
             <Empty description="请选择仓库" style={{ marginTop: 80 }} />
@@ -250,15 +337,8 @@ export function WarehousesPage() {
       </div>
 
       {/* 仓库 Modal */}
-      <Modal
-        title={whModal.editing ? "编辑仓库" : "新建仓库"}
-        open={whModal.open}
-        onOk={() => void saveWarehouse()}
-        onCancel={() => setWhModal({ open: false, editing: null })}
-        confirmLoading={busy}
-        destroyOnHidden
-        afterOpenChange={(o) => { if (!o) return; if (whModal.editing) whForm.setFieldsValue(whModal.editing); else whForm.resetFields(); }}
-      >
+      <Modal title={whModal.editing ? "编辑仓库" : "新建仓库"} open={whModal.open} onOk={() => void saveWarehouse()} onCancel={() => setWhModal({ open: false, editing: null })} confirmLoading={busy} destroyOnHidden
+        afterOpenChange={(o) => { if (!o) return; if (whModal.editing) whForm.setFieldsValue(whModal.editing); else whForm.resetFields(); }}>
         <Form form={whForm} layout="vertical">
           <Form.Item name="name" label="仓库名称" rules={[{ required: true, message: "请输入名称" }]}>
             <Input placeholder="如 一号仓" />
@@ -268,44 +348,77 @@ export function WarehousesPage() {
         </Form>
       </Modal>
 
-      {/* 货架 Modal */}
-      <Modal
-        title={shelfModal.editing ? "编辑货架" : "新建货架"}
-        open={shelfModal.open}
-        onOk={() => void saveShelf()}
-        onCancel={() => setShelfModal({ open: false, editing: null })}
-        confirmLoading={busy}
-        destroyOnHidden
-        afterOpenChange={(o) => { if (!o) return; if (shelfModal.editing) shelfForm.setFieldsValue(shelfModal.editing); else shelfForm.resetFields(); }}
-      >
+      {/* 货架 Modal（新建支持批量生成库位） */}
+      <Modal title={shelfModal.editing ? "编辑货架" : "新建货架（按层×行×列批量生成库位）"} open={shelfModal.open} onOk={() => void saveShelf()} onCancel={() => setShelfModal({ open: false, editing: null })} confirmLoading={busy} destroyOnHidden
+        afterOpenChange={(o) => { if (!o) return; if (shelfModal.editing) shelfForm.setFieldsValue(shelfModal.editing); else shelfForm.resetFields(); }}>
         <Form form={shelfForm} layout="vertical">
           {!shelfModal.editing && (
-            <Form.Item name="code" label="货架编号" rules={[{ required: true, message: "请输入编号" }]}>
-              <Input placeholder="如 A01" />
-            </Form.Item>
+            <>
+              <Form.Item name="code" label="货架编号" rules={[{ required: true, message: "请输入编号" }]}>
+                <Input placeholder="如 A01" />
+              </Form.Item>
+              <Space wrap>
+                <Form.Item name="layers" label="层数" rules={[{ required: true, message: "请输入层数" }]}>
+                  <InputNumber min={1} max={99} style={{ width: 110 }} placeholder="如 3" />
+                </Form.Item>
+                <Form.Item name="rows" label="行数" rules={[{ required: true, message: "请输入行数" }]}>
+                  <InputNumber min={1} max={99} style={{ width: 110 }} placeholder="如 2" />
+                </Form.Item>
+                <Form.Item name="cols" label="列数" rules={[{ required: true, message: "请输入列数" }]}>
+                  <InputNumber min={1} max={99} style={{ width: 110 }} placeholder="如 4" />
+                </Form.Item>
+              </Space>
+            </>
           )}
           <Form.Item name="name" label="名称"><Input placeholder="可选" /></Form.Item>
           <Form.Item name="remark" label="备注"><Input /></Form.Item>
         </Form>
       </Modal>
 
-      {/* 库位 Modal */}
-      <Modal
-        title={`新建库位（${locModal.shelf?.name || locModal.shelf?.code || ""}）`}
-        open={locModal.open}
-        onOk={() => void saveLocation()}
-        onCancel={() => setLocModal({ open: false, shelf: null })}
-        confirmLoading={busy}
-        destroyOnHidden
-        afterOpenChange={(o) => { if (o) locForm.resetFields(); }}
-      >
+      {/* 库位 Modal（单格：层行列） */}
+      <Modal title={`新建库位（${locModal.shelf?.code || ""}）`} open={locModal.open} onOk={() => void saveLocation()} onCancel={() => setLocModal({ open: false, shelf: null })} confirmLoading={busy} destroyOnHidden
+        afterOpenChange={(o) => { if (o) locForm.resetFields(); }}>
         <Form form={locForm} layout="vertical">
-          <Form.Item name="layer_no" label="层数" rules={[{ required: true, message: "请输入层数" }]}>
-            <InputNumber min={1} max={99} style={{ width: 160 }} placeholder="如 1" />
-          </Form.Item>
-          <Form.Item name="remark" label="备注"><Input /></Form.Item>
+          <Space wrap>
+            <Form.Item name="layer_no" label="层号" rules={[{ required: true, message: "请输入层号" }]}>
+              <InputNumber min={1} max={99} style={{ width: 110 }} placeholder="如 1" />
+            </Form.Item>
+            <Form.Item name="row_no" label="行号" rules={[{ required: true, message: "请输入行号" }]}>
+              <InputNumber min={1} max={99} style={{ width: 110 }} placeholder="如 1" />
+            </Form.Item>
+            <Form.Item name="col_no" label="列号" rules={[{ required: true, message: "请输入列号" }]}>
+              <InputNumber min={1} max={99} style={{ width: 110 }} placeholder="如 1" />
+            </Form.Item>
+          </Space>
+          <Form.Item name="remark" label="备注"><Input placeholder="可空" maxLength={100} /></Form.Item>
         </Form>
+      </Modal>
+
+      {/* 库位明细 */}
+      <Modal title={`库位 ${detail?.location_code ?? ""} 明细`} open={Boolean(detail)} onCancel={() => setDetail(null)} footer={null}>
+        {detail && (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: "#fafafa" }}>
+                <th style={thStyle}>材料名称</th><th style={thStyle}>数量</th><th style={thStyle}>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.items.map((it) => (
+                <tr key={it.product_id}>
+                  <td style={tdStyle}>{it.name} <span style={{ color: "#646a73" }}>{it.spec}</span></td>
+                  <td style={tdStyle}>{it.qty}</td>
+                  <td style={tdStyle}><Tag color={ALERT_COLOR[it.alert]}>{ALERT_TEXT[it.alert]}</Tag></td>
+                </tr>
+              ))}
+              {!detail.items.length && <tr><td colSpan={3} style={{ ...tdStyle, textAlign: "center", color: "#646a73" }}>空库位</td></tr>}
+            </tbody>
+          </table>
+        )}
       </Modal>
     </div>
   );
 }
+
+const thStyle: React.CSSProperties = { padding: "6px 8px", textAlign: "left", borderBottom: "1px solid #f0f0f0" };
+const tdStyle: React.CSSProperties = { padding: "6px 8px", borderBottom: "1px solid #fafafa" };

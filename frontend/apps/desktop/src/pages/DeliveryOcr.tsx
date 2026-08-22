@@ -32,7 +32,7 @@ export function DeliveryOcrPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [nextKey, setNextKey] = useState(0);
   const [uploadUrl, setUploadUrl] = useState(""); // 送货单图片（原始单据参考）
-  // 识别方式：SiliconFlow 视觉识别（视觉大模型，等待 20-60 秒）
+  // 识别方式：视觉大模型识别（等待 20-60 秒）
   const [preview, setPreview] = useState(""); // 点击图片放大查看（Modal）
   const [supplierName, setSupplierName] = useState("");
   const [billNo, setBillNo] = useState("");
@@ -378,14 +378,14 @@ export function DeliveryOcrPage() {
           <Button type="primary" loading={polling} icon={<CameraOutlined />}>上传送货单照片</Button>
         </Upload>
         <Button icon={<SearchOutlined />} onClick={() => void openTaskList()}>查询任务单</Button>
-        <Tag color="blue">识别方式：SiliconFlow 视觉识别（视觉大模型）</Tag>
+        <Tag color="blue">识别方式：视觉大模型识别</Tag>
       </Space>
       <Alert
         type="info"
         showIcon
         style={{ maxWidth: 760, marginBottom: 8 }}
         title={
-          "视觉识别（SiliconFlow）：调用视觉大模型分析送货单，通常需等待 20-60 秒，请耐心等待；识别后逐项确认再带入入库。"
+          "视觉识别：调用视觉大模型分析送货单，通常需等待 20-60 秒，请耐心等待；识别后逐项确认再带入入库。"
         }
       />
 
@@ -449,7 +449,7 @@ export function DeliveryOcrPage() {
           {rows.length > 0 ? (
             <>
               <Space style={{ marginBottom: 8 }}>
-                <Tag color="blue">视觉识别（SiliconFlow + DeepSeek 分类）</Tag>
+                <Tag color="blue">视觉识别 + 文本模型分类</Tag>
                 <Tag color="green">识别到 {rows.length} 项材料</Tag>
                 <span style={{ fontSize: 12, color: "#646a73" }}>漏识条目可点击下方「+ 添加明细」手动补录；确认时系统不存在物料将自动新增</span>
               </Space>

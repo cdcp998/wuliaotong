@@ -6,9 +6,9 @@ import { adminApi, type OperationLog } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
 
-const MODULES = ["auth", "base", "stock", "advanced", "requisition", "ocr", "report", "files", "storage", "system", "admin", "-"];
+const MODULES = ["认证", "系统", "系统设置", "用户", "角色", "注册审核", "材料", "分类", "供应商", "仓库", "货架", "库位", "组织单位", "删除审核", "导航管理", "采购入库", "采购计划", "期初", "库存调拨", "盘点", "其他出入库", "领用申请", "通知", "OCR/大模型", "AI建议", "文件", "存储", "AI调用日志", "备份", "其他"];
 
-/** 操作日志（电脑端，超管 sys:log）：写操作审计查询。 */
+/** 操作日志（电脑端，超管 sys:log）：写操作审计查询（模块/动作已中文化、具体化）。 */
 export function LogsPage() {
   const { message } = App.useApp();
   const [list, setList] = useState<OperationLog[]>([]);
@@ -38,13 +38,14 @@ export function LogsPage() {
 
   const columns: ColumnsType<OperationLog> = [
     { title: "时间", dataIndex: "created_at", width: 160 },
-    { title: "用户", dataIndex: "username", width: 100 },
+    { title: "用户", dataIndex: "username", width: 90 },
+    { title: "操作", dataIndex: "action", width: 180, render: (v: string) => <b style={{ fontWeight: 500 }}>{v}</b> },
     { title: "模块", dataIndex: "module", width: 100, render: (v: string) => <Tag>{v}</Tag> },
     { title: "方法", dataIndex: "method", width: 80, render: (v: string) => <Tag color={v === "POST" ? "green" : v === "DELETE" ? "red" : "blue"}>{v}</Tag> },
-    { title: "URL", dataIndex: "url", width: 260 },
+    { title: "URL", dataIndex: "url", width: 220, ellipsis: true },
     { title: "参数", dataIndex: "params", ellipsis: { showTitle: false }, render: (v: string) => v || "-" },
-    { title: "IP", dataIndex: "ip", width: 120 },
-    { title: "耗时", dataIndex: "duration_ms", width: 80, render: (v: number) => `${v}ms` },
+    { title: "IP", dataIndex: "ip", width: 110 },
+    { title: "耗时", dataIndex: "duration_ms", width: 70, render: (v: number) => `${v}ms` },
   ];
 
   return (
@@ -53,7 +54,7 @@ export function LogsPage() {
       <Space style={{ marginBottom: 16 }} wrap>
         <Input.Search placeholder="用户名" allowClear style={{ width: 160 }} onSearch={(v) => { setUsername(v); setPage(1); }} />
         <Select
-          style={{ width: 140 }}
+          style={{ width: 150 }}
           placeholder="模块"
           allowClear
           options={MODULES.map((m) => ({ label: m, value: m }))}

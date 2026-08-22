@@ -1,11 +1,12 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Input, NavBar, Popup, Tag, Toast } from "antd-mobile";
 
 import { baseApi, fileApi, ocrApi, resolveByBarcode, type Product } from "@wlt/shared";
 
 import { BarcodeScanner } from "./BarcodeScanner";
+import { useBackToClose } from "../hooks/useBackToClose";
 
-/** 商品选择弹层：关键字搜索 / 拍照 / 相册 / 扫码 → 选择（手机端仓管员出入库/盘点/领用新增物料用，
+/** 商品选择弹层：实时搜索 / 拍照 / 相册 / 扫码 → 选择（手机端仓管员出入库/盘点/领用新增物料用，
  * 四个页面共用：领用申请/入库/出库/盘点）。 */
 export function ProductPicker({
   visible,
@@ -23,7 +24,11 @@ export function ProductPicker({
   const [scanOpen, setScanOpen] = useState(false);
   const camRef = useRef<HTMLInputElement>(null); // 拍照：直达后置相机
   const albRef = useRef<HTMLInputElement>(null); // 相册：不带 capture，移动端可正常选图
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined); // 实时搜索防抖
   const searched = useMemo(() => list.length > 0, [list]);
+
+  // 返回键（硬件/浏览器）关闭弹层
+  useBackToClose(visible, onClose);
 
   /** 选中商品并关闭弹层（扫码命中/拍照命中/列表点击共用）。 */
   function finish(p: Product) {
@@ -33,20 +38,42 @@ export function ProductPicker({
     onClose();
   }
 
-  async function search() {
-    if (!keyword.trim()) {
-      Toast.show("请输入关键字");
+  async function doSearch(k: string) {
+    if (!k) {
+      setList([]);
       return;
     }
     setLoading(true);
     try {
-      const data = await baseApi.products(keyword.trim());
+      const data = await baseApi.products(k);
       setList(data.list);
     } catch (e) {
       Toast.show(e instanceof Error ? e.message : "查询失败");
     } finally {
       setLoading(false);
     }
+  }
+
+  /** 实时搜索：输入即查（防抖 300ms，无需点「搜索」按钮）。 */
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const k = keyword.trim();
+    if (!k) {
+      setList([]);
+      return;
+    }
+    debounceRef.current = setTimeout(() => {
+      void doSearch(k);
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [keyword]);
+
+  /** 点「搜索」按钮：立即查询（取消防抖等待）。 */
+  function search() {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    void doSearch(keyword.trim());
   }
 
   /** 识别命中：直接选中材料并关闭；未命中：条码填入搜索框供二次搜索（识别链路含大模型兜底命中商品）。 */
@@ -110,6 +137,7 @@ export function ProductPicker({
     <Popup visible={visible} onMaskClick={onClose} bodyStyle={{ height: "70vh", display: "flex", flexDirection: "column" }}>
       {/* 标题栏：明确弹层用途，右侧关闭按钮 */}
       <NavBar
+        onBack={onClose}
         right={
           <span onClick={onClose} style={{ fontSize: 14, color: "#1668dc", padding: "0 12px" }}>
             关闭

@@ -55,6 +55,51 @@ class SysRegisterApply(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
 
+class SysDeleteReview(Base):
+    """删除审核（物料数据删除审批流）：仓管员及以上提交删除申请，管理者及以上角色审核后执行删除。
+
+    biz_type：product（停用材料）/ category（删除分类）；status：0 待审核 / 1 已通过（已删除） / 2 已驳回。
+    """
+
+    __tablename__ = "sys_delete_review"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    biz_type: Mapped[str] = mapped_column(String(20), nullable=False, default="product")
+    target_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    target_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    target_desc: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    reason: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    status: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 0 待审核 / 1 已通过 / 2 已驳回
+    applicant_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    applicant_name: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    handled_by: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    review_remark: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+
+class SysMenu(TimestampMixin, Base):
+    """导航菜单（动态导航管理）：多级菜单树，按角色权限动态渲染侧边导航。
+
+    - parent_id：0=顶级分组；支持多级（分组→菜单，可再嵌套）
+    - path：路由路径（菜单项）；分组留空
+    - perm_code：绑定权限码（逗号分隔=任一命中即可见；空=公开菜单）
+    - visible：1 显示 / 0 隐藏（管理员手动隐藏，即使有权限也不显示）
+    """
+
+    __tablename__ = "sys_menu"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    parent_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    path: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    icon: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    perm_code: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    visible: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    remark: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+
+
 class SysRole(TimestampMixin, Base):
     __tablename__ = "sys_role"
 
@@ -152,6 +197,7 @@ class SysNotification(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     content: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     biz_type: Mapped[str] = mapped_column(String(30), nullable=False, default="")  # 预警/待办/审批
+    link: Mapped[str] = mapped_column(String(255), nullable=False, default="")  # 业务联动跳转目标（移动端路由），兼作业务去重/自动已读的唯一键
     is_read: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 

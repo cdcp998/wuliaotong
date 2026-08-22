@@ -1,7 +1,8 @@
 """大模型/OCR 服务商配额管理（系统设置 → OCR 与大模型 → 配额与预警）。
 
 - 获取配额：SiliconFlow /user/info（余额，元）、DeepSeek /user/balance（余额，元）、
-  豆包(火山方舟) /usage/quota（资源包配额，字段随服务商返回而变，防御式解析）
+  多模态大模型（指向火山方舟等提供官方 /usage/quota 接口的服务商时）资源包配额
+  （字段随服务商返回而变，防御式解析）
 - 快照：成功/失败结果统一存 sys_config(quota.snapshot) JSON，设置页展示「上次获取」
 - 预警：check_quota_warnings 由调度器每小时调用；剩余配额低于阈值（quota.warning.threshold.*）
   时向收件人（quota.warning.recipients）发送邮件；每个服务商只在跌破阈值时通知一次，
@@ -23,10 +24,10 @@ from app.services.mail import send_mail
 
 logger = logging.getLogger("app.quota")
 
-PROVIDERS = ("siliconflow", "deepseek", "doubao")
+PROVIDERS = ("siliconflow", "deepseek", "mm_llm")
 
 PROVIDER_LABELS = {
-    "doubao": "多模态大模型 (主用)",
+    "mm_llm": "多模态大模型 (MM-LLM)",
     "siliconflow": "视觉模型（视觉识别）",
     "deepseek": "文本模型（文字结构化 / 材料分类）",
 }
@@ -43,7 +44,7 @@ SCENE_META = {
 }
 
 MODEL_SCENES: dict[str, list[tuple[str, str]]] = {
-    "doubao": [
+    "mm_llm": [
         ("match_vision", "主用"),
         ("vision_product", "主用"),
         ("classify_items", "主用"),
@@ -158,8 +159,9 @@ def _fetch_deepseek(base_url: str, api_key: str) -> list[dict]:
     }]
 
 
-def _fetch_doubao(base_url: str, api_key: str) -> list[dict]:
-    """豆包（火山方舟）资源配额：quota_list[]，防御式解析 total/used/remaining_quota。"""
+def _fetch_ark(base_url: str, api_key: str) -> list[dict]:
+    """火山方舟（Volcengine Ark）资源配额：/usage/quota → quota_list[]，防御式解析
+    total/used/remaining_quota。多模态大模型槽位指向 Ark（或其他提供同款接口的服务商）时使用。"""
     resp = _http_get(f"{base_url.rstrip('/')}/usage/quota", api_key)
     resp.raise_for_status()
     body = resp.json()
@@ -194,26 +196,26 @@ def _fetch_doubao(base_url: str, api_key: str) -> list[dict]:
 _FETCHERS = {
     "siliconflow": _fetch_siliconflow,
     "deepseek": _fetch_deepseek,
-    "doubao": _fetch_doubao,
+    "mm_llm": _fetch_ark,
 }
 
 _DEFAULT_BASE_URLS = {
     "siliconflow": "https://api.siliconflow.cn/v1",
     "deepseek": "https://api.deepseek.com",
-    "doubao": "https://ark.cn-beijing.volces.com/api/v3",
 }
 
 # 提供官方余额/配额查询接口的服务商域名（其余 OpenAI 兼容服务商可正常用于识别，但无配额接口）
+# 多模态大模型（mm_llm）为通用槽位，仅当其 Base URL 指向火山方舟等已知服务商时识别为可查配额
 _KNOWN_QUOTA_HOSTS = {
     "siliconflow": ("api.siliconflow.cn",),
     "deepseek": ("api.deepseek.com",),
-    "doubao": ("ark.cn-beijing.volces.com",),
+    "mm_llm": ("ark.cn-beijing.volces.com",),
 }
 
 QUOTA_UNAVAILABLE_MSG = (
-    "该服务商不提供标准的余额/配额查询接口。配额查询仅支持 SiliconFlow、DeepSeek、火山方舟"
-    "等提供官方余额接口的服务商；其他 OpenAI 兼容服务商（自建 vLLM/Ollama/第三方网关等）"
-    "可正常用于识别，但无法获取配额，也不会参与配额告警。"
+    "该服务商不提供标准的余额/配额查询接口。配额查询仅支持 SiliconFlow、DeepSeek 以及"
+    "提供官方余额接口的服务商（如多模态大模型槽位指向火山方舟时）；其他 OpenAI 兼容服务商"
+    "（自建 vLLM/Ollama/第三方网关等）可正常用于识别，但无法获取配额，也不会参与配额告警。"
 )
 
 
@@ -239,7 +241,7 @@ def fetch_provider_quota(db: Session, provider: str) -> dict:
     api_key = _cfg(db, f"llm.{provider}.api_key")
     if not api_key:
         return {"provider": provider, "ok": False, "fetched_at": now, "error": "未配置 API Key（请先在设置中填写并保存）"}
-    base_url = _cfg(db, f"llm.{provider}.base_url") or _DEFAULT_BASE_URLS[provider]
+    base_url = _cfg(db, f"llm.{provider}.base_url") or _DEFAULT_BASE_URLS.get(provider, "")
     # 自选/自建服务商（非官方域名）无标准余额接口：明确说明兼容性，不发起请求
     if _quota_provider_of(base_url) is None:
         return {"provider": provider, "ok": False, "fetched_at": now, "error": QUOTA_UNAVAILABLE_MSG}

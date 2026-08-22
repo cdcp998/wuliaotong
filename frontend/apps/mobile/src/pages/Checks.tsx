@@ -64,7 +64,7 @@ export function ChecksPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar
         onBack={() => navigate("/")}
         right={
@@ -85,7 +85,6 @@ export function ChecksPage() {
           <List.Item
             key={c.id}
             onClick={() => navigate(`/checks/${c.id}`)}
-            arrow="horizontal"
             description={`${c.warehouse_name} · ${c.check_date.slice(0, 16)} · ${c.items.length} 项`}
             extra={
               <Tag color={STATUS_TEXT[c.status]?.color}>{STATUS_TEXT[c.status]?.text ?? c.status}</Tag>

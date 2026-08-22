@@ -1,8 +1,8 @@
 """OCR 识别接口（《后端API设计.md》§7）：异步识别任务、拍照快查、商品匹配、AI 建议。
 
-- 送货单（ocr_type=1）：异步任务 → SiliconFlow 一次视觉+文本结构化（不启动本地 OCR；未配置则返回原文行）→ 前端人工确认
+- 送货单（ocr_type=1）：异步任务 → 视觉大模型一次视觉+文本结构化（不启动本地 OCR；未配置则返回原文行）→ 前端人工确认
 - 商品快查（ocr_type=2/3）：同步识别 → 商品库模糊匹配 → 返回候选商品（出入库带入用）
-- 未匹配商品 → POST /ocr/match 调豆包视觉 → ai_suggestion → 人工确认新增/忽略
+- 未匹配商品 → POST /ocr/match 调多模态大模型 → ai_suggestion → 人工确认新增/忽略
 """
 from __future__ import annotations
 
@@ -44,17 +44,17 @@ from app.services.ocr.correction import correct_texts
 from app.services.ocr.generic_parser import is_footer_text, parse_delivery_generic, sanitize_items
 from app.services.ocr.delivery_template import learn_template as learn_delivery_template, match_template as match_delivery_template
 from app.services.ocr.template import parse_delivery as parse_delivery_template
-from app.services.ai.supplier_norm import match_supplier_by_llm
+from app.services.ai.supplier_norm import match_supplier_local
 from app.services.ocr.product_template import build_anchors, load_templates, match_template, save_templates
 from app.services.storage import resolve_storage_path
 
 def _chat_image_with_fallback(db: Session, image_bytes: bytes, prompt: str, scene: str = "") -> str:
-    """多模态大模型（豆包）主用 → 视觉模型（SiliconFlow）备用（任务开关关闭时跳过主用）。"""
+    """多模态大模型主用 → 视觉模型备用（任务开关关闭时跳过主用）。"""
     return chat_image_with_fallback(db, image_bytes, prompt, scene=scene)
 
 
 def _chat_text_with_fallback(db: Session, system: str, user: str, scene: str = "") -> str:
-    """多模态大模型（豆包）文本主用 → 文本模型（DeepSeek）备用（任务开关关闭时直接走备用）。"""
+    """多模态大模型文本主用 → 文本模型备用（任务开关关闭时直接走备用）。"""
     return chat_text_with_fallback(db, system, user, scene=scene)
 
 
@@ -169,7 +169,7 @@ def _sanitize_structured(structured: dict) -> None:
 
 
 def _vision_product(db: Session, image_bytes: bytes) -> dict | None:
-    """多模态大模型（豆包）主用 → 视觉模型（SiliconFlow）备用识别商品外包装/标签。
+    """多模态大模型主用 → 视觉模型备用识别商品外包装/标签。
 
     返回 {product_name, brand, spec, lines}；全部不可用/解析失败返回 None。
     """
@@ -195,7 +195,7 @@ def _vision_product(db: Session, image_bytes: bytes) -> dict | None:
 
 
 def _vision_texts(db: Session, data: bytes) -> list[str]:
-    """多模态大模型（豆包）主用 → 视觉模型（SiliconFlow）备用纯文本识别；全部不可用返回空列表。"""
+    """多模态大模型主用 → 视觉模型备用纯文本识别；全部不可用返回空列表。"""
     try:
         content = _chat_image_with_fallback(db, data, VISION_TEXT_PROMPT, scene="vision_text")
         return [ln.strip() for ln in content.splitlines() if ln.strip()]
@@ -225,7 +225,7 @@ def _recognize_text(db: Session, data: bytes) -> list[str]:
 
 
 def _delivery_by_vision(db: Session, image_bytes: bytes) -> dict | None:
-    """多模态大模型（豆包）主用 → 视觉模型（SiliconFlow）备用识别送货单。
+    """多模态大模型主用 → 视觉模型备用识别送货单。
 
     一次调用完成视觉+文本结构化（含 category_name）；未配置/失败返回 None。
     """
@@ -252,8 +252,8 @@ def _delivery_by_vision(db: Session, image_bytes: bytes) -> dict | None:
         return None
 
 
-def _classify_items_by_deepseek(db: Session, items: list) -> list:
-    """多模态大模型（豆包）文本主用 → 文本模型（DeepSeek）备用做材料分类（补 category_name）。"""
+def _classify_items_by_text(db: Session, items: list) -> list:
+    """多模态大模型文本主用 → 文本模型备用做材料分类（补 category_name）。"""
     if not items:
         return items
     cats = [c.name for c in db.scalars(select(BaseCategory).order_by(BaseCategory.sort, BaseCategory.id)).all()]
@@ -282,8 +282,8 @@ def _classify_items_by_deepseek(db: Session, items: list) -> list:
     return items
 
 
-def _structured_by_deepseek(db: Session, lines: list[str]) -> dict | None:
-    """送货单文本行结构化（多模态大模型文本主用 → DeepSeek 备用）；未配置/失败返回 None（前端人工录入）。
+def _structured_by_text(db: Session, lines: list[str]) -> dict | None:
+    """送货单文本行结构化（多模态大模型文本主用 → 文本模型备用）；未配置/失败返回 None（前端人工录入）。
 
     返回：{"supplier_name": 供应商(可空), "bill_no": 送货单号(可空),
            "items": [{product_name, material_code(可空), spec(可空), qty, price, amount}]}
@@ -339,7 +339,7 @@ def _save_record(file_id: int, ocr_type: int, texts: list[str], structured: dict
 def ocr_recognize(
     file_id: int,
     ocr_type: int = Query(1, ge=1, le=3, description="1 送货单 / 2 商品外包装 / 3 标签型号"),
-    mode: str = Query("auto", description="auto 四级回退（模板→通用提取→视觉→DeepSeek）；template 仅本地；llm 仅大模型"),
+    mode: str = Query("auto", description="auto 四级回退（模板→通用提取→视觉→文本模型）；template 仅本地；llm 仅大模型"),
     user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -363,7 +363,7 @@ def ocr_recognize(
                 texts: list[str] = []
                 structured = None
                 if ocr_type == 1:
-                    # 默认链路（auto/llm）：一次 SiliconFlow 视觉结构化+文本结构化，不启动本地 OCR
+                    # 默认链路（auto/llm）：一次视觉+文本结构化（大模型），不启动本地 OCR
                     # mode=template 仍保留纯本地模板/通用解析（可选，UI 默认 auto 不走这里）
                     if mode == "template":
                         ocr_lines = _local_ocr_lines(s_eng, data)
@@ -379,7 +379,7 @@ def ocr_recognize(
                         if structured:
                             _sanitize_structured(structured)
                     else:
-                        # 使用大模型识别：不启动本地 OCR，仅一次 SiliconFlow 视觉+文本结构化
+                        # 使用大模型识别：不启动本地 OCR，仅一次视觉+文本结构化
                         texts = []
                         boxes = None
                         structured = _delivery_by_vision(s_eng, data)
@@ -392,7 +392,7 @@ def ocr_recognize(
                             structured["lines"] = texts
                         if not texts and structured.get("lines"):
                             texts = structured["lines"]  # 纯视觉模式：识别记录原文用视觉返回行
-                        structured["items"] = _classify_items_by_deepseek(s_eng, structured.get("items") or [])
+                        structured["items"] = _classify_items_by_text(s_eng, structured.get("items") or [])
                         # 新表单成功解析后自动学习版式模板（下次同版式直接命中）
                         if structured.get("items") and not matched_tpl:
                             learn_delivery_template(s_eng, texts, structured)
@@ -478,7 +478,7 @@ def ocr_task_status(task_id: str, db: Session = Depends(get_db)) -> dict:
 
 
 def _guess_product_name_from_lines(db: Session, texts: list[str]) -> str | None:
-    """文本分析兜底：多模态大模型（豆包）文本主用 → 文本模型（DeepSeek）备用。
+    """文本分析兜底：多模态大模型文本主用 → 文本模型备用。
 
     从识别文本行中提取最可能的商品名称；失败/无法判断返回 None。
     """
@@ -508,7 +508,7 @@ def ocr_quick(
 
     识别链路（按序执行，每级失败/未命中自动进入下一级）：
     ① 条码解码（zxing-cpp）→ 条码命中商品库直接返回；
-    ② 多模态/视觉模型识别物品（豆包 → SiliconFlow 兜底链）；
+    ② 多模态/视觉模型识别物品（多模态大模型 → 视觉模型兜底链）；
     ③ 未识别出物品 → 视觉纯文本兜底；
     ④ 本地 OCR 优先级最低（视觉不可用才回退）+ 纠错 + 模板匹配；
     ⑤ 全部不可用 → 统一 5001 提示。
@@ -574,7 +574,7 @@ def ocr_quick(
                 matches.append(m)
                 # 模板自动学习：同一商品 3 次命中同一行 → 自动生成模板（下次秒级匹配，不调大模型）
                 _maybe_learn_template(db, m["product_id"], t, m.get("spec") or "")
-    # ④b 文本分析物品是什么：条码未命中、文本行也匹配不到 → DeepSeek 提取商品名再匹配一次
+    # ④b 文本分析物品是什么：条码未命中、文本行也匹配不到 → 文本模型提取商品名再匹配一次
     if not matches and texts:
         guessed = _guess_product_name_from_lines(db, texts)
         if guessed:
@@ -608,7 +608,7 @@ def barcode_decode(
 
 @router.post("/ocr/classify", dependencies=[Depends(require_permission("pch:in"))])
 def classify_product(req: ClassifyReq, db: Session = Depends(get_db)) -> dict:
-    """根据材料名称+规格用 DeepSeek 判断系统分类（材料入库明细行「分类」自动识别）。
+    """根据材料名称+规格用文本模型判断系统分类（材料入库明细行「分类」自动识别）。
 
     - 识别成功且命中系统分类：{category_id, category_name, matched: true}
     - 识别成功但无匹配分类：{category_id: 0, category_name: "", matched: false}（前端提示手动选择）
@@ -618,14 +618,14 @@ def classify_product(req: ClassifyReq, db: Session = Depends(get_db)) -> dict:
     if not name:
         raise BizError(E_PARAM, "材料名称不能为空")
     items = [{"product_name": name, "spec": req.spec.strip(), "qty": "", "price": "", "amount": ""}]
-    classified = _classify_items_by_deepseek(db, items)
+    classified = _classify_items_by_text(db, items)
     cat_name = ""
     if classified and isinstance(classified, list):
         cat_name = str(classified[0].get("category_name") or "").strip()
     if not cat_name or cat_name == "未分类":
         # 无 category_name 说明大模型未配置/调用失败；「未分类」说明识别成功但无匹配
         if not cat_name:
-            raise BizError(E_LLM_FAILED, "大模型分类不可用：请先在系统设置中配置并启用文本模型（DeepSeek），或稍后重试")
+            raise BizError(E_LLM_FAILED, "大模型分类不可用：请先在系统设置中配置并启用文本模型，或稍后重试")
         return ok({"category_id": 0, "category_name": "", "matched": False})
     cat = db.scalar(select(BaseCategory).where(BaseCategory.name == cat_name).order_by(BaseCategory.id))
     if cat is None:
@@ -752,8 +752,8 @@ def delivery_confirm(
     if supplier_name:
         sup = db.scalar(select(BaseSupplier).where(BaseSupplier.name == supplier_name).order_by(BaseSupplier.id.desc()))
         if sup is None:
-            # AI 别名归一：精确匹配失败时用 DeepSeek 判断是否与已有供应商同一实体（简称/全称/错字）
-            matched_id, matched_name = match_supplier_by_llm(db, supplier_name)
+            # 本地别名归一：精确匹配失败时用本地规则判断是否与已有供应商同一实体（简称/全称/错字）
+            matched_id, matched_name = match_supplier_local(db, supplier_name)
             if matched_id:
                 sup = db.get(BaseSupplier, matched_id)
                 supplier_matched_name = matched_name
@@ -843,7 +843,7 @@ def _match_or_create_product(db: Session, it, name: str) -> BaseProduct | None:
         if not unit_id:
             return None  # 无单位库无法建材料（前端可稍后在入库页选择）
         code = str((db.execute(text("SELECT MAX(CAST(code AS UNSIGNED)) FROM base_product WHERE code REGEXP '^[0-9]+$'")).scalar() or 0) + 1)
-        # DeepSeek 材料分类：匹配/自动创建分类（自动分类入库）。
+        # 文本模型材料分类：匹配/自动创建分类（自动分类入库）。
         # 规则（三级体系）：顶级分类仅作分组——匹配到顶级分类或新建顶级分类时材料保持未分类，
         # 由人工在确认明细里改挂其二级/三级子分类（新建的顶级分类已入树，可直接创建子分类）。
         category_id = 0
@@ -906,9 +906,9 @@ def ocr_match(
     user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """未匹配文本 → 商品识别兜底：本地 OCR 模板 → 视觉模型（豆包/SiliconFlow）分析 → 生成 ai_suggestion。
+    """未匹配文本 → 商品识别兜底：本地 OCR 模板 → 视觉模型分析 → 生成 ai_suggestion。
 
-    豆包关闭不影响：模板命中走模板（秒级），否则用 SiliconFlow 视觉模型；两者均不可用才报错。
+    多模态大模型关闭不影响：模板命中走模板（秒级），否则用视觉模型；两者均不可用才报错。
     """
     record = db.get(OcrRecord, record_id)
     if record is None:
@@ -932,10 +932,10 @@ def ocr_match(
         db.commit()
         db.refresh(suggestion)
         return ok({"suggestion_id": suggestion.id, "product_name": name, "detail": suggestion.suggestion})
-    # 2) 视觉模型分析链：多模态大模型 → SiliconFlow（模型任务开关关闭/未配置时跳过对应模型）
+    # 2) 视觉模型分析链：多模态大模型 → 视觉模型（模型任务开关关闭/未配置时跳过对应模型）
     file_bytes = _read_file_bytes(db, record.file_id, user)
     llm = None
-    chain = [n for n in ("doubao", "siliconflow") if model_scene_enabled(db, n, "match_vision")]
+    chain = [n for n in ("mm_llm", "siliconflow") if model_scene_enabled(db, n, "match_vision")]
     for llm_name in chain:
         try:
             llm = get_llm(db, llm_name)

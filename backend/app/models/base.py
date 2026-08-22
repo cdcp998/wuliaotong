@@ -126,11 +126,15 @@ class BaseShelf(TimestampMixin, Base):
 
 
 class BaseLocation(TimestampMixin, Base):
+    """库位（隔）：货架内的一个储物格，由 层 × 行 × 列 定位（2.5D 视图数据基础）。"""
+
     __tablename__ = "base_location"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     warehouse_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     shelf_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    layer_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    layer_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    row_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    col_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     remark: Mapped[str] = mapped_column(String(255), nullable=False, default="")

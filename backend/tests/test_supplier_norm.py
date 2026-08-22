@@ -15,13 +15,13 @@ def test_local_match_by_containment():
         sup = BaseSupplier(code="SUP" + tag, name=f"{tag}五金有限公司", remark="")
         db.add(sup)
         db.commit()
-        sid, sname = supplier_norm.match_supplier_by_llm(db, f"{tag}五金")
+        sid, sname = supplier_norm.match_supplier_local(db, f"{tag}五金")
         assert sid == sup.id and sname == sup.name
 
 
 def test_local_no_match():
     with SessionLocal() as db:
-        assert supplier_norm.match_supplier_by_llm(db, "完全不存在的供应商xyz123") == (0, "")
+        assert supplier_norm.match_supplier_local(db, "完全不存在的供应商xyz123") == (0, "")
 
 
 def test_merge_suppliers_transfers_and_disables():

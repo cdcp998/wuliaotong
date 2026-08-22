@@ -592,8 +592,8 @@ def export_report(
             p = prod_map.get(log.product_id)
             wh = wh_map.get(log.warehouse_id)
             loc = loc_map.get(log.location_id)
-            # 库位显示名：仓库名-货架编码-层号（界面/导出不显示 WH 仓库编码，避免混淆）
-            loc_name = f"{wh.name if wh else ''}-{shelf_map[loc.shelf_id].code if loc and loc.shelf_id in shelf_map else ''}-{loc.layer_no:02d}" if loc else ""
+            # 库位显示名：仓库名-货架编码-层行列（界面/导出不显示 WH 仓库编码，避免混淆）
+            loc_name = f"{wh.name if wh else ''}-{shelf_map[loc.shelf_id].code if loc and loc.shelf_id in shelf_map else ''}-L{loc.layer_no}R{loc.row_no}C{loc.col_no}" if loc else ""
             data.append(
                 [
                     log.created_at.strftime("%Y-%m-%d %H:%M:%S"),
@@ -621,7 +621,7 @@ def export_report(
 
 @router.post("/reports/ai-summary", dependencies=[Depends(require_permission("report:view"))])
 def report_ai_summary(body: dict, db: Session = Depends(get_db)) -> dict:
-    """AI 月报摘要（P9-P1⑦）：服务端聚合经营数据 → DeepSeek 生成 200-300 字摘要（未配置降级规则版）。"""
+    """AI 月报摘要（P9-P1⑦）：服务端聚合经营数据 → 本地规则拼接生成经营摘要（免费即时）。"""
     try:
         start = date.fromisoformat(str(body.get("start") or ""))
         end = date.fromisoformat(str(body.get("end") or ""))

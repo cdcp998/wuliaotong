@@ -82,7 +82,7 @@ export function OutboundPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate("/")}>其他出库</NavBar>
       <List header="出库类型">
         <List.Item>
@@ -147,7 +147,7 @@ export function OutboundPage() {
             {r.product.name}
           </List.Item>
         ))}
-        <List.Item onClick={() => setPickerOpen(true)} arrow="horizontal">
+        <List.Item onClick={() => setPickerOpen(true)}>
           + 添加材料
         </List.Item>
       </List>

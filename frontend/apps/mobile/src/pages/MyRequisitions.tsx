@@ -62,7 +62,7 @@ export function MyRequisitionsPage() {
   }, []);
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate("/")}>我的申请</NavBar>
       <List>
         {list.map((r) => (
@@ -87,7 +87,7 @@ export function MyRequisitionsPage() {
           </div>
         )}
         {!loading && !list.length && <List.Item>暂无申请记录</List.Item>}
-        <List.Item onClick={() => navigate("/requisitions/new")} arrow="horizontal">
+        <List.Item onClick={() => navigate("/requisitions/new")}>
           + 新建领用申请
         </List.Item>
       </List>

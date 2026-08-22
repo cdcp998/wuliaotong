@@ -105,12 +105,135 @@ button:focus-visible,
   background: rgba(22, 104, 220, 0.03);
 }
 
-/* ---------- 6. 文本选区 ---------- */
+/* ---------- 5c. 2.5D 货架视图：库位（隔）3D 方块 ----------
+ * 每个格子 = 一个带顶面/右侧面的 3D 方块（前后/右面伪元素），
+ * 格子内直接展示材料名称 + 数量；空/未建为虚线。 */
+.loc-cell3d {
+  position: relative;
+  min-height: 66px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.loc-cell3d:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  z-index: 3;
+}
+/* 顶面（2.5D 立体感） */
+.loc-cell3d::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 4px;
+  right: -8px;
+  height: 8px;
+  background: #e6e6e6;
+  border-radius: 4px 4px 0 0;
+  transform: skewX(-42deg);
+  z-index: -1;
+}
+/* 右侧面（2.5D 立体感） */
+.loc-cell3d::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: -8px;
+  right: -8px;
+  width: 8px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 0 4px 4px 0;
+  transform: skewY(-42deg);
+  z-index: -1;
+}
+/* 空位/未建库位：无 3D 面、虚线 */
+.loc-cell3d-empty {
+  border-style: dashed;
+  cursor: default;
+  opacity: 0.55;
+}
+.loc-cell3d-empty::before,
+.loc-cell3d-empty::after {
+  display: none;
+}
+.loc-cell3d-label {
+  font-size: 10px;
+  color: #8c8c8c;
+  line-height: 1;
+}
+.loc-cell3d-mat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.loc-cell3d-mat-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1f2329;
+}
+.loc-cell3d-mat-qty {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #1668dc;
+}
+.loc-cell3d-more {
+  font-size: 10px;
+  color: #646a73;
+}
+.loc-cell3d-empty-text {
+  font-size: 11px;
+  color: #a6adb4;
+  line-height: 1;
+}
+/* 货架层板（每层一个托盘面板） */
+.rack-layer {
+  background: #fafbfc;
+  border: 1px solid #eceff3;
+  border-bottom-width: 3px;
+  border-radius: 8px;
+  padding: 8px 10px 10px;
+  margin-bottom: 10px;
+}
+.rack-layer-title {
+  font-size: 11px;
+  color: #8c8c8c;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+/* ---------- 6. 页面进场动画（路由切换）：内容区淡入 + 轻微上移 ----------
+ * .wlt-page 包裹 AppLayout 内容区（key=location.pathname，路由切换即重挂载），
+ * 覆盖全部桌面业务页；backwards fill 保证进入瞬间从透明开始，不与页内过渡冲突。 */
+.wlt-page {
+  animation: wlt-page-in 0.34s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+@keyframes wlt-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- 7. 文本选区 ---------- */
 ::selection {
   background: rgba(22, 104, 220, 0.18);
 }
 
-/* ---------- 7. 减少动态效果偏好（无障碍）：全局降级动画/过渡 ---------- */
+/* ---------- 8. 减少动态效果偏好（无障碍）：全局降级动画/过渡 ---------- */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -41,14 +41,14 @@ SETTINGS_KEYS: dict[str, str] = {
     "session.expire_hours": "str",
     "ocr.engine": "str",  # rapidocr / paddle
     "ocr.model_version": "str",  # PP-OCRv4 / PP-OCRv5 / PP-OCRv6（paddle 引擎模型版本）
-    "llm.doubao.enabled": "str",  # 1 启用 / 0 关闭（关闭后拍照识别未匹配不再调用豆包分析并提示）
-    # 多模态大模型（主用）任务开关：1 启用（默认）/ 0 关闭（该任务跳过主用，直接走备用模型）
-    "llm.doubao.scene.match_vision": "str",  # 送货单参考匹配（主用）
-    "llm.doubao.scene.vision_product": "str",  # 拍照识别商品（主用）
-    "llm.doubao.scene.classify_items": "str",  # 材料自动分类（主用）
-    "llm.doubao.scene.ocr_correct": "str",  # OCR 文本纠错（主用）
-    "llm.doubao.scene.vision_text": "str",  # 视觉文字兜底（主用）
-    "llm.doubao.scene.structured": "str",  # 送货单结构化（主用）
+    "llm.mm_llm.enabled": "str",  # 1 启用 / 0 关闭（关闭后拍照识别未匹配不再调用多模态大模型分析并提示）
+    # 多模态大模型（MM-LLM，主用）任务开关：1 启用（默认）/ 0 关闭（该任务跳过主用，直接走备用模型）
+    "llm.mm_llm.scene.match_vision": "str",  # 送货单参考匹配（主用）
+    "llm.mm_llm.scene.vision_product": "str",  # 拍照识别商品（主用）
+    "llm.mm_llm.scene.classify_items": "str",  # 材料自动分类（主用）
+    "llm.mm_llm.scene.ocr_correct": "str",  # OCR 文本纠错（主用）
+    "llm.mm_llm.scene.vision_text": "str",  # 视觉文字兜底（主用）
+    "llm.mm_llm.scene.structured": "str",  # 送货单结构化（主用）
     # 视觉模型（备用）任务开关
     "llm.siliconflow.scene.vision_delivery": "str",  # 送货单识别（备用）
     "llm.siliconflow.scene.vision_product": "str",  # 拍照识别商品（备用）
@@ -59,9 +59,9 @@ SETTINGS_KEYS: dict[str, str] = {
     "llm.deepseek.scene.classify_items": "str",  # 材料自动分类（备用）
     "llm.deepseek.scene.structured": "str",  # 送货单结构化（备用）
     "llm.deepseek.enabled": "str",  # 1 启用 / 0 关闭（关闭后送货单结构化仅用本地模板并提示）
-    "llm.doubao.api_key": "secret",
-    "llm.doubao.base_url": "str",
-    "llm.doubao.model": "str",
+    "llm.mm_llm.api_key": "secret",
+    "llm.mm_llm.base_url": "str",
+    "llm.mm_llm.model": "str",
     "llm.deepseek.api_key": "secret",
     "llm.deepseek.base_url": "str",
     "llm.deepseek.model": "str",
@@ -88,12 +88,49 @@ SETTINGS_KEYS: dict[str, str] = {
     "quota.refresh.interval_minutes": "str",  # 配额自动获取间隔（分钟），默认 60
     "quota.warning.threshold.siliconflow": "str",  # 视觉模型剩余余额低于该值（元）时告警
     "quota.warning.threshold.deepseek": "str",  # 文本模型剩余余额低于该值（元）时告警
-    "quota.warning.threshold.doubao": "str",  # 豆包剩余配额低于该值（与服务商返回数值同单位）时告警
+    "quota.warning.threshold.mm_llm": "str",  # 多模态大模型剩余配额低于该值（与服务商返回数值同单位）时告警
 }
 
 
 def _mask(value: str) -> str:
     return f"****{value[-4:]}" if len(value) > 4 else "****"
+
+
+# 旧版配置键迁移：多模态大模型槽位由 llm.doubao.* 更名为 llm.mm_llm.*（通用化，不绑定供应商）
+_LEGACY_DOUBAO_SUFFIXES = (
+    "enabled", "api_key", "base_url", "model",
+    "scene.match_vision", "scene.vision_product", "scene.classify_items",
+    "scene.ocr_correct", "scene.vision_text", "scene.structured",
+)
+
+
+def _migrate_legacy_doubao_config(db: Session) -> None:
+    """一次性迁移旧版配置键 llm.doubao.* → llm.mm_llm.*（含配额阈值键）；新键已有值时跳过，不覆盖。"""
+    try:
+        changed = False
+        for suffix in _LEGACY_DOUBAO_SUFFIXES:
+            old = f"llm.doubao.{suffix}"
+            new = f"llm.mm_llm.{suffix}"
+            if db.scalar(select(SysConfig).where(SysConfig.config_key == new)) is not None:
+                continue
+            row = db.scalar(select(SysConfig).where(SysConfig.config_key == old))
+            if row is None:
+                continue
+            db.add(SysConfig(config_key=new, config_value=row.config_value, remark=row.remark or "系统设置"))
+            db.delete(row)
+            changed = True
+        old_th = "quota.warning.threshold.doubao"
+        new_th = "quota.warning.threshold.mm_llm"
+        if db.scalar(select(SysConfig).where(SysConfig.config_key == new_th)) is None:
+            row = db.scalar(select(SysConfig).where(SysConfig.config_key == old_th))
+            if row is not None:
+                db.add(SysConfig(config_key=new_th, config_value=row.config_value, remark=row.remark or "系统设置"))
+                db.delete(row)
+                changed = True
+        if changed:
+            db.commit()
+    except Exception:  # noqa: BLE001 迁移失败不影响设置读写
+        db.rollback()
 
 
 @router.get("/health")
@@ -126,7 +163,7 @@ def health(db: Session = Depends(get_db)) -> dict:
             "configured": bool(llm_cfg.get(f"llm.{name}.api_key")),
             "model": llm_cfg.get(f"llm.{name}.model", ""),
         }
-        for name in ("doubao", "deepseek", "siliconflow")
+        for name in ("mm_llm", "deepseek", "siliconflow")
     }
     return ok(
         {
@@ -145,6 +182,7 @@ def health(db: Session = Depends(get_db)) -> dict:
 @router.get("/settings", dependencies=[Depends(require_permission("sys:config"))])
 def get_settings(db: Session = Depends(get_db)) -> dict:
     """读取系统设置；密钥脱敏（只显示 **** 后四位）。"""
+    _migrate_legacy_doubao_config(db)  # 旧版 llm.doubao.* 配置键一次性迁移到 llm.mm_llm.*
     out: dict[str, str] = {}
     for key, kind in SETTINGS_KEYS.items():
         cfg = db.scalar(select(SysConfig).where(SysConfig.config_key == key))
@@ -203,7 +241,7 @@ def _sys_config(db: Session, key: str) -> str:
 
 
 def _fetch_models(base_url: str, api_key: str) -> list[dict]:
-    """调用 OpenAI 兼容 /models 接口拉取模型列表（SiliconFlow/DeepSeek 均支持）。"""
+    """调用 OpenAI 兼容 /models 接口拉取模型列表（任意兼容服务商均支持）。"""
     try:
         resp = httpx.get(
             f"{base_url.rstrip('/')}/models",
@@ -246,15 +284,17 @@ def list_deepseek_models(db: Session = Depends(get_db)) -> dict:
     return ok({"models": _fetch_models(base_url, key)})
 
 
-@router.post("/llm/doubao/models", dependencies=[Depends(require_permission("sys:config"))])
-def list_doubao_models(db: Session = Depends(get_db)) -> dict:
-    """用已保存的豆包 Key 拉取模型列表（设置页保存后展示，供选择模型）。"""
-    if _sys_config(db, "llm.doubao.enabled") == "0":
+@router.post("/llm/mm_llm/models", dependencies=[Depends(require_permission("sys:config"))])
+def list_mm_llm_models(db: Session = Depends(get_db)) -> dict:
+    """用已保存的多模态大模型 Key 拉取模型列表（设置页保存后展示，供选择模型）。"""
+    if _sys_config(db, "llm.mm_llm.enabled") == "0":
         raise BizError(E_PARAM, "多模态大模型未启用：请先在系统设置中打开「启用多模态大模型」开关并保存")
-    key = _sys_config(db, "llm.doubao.api_key")
+    key = _sys_config(db, "llm.mm_llm.api_key")
     if not key:
         raise BizError(E_PARAM, "请先填写并保存多模态大模型 API Key，再获取模型列表")
-    base_url = _sys_config(db, "llm.doubao.base_url") or "https://ark.cn-beijing.volces.com/api/v3"
+    base_url = _sys_config(db, "llm.mm_llm.base_url")
+    if not base_url:
+        raise BizError(E_PARAM, "请先填写并保存多模态大模型 Base URL，再获取模型列表")
     return ok({"models": _fetch_models(base_url, key)})
 
 

@@ -16,6 +16,7 @@ from sqlalchemy import select, text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app import __version__
 from app.api import auth as auth_api
 from app.api import admin as admin_api
 from app.api import advanced as advanced_api
@@ -23,6 +24,7 @@ from app.api import base_data as base_data_api
 from app.api import files as files_api
 from app.api import geo as geo_api
 from app.api import init as init_api
+from app.api import menu as menu_api
 from app.api import notification as notification_api
 from app.api import ocr as ocr_api
 from app.api import requisition as requisition_api
@@ -81,7 +83,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
+    version=__version__,  # 单一事实源（app/__init__.py），避免与 __version__ 漂移
     lifespan=lifespan,
     # 生产环境默认关闭 API 文档（DEBUG=true 时开放），避免暴露完整攻击面
     docs_url="/api/docs" if settings.debug else None,
@@ -172,18 +174,160 @@ _AUDIT_MAX_PENDING = 500  # 审计落库任务并发上限（防 executor 队列
 _audit_semaphore = threading.Semaphore(_AUDIT_MAX_PENDING)
 _audit_drop_logged_at = 0.0
 
+# ============================ 操作日志中文化（路由 → 具体动作） ============================
+# 写操作审计：把「模块(英文URL段) + 方法(POST/PUT/DELETE)」翻译为中文、具体化的操作描述。
+# 匹配规则：(方法, 归一化路径（数字段→{id}）) → 中文动作；未匹配走模块+动词兜底。
+
+_AUDIT_MODULES = {
+    "auth": "认证", "login": "认证", "logout": "认证", "password": "认证", "forgot": "认证",
+    "system": "系统", "settings": "系统设置", "admin": "系统管理",
+    "users": "用户", "roles": "角色", "register-applies": "注册审核", "logs": "日志",
+    "backups": "备份", "products": "材料", "categories": "分类", "suppliers": "供应商",
+    "units": "单位", "warehouses": "仓库", "shelves": "货架", "locations": "库位",
+    "departments": "组织单位", "delete-reviews": "删除审核", "menus": "导航管理",
+    "purchase-in": "采购入库", "purchase-plans": "采购计划", "opening": "期初",
+    "transfers": "库存调拨", "checks": "盘点", "other-io": "其他出入库",
+    "requisitions": "领用申请", "notifications": "通知", "ocr": "OCR/大模型",
+    "ai-suggestions": "AI建议", "files": "文件", "storages": "存储", "llm-logs": "AI调用日志",
+    "storage": "存储", "geo": "定位", "init": "初始化", "-": "其他",
+}
+
+_AUDIT_METHOD_VERB = {"POST": "新增", "PUT": "修改", "DELETE": "删除"}
+
+_AUDIT_ACTIONS: dict[tuple[str, str], str] = {
+    ("POST", "/login"): "登录系统",
+    ("POST", "/logout"): "退出登录",
+    ("PUT", "/password"): "修改密码",
+    ("POST", "/forgot"): "申请找回密码",
+    ("POST", "/forgot/reset"): "重置密码",
+    ("POST", "/register"): "提交注册申请",
+    ("PUT", "/settings"): "修改系统设置",
+    ("POST", "/watermark/preview"): "预览水印效果",
+    ("POST", "/users"): "新增用户",
+    ("PUT", "/users/{id}"): "编辑用户",
+    ("DELETE", "/users/{id}"): "删除用户",
+    ("POST", "/roles"): "新增角色",
+    ("PUT", "/roles/{id}"): "编辑角色",
+    ("DELETE", "/roles/{id}"): "删除角色",
+    ("PUT", "/roles/{id}/permissions"): "更新角色权限",
+    ("POST", "/register-applies/{id}/approve"): "审核通过注册申请",
+    ("POST", "/register-applies/{id}/reject"): "驳回注册申请",
+    ("POST", "/categories"): "新增分类",
+    ("PUT", "/categories/{id}"): "编辑分类",
+    ("DELETE", "/categories/{id}"): "删除分类",
+    ("POST", "/products"): "新增材料",
+    ("PUT", "/products/{id}"): "编辑材料",
+    ("DELETE", "/products/{id}"): "停用材料",
+    ("PUT", "/products/{id}/category"): "修改材料分类",
+    ("POST", "/products/import"): "批量导入材料",
+    ("POST", "/products/dedupe-scan"): "材料查重扫描",
+    ("POST", "/products/{id}/mark-duplicate"): "标记材料重复",
+    ("POST", "/suppliers"): "新增供应商",
+    ("PUT", "/suppliers/{id}"): "编辑供应商",
+    ("DELETE", "/suppliers/{id}"): "停用供应商",
+    ("POST", "/suppliers/merge"): "合并供应商",
+    ("POST", "/suppliers/import"): "批量导入供应商",
+    ("POST", "/delete-reviews"): "提交删除申请",
+    ("POST", "/delete-reviews/{id}/approve"): "通过删除申请并执行删除",
+    ("POST", "/delete-reviews/{id}/reject"): "驳回删除申请",
+    ("POST", "/warehouses"): "新增仓库",
+    ("PUT", "/warehouses/{id}"): "编辑仓库",
+    ("DELETE", "/warehouses/{id}"): "停用仓库",
+    ("POST", "/shelves"): "新增货架（批量生成库位）",
+    ("PUT", "/shelves/{id}"): "编辑货架",
+    ("DELETE", "/shelves/{id}"): "删除货架",
+    ("POST", "/locations"): "新增库位",
+    ("PUT", "/locations/{id}"): "编辑库位",
+    ("DELETE", "/locations/{id}"): "删除库位",
+    ("POST", "/departments"): "新增组织单位",
+    ("PUT", "/departments/{id}"): "编辑组织单位",
+    ("DELETE", "/departments/{id}"): "删除组织单位",
+    ("PUT", "/departments/{id}/shelves"): "设置单位可用货架",
+    ("POST", "/menus"): "新增导航菜单",
+    ("PUT", "/menus/{id}"): "编辑导航菜单",
+    ("DELETE", "/menus/{id}"): "删除导航菜单",
+    ("POST", "/purchase-in"): "材料采购入库",
+    ("POST", "/purchase-in/{id}/void"): "作废入库单（冲销库存）",
+    ("POST", "/purchase-plans"): "新建采购计划单",
+    ("PUT", "/purchase-plans/{id}"): "编辑采购计划单",
+    ("POST", "/purchase-plans/{id}/submit"): "提交采购计划单",
+    ("POST", "/purchase-plans/{id}/void"): "作废采购计划单",
+    ("POST", "/opening"): "期初建账",
+    ("PUT", "/opening/{id}"): "编辑期初",
+    ("POST", "/opening/{id}/post"): "期初过账",
+    ("POST", "/opening/import"): "批量导入期初",
+    ("POST", "/transfers"): "新增库存调拨",
+    ("POST", "/transfers/{id}/audit"): "调拨审核通过",
+    ("POST", "/transfers/{id}/reject"): "驳回调拨",
+    ("POST", "/transfers/{id}/void"): "作废库存调拨",
+    ("POST", "/checks"): "新建盘点单",
+    ("PUT", "/checks/{id}/items"): "更新盘点明细",
+    ("POST", "/checks/{id}/audit"): "盘点审核",
+    ("POST", "/other-io"): "其他出入库",
+    ("POST", "/other-io/{id}/void"): "作废其他出入库单",
+    ("POST", "/requisitions"): "提交领用申请",
+    ("PUT", "/requisitions/{id}"): "编辑领用申请",
+    ("POST", "/requisitions/{id}/cancel"): "取消领用申请",
+    ("POST", "/requisitions/{id}/audit"): "领用审计（通过/驳回）",
+    ("PUT", "/requisitions/{id}/display"): "更新申请显示状态",
+    ("PUT", "/requisitions/{id}/work-location"): "更新工作地点",
+    ("POST", "/requisitions/{id}/work-done"): "完成工作（拍照留痕）",
+    ("POST", "/ocr/recognize"): "送货单识别",
+    ("POST", "/ocr/quick"): "拍照快查识别",
+    ("POST", "/ocr/classify"): "材料自动分类",
+    ("POST", "/ocr/template/train"): "训练本地 OCR 模板",
+    ("DELETE", "/ocr/templates/{id}"): "删除 OCR 模板",
+    ("POST", "/ocr/delivery/confirm"): "送货单确认并入库",
+    ("POST", "/ocr/match"): "AI 建议分析",
+    ("POST", "/ai-suggestions/{id}/accept"): "采纳 AI 建议新增材料",
+    ("POST", "/ai-suggestions/{id}/ignore"): "忽略 AI 建议",
+    ("PUT", "/notifications/{id}/read"): "标记通知已读",
+    ("PUT", "/notifications/read-all"): "全部通知标记已读",
+    ("DELETE", "/notifications/{id}"): "删除通知",
+    ("POST", "/notifications/delete"): "批量删除通知",
+    ("DELETE", "/notifications"): "清空通知",
+    ("POST", "/files/upload"): "上传文件",
+    ("POST", "/storages"): "新增存储位置",
+    ("PUT", "/storages/{id}"): "编辑存储位置",
+    ("DELETE", "/storages/{id}"): "删除存储位置",
+    ("DELETE", "/llm-logs"): "批量删除 AI 调用日志",
+    ("POST", "/backups"): "创建数据备份",
+    ("DELETE", "/backups/{id}"): "删除备份文件",
+    ("POST", "/ocr/install-paddle"): "安装 PP-OCR 引擎",
+}
+
+
+def _audit_normalize_path(path: str) -> str:
+    """归一化路径：去掉 api 前缀，数字段 → {id}（如 /api/v1/products/123/category → /products/{id}/category）。"""
+    p = path.removeprefix(settings.api_prefix)
+    segs = ["{id}" if seg.isdigit() else seg for seg in p.split("/") if seg]
+    return "/" + "/".join(segs) if segs else "/"
+
+
+def _audit_action(method: str, path: str) -> tuple[str, str]:
+    """操作描述 + 中文模块（未匹配路由按模块+动词兜底）。"""
+    raw = path.removeprefix(settings.api_prefix)
+    seg = raw.split("/")[1] if raw.count("/") >= 1 else "-"
+    module = _AUDIT_MODULES.get(seg, _AUDIT_MODULES.get("-", "其他"))
+    norm = _audit_normalize_path(path)
+    hit = _AUDIT_ACTIONS.get((method, norm))
+    if hit:
+        return hit, module
+    verb = _AUDIT_METHOD_VERB.get(method, "操作")
+    return f"{module}{verb}", module
+
 
 def _audit_log(db, request: Request, status_code: int, duration_ms: int) -> None:
     """写操作审计（sys_operation_log）。fire-and-forget，失败不影响主流程。"""
     try:
         user = resolve_session_user(db, request.cookies.get(settings.session_cookie_name))
-        module = request.url.path.removeprefix(settings.api_prefix).split("/")[1] or "-"
+        action, module = _audit_action(request.method, request.url.path)
         db.add(
             SysOperationLog(
                 user_id=user.id if user else 0,
                 username=user.username if user else "",
                 module=module,
-                action=request.method,
+                action=action,
                 method=request.method,
                 url=request.url.path,
                 params=json.dumps(dict(request.query_params), ensure_ascii=False)[:2000],
@@ -258,6 +402,7 @@ app.include_router(requisition_api.router, prefix=settings.api_prefix)
 app.include_router(report_api.router, prefix=settings.api_prefix)
 app.include_router(ocr_api.router, prefix=settings.api_prefix)
 app.include_router(notification_api.router, prefix=settings.api_prefix)
+app.include_router(menu_api.router, prefix=settings.api_prefix)
 app.include_router(files_api.router, prefix=settings.api_prefix)
 app.include_router(storage_api.router, prefix=settings.api_prefix)
 app.include_router(system_api.router, prefix=settings.api_prefix)

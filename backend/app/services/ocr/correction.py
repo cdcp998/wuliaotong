@@ -1,4 +1,4 @@
-"""OCR 识别文本纠错与归一化（DeepSeek 文本模型）：修正错别字/全半角/多余空格/单位写法，
+"""OCR 识别文本纠错与归一化（文本模型）：修正错别字/全半角/多余空格/单位写法，
 不改变语义、不增删行。未启用/未配置/调用失败一律原样返回（降级不影响主流程）。
 
 开关：sys_config ai.correct_enabled（默认 1，设置 0 关闭走原样）。
@@ -21,12 +21,12 @@ CORRECT_PROMPT = (
 
 
 def _chat_text_with_fallback(db: Session, system: str, user: str, scene: str = "") -> str:
-    """多模态大模型（豆包）文本主用 → 文本模型（DeepSeek）备用（任务开关关闭时直接走备用）。"""
+    """多模态大模型文本主用 → 文本模型备用（任务开关关闭时直接走备用）。"""
     return chat_text_with_fallback(db, system, user, scene=scene)
 
 
 def correct_texts(db: Session, lines: list[str]) -> list[str]:
-    """DeepSeek 纠错归一；开关关闭/未配置/调用失败/行数不一致时返回原样。"""
+    """文本模型纠错归一；开关关闭/未配置/调用失败/行数不一致时返回原样。"""
     if not lines:
         return lines
     cfg = db.scalar(select(SysConfig).where(SysConfig.config_key == "ai.correct_enabled"))

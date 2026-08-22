@@ -168,13 +168,15 @@ CREATE TABLE sys_notification (
   user_id    BIGINT      NOT NULL COMMENT '接收人 → sys_user.id',
   title      VARCHAR(100) NOT NULL COMMENT '标题',
   content    VARCHAR(500) NOT NULL DEFAULT '',
-  biz_type   VARCHAR(30) NOT NULL DEFAULT '' COMMENT '预警/待办/审批/ocr',
+  biz_type   VARCHAR(30) NOT NULL DEFAULT '' COMMENT '预警/待办/审批',
+  link       VARCHAR(255) NOT NULL DEFAULT '' COMMENT '业务联动跳转目标（移动端路由），兼作业务去重/自动已读唯一键',
   is_read    TINYINT     NOT NULL DEFAULT 0 COMMENT '1 已读 / 0 未读',
   created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_user_read (user_id, is_read),
-  KEY idx_user_time (user_id, created_at)
+  KEY idx_user_time (user_id, created_at),
+  KEY idx_link (link)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='站内通知';
 
 DROP TABLE IF EXISTS sys_backup_log;
@@ -407,8 +409,10 @@ CREATE TABLE base_location (
   id           BIGINT NOT NULL AUTO_INCREMENT,
   warehouse_id BIGINT      NOT NULL COMMENT '仓库',
   shelf_id     BIGINT      NOT NULL COMMENT '货架',
-  layer_no     INT         NOT NULL COMMENT '层号',
-  code         VARCHAR(50) NOT NULL COMMENT '库位编码，如 CK01-J01-03',
+  layer_no     INT         NOT NULL DEFAULT 1 COMMENT '层号',
+  row_no       INT         NOT NULL DEFAULT 1 COMMENT '行号',
+  col_no       INT         NOT NULL DEFAULT 1 COMMENT '列号',
+  code         VARCHAR(50) NOT NULL COMMENT '库位编码，如 CK01-J01-L1R2C3（层行隔）',
   remark       VARCHAR(255) NOT NULL DEFAULT '',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -416,7 +420,7 @@ CREATE TABLE base_location (
   UNIQUE KEY uk_code (code),
   KEY idx_warehouse (warehouse_id),
   KEY idx_shelf (shelf_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库位（仓库-货架-层）';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库位（隔：货架内层×行×列定位）';
 
 -- ============================ 4. 库存核心 ============================
 
@@ -507,6 +511,8 @@ CREATE TABLE pch_purchase_in (
   operator_id  BIGINT       NOT NULL DEFAULT 0,
   ocr_record_id BIGINT      NOT NULL DEFAULT 0 COMMENT '来源送货单 OCR 识别记录 → ocr_record.id（0=手工录入）',
   ocr_bill_no   VARCHAR(60) NOT NULL DEFAULT '' COMMENT '送货单号（OCR 识别/手工填写，可空）',
+  plan_id       BIGINT      NOT NULL DEFAULT 0 COMMENT '来源采购计划单 → pch_purchase_plan.id（0=无计划手工入库）',
+  delivery_file_ids TEXT    NULL COMMENT '送货单图片存底：JSON 数组 [file_id,...]，最多 10 张',
   remark       VARCHAR(255) NOT NULL DEFAULT '',
   created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -515,8 +521,47 @@ CREATE TABLE pch_purchase_in (
   KEY idx_supplier (supplier_id),
   KEY idx_warehouse (warehouse_id),
   KEY idx_ocr (ocr_record_id),
+  KEY idx_plan (plan_id),
   KEY idx_status_time (status, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采购入库单';
+
+DROP TABLE IF EXISTS pch_purchase_plan;
+CREATE TABLE pch_purchase_plan (
+  id            BIGINT NOT NULL AUTO_INCREMENT,
+  bill_no       VARCHAR(30)  NOT NULL COMMENT '单号 JH...',
+  supplier_id   BIGINT       NOT NULL DEFAULT 0 COMMENT '供应商（可空）',
+  warehouse_id  BIGINT       NOT NULL,
+  total_qty     DECIMAL(12,3) NOT NULL DEFAULT 0,
+  total_amount  DECIMAL(12,2) NOT NULL DEFAULT 0,
+  status        TINYINT      NOT NULL DEFAULT 0 COMMENT '0 草稿 / 1 已提交 / 2 部分入库 / 3 已完成 / -1 作废',
+  plan_date     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '计划日期',
+  remark        VARCHAR(255) NOT NULL DEFAULT '',
+  creator_id    BIGINT       NOT NULL DEFAULT 0,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_bill_no (bill_no),
+  KEY idx_supplier (supplier_id),
+  KEY idx_status_time (status, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采购计划单';
+
+DROP TABLE IF EXISTS pch_purchase_plan_item;
+CREATE TABLE pch_purchase_plan_item (
+  id          BIGINT NOT NULL AUTO_INCREMENT,
+  plan_id     BIGINT        NOT NULL COMMENT '→ pch_purchase_plan.id',
+  product_id  BIGINT        NOT NULL,
+  planned_qty DECIMAL(12,3) NOT NULL COMMENT '计划数量（实收数量在入库单上按实际填，可分批）',
+  unit_name   VARCHAR(20)   NOT NULL DEFAULT '' COMMENT '单位（快照）',
+  est_price   DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '预计单价（仅估金额，不影响入库实际价格）',
+  amount      DECIMAL(12,2) NOT NULL DEFAULT 0,
+  remark      VARCHAR(255)  NOT NULL DEFAULT '',
+  sort        INT           NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_plan (plan_id),
+  KEY idx_product (product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采购计划明细';
 
 DROP TABLE IF EXISTS pch_purchase_in_item;
 CREATE TABLE pch_purchase_in_item (
@@ -699,7 +744,7 @@ CREATE TABLE ocr_record (
   id                BIGINT NOT NULL AUTO_INCREMENT,
   file_id           BIGINT      NOT NULL COMMENT '→ sys_file.id',
   ocr_type          TINYINT     NOT NULL COMMENT '1 送货单 / 2 商品外包装 / 3 标签型号',
-  engine            VARCHAR(20) NOT NULL DEFAULT 'paddle' COMMENT 'rapidocr/paddle/doubao/deepseek',
+  engine            VARCHAR(20) NOT NULL DEFAULT 'paddle' COMMENT 'rapidocr/paddle/mm_llm/deepseek',
   raw_result        JSON        NULL COMMENT '引擎原始输出',
   structured        JSON        NULL COMMENT '结构化结果',
   matched_product_id BIGINT     NOT NULL DEFAULT 0 COMMENT '匹配到的商品',
@@ -719,7 +764,7 @@ CREATE TABLE ai_suggestion (
   id             BIGINT NOT NULL AUTO_INCREMENT,
   ocr_record_id  BIGINT       NOT NULL COMMENT '→ ocr_record.id',
   product_name   VARCHAR(100) NOT NULL COMMENT '大模型给出的商品名',
-  model          VARCHAR(20)  NOT NULL COMMENT 'doubao / deepseek',
+  model          VARCHAR(20)  NOT NULL COMMENT 'mm_llm / deepseek',
   suggestion     JSON         NULL COMMENT '建议的商品资料',
   status         TINYINT      NOT NULL DEFAULT 1 COMMENT '1 待处理 / 2 已新增商品 / 3 已忽略',
   new_product_id BIGINT       NOT NULL DEFAULT 0 COMMENT '确认新增后的商品 id',
@@ -731,6 +776,43 @@ CREATE TABLE ai_suggestion (
   KEY idx_ocr (ocr_record_id),
   KEY idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='大模型商品建议';
+
+DROP TABLE IF EXISTS sys_delete_review;
+CREATE TABLE sys_delete_review (
+  id             BIGINT NOT NULL AUTO_INCREMENT,
+  biz_type       VARCHAR(20) NOT NULL DEFAULT 'product' COMMENT 'product=停用材料 / category=删除分类',
+  target_id      BIGINT      NOT NULL COMMENT '目标对象 id（base_product.id / base_category.id）',
+  target_name    VARCHAR(200) NOT NULL DEFAULT '' COMMENT '目标名称快照（审核时对象可能已变）',
+  target_desc    VARCHAR(500) NOT NULL DEFAULT '' COMMENT '目标补充信息（编码/规格/路径）',
+  reason         VARCHAR(500) NOT NULL DEFAULT '' COMMENT '删除原因（申请人填写，必填）',
+  status         TINYINT      NOT NULL DEFAULT 0 COMMENT '0 待审核 / 1 已通过（已删除） / 2 已驳回',
+  applicant_id   BIGINT       NOT NULL DEFAULT 0 COMMENT '申请人 → sys_user.id',
+  applicant_name VARCHAR(50)  NOT NULL DEFAULT '',
+  handled_by     BIGINT       NOT NULL DEFAULT 0 COMMENT '审核人 → sys_user.id',
+  handled_at     DATETIME     NULL,
+  review_remark  VARCHAR(500) NOT NULL DEFAULT '' COMMENT '审核备注/驳回理由',
+  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_status (status),
+  KEY idx_target (biz_type, target_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='删除审核（物料/分类删除审批流）';
+
+DROP TABLE IF EXISTS sys_menu;
+CREATE TABLE sys_menu (
+  id          BIGINT NOT NULL AUTO_INCREMENT,
+  parent_id   BIGINT       NOT NULL DEFAULT 0 COMMENT '父级（0=顶级分组）',
+  name        VARCHAR(50)  NOT NULL COMMENT '菜单名称',
+  path        VARCHAR(100) NOT NULL DEFAULT '' COMMENT '路由路径（菜单项）；分组留空',
+  icon        VARCHAR(50)  NOT NULL DEFAULT '' COMMENT '图标名（前端 ICON_MAP 注册）',
+  perm_code   VARCHAR(100) NOT NULL DEFAULT '' COMMENT '权限码；逗号分隔=任一命中可见；空=公开',
+  visible     TINYINT      NOT NULL DEFAULT 1 COMMENT '1 显示 / 0 隐藏',
+  sort        INT          NOT NULL DEFAULT 0 COMMENT '排序（小在前）',
+  remark      VARCHAR(255) NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_parent (parent_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='导航菜单（动态菜单管理）';
 
 -- =====================================================================
 -- 种子数据
@@ -776,9 +858,9 @@ INSERT INTO sys_permission (id, name, code, type, sort) VALUES
 -- 超级管理员：全部
 INSERT INTO sys_role_permission (role_id, permission_id)
   SELECT 1, id FROM sys_permission;
--- 管理者：报表 + 库存查询/流水
+-- 管理者：报表 + 库存查询/流水 + 物料数据管理（base:product/base:category，合并页与删除审核用）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
-  (2, 8), (2, 9), (2, 17), (2, 18);
+  (2, 8), (2, 9), (2, 17), (2, 18), (2, 1), (2, 2);
 -- 仓管员：基础资料 + 采购 + 库存 + 审计 + OCR + AI 建议处理
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
   (3, 1), (3, 2), (3, 3), (3, 4), (3, 5),
@@ -787,6 +869,44 @@ INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 -- 使用者：领用申请 + 库存查询（自己相关）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
   (4, 13), (4, 8);
+
+-- 导航菜单种子（id 固定；perm_code 逗号分隔=任一命中可见；后续可在「系统管理 → 导航管理」动态调整）
+INSERT INTO sys_menu (id, parent_id, name, path, icon, perm_code, visible, sort) VALUES
+  (1, 0, '工作台',   '', 'DashboardOutlined', '', 1, 10),
+  (2, 1, '统计面板', '/dashboard', 'DashboardOutlined', 'report:view', 1, 10),
+  (3, 0, '基础资料', '', 'ShopOutlined', '', 1, 20),
+  (4, 3, '物料数据管理', '/materials-data', 'AppstoreOutlined', 'base:product,base:category', 1, 10),
+  (5, 3, '删除审核', '/delete-reviews', 'AuditOutlined', 'base:product,base:category', 1, 20),
+  (6, 3, '供应商管理', '/suppliers', 'ContactsOutlined', 'base:supplier', 1, 30),
+  (7, 3, '材料单位管理', '/units', 'NumberOutlined', 'base:product', 1, 40),
+  (8, 0, '入库管理', '', 'InboxOutlined', '', 1, 30),
+  (9, 8, '采购计划单', '/purchase-plans', 'FileTextOutlined', 'pch:in', 1, 10),
+  (10, 8, '材料入库', '/purchase-in', 'InboxOutlined', 'pch:in', 1, 20),
+  (11, 8, '送货单识别入库', '/ocr/delivery', 'FileSearchOutlined', 'pch:ocr', 1, 30),
+  (12, 0, '库存管理', '', 'DatabaseOutlined', '', 1, 40),
+  (13, 12, '库存查询', '/stock', 'TableOutlined', 'stk:query', 1, 10),
+  (14, 12, '仓库与货架', '/warehouses', 'BankOutlined', 'base:warehouse', 1, 20),
+  (15, 12, '历史价格管理', '/history-price', 'LineChartOutlined', 'stk:query', 1, 30),
+  (16, 12, '库存调拨', '/transfers', 'SwapOutlined', 'stk:transfer', 1, 40),
+  (17, 12, '其他出入库', '/other-io', 'ExportOutlined', 'stk:other', 1, 50),
+  (18, 0, '领用管理', '', 'EditOutlined', '', 1, 50),
+  (19, 18, '领用申请', '/requisitions/apply', 'EditOutlined', 'req:apply', 1, 10),
+  (20, 18, '领用申请单查询', '/requisitions/query', 'SearchOutlined', 'req:audit', 1, 20),
+  (21, 18, '领用审计', '/requisitions', 'AuditOutlined', 'req:audit', 1, 30),
+  (22, 0, '报表中心', '', 'FundOutlined', '', 1, 60),
+  (23, 22, '报表中心', '/reports', 'FundOutlined', 'report:view', 1, 10),
+  (24, 22, '盘点', '/checks', 'ProfileOutlined', 'stk:check', 1, 20),
+  (25, 22, 'AI 建议处理', '/ai-suggestions', 'RobotOutlined', 'ai:suggestion', 1, 30),
+  (26, 0, '系统管理', '', 'SettingOutlined', '', 1, 70),
+  (27, 26, '用户管理', '/system/users', 'UserOutlined', 'sys:user', 1, 10),
+  (28, 26, '用户权限设置', '/system/roles', 'SafetyCertificateOutlined', 'sys:role', 1, 20),
+  (29, 26, '注册审核', '/system/register-applies', 'AuditOutlined', 'sys:user', 1, 30),
+  (30, 26, '单位管理', '/system/departments', 'ApartmentOutlined', 'dept:manage', 1, 40),
+  (31, 26, '导航管理', '/system/menus', 'MenuOutlined', 'sys:role', 1, 45),
+  (32, 26, '操作日志', '/system/logs', 'FileTextOutlined', 'sys:log', 1, 50),
+  (33, 26, '备份管理', '/system/backups', 'HddOutlined', 'sys:backup', 1, 60),
+  (34, 26, 'AI 调用日志', '/llm-logs', 'RobotOutlined', 'sys:llm-log', 1, 70),
+  (35, 26, '系统设置', '/system/settings', 'SettingOutlined', 'sys:config', 1, 80);
 
 -- 初始管理员占位（不可登录）：密码哈希为无效值，必须通过「初始化安装向导」设置密码后方可登录。
 -- 若手工导入本脚本部署，请执行安装向导（删除 backend/data/.initialized 后访问系统入口），
@@ -824,7 +944,7 @@ INSERT INTO sys_storage (id, name, type, path, policy, is_default, status) VALUE
 CREATE TABLE IF NOT EXISTS sys_llm_log (
   id          BIGINT NOT NULL AUTO_INCREMENT,
   scene       VARCHAR(50) NOT NULL DEFAULT '' COMMENT '调用场景（如 ocr_correct/alert_text/dedupe/req_summary/vision_delivery）',
-  model       VARCHAR(50) NOT NULL DEFAULT '' COMMENT '模型名（siliconflow/deepseek/doubao）',
+  model       VARCHAR(50) NOT NULL DEFAULT '' COMMENT '模型名（siliconflow/deepseek/mm_llm）',
   prompt      TEXT NULL COMMENT '输入（文本消息；图片仅记张数，省略 base64）',
   output      TEXT NULL COMMENT '模型输出（截断保存）',
   status      VARCHAR(10) NOT NULL DEFAULT 'ok' COMMENT 'ok / error',

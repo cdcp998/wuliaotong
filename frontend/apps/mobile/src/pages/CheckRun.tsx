@@ -39,7 +39,7 @@ export function CheckRunPage() {
       .catch((e) => Toast.show(e instanceof Error ? e.message : "加载失败"));
   }, [id]);
 
-  if (!bill) return <NavBar>盘点执行</NavBar>;
+  if (!bill) return <NavBar onBack={() => navigate("/checks")}>盘点执行</NavBar>;
 
   const readonly = bill.status === 2; // 已审核只读
 
@@ -73,7 +73,7 @@ export function CheckRunPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate("/checks")}>{bill.bill_no}</NavBar>
       <List header={`${bill.warehouse_name} · 共 ${bill.items.length} 项（物品级盘点）`}>
         {bill.items.map((it: CheckItem) => {

@@ -55,14 +55,14 @@ const EMPTY: Settings = {
   "session.expire_hours": "8",
   "ocr.engine": "paddle",
   "ocr.model_version": "PP-OCRv6",
-  "llm.doubao.enabled": "1",
+  "llm.mm_llm.enabled": "1",
   // 模型承担任务开关默认全开（主用/备用）
-  "llm.doubao.scene.match_vision": "1",
-  "llm.doubao.scene.vision_product": "1",
-  "llm.doubao.scene.classify_items": "1",
-  "llm.doubao.scene.ocr_correct": "1",
-  "llm.doubao.scene.vision_text": "1",
-  "llm.doubao.scene.structured": "1",
+  "llm.mm_llm.scene.match_vision": "1",
+  "llm.mm_llm.scene.vision_product": "1",
+  "llm.mm_llm.scene.classify_items": "1",
+  "llm.mm_llm.scene.ocr_correct": "1",
+  "llm.mm_llm.scene.vision_text": "1",
+  "llm.mm_llm.scene.structured": "1",
   "llm.siliconflow.scene.vision_delivery": "1",
   "llm.siliconflow.scene.vision_product": "1",
   "llm.siliconflow.scene.vision_text": "1",
@@ -80,10 +80,10 @@ const EMPTY: Settings = {
   "quota.refresh.interval_minutes": "60",
   "quota.warning.threshold.siliconflow": "50",
   "quota.warning.threshold.deepseek": "50",
-  "quota.warning.threshold.doubao": "50",
-  "llm.doubao.api_key": "",
-  "llm.doubao.base_url": "",
-  "llm.doubao.model": "",
+  "quota.warning.threshold.mm_llm": "50",
+  "llm.mm_llm.api_key": "",
+  "llm.mm_llm.base_url": "",
+  "llm.mm_llm.model": "",
   "llm.deepseek.api_key": "",
   "llm.deepseek.base_url": "",
   "llm.deepseek.model": "",
@@ -136,13 +136,13 @@ export function SettingsPage() {
   const ocrEngine = Form.useWatch("ocr.engine", form);
   // 模型字段在 Space.Compact 内，antd v6 Form.Item 只注入 value/onChange 给直接子元素（Space.Compact 不透传），
   // Select 拿不到表单绑定会变成非受控（选中不写 store、回显失效）→ 显式受控绑定 form
-  const doubaoModel = Form.useWatch("llm.doubao.model", form);
+  const mmLlmModel = Form.useWatch("llm.mm_llm.model", form);
   const dsModel = Form.useWatch("llm.deepseek.model", form);
   const sfModel = Form.useWatch("llm.siliconflow.model", form);
   // 配额区块展示各服务商启用状态（随开关变化响应式刷新）
   const sfEnabled = Form.useWatch("llm.siliconflow.enabled", form);
   const dsEnabled = Form.useWatch("llm.deepseek.enabled", form);
-  const doubaoEnabled = Form.useWatch("llm.doubao.enabled", form);
+  const mmLlmEnabled = Form.useWatch("llm.mm_llm.enabled", form);
   // 邮件服务分区：根据已填 SMTP 服务器地址显示配置状态（随输入实时刷新）
   const smtpHost = Form.useWatch("smtp.host", form);
   // 配额与预警分区状态（随开关变化响应式刷新）
@@ -161,9 +161,9 @@ export function SettingsPage() {
   // DeepSeek（文本模型）模型列表
   const [dsModels, setDsModels] = useState<{ id: string; owned_by: string }[]>([]);
   const [dsLoading, setDsLoading] = useState(false);
-  // 多模态大模型（火山方舟）模型列表
-  const [doubaoModels, setDoubaoModels] = useState<{ id: string; owned_by: string }[]>([]);
-  const [doubaoLoading, setDoubaoLoading] = useState(false);
+  // 多模态大模型（MM-LLM）模型列表
+  const [mmLlmModels, setMmLlmModels] = useState<{ id: string; owned_by: string }[]>([]);
+  const [mmLlmLoading, setMmLlmLoading] = useState(false);
   // PP-OCR 自动安装状态（后台线程安装，前端轮询）
   const [installState, setInstallState] = useState<OcrInstallState>({ status: "idle", log: "" });
   const installTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -347,12 +347,12 @@ export function SettingsPage() {
     }
   }
 
-  type LlmKind = "siliconflow" | "deepseek" | "doubao";
+  type LlmKind = "siliconflow" | "deepseek" | "mm_llm";
 
   const LLM_META: Record<LlmKind, { label: string; enableLabel: string; api: () => Promise<{ models: { id: string; owned_by: string }[] }> }> = {
     siliconflow: { label: "视觉模型", enableLabel: "启用视觉模型", api: systemApi.listSiliconflowModels },
     deepseek: { label: "文本模型", enableLabel: "启用文本模型", api: systemApi.listDeepseekModels },
-    doubao: { label: "多模态大模型 (主用)", enableLabel: "启用多模态大模型", api: systemApi.listDoubaoModels },
+    mm_llm: { label: "多模态大模型 (MM-LLM)", enableLabel: "启用多模态大模型", api: systemApi.listMmLlmModels },
   };
 
   async function fetchModelList(kind: LlmKind, opts?: { skipCheck?: boolean }) {
@@ -384,8 +384,8 @@ export function SettingsPage() {
         setSaving(false);
       }
     }
-    const setLoading = kind === "siliconflow" ? setSfLoading : kind === "deepseek" ? setDsLoading : setDoubaoLoading;
-    const setModels = kind === "siliconflow" ? setSfModels : kind === "deepseek" ? setDsModels : setDoubaoModels;
+    const setLoading = kind === "siliconflow" ? setSfLoading : kind === "deepseek" ? setDsLoading : setMmLlmLoading;
+    const setModels = kind === "siliconflow" ? setSfModels : kind === "deepseek" ? setDsModels : setMmLlmModels;
     setLoading(true);
     try {
       const r = await meta.api();
@@ -404,9 +404,9 @@ export function SettingsPage() {
   }
 
   const QUOTA_META: Record<string, { label: string; enabledKey: keyof Settings; unitHint: string }> = {
-    siliconflow: { label: "视觉模型（SiliconFlow）", enabledKey: "llm.siliconflow.enabled", unitHint: "元" },
-    deepseek: { label: "文本模型（DeepSeek）", enabledKey: "llm.deepseek.enabled", unitHint: "元" },
-    doubao: { label: "多模态大模型 (主用)", enabledKey: "llm.doubao.enabled", unitHint: "与服务商返回数值同单位" },
+    siliconflow: { label: "视觉模型", enabledKey: "llm.siliconflow.enabled", unitHint: "元" },
+    deepseek: { label: "文本模型", enabledKey: "llm.deepseek.enabled", unitHint: "元" },
+    mm_llm: { label: "多模态大模型 (MM-LLM)", enabledKey: "llm.mm_llm.enabled", unitHint: "与服务商返回数值同单位" },
   };
 
   /** 立即从服务商获取配额/余额；未启用或未配置 API Key 时不查询（直接提示），
@@ -442,11 +442,11 @@ export function SettingsPage() {
   const providerEnabled: Record<string, string | undefined> = {
     siliconflow: sfEnabled,
     deepseek: dsEnabled,
-    doubao: doubaoEnabled,
+    mm_llm: mmLlmEnabled,
   };
   const quotaBlock = (
     <Space orientation="vertical" style={{ width: "100%" }} size={4}>
-      {(["siliconflow", "deepseek", "doubao"] as const).map((p) => {
+      {(["siliconflow", "deepseek", "mm_llm"] as const).map((p) => {
         const meta = QUOTA_META[p];
         const snap = quota[p];
         const enabled = providerEnabled[p];
@@ -903,12 +903,12 @@ export function SettingsPage() {
 
       <Section
         icon={<ThunderboltOutlined />}
-        title="多模态大模型 (主用)"
-        desc="多模态大模型（主用，支持外网/内网 API）。"
-        extra={doubaoEnabled === "0" ? <Tag>未启用</Tag> : <Tag color="green">已启用</Tag>}
+        title="多模态大模型 (MM-LLM)"
+        desc="多模态大模型（MM-LLM，支持外网/内网 API）。"
+        extra={mmLlmEnabled === "0" ? <Tag>未启用</Tag> : <Tag color="green">已启用</Tag>}
       >
         <Form.Item
-          name="llm.doubao.enabled"
+          name="llm.mm_llm.enabled"
           label="启用多模态大模型"
           valuePropName="checked"
           getValueProps={(v) => ({ checked: v !== "0" })}
@@ -916,23 +916,23 @@ export function SettingsPage() {
         >
           <Switch />
         </Form.Item>
-        {keyField("llm.doubao.api_key", "多模态大模型 API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
-        <Form.Item name="llm.doubao.base_url" label="多模态大模型 Base URL" extra="支持任意 OpenAI 兼容服务商（含自建内网服务），填其 Base URL 即可；不填默认火山方舟">
-          <Input style={{ maxWidth: 560 }} placeholder="https://ark.cn-beijing.volces.com/api/v3" />
+        {keyField("llm.mm_llm.api_key", "多模态大模型 API Key", { secret: true, placeholder: "填新 Key 覆盖，留空不修改" })}
+        <Form.Item name="llm.mm_llm.base_url" label="多模态大模型 Base URL" extra="支持任意 OpenAI 兼容服务商（含自建内网服务），填其 Base URL 即可（无默认值，必填）">
+          <Input style={{ maxWidth: 560 }} placeholder="https://api.example.com/v1" />
         </Form.Item>
-        <Form.Item name="llm.doubao.model" label="多模态大模型名称" extra="保存多模态大模型 API Key 后自动获取模型列表，也可点右侧按钮手动刷新">
+        <Form.Item name="llm.mm_llm.model" label="多模态大模型名称" extra="保存多模态大模型 API Key 后点「获取模型列表」拉取模型，也可直接填写">
           <Space.Compact style={{ width: "100%", maxWidth: 640 }}>
             <Select
               style={{ flex: 1 }}
               showSearch
               allowClear
-              value={doubaoModel}
-              onChange={(v) => form.setFieldValue("llm.doubao.model", v)}
-              placeholder="如：doubao-1-5-vision-pro-32k-250115"
-              options={doubaoModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
+              value={mmLlmModel}
+              onChange={(v) => form.setFieldValue("llm.mm_llm.model", v)}
+              placeholder="如：qwen-vl-max / glm-4v / gpt-4o"
+              options={mmLlmModels.map((m) => ({ value: m.id, label: m.owned_by ? `${m.id}（${m.owned_by}）` : m.id }))}
               optionFilterProp="label"
             />
-            <Button loading={doubaoLoading} onClick={() => void fetchModelList("doubao")}>获取模型列表</Button>
+            <Button loading={mmLlmLoading} onClick={() => void fetchModelList("mm_llm")}>获取模型列表</Button>
           </Space.Compact>
         </Form.Item>
       </Section>
@@ -1092,7 +1092,7 @@ export function SettingsPage() {
         <div>
           <h2 style={{ margin: 0 }}>系统设置</h2>
           <p style={{ color: token.colorTextTertiary, fontSize: 12, margin: "4px 0 0" }}>
-            站点信息 · 邮件服务 · 水印 · 注册与找回 · 识别引擎与大模型
+            站点信息 · 邮件服务 · 水印 · 注册与找回 · 识别引擎与大模型 · 版本 v{__APP_VERSION__}
           </p>
         </div>
         <Space>

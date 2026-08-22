@@ -1,6 +1,6 @@
 """AI 服务配额管理测试（系统设置 → OCR 与大模型 → 配额与预警，L2 门禁）。
 
-覆盖：SiliconFlow/DeepSeek/豆包 配额解析、获取失败优雅降级、
+覆盖：SiliconFlow/DeepSeek/多模态大模型（MM-LLM）配额解析、获取失败优雅降级、
 预警邮件（阈值触发一次/去重/恢复后重新触发）、模型-任务映射、接口快照往返。
 测试与开发共用数据库：写 sys_config 前先保存原值，结束后恢复/清理。
 
@@ -24,7 +24,7 @@ client = TestClient(app)
 SAVED: dict[str, str | None] = {}
 
 # 敏感 API Key 键（进程级快照在 _raw 定义后初始化，见下）
-_API_KEY_KEYS = ("llm.siliconflow.api_key", "llm.deepseek.api_key", "llm.doubao.api_key")
+_API_KEY_KEYS = ("llm.siliconflow.api_key", "llm.deepseek.api_key", "llm.mm_llm.api_key")
 _FAKE_API_KEYS = {"sk-x", "sk-d", "sk-test", "sk-local", "sk-new-0000", "sk-test-123456", "sk-test-abcdef", "sk-test-xyz789"}
 
 
@@ -151,17 +151,18 @@ def test_deepseek_parse(monkeypatch) -> None:
     assert items[0]["remaining"] == 110.5 and items[0]["unit"] == "元"  # 优先取 CNY
 
 
-def test_doubao_parse(monkeypatch) -> None:
+def test_mmllm_ark_parse(monkeypatch) -> None:
+    """多模态大模型指向火山方舟时的资源配额解析。"""
     monkeypatch.setattr(
         q, "_http_get",
         lambda *a, **k: FakeResp({
             "quota_list": [
-                {"id": "q1", "name": "资源包A", "model_reference": {"type": "model", "id": "doubao-x"},
+                {"id": "q1", "name": "资源包A", "model_reference": {"type": "model", "id": "mm-llm-x"},
                  "status": "正常", "total": 1000000, "used": 300000},
             ]
         }),
     )
-    items = q._fetch_doubao("https://ark.cn-beijing.volces.com/api/v3", "sk-x")
+    items = q._fetch_ark("https://ark.cn-beijing.volces.com/api/v3", "sk-x")
     assert items[0]["name"] == "资源包A"
     assert items[0]["remaining"] == 700000  # total - used 兜底计算
     assert items[0]["status"] == "正常"
@@ -209,7 +210,7 @@ def test_quota_warning_email_send_once_then_recover(monkeypatch) -> None:
     _save_originals([
         "quota.warning.enabled", "quota.warning.recipients",
         "quota.warning.threshold.siliconflow", "quota.warning.threshold.deepseek",
-        "quota.warning.threshold.doubao", "quota.warning.notified.siliconflow", "quota.snapshot",
+        "quota.warning.threshold.mm_llm", "quota.warning.notified.siliconflow", "quota.snapshot",
         "llm.siliconflow.enabled", "llm.siliconflow.api_key",
         "quota.last_refresh", "quota.refresh.interval_minutes",
     ])
@@ -218,7 +219,7 @@ def test_quota_warning_email_send_once_then_recover(monkeypatch) -> None:
         _set("quota.warning.recipients", "a@x.com, b@y.com")
         _set("quota.warning.threshold.siliconflow", "50")
         _set("quota.warning.threshold.deepseek", "")
-        _set("quota.warning.threshold.doubao", "")
+        _set("quota.warning.threshold.mm_llm", "")
         _set("quota.refresh.interval_minutes", "60")
         _set("quota.warning.notified.siliconflow", "")
         _set("llm.siliconflow.enabled", "1")  # 保证定时刷新会查询 siliconflow（走 monkeypatch 的 fetch）
@@ -278,29 +279,29 @@ def test_refresh_quota_snapshots_auto(monkeypatch) -> None:
         "quota.snapshot",
         "llm.siliconflow.enabled", "llm.siliconflow.api_key",
         "llm.deepseek.enabled", "llm.deepseek.api_key",
-        "llm.doubao.enabled", "llm.doubao.api_key",
+        "llm.mm_llm.enabled", "llm.mm_llm.api_key",
         "quota.last_refresh",
     ])
     try:
-        # deepseek 未启用、doubao 未配置 Key → 均不查询；预先写入 deepseek 旧快照验证被清除
+        # deepseek 未启用、mm_llm 未配置 Key → 均不查询；预先写入 deepseek 旧快照验证被清除
         _set("llm.siliconflow.enabled", "1")
         _set("llm.siliconflow.api_key", "sk-x")
         _set("llm.deepseek.enabled", "0")
         _set("llm.deepseek.api_key", "sk-d")
-        _set("llm.doubao.enabled", "1")
-        _set("llm.doubao.api_key", "")
+        _set("llm.mm_llm.enabled", "1")
+        _set("llm.mm_llm.api_key", "")
         with SessionLocal() as db:
             q.save_quota_snapshot(db, "deepseek", {"provider": "deepseek", "ok": True, "fetched_at": "old", "items": []})
 
         result = q.refresh_quota_snapshots()
         assert result["checked"] == 1 and result["ok"] == 1
-        assert result["skipped"] == ["deepseek", "doubao"]
+        assert result["skipped"] == ["deepseek", "mm_llm"]
         assert called == ["siliconflow"]  # 只查询了已启用且配置 Key 的服务商
 
         with SessionLocal() as db:
             snap = q.get_quota_snapshot(db)
         assert snap["siliconflow"]["ok"] is True and snap["siliconflow"]["items"][0]["remaining"] == 88
-        assert "deepseek" not in snap and "doubao" not in snap  # 旧快照已清除，无 401 失败记录
+        assert "deepseek" not in snap and "mm_llm" not in snap  # 旧快照已清除，无 401 失败记录
 
         # 预警未启用时，定时任务同样刷新快照
         _set("quota.warning.enabled", "0")
@@ -322,7 +323,7 @@ def test_quota_refresh_interval_respected(monkeypatch) -> None:
     monkeypatch.setattr(q, "fetch_provider_quota", lambda db, provider: (called.append(provider), ok_sf)[1])
     _save_originals([
         "quota.warning.enabled", "quota.warning.recipients", "quota.warning.threshold.siliconflow",
-        "quota.warning.threshold.deepseek", "quota.warning.threshold.doubao",
+        "quota.warning.threshold.deepseek", "quota.warning.threshold.mm_llm",
         "quota.refresh.interval_minutes", "quota.refresh.interval_hours",
         "quota.last_refresh", "quota.snapshot",
         "quota.warning.notified.siliconflow",
@@ -333,7 +334,7 @@ def test_quota_refresh_interval_respected(monkeypatch) -> None:
         _set("quota.warning.recipients", "a@x.com")
         _set("quota.warning.threshold.siliconflow", "50")
         _set("quota.warning.threshold.deepseek", "")  # 隔离开发库真实阈值：deepseek 不得误入预警
-        _set("quota.warning.threshold.doubao", "")
+        _set("quota.warning.threshold.mm_llm", "")
         _set("quota.warning.notified.siliconflow", "")
         _set("quota.refresh.interval_minutes", "1440")  # 自定义间隔：24 小时 = 1440 分钟
         _set("llm.siliconflow.enabled", "1")
@@ -349,7 +350,7 @@ def test_quota_refresh_interval_respected(monkeypatch) -> None:
         _expire_refresh()
         r2 = q.check_quota_warnings()
         assert r2["emails"] == 1 and r2["providers"] == ["siliconflow"]
-        assert "siliconflow" in called and "doubao" not in called  # 已启用配置的均会查询，未配置的跳过
+        assert "siliconflow" in called and "mm_llm" not in called  # 已启用配置的均会查询，未配置的跳过
         assert len(sent) == 1
 
         # 间隔配置非法/为空 → 回退默认 60 分钟
@@ -423,7 +424,7 @@ def test_model_scenes() -> None:
         with SessionLocal() as db:
             models = q.get_model_scenes(db)
         by_name = {m["name"]: m for m in models}
-        assert set(by_name) == {"siliconflow", "deepseek", "doubao"}
+        assert set(by_name) == {"siliconflow", "deepseek", "mm_llm"}
         assert by_name["deepseek"]["enabled"] is False
         assert by_name["siliconflow"]["enabled"] is True
         scenes = {s["scene"] for s in by_name["deepseek"]["scenes"]}

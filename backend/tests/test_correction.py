@@ -5,7 +5,7 @@ from app.services.llm import LLMNotConfigured
 
 
 class _FakeLLM:
-    name = "deepseek"
+    name = "mm_llm"
 
     def __init__(self, content: str) -> None:
         self.content = content
@@ -15,7 +15,7 @@ class _FakeLLM:
 
 
 def test_correct_returns_fixed_lines(monkeypatch):
-    """DeepSeek 修正生效：错字/多余空格归一，行数保持一致。"""
+    """文本模型修正生效：错字/多余空格归一，行数保持一致。"""
     monkeypatch.setattr("app.services.llm.get_llm", lambda db, name: _FakeLLM("轴承6204\n数量10\n"))
     with SessionLocal() as db:
         out = correction.correct_texts(db, ["轴承 6204", "数量 10"])

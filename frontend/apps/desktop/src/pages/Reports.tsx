@@ -216,7 +216,7 @@ function FlowExportTab() {
 }
 
 
-/** AI 月报摘要（P9-P1⑦）：选择日期范围 → DeepSeek 生成经营摘要（未配置降级规则版）。 */
+/** AI 月报摘要（P9-P1⑦）：选择日期范围 → 本地规则生成经营摘要。 */
 function AiSummaryTab() {
   const { message } = App.useApp();
   const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>([dayjs().startOf("month"), dayjs()]);

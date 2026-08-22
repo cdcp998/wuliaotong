@@ -49,7 +49,7 @@ def test_settings_get_masked():
     data = r.json()["data"]
     assert data["ocr.engine"] in ("rapidocr", "paddle")  # 不依赖全局引擎状态（其他测试/冒烟可能切换）
     # 密钥脱敏：未配置为空，已配置为 **** 后四位
-    assert data["llm.doubao.api_key"] == "" or data["llm.doubao.api_key"].startswith("****")
+    assert data["llm.mm_llm.api_key"] == "" or data["llm.mm_llm.api_key"].startswith("****")
     assert "site.name" in data
 
 
@@ -81,23 +81,23 @@ def test_settings_update_ocr_engine():
 
 def test_settings_secret_update_rule():
     _login_admin()
-    original = _raw_config("llm.doubao.api_key")
+    original = _raw_config("llm.mm_llm.api_key")
     try:
         # 设置新 Key
-        r = client.put("/api/v1/settings", json={"llm.doubao.api_key": "sk-test-123456"})
+        r = client.put("/api/v1/settings", json={"llm.mm_llm.api_key": "sk-test-123456"})
         assert r.json()["code"] == 0
         data = client.get("/api/v1/settings").json()["data"]
-        assert data["llm.doubao.api_key"] == "****3456"  # 脱敏：**** 后四位
+        assert data["llm.mm_llm.api_key"] == "****3456"  # 脱敏：**** 后四位
         # 传掩码/空 → 不修改
-        client.put("/api/v1/settings", json={"llm.doubao.api_key": "****3456"})
-        client.put("/api/v1/settings", json={"llm.doubao.api_key": ""})
+        client.put("/api/v1/settings", json={"llm.mm_llm.api_key": "****3456"})
+        client.put("/api/v1/settings", json={"llm.mm_llm.api_key": ""})
         data = client.get("/api/v1/settings").json()["data"]
-        assert data["llm.doubao.api_key"] == "****3456"
+        assert data["llm.mm_llm.api_key"] == "****3456"
         # 传新值 → 覆盖
-        client.put("/api/v1/settings", json={"llm.doubao.api_key": "sk-new-0000"})
-        assert client.get("/api/v1/settings").json()["data"]["llm.doubao.api_key"] == "****0000"
+        client.put("/api/v1/settings", json={"llm.mm_llm.api_key": "sk-new-0000"})
+        assert client.get("/api/v1/settings").json()["data"]["llm.mm_llm.api_key"] == "****0000"
     finally:
-        _restore_config("llm.doubao.api_key", original)
+        _restore_config("llm.mm_llm.api_key", original)
 
 
 def test_settings_validation_and_permission():
@@ -121,7 +121,7 @@ def test_siliconflow_models_requires_key(monkeypatch):
         m.setattr(sysmod, "_sys_config", lambda db, key: "")
         assert client.post("/api/v1/llm/siliconflow/models").json()["code"] == 4006
         assert client.post("/api/v1/llm/deepseek/models").json()["code"] == 4006
-        assert client.post("/api/v1/llm/doubao/models").json()["code"] == 4006
+        assert client.post("/api/v1/llm/mm_llm/models").json()["code"] == 4006
     # 已配置 Key → 拉取模型列表（打桩模拟 /models 响应与已存 Key，不依赖/不写开发库）
     monkeypatch.setattr(sysmod, "_fetch_models", lambda base_url, api_key: [{"id": "deepseek-chat", "owned_by": "deepseek"}])
     with monkeypatch.context() as m:

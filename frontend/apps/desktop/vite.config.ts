@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -7,8 +8,13 @@ import { defineConfig } from "vite";
 // 路径基于本文件所在目录解析：apps/desktop → 项目根 → backend/certs/dev
 const CERT_DIR = "../../../backend/certs/dev";
 
+// 唯一版本源为 backend/app/__init__.py 的 __version__；本包 package.json.version 与之保持
+// 一致（scripts/check_version.py 强制校验）。构建时注入 __APP_VERSION__ 供前端展示，避免 UI 内硬编码。
+const pkg = JSON.parse(fs.readFileSync(fileURLToPath(new URL("./package.json", import.meta.url)), "utf-8")) as { version: string };
+
 export default defineConfig({
   plugins: [react()],
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   // workspace 源码包不参与依赖预构建：@wlt/shared 改动即时 HMR（否则 dev server 用旧缓存，改动不生效）
   optimizeDeps: {
     exclude: ["@wlt/shared"],

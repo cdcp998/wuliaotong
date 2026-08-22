@@ -1,14 +1,15 @@
 """大模型客户端抽象（《后端API设计.md》§11.3、数据库设计决策 4）。
 
-- DoubaoClient：视觉模型（看图识别商品），火山方舟 OpenAI 兼容接口
+- MMLLMClient：多模态大模型（看图识别商品/送货单 + 文本，任意 OpenAI 兼容服务商）
 - DeepSeekClient：文本模型（OCR 文本结构化/纠错/归一化，不支持图像输入）
-- API Key/BaseURL/Model 存 sys_config（llm.doubao.* / llm.deepseek.*），接口返回时脱敏
+- SiliconFlowClient：视觉模型（视觉识别）
+- API Key/BaseURL/Model 存 sys_config（llm.mm_llm.* / llm.deepseek.* / llm.siliconflow.*），接口返回时脱敏
 - 未配置时调用抛 LLMNotConfigured，由调用方降级（人工录入），不影响主流程
 
-兼容性标准：三个模型槽位（豆包兜底 / 文本 / 视觉）均遵循 **OpenAI Chat Completions
+兼容性标准：三个模型槽位（多模态 / 文本 / 视觉）均遵循 **OpenAI Chat Completions
 兼容协议**（POST {base_url}/chat/completions，Authorization: Bearer，messages 格式），
-Base URL / API Key / 模型名可自由指向任意兼容服务商（SiliconFlow、DeepSeek、火山方舟、
-通义、智谱、自建 vLLM / Ollama、第三方网关等），不绑定特定供应商。
+Base URL / API Key / 模型名可自由指向任意兼容服务商（通义、智谱、火山方舟、自建
+vLLM / Ollama、第三方网关等），不绑定特定供应商。
 """
 from __future__ import annotations
 
@@ -73,7 +74,7 @@ def _log_llm_call(scene: str, model: str, prompt_text: str, output: str, status:
 
 
 class _OpenAICompatClient:
-    """OpenAI 兼容 Chat Completions 客户端（豆包/DeepSeek 均支持）。"""
+    """OpenAI 兼容 Chat Completions 客户端（多模态/文本/视觉模型均支持）。"""
 
     name = "base"
 
@@ -141,8 +142,10 @@ class _OpenAICompatClient:
         ], scene=scene, user_id=user_id)
 
 
-class DoubaoClient(_OpenAICompatClient):
-    name = "doubao"
+class MMLLMClient(_OpenAICompatClient):
+    """多模态大模型（视觉 + 文本），OpenAI 兼容接口。"""
+
+    name = "mm_llm"
 
     def __init__(self, api_key: str, base_url: str, model: str) -> None:
         super().__init__(base_url, api_key, model, vision=True)
@@ -156,7 +159,7 @@ class DeepSeekClient(_OpenAICompatClient):
 
 
 class SiliconFlowClient(_OpenAICompatClient):
-    """SiliconFlow（硅基流动）视觉/文本模型，OpenAI 兼容接口（https://api.siliconflow.cn/v1）。"""
+    """视觉模型，OpenAI 兼容接口。"""
 
     name = "siliconflow"
 
@@ -176,9 +179,9 @@ def model_scene_enabled(db: Session, model: str, scene: str) -> bool:
 
 
 def chat_image_with_fallback(db: Session, image_bytes: bytes, prompt: str, scene: str = "") -> str:
-    """多模态大模型（豆包）主用 → 视觉模型（SiliconFlow）备用；各模型任务开关关闭时跳过对应模型。"""
+    """多模态大模型主用 → 视觉模型备用；各模型任务开关关闭时跳过对应模型。"""
     last_err: Exception | None = None
-    for name in ("doubao", "siliconflow"):
+    for name in ("mm_llm", "siliconflow"):
         if not model_scene_enabled(db, name, scene):
             last_err = LLMNotConfigured(f"{name} 未承担该任务（任务开关已关闭）")
             continue
@@ -194,9 +197,9 @@ def chat_image_with_fallback(db: Session, image_bytes: bytes, prompt: str, scene
 
 
 def chat_text_with_fallback(db: Session, system: str, user: str, scene: str = "") -> str:
-    """多模态大模型（豆包）文本主用 → 文本模型（DeepSeek）备用；各模型任务开关关闭时跳过对应模型。"""
+    """多模态大模型文本主用 → 文本模型备用；各模型任务开关关闭时跳过对应模型。"""
     last_err: Exception | None = None
-    for name in ("doubao", "deepseek"):
+    for name in ("mm_llm", "deepseek"):
         if not model_scene_enabled(db, name, scene):
             last_err = LLMNotConfigured(f"{name} 未承担该任务（任务开关已关闭）")
             continue
@@ -213,24 +216,24 @@ def chat_text_with_fallback(db: Session, system: str, user: str, scene: str = ""
 
 def get_llm(db: Session, name: str = "") -> LLMClient:
     """按 sys_config 创建大模型客户端；未配置或开关关闭抛 LLMNotConfigured。"""
-    name = name or "doubao"
-    if name == "doubao":
-        if _get_config(db, "llm.doubao.enabled") == "0":
+    name = name or "mm_llm"
+    if name == "mm_llm":
+        if _get_config(db, "llm.mm_llm.enabled") == "0":
             raise LLMNotConfigured("多模态大模型已关闭（系统设置 → OCR 与大模型 → 启用开关）")
-        key = _get_config(db, "llm.doubao.api_key")
+        key = _get_config(db, "llm.mm_llm.api_key")
+        base_url = _get_config(db, "llm.mm_llm.base_url")
+        model = _get_config(db, "llm.mm_llm.model")
         if not key:
-            raise LLMNotConfigured("多模态大模型未配置（系统设置 → 大模型）")
-        return DoubaoClient(
-            api_key=key,
-            base_url=_get_config(db, "llm.doubao.base_url") or "https://ark.cn-beijing.volces.com/api/v3",
-            model=_get_config(db, "llm.doubao.model") or "doubao-1-5-vision-pro-32k-250115",
-        )
+            raise LLMNotConfigured("多模态大模型未配置 API Key（系统设置 → 大模型）")
+        if not base_url or not model:
+            raise LLMNotConfigured("多模态大模型未配置 Base URL / 模型名（系统设置 → 大模型）")
+        return MMLLMClient(api_key=key, base_url=base_url, model=model)
     if name == "siliconflow":
         if _get_config(db, "llm.siliconflow.enabled") == "0":
-            raise LLMNotConfigured("SiliconFlow 视觉大模型已关闭（系统设置 → OCR 与大模型 → 启用开关）")
+            raise LLMNotConfigured("视觉大模型已关闭（系统设置 → OCR 与大模型 → 启用开关）")
         key = _get_config(db, "llm.siliconflow.api_key")
         if not key:
-            raise LLMNotConfigured("SiliconFlow 视觉大模型未配置（系统设置 → OCR 与大模型）")
+            raise LLMNotConfigured("视觉大模型未配置（系统设置 → OCR 与大模型）")
         return SiliconFlowClient(
             api_key=key,
             base_url=_get_config(db, "llm.siliconflow.base_url") or "https://api.siliconflow.cn/v1",
@@ -239,10 +242,10 @@ def get_llm(db: Session, name: str = "") -> LLMClient:
         )
     if name == "deepseek":
         if _get_config(db, "llm.deepseek.enabled") == "0":
-            raise LLMNotConfigured("DeepSeek 大模型已关闭（系统设置 → OCR 与大模型 → 启用开关）")
+            raise LLMNotConfigured("文本大模型已关闭（系统设置 → OCR 与大模型 → 启用开关）")
         key = _get_config(db, "llm.deepseek.api_key")
         if not key:
-            raise LLMNotConfigured("DeepSeek 大模型未配置（系统设置 → 大模型）")
+            raise LLMNotConfigured("文本大模型未配置（系统设置 → 大模型）")
         return DeepSeekClient(
             api_key=key,
             base_url=_get_config(db, "llm.deepseek.base_url") or "https://api.deepseek.com",

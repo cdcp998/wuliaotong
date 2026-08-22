@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import io
+import json
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -25,6 +26,8 @@ from app.models.base import BaseCategory, BaseLocation, BaseProduct, BaseShelf, 
 from app.models.stock import (
     PchPurchaseIn,
     PchPurchaseInItem,
+    PchPurchasePlan,
+    PchPurchasePlanItem,
     StkOpening,
     StkOpeningItem,
     StkStock,
@@ -40,6 +43,10 @@ from app.schemas.stock import (
     PurchaseInItemOut,
     PurchaseInOut,
     PurchaseInReq,
+    PurchasePlanItemOut,
+    PurchasePlanItemReq,
+    PurchasePlanOut,
+    PurchasePlanReq,
     StockFlowRow,
     StockRow,
 )
@@ -82,19 +89,26 @@ def _user_name(db: Session, uid: int) -> str:
 
 
 def _loc_code(db: Session, loc_id: int) -> str:
-    """库位显示名：仓库名-货架编码-层号（界面不显示 WH 仓库编码，避免混淆）。"""
+    """库位显示名：仓库名-货架编码-L{层}R{行}C{列}（界面不显示 WH 仓库编码，避免混淆）。"""
     loc = db.get(BaseLocation, loc_id)
     if loc is None:
         return ""
     wh = db.get(BaseWarehouse, loc.warehouse_id)
     shelf = db.get(BaseShelf, loc.shelf_id)
-    return f"{wh.name if wh else ''}-{shelf.code if shelf else ''}-{loc.layer_no:02d}"
+    return f"{wh.name if wh else ''}-{shelf.code if shelf else ''}-L{loc.layer_no}R{loc.row_no}C{loc.col_no}"
 
 
 def _purchase_out(db: Session, bill: PchPurchaseIn) -> dict:
     items = db.scalars(select(PchPurchaseInItem).where(PchPurchaseInItem.bill_id == bill.id).order_by(PchPurchaseInItem.sort)).all()
     wh = db.get(BaseWarehouse, bill.warehouse_id)
     sup = db.get(BaseSupplier, bill.supplier_id)
+    plan = db.get(PchPurchasePlan, bill.plan_id) if bill.plan_id else None
+    try:
+        delivery_file_ids = json.loads(bill.delivery_file_ids) if bill.delivery_file_ids else []
+    except (ValueError, TypeError):
+        delivery_file_ids = []
+    if not isinstance(delivery_file_ids, list):
+        delivery_file_ids = []
     return PurchaseInOut(
         id=bill.id, bill_no=bill.bill_no, ocr_bill_no=bill.ocr_bill_no, supplier_id=bill.supplier_id,
         supplier_name=sup.name if sup else "",
@@ -102,6 +116,8 @@ def _purchase_out(db: Session, bill: PchPurchaseIn) -> dict:
         total_qty=bill.total_qty, total_amount=bill.total_amount, status=bill.status,
         bill_date=bill.bill_date, operator_name=_user_name(db, bill.operator_id), remark=bill.remark,
         ocr_record_id=bill.ocr_record_id,
+        plan_id=bill.plan_id, plan_bill_no=plan.bill_no if plan else "",
+        delivery_file_ids=delivery_file_ids,
         items=[
             PurchaseInItemOut(
                 id=it.id, product_id=it.product_id,
@@ -131,12 +147,34 @@ def create_purchase_in(
         raise BizError(E_PARAM, "供应商不存在")
     if req.ocr_record_id and db.get(OcrRecord, req.ocr_record_id) is None:
         raise BizError(E_PARAM, "送货单 OCR 记录不存在")
+    # 采购计划单：存在且状态允许入库（已提交/部分入库）；已完成/作废不可再入库
+    plan: PchPurchasePlan | None = None
+    if req.plan_id:
+        plan = db.get(PchPurchasePlan, req.plan_id)
+        if plan is None:
+            raise BizError(E_PARAM, "采购计划单不存在")
+        if plan.status not in (1, 2):
+            raise BizError(E_BILL_STATUS, "该采购计划单当前状态不可入库（仅已提交/部分入库可继续入库）")
+        if plan.warehouse_id != req.warehouse_id:
+            raise BizError(E_PARAM, "入库仓库与采购计划单仓库不一致")
+    # 送货单图片存底：可选、最多 10 张、文件必须存在
+    delivery_file_ids = list(dict.fromkeys(req.delivery_file_ids or []))  # 去重保序
+    if len(delivery_file_ids) > 10:
+        raise BizError(E_PARAM, "送货单图片最多 10 张")
+    if delivery_file_ids:
+        from app.models.sys import SysFile
+
+        exist = set(db.scalars(select(SysFile.id).where(SysFile.id.in_(delivery_file_ids))).all())
+        missing = [fid for fid in delivery_file_ids if fid not in exist]
+        if missing:
+            raise BizError(E_PARAM, f"送货单图片不存在：{missing}")
     for attempt in range(5):  # 单号并发冲突重试
         bill_no = generate_bill_no(db, "RK", PchPurchaseIn)
         bill = PchPurchaseIn(
             bill_no=bill_no, supplier_id=req.supplier_id, warehouse_id=req.warehouse_id,
             status=1, bill_date=req.bill_date or datetime.now(), operator_id=user.id,
             ocr_record_id=req.ocr_record_id, ocr_bill_no=req.ocr_bill_no.strip(), remark=req.remark,
+            plan_id=req.plan_id, delivery_file_ids=json.dumps(delivery_file_ids),
         )
         db.add(bill)
         db.flush()
@@ -184,6 +222,10 @@ def create_purchase_in(
             bill.total_qty = total_qty.quantize(Decimal("0.001"))
             bill.total_amount = total_amount.quantize(_DEC2)
             db.commit()
+            # 关联采购计划单 → 按累计实际入库量推进状态（部分入库 / 已完成）
+            if plan:
+                _advance_plan_status(db, plan.id)
+                db.commit()
             return ok({"id": bill.id, "bill_no": bill_no})
         except IntegrityError as exc:
             db.rollback()
@@ -323,6 +365,8 @@ def void_purchase_in(
             bill_item_id=it.id, qty_delta=-it.qty, cost_price=it.price,
             operator_id=user.id, remark="作废冲销",
         )
+    if bill.plan_id:
+        _advance_plan_status(db, bill.plan_id)  # 作废后实收减少，计划状态相应回退
     db.commit()
     return ok()
 
@@ -631,7 +675,7 @@ def location_summary(
             stmt = stmt.where(BaseLocation.warehouse_id == warehouse_id)
         if shelf_id:
             stmt = stmt.where(BaseLocation.shelf_id == shelf_id)
-        locations = db.scalars(stmt.order_by(BaseLocation.layer_no, BaseLocation.code)).all()
+        locations = db.scalars(stmt.order_by(BaseLocation.layer_no, BaseLocation.row_no, BaseLocation.col_no)).all()
         if not locations:
             return []
         loc_ids = [loc.id for loc in locations]
@@ -668,9 +712,220 @@ def location_summary(
                 "location_id": loc.id,
                 "location_code": _loc_code(db, loc.id),
                 "layer_no": loc.layer_no,
+                "row_no": loc.row_no,
+                "col_no": loc.col_no,
+                "shelf_id": loc.shelf_id,
                 "items": by_loc.get(loc.id, []),
             }
             for loc in locations
         ]
 
     return ok(cache_aside_json(f"stock:locsum:{warehouse_id}:{shelf_id}", 60, _load))
+
+
+# ============================ 采购计划单 ============================
+# 事物流：采购计划单 → 材料入库（关联 plan_id，送货单图片可选存底）→ 库存落账。
+# 计划状态自动推进：0 草稿 → 1 已提交 → 2 部分入库 / 3 已完成（按计划明细累计实收）→ -1 作废。
+
+
+def _plan_received_map(db: Session, plan_id: int) -> dict[int, Decimal]:
+    """计划明细 id → 已累计入库数量（按 product_id 匹配该计划下已入库单明细求和）。"""
+    plan_items = db.scalars(select(PchPurchasePlanItem).where(PchPurchasePlanItem.plan_id == plan_id)).all()
+    result: dict[int, Decimal] = {pi.id: Decimal(0) for pi in plan_items}
+    bill_ids = list(db.scalars(
+        select(PchPurchaseIn.id).where(PchPurchaseIn.plan_id == plan_id, PchPurchaseIn.status == 1)
+    ).all())
+    if bill_ids:
+        rows = db.execute(
+            select(PchPurchaseInItem.product_id, func.sum(PchPurchaseInItem.qty))
+            .where(PchPurchaseInItem.bill_id.in_(bill_ids))
+            .group_by(PchPurchaseInItem.product_id)
+        ).all()
+        by_product = {pid: qty for pid, qty in rows}
+        for pi in plan_items:
+            result[pi.id] = by_product.get(pi.product_id, Decimal(0))
+    return result
+
+
+def _advance_plan_status(db: Session, plan_id: int) -> None:
+    """按计划明细累计实收推进状态：全部完成 → 已完成(3)；有部分实收 → 部分入库(2)。"""
+    plan = db.get(PchPurchasePlan, plan_id)
+    if plan is None or plan.status not in (1, 2):
+        return
+    items = db.scalars(select(PchPurchasePlanItem).where(PchPurchasePlanItem.plan_id == plan.id)).all()
+    if not items:
+        return
+    received = _plan_received_map(db, plan.id)
+    total_planned = sum((it.planned_qty for it in items), Decimal(0))
+    total_received = sum((received.get(it.id, Decimal(0)) for it in items), Decimal(0))
+    if total_planned > 0 and total_received >= total_planned:
+        plan.status = 3
+    elif total_received > 0:
+        plan.status = 2
+
+
+def _plan_out(db: Session, plan: PchPurchasePlan) -> dict:
+    items = db.scalars(select(PchPurchasePlanItem).where(PchPurchasePlanItem.plan_id == plan.id).order_by(PchPurchasePlanItem.sort)).all()
+    wh = db.get(BaseWarehouse, plan.warehouse_id)
+    sup = db.get(BaseSupplier, plan.supplier_id)
+    received = _plan_received_map(db, plan.id)
+    return PurchasePlanOut(
+        id=plan.id, bill_no=plan.bill_no, supplier_id=plan.supplier_id, supplier_name=sup.name if sup else "",
+        warehouse_id=plan.warehouse_id, warehouse_name=wh.name if wh else "",
+        status=plan.status, total_qty=plan.total_qty, total_amount=plan.total_amount,
+        plan_date=plan.plan_date, remark=plan.remark, creator_name=_user_name(db, plan.creator_id),
+        items=[
+            PurchasePlanItemOut(
+                id=it.id, product_id=it.product_id,
+                product_name=(p.name if (p := db.get(BaseProduct, it.product_id)) else ""),
+                code=(p.code if (p := db.get(BaseProduct, it.product_id)) else ""),
+                planned_qty=it.planned_qty, unit_name=it.unit_name, est_price=it.est_price, amount=it.amount,
+                remark=it.remark, received_qty=received.get(it.id, Decimal(0)),
+            )
+            for it in items
+        ],
+    ).model_dump()
+
+
+def _apply_plan_items(db: Session, plan: PchPurchasePlan, items: list[PurchasePlanItemReq]) -> None:
+    """重建计划明细（事务内调用，调用方负责 commit）。"""
+    db.execute(PchPurchasePlanItem.__table__.delete().where(PchPurchasePlanItem.plan_id == plan.id))
+    total_qty, total_amount = Decimal(0), Decimal(0)
+    for idx, item in enumerate(items):
+        product = db.get(BaseProduct, item.product_id)
+        if product is None:
+            raise BizError(E_NOT_FOUND, f"商品 id={item.product_id} 不存在")
+        qty = _parse_dec(item.planned_qty, "计划数量")
+        est = _parse_dec(item.est_price, "预计单价")
+        if qty <= 0:
+            raise BizError(E_PARAM, "计划数量必须大于 0")
+        if est < 0:
+            raise BizError(E_PARAM, "预计单价不能为负数")
+        amount = (qty * est).quantize(_DEC2)
+        unit_name = item.unit_name or (db.get(BaseUnit, product.unit_id).name if product.unit_id else "")
+        db.add(PchPurchasePlanItem(
+            plan_id=plan.id, product_id=product.id, planned_qty=qty, unit_name=unit_name,
+            est_price=est, amount=amount, remark=item.remark.strip(), sort=idx,
+        ))
+        total_qty += qty
+        total_amount += amount
+    plan.total_qty = total_qty.quantize(Decimal("0.001"))
+    plan.total_amount = total_amount.quantize(_DEC2)
+
+
+@router.post("/purchase-plans", dependencies=[Depends(require_permission("pch:in"))])
+def create_purchase_plan(req: PurchasePlanReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """新建采购计划单（草稿）：不动库存，到货后由它生成材料入库。"""
+    if db.get(BaseWarehouse, req.warehouse_id) is None:
+        raise BizError(E_PARAM, "仓库不存在")
+    if req.supplier_id and db.get(BaseSupplier, req.supplier_id) is None:
+        raise BizError(E_PARAM, "供应商不存在")
+    for attempt in range(5):
+        bill_no = generate_bill_no(db, "JH", PchPurchasePlan)
+        plan = PchPurchasePlan(
+            bill_no=bill_no, supplier_id=req.supplier_id, warehouse_id=req.warehouse_id,
+            status=0, plan_date=req.plan_date or datetime.now(), remark=req.remark.strip(),
+            creator_id=user.id,
+        )
+        db.add(plan)
+        db.flush()
+        try:
+            _apply_plan_items(db, plan, req.items)
+            db.commit()
+            return ok(_plan_out(db, db.get(PchPurchasePlan, plan.id)))
+        except IntegrityError as exc:
+            db.rollback()
+            if not bill_no_conflict(exc):
+                raise BizError(E_PARAM, "采购计划单保存失败，请重试（详情见系统日志）") from exc
+            continue
+    raise BizError(E_PARAM, "单据编号生成失败，请重试")
+
+
+@router.get("/purchase-plans")
+def list_purchase_plans(
+    bill_no: str = Query("", max_length=30),
+    supplier_id: int = Query(0),
+    warehouse_id: int = Query(0),
+    status: int | None = Query(None),
+    start: str = Query(""),
+    end: str = Query(""),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> dict:
+    stmt = select(PchPurchasePlan)
+    if bill_no:
+        stmt = stmt.where(PchPurchasePlan.bill_no.like(f"%{bill_no}%"))
+    if supplier_id:
+        stmt = stmt.where(PchPurchasePlan.supplier_id == supplier_id)
+    if warehouse_id:
+        stmt = stmt.where(PchPurchasePlan.warehouse_id == warehouse_id)
+    if start:
+        _check_date_arg(start, "start")
+        stmt = stmt.where(PchPurchasePlan.plan_date >= f"{start} 00:00:00")
+    if end:
+        _check_date_arg(end, "end")
+        stmt = stmt.where(PchPurchasePlan.plan_date <= f"{end} 23:59:59")
+    if status is not None:
+        stmt = stmt.where(PchPurchasePlan.status == status)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.scalars(stmt.order_by(PchPurchasePlan.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
+    return ok(PageData(
+        list=[_plan_out(db, p) for p in rows],
+        total=total, page=page, page_size=page_size,
+    ).model_dump())
+
+
+@router.get("/purchase-plans/{plan_id}")
+def get_purchase_plan(plan_id: int, db: Session = Depends(get_db)) -> dict:
+    plan = db.get(PchPurchasePlan, plan_id)
+    if plan is None:
+        raise BizError(E_NOT_FOUND, "采购计划单不存在")
+    return ok(_plan_out(db, plan))
+
+
+@router.put("/purchase-plans/{plan_id}", dependencies=[Depends(require_permission("pch:in"))])
+def update_purchase_plan(plan_id: int, req: PurchasePlanReq, db: Session = Depends(get_db)) -> dict:
+    """编辑采购计划单（仅草稿可编辑；已提交后不允许改计划）。"""
+    plan = db.get(PchPurchasePlan, plan_id)
+    if plan is None:
+        raise BizError(E_NOT_FOUND, "采购计划单不存在")
+    if plan.status != 0:
+        raise BizError(E_BILL_STATUS, "仅草稿状态的采购计划单可编辑")
+    if db.get(BaseWarehouse, req.warehouse_id) is None:
+        raise BizError(E_PARAM, "仓库不存在")
+    if req.supplier_id and db.get(BaseSupplier, req.supplier_id) is None:
+        raise BizError(E_PARAM, "供应商不存在")
+    plan.supplier_id = req.supplier_id
+    plan.warehouse_id = req.warehouse_id
+    plan.plan_date = req.plan_date or plan.plan_date
+    plan.remark = req.remark.strip()
+    _apply_plan_items(db, plan, req.items)
+    db.commit()
+    return ok(_plan_out(db, db.get(PchPurchasePlan, plan.id)))
+
+
+@router.post("/purchase-plans/{plan_id}/submit", dependencies=[Depends(require_permission("pch:in"))])
+def submit_purchase_plan(plan_id: int, db: Session = Depends(get_db)) -> dict:
+    """提交采购计划单（草稿 → 已提交，之后可据此入库）。"""
+    plan = db.get(PchPurchasePlan, plan_id)
+    if plan is None:
+        raise BizError(E_NOT_FOUND, "采购计划单不存在")
+    if plan.status != 0:
+        raise BizError(E_BILL_STATUS, "仅草稿状态的采购计划单可提交")
+    plan.status = 1
+    db.commit()
+    return ok(_plan_out(db, db.get(PchPurchasePlan, plan.id)))
+
+
+@router.post("/purchase-plans/{plan_id}/void", dependencies=[Depends(require_permission("pch:in"))])
+def void_purchase_plan(plan_id: int, db: Session = Depends(get_db)) -> dict:
+    """作废采购计划单（未完成/未作废状态可作废；已完成的不可）。"""
+    plan = db.get(PchPurchasePlan, plan_id)
+    if plan is None:
+        raise BizError(E_NOT_FOUND, "采购计划单不存在")
+    if plan.status in (-1, 3):
+        raise BizError(E_BILL_STATUS, "已作废或已完成的采购计划单不可作废")
+    plan.status = -1
+    db.commit()
+    return ok(_plan_out(db, db.get(PchPurchasePlan, plan.id)))

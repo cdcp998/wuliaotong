@@ -448,7 +448,7 @@
 | 间距节奏 | 页面标题独立成行，标题与工具栏分层；标题下统一 16px；页面 padding 24（桌面）/12（移动） |
 | 形态一致 | 圆角规则：卡片/面板 8–10、按钮/输入 6、照片缩略图 4；卡片用 1px 边框而非阴影堆叠 |
 | 状态完整 | 加载=骨架屏；错误=Alert+重试；空态=引导文案+行动按钮；删除危险操作带保护提示 |
-| 微交互 | 悬浮背景/边框变化 + 按压 `scale(.98)`；动画只走 transform/opacity，时长 ≤200ms |
+| 微交互 | 悬浮背景/边框变化 + 按压 `scale(.98)`；动画只走 transform/opacity，微交互 ≤200ms、页面进场 ≤400ms；全交互尊重 `prefers-reduced-motion` |
 | 无障碍 | 全局 `:focus-visible` 焦点环；`prefers-reduced-motion` 全局降级；触屏目标 ≥44px |
 | 视口稳定 | 全站 `100dvh` 替代 `100vh`（iOS 地址栏跳动）；移动端宽屏「应用窗口化」选择器同步改用 `100dvh` |
 
@@ -489,3 +489,20 @@
 | 移动 `RequisitionDetail.tsx`「⚠ 私用申请」 | ⚠ | `WarnIcon`（内联 SVG） | 自定义 path：警示三角+感叹号 |
 | 桌面 `Categories.tsx` 挂载材料表格「取消挂载」文字按钮 | —（文字） | `DisconnectOutlined` 图标按钮 + Tooltip「取消挂载」 | 现有图标库 @ant-design/icons |
 | 桌面 `Categories.tsx` 挂载材料表格「移动材料」文字按钮 | —（文字） | `SwapOutlined` 图标按钮 + Tooltip「移动材料」 | 现有图标库 @ant-design/icons |
+
+### 9.6 动效与「导航回顶」（2026-06 增补）
+
+> 在 §9（v2 仅反馈性微交互）基础上按需求为两端导航与主界面补一层**克制动效**；沿用 §9 既有原则：只走 transform/opacity、尊重 `prefers-reduced-motion`、未引入新依赖（纯 CSS animation/transition，对齐 antd 体系）。
+
+| 界面 | 动效 |
+|---|---|
+| 移动端 `TabLayout` | **点击当前 Tab → 内容区平滑回到顶端**（`scrollTo({behavior:'smooth'})`）；点击其他 Tab / 路由切换 → 内容区即时回顶；滚动容器 ref 由 TabLayout 持有（原 `flex:1 + overflowY:auto` 容器） |
+| 移动端 `Home` | hero 问候条淡入+上移；「快捷操作」标题淡入；快捷宫格卡片**错峰入场**（nth-child 延迟 0–0.4s，scale+上移）；「我的申请 / 通知」区块淡入；沿用既有按压反馈（`.wlt-action-cell:active`） |
+| 移动端**二级页** | `/requisitions/list`、`/requisitions/:id`、`/stock/query`、`/inbound`、`/outbound`、`/checks`、`/checks/:id` 根容器加 `.wlt-page-enter`，进入页面时整页淡入+上移（同 Home 的 `wlt-fade-up`）；返回时重新播放 |
+| 移动端「领用申请」底部提交栏 | 原 `position:fixed; left:0; right:0` 会横跨整个视口，在宽屏「应用窗口化（720px）」下**溢出界面**；改为 `left:50% + translateX(-50%) + width:100% + max-width:720px + box-sizing:border-box`（移动端仍全宽、窗口化时居中限宽）；`paddingBottom` 加 `env(safe-area-inset-bottom)` 适配全面屏；根容器 `paddingBottom` 同步改为 `calc(84px + env(...))` |
+| 移动端列表箭头提示 | 移除 `List.Item` 的 `arrow="horizontal"`（右箭头 `>`）提示（Mine/MyRequisitions/Inbound/Outbound/Checks），保留可点击能力、去掉冗余箭头 |
+| 桌面端 `withLayout`→`PageShell` | 受保护业务页外层用 `PageShell`（`key=location.pathname`，置于路由懒加载 `Suspense` 边界内，chunk 就绪后整页进场）：**整页淡入+上移**（覆盖全部业务页）；`AppLayout` 持有内容区 ref，点击侧边导航（含当前项）与顶栏搜索跳转 → 内容区/窗口**回顶**（`scrollContentTop()`，同时兼容「内容区自身滚动」与「页面(窗口)滚动」两种布局） |
+
+- **实现要点**：全部为 CSS `animation`/`transition`，无 `window.addEventListener('scroll')`；进场动画用 `animation-fill-mode: backwards`，动画结束后回落自然样式，**不干扰** `:active`/`:hover` 的按压/悬浮反馈。
+- **无障碍**：`prefers-reduced-motion: reduce` 全局将动画时长降至约 0.01ms（见 §9.2），动效在弱动效偏好下自动消失。
+- **MOTION_INTENSITY 校正**：由 §9.1 的 **3** 提升为 **4**（导航回顶 + 页面进场 + 首页错峰入场均属「状态切换 / 层级反馈」，非装饰性动画），`DESIGN_VARIANCE 4` / `VISUAL_DENSITY 6` 维持不变。

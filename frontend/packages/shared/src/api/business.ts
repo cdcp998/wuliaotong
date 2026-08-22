@@ -10,7 +10,7 @@ export interface InboundItem {
   category_id?: number; // 大模型识别/人工确认的材料分类（>0 时入库同步更新材料分类）
 }
 
-/** 新建入库：warehouseId 仓库（表头）+ items 明细；supplierId/billDate/remark 为单据表头（标题行）信息；ocrBillNo 送货单号（OCR 带入/手工填写，可空）。 */
+/** 新建入库：warehouseId 仓库（表头）+ items 明细；supplierId/billDate/remark 为单据表头（标题行）信息；ocrBillNo 送货单号（OCR 带入/手工填写，可空）；planId 来源采购计划单（可空）；deliveryFileIds 送货单图片存底（可选，最多 10 张）。 */
 export function purchaseIn(
   warehouseId: number,
   items: InboundItem[],
@@ -18,7 +18,9 @@ export function purchaseIn(
   supplierId = 0,
   billDate?: string,
   ocrRecordId = 0,
-  ocrBillNo = ""
+  ocrBillNo = "",
+  planId = 0,
+  deliveryFileIds: number[] = []
 ) {
   return http.post<{ id: number; bill_no: string }>("/purchase-in", {
     warehouse_id: warehouseId,
@@ -27,6 +29,8 @@ export function purchaseIn(
     remark,
     ocr_record_id: ocrRecordId,
     ocr_bill_no: ocrBillNo,
+    plan_id: planId,
+    delivery_file_ids: deliveryFileIds,
     items,
   });
 }
@@ -421,6 +425,8 @@ export interface PurchaseInBill {
   bill_date: string;
   total_qty: string;
   total_amount: string;
+  plan_id?: number; // 来源采购计划单 id
+  plan_bill_no?: string; // 来源采购计划单号
 }
 
 export interface BillItem {
@@ -440,8 +446,57 @@ export interface PurchaseInDetail extends PurchaseInBill {
   remark: string;
   operator_name?: string;
   ocr_record_id?: number;
+  delivery_file_ids?: number[]; // 送货单图片存底（可选，最多 10 张）
   items: BillItem[];
 }
+
+/** 采购计划单（事物流前置：采购计划单 → 材料入库 → 库存落账）。 */
+export interface PurchasePlanBill {
+  id: number;
+  bill_no: string;
+  supplier_id: number;
+  supplier_name: string;
+  warehouse_id: number;
+  warehouse_name: string;
+  status: number; // 0 草稿 / 1 已提交 / 2 部分入库 / 3 已完成 / -1 作废
+  total_qty: string;
+  total_amount: string;
+  plan_date: string;
+  remark: string;
+  creator_name: string;
+  items: {
+    id: number;
+    product_id: number;
+    product_name: string;
+    code: string;
+    planned_qty: string;
+    unit_name: string;
+    est_price: string;
+    amount: string;
+    remark: string;
+    received_qty: string; // 已累计入库数量
+  }[];
+}
+
+export const purchasePlanApi = {
+  list: (params: { billNo?: string; supplierId?: number; warehouseId?: number; status?: number; start?: string; end?: string; page?: number; pageSize?: number } = {}) => {
+    const qs = new URLSearchParams({ page: String(params.page ?? 1), page_size: String(params.pageSize ?? 20) });
+    if (params.billNo) qs.set("bill_no", params.billNo);
+    if (params.supplierId) qs.set("supplier_id", String(params.supplierId));
+    if (params.warehouseId) qs.set("warehouse_id", String(params.warehouseId));
+    if (params.status !== undefined && params.status !== null) qs.set("status", String(params.status));
+    if (params.start) qs.set("start", params.start);
+    if (params.end) qs.set("end", params.end);
+    return http.get<PageData<PurchasePlanBill>>(`/purchase-plans?${qs}`);
+  },
+  detail: (id: number) => http.get<PurchasePlanBill>(`/purchase-plans/${id}`),
+  create: (body: { supplier_id: number; warehouse_id: number; plan_date?: string; remark?: string; items: { product_id: number; planned_qty: string; unit_name?: string; est_price?: string; remark?: string }[] }) =>
+    http.post<PurchasePlanBill>("/purchase-plans", body),
+  update: (id: number, body: { supplier_id: number; warehouse_id: number; plan_date?: string; remark?: string; items: { product_id: number; planned_qty: string; unit_name?: string; est_price?: string; remark?: string }[] }) =>
+    http.put<PurchasePlanBill>(`/purchase-plans/${id}`, body),
+  submit: (id: number) => http.post<PurchasePlanBill>(`/purchase-plans/${id}/submit`),
+  void: (id: number) => http.post<PurchasePlanBill>(`/purchase-plans/${id}/void`),
+};
 
 /** 历史采购价行（材料/供应商历史价格查询）。 */
 export interface HistoryPriceRow {

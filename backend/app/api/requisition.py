@@ -180,19 +180,33 @@ def _req_out(db: Session, r: OutRequisition, viewer: SysUser | None = None) -> d
     return _req_out_batch(db, [r], viewer)[0]
 
 
-def _notify(db: Session, user_id: int, title: str, content: str, biz_type: str) -> None:
-    """站内通知（调用方事务内）。"""
-    db.add(SysNotification(user_id=user_id, title=title, content=content, biz_type=biz_type))
+def _notify(db: Session, user_id: int, title: str, content: str, biz_type: str, link: str = "") -> None:
+    """站内通知（调用方事务内）。link=业务联动跳转目标（移动端路由），兼作自动已读的唯一键。"""
+    db.add(SysNotification(user_id=user_id, title=title, content=content, biz_type=biz_type, link=link))
 
 
-def _notify_admins(db: Session, title: str, content: str) -> None:
+def _notify_admins(db: Session, title: str, content: str, biz_type: str = "预警", link: str = "") -> None:
     """通知管理员（超管/管理者/仓管员）。"""
     role_ids = db.scalars(select(SysRole.id).where(SysRole.code.in_(ALERT_RECEIVER_ROLES))).all()
     uids = db.scalars(
         select(SysUser.id).where(SysUser.role_id.in_(role_ids), SysUser.status == 1)
     ).all()
     for uid in uids:
-        db.add(SysNotification(user_id=uid, title=title, content=content, biz_type="预警"))
+        db.add(SysNotification(user_id=uid, title=title, content=content, biz_type=biz_type, link=link))
+
+
+def _clear_requisition_todo(db: Session, req_id: int) -> None:
+    """领用单进入终态（审计通过/驳回/取消）后，自动把发给管理员们的「待审计」待办标记已读，
+    避免已处理完的待办长期残留（业务联动的一部分）。"""
+    db.execute(
+        SysNotification.__table__.update()
+        .where(
+            SysNotification.link == f"/requisitions/{req_id}",
+            SysNotification.title == "领用已完成工作待审计",
+            SysNotification.is_read == 0,
+        )
+        .values(is_read=1)
+    )
 
 
 def _deduct_items(db: Session, r: OutRequisition, operator_id: int) -> list[str]:
@@ -296,6 +310,7 @@ def create_requisition(
                 db,
                 "领用出库库存不足",
                 f"{bill.bill_no} 领用出库后以下商品库存为负（实际库存与系统不符，请核对）：{'；'.join(shortages)}",
+                biz_type="预警", link=f"/requisitions/{bill.id}",
             )
         try:
             db.commit()
@@ -352,6 +367,7 @@ def work_done_requisition(
         db,
         "领用已完成工作待审计",
         f"{r.bill_no} 已完成工作并拍照留痕（含定位水印），请及时审计",
+        biz_type="待办", link=f"/requisitions/{r.id}",
     )
     db.commit()
     return ok()
@@ -414,7 +430,7 @@ def get_requisition(
 
 @router.get("/requisitions/{req_id}/ai-summary", dependencies=[Depends(require_permission("req:audit"))])
 def requisition_ai_summary(req_id: int, db: Session = Depends(get_db)) -> dict:
-    """领用审核 AI 辅助摘要（P9-P1⑤）：规则聚合上下文 + DeepSeek 生成摘要/风险等级/原因。"""
+    """领用审核 AI 辅助摘要（P9-P1⑤）：规则聚合上下文生成摘要/风险等级/原因。"""
     r = db.get(OutRequisition, req_id)
     if r is None:
         raise BizError(E_NOT_FOUND, "领用单不存在")
@@ -472,6 +488,7 @@ def update_requisition(
             db,
             "领用出库库存不足",
             f"{r.bill_no} 领用出库后以下商品库存为负（实际库存与系统不符，请核对）：{'；'.join(shortages)}",
+            biz_type="预警", link=f"/requisitions/{r.id}",
         )
     db.commit()
     return ok({"shortages": shortages})
@@ -520,6 +537,7 @@ def cancel_requisition(
     # 取消回补库存（提交时已自动出库）
     _restock_items(db, r, user.id, "领用取消回补")
     r.status = REQ_STATUS_CANCELED
+    _clear_requisition_todo(db, r.id)  # 已取消：管理员们的「待审计」待办自动已读
     db.commit()
     return ok()
 
@@ -547,7 +565,8 @@ def audit_requisition(
         r.audit_by = user.id
         r.audit_time = datetime.now()
         r.audit_remark = body.remark
-        _notify(db, r.applicant_id, "领用申请被驳回", f"{r.bill_no} 被驳回：{body.remark or '无'}，库存已回补", "审批")
+        _notify(db, r.applicant_id, "领用申请被驳回", f"{r.bill_no} 被驳回：{body.remark or '无'}，库存已回补", "审批", link=f"/requisitions/{r.id}")
+        _clear_requisition_todo(db, r.id)  # 已处理：管理员们的「待审计」待办自动已读
         db.commit()
         return ok()
 
@@ -559,7 +578,8 @@ def audit_requisition(
     r.audit_by = user.id
     r.audit_time = datetime.now()
     r.audit_remark = body.remark
-    _notify(db, r.applicant_id, "领用申请已通过", f"{r.bill_no} 已通过审计，请凭单领用", "审批")
+    _notify(db, r.applicant_id, "领用申请已通过", f"{r.bill_no} 已通过审计，请凭单领用", "审批", link=f"/requisitions/{r.id}")
+    _clear_requisition_todo(db, r.id)  # 已处理：管理员们的「待审计」待办自动已读
     db.commit()
     return ok()
 

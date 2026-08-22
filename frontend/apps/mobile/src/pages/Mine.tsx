@@ -48,7 +48,7 @@ export function MinePage() {
 
   return (
     <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
-      <NavBar>我的</NavBar>
+      <NavBar onBack={() => navigate("/")}>我的</NavBar>
       <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, padding: 16, margin: 12 }}>
         <div
           style={{
@@ -75,17 +75,16 @@ export function MinePage() {
 
       <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, margin: "0 12px 12px", overflow: "hidden" }}>
         <List style={{ "--border-top": "0" } as React.CSSProperties}>
-          <List.Item onClick={() => setPwdVisible(true)} arrow="horizontal">
+          <List.Item onClick={() => setPwdVisible(true)}>
             修改密码
           </List.Item>
-          <List.Item onClick={() => window.open(otherEndUrl("desktop"), "_blank")} arrow="horizontal">
+          <List.Item onClick={() => window.open(otherEndUrl("desktop"), "_blank")}>
             电脑版入口
           </List.Item>
           <List.Item
             onClick={async () => {
               await Dialog.alert({ content: "报表、系统管理等功能请使用电脑端操作。" });
             }}
-            arrow="horizontal"
           >
             电脑端功能提示
           </List.Item>
@@ -94,7 +93,7 @@ export function MinePage() {
       </div>
 
       <div style={{ padding: "0 16px", fontSize: 11, color: "#c9cdd4", lineHeight: 1.7, textAlign: "center" }}>
-        物料通管理系统 v0.1.0<br />
+        物料通管理系统 v{__APP_VERSION__}<br />
         照片永久保存 · 全程操作留痕
       </div>
 

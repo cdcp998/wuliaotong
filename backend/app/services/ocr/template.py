@@ -1,7 +1,7 @@
 """送货单模板解析（本地规则，无大模型）。
 
 《后端API设计.md》§7：送货单固定版式（行号/物料编码/物料名称/规格型号/单位/数量/含税单价/价税合计）。
-规则解析毫秒级完成，命中后不再调用 DeepSeek，减少等待；失败返回 None 由大模型兜底。
+规则解析毫秒级完成，命中后不再调用大模型，减少等待；失败返回 None 由大模型兜底。
 
 字段特征（对每行文本分类）：
 - 物料编码：9~15 位纯数字（锚点，一条明细的开始；支持「编码 名称」同行）
@@ -54,7 +54,7 @@ def _fmt(v: float) -> str:
 def parse_delivery(lines: list[str]) -> dict | None:
     """规则模板解析送货单文本行；命中返回结构化 dict，否则 None。
 
-    返回结构同 DeepSeek：{"supplier_name", "bill_no", "items": [...]}（items 含 unit），
+    返回结构同大模型文本结构化：{"supplier_name", "bill_no", "items": [...]}（items 含 unit），
     另附 "_engine": "template" 供前端标注识别来源。
     """
     supplier_name = ""

@@ -22,7 +22,7 @@ def test_health():
     assert body["data"]["db"] == "ok"
     assert body["data"]["redis"] in ("ok", "down")
     llm = body["data"]["llm"]
-    assert set(llm) == {"doubao", "deepseek", "siliconflow"}
+    assert set(llm) == {"mm_llm", "deepseek", "siliconflow"}
     assert all(set(v) == {"enabled", "configured", "model"} for v in llm.values())
 
 

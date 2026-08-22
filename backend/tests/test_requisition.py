@@ -267,6 +267,54 @@ def test_notification_flow():
     assert client.put(f"/api/v1/notifications/{nid}/read").json()["code"] == 4003
 
 
+def test_notification_delete_flow():
+    """通知删除（单删/批量删/清空）+ 用户隔离（手机端/桌面端同用）。"""
+    _login_admin()
+    c = _login_tester()
+    uid = c.get("/api/v1/auth/me").json()["data"]["user"]["id"]
+    from app.db import SessionLocal
+    from app.models.sys import SysNotification
+
+    db = SessionLocal()
+    try:
+        for i in range(3):
+            db.add(SysNotification(user_id=uid, title=f"删除测试{i}", content="删除测试", biz_type="测试"))
+        db.commit()
+    finally:
+        db.close()
+    from app.core.cache import cache_delete
+
+    cache_delete(f"notify:unread:{uid}")
+
+    # 单条删除
+    one = c.get("/api/v1/notifications?is_read=0").json()["data"]["list"][0]
+    assert c.delete(f"/api/v1/notifications/{one['id']}").json()["code"] == 0
+    assert c.delete(f"/api/v1/notifications/{one['id']}").json()["code"] == 4003  # 已删除/不存在
+    # 用户隔离：admin 不能删 tester 的通知
+    assert client.delete(f"/api/v1/notifications/{one['id']}").json()["code"] == 4003
+
+    # 批量删除剩余两条
+    rest = c.get("/api/v1/notifications?is_read=0").json()["data"]["list"]
+    ids = [n["id"] for n in rest if n["title"].startswith("删除测试")]
+    assert len(ids) >= 2
+    r = c.post("/api/v1/notifications/delete", json={"ids": ids}).json()
+    assert r["code"] == 0 and r["data"]["deleted"] == len(ids)
+    # 空 id 列表 → 参数错误
+    assert c.post("/api/v1/notifications/delete", json={"ids": []}).json()["code"] != 0
+
+    # 清空：再造一条后清空全部
+    db = SessionLocal()
+    try:
+        db.add(SysNotification(user_id=uid, title="清空测试", content="清空测试", biz_type="测试"))
+        db.commit()
+    finally:
+        db.close()
+    cache_delete(f"notify:unread:{uid}")
+    r = c.delete("/api/v1/notifications").json()
+    assert r["code"] == 0 and r["data"]["deleted"] >= 1
+    assert c.get("/api/v1/notifications/unread-count").json()["data"]["unread_count"] == 0
+
+
 def test_requisition_private_hidden_reason():
     """私用触发：因何使用锁定为「私用」；非管理员看到固定掩护值（最近 30 天内未盘点领用单取值），管理员见真实状态并可编辑掩护值。"""
     _login_admin()

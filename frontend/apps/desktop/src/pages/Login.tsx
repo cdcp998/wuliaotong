@@ -230,6 +230,9 @@ export function LoginPage() {
           <div style={{ marginTop: 18, textAlign: "center", fontSize: 12.5, color: "#646a73" }}>
             手机端操作请前往 <a href={otherEndUrl("mobile")} style={{ color: "#1668dc" }}>手机版入口</a>
           </div>
+          <div style={{ marginTop: 10, textAlign: "center", fontSize: 11.5, color: "#a0a4ab" }}>
+            物料通管理系统 v{__APP_VERSION__}
+          </div>
         </div>
       </div>
 

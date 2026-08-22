@@ -61,6 +61,13 @@ fi
 HAS_NPM=0
 command -v npm >/dev/null 2>&1 && [ -d frontend/node_modules ] && HAS_NPM=1
 
+# ---- 版本一致性门禁（《开发规范.md》§9）：前后端版本号必须一致，任一漂移禁止提交 ----
+echo "[run_tests] 版本一致性校验（§9）"
+if ! "$PY" scripts/check_version.py; then
+  echo "[run_tests] 版本号漂移，禁止继续" >&2
+  exit 1
+fi
+
 # ---- 关键路径（命中任一 → 全量）----
 CRITICAL_PATTERNS=(
   "backend/app/models/"

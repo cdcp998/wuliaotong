@@ -44,10 +44,10 @@ class _FakeEngine:
         return [OcrLine(t, 0.99, b) for t, b in zip(self._lines, self._boxes)]
 
 
-class _FakeDoubao:
-    """伪造豆包视觉客户端。"""
+class _FakeMMLLM:
+    """伪造多模态大模型客户端。"""
 
-    name = "doubao"
+    name = "mm_llm"
 
     def __init__(self, content: str) -> None:
         self._content = content
@@ -71,7 +71,7 @@ def test_ocr_quick_match(monkeypatch):
     pid = _setup_product(name)
     file_id = _upload_img()
     monkeypatch.setattr("app.api.ocr.get_ocr_engine", lambda db: _FakeEngine([name, "数量 10"]))
-    monkeypatch.setattr("app.api.ocr.correct_texts", lambda db, lines: lines)  # 纠错依赖真实 DeepSeek，单测跳过
+    monkeypatch.setattr("app.api.ocr.correct_texts", lambda db, lines: lines)  # 纠错依赖真实大模型，单测跳过
 
     r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
     assert r.json()["code"] == 0, r.text
@@ -128,7 +128,7 @@ def test_ocr_quick_fallback_to_vision(monkeypatch):
     )
     monkeypatch.setattr(
         "app.services.llm.get_llm",
-        lambda db, name="deepseek": _FakeDoubao("轴承6204\n数量 10"),
+        lambda db, name="deepseek": _FakeMMLLM("轴承6204\n数量 10"),
     )
     r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
     assert r.json()["code"] == 0, r.text
@@ -153,7 +153,7 @@ def test_ocr_recognize_task(monkeypatch):
     file_id = _upload_img()
 
     class _FakeVision:
-        """伪造 SiliconFlow 视觉客户端：返回送货单 JSON；chat_text 用于 DeepSeek 材料分类。"""
+        """伪造视觉模型客户端：返回送货单 JSON；chat_text 用于文本模型材料分类。"""
 
         name = "siliconflow"
 
@@ -181,7 +181,7 @@ def test_ocr_recognize_task(monkeypatch):
         time.sleep(0.1)
     assert r.json()["data"]["status"] == "done"
     st = r.json()["data"]["structured"]
-    # SiliconFlow 视觉识别 → DeepSeek 材料分类
+    # 视觉模型识别 → 文本模型材料分类
     assert st["supplier_name"] == "测试供应商"
     assert st["bill_no"] == "X001"
     assert st["items"][0]["product_name"] == "轴承6204"
@@ -197,7 +197,7 @@ def test_ocr_recognize_task(monkeypatch):
 
 
 def test_ocr_recognize_template_first(monkeypatch):
-    """已知格式（物料编码锚点）：mode=template 本地规则模板命中 → 不调用视觉/DeepSeek。"""
+    """已知格式（物料编码锚点）：mode=template 本地规则模板命中 → 不调用视觉/文本模型。"""
     _login_admin()
     file_id = _upload_img()
     lines = [
@@ -214,7 +214,7 @@ def test_ocr_recognize_template_first(monkeypatch):
         "app.api.ocr._delivery_by_vision", lambda db, data: (_ for _ in ()).throw(AssertionError("模板命中不应调用视觉"))
     )
     monkeypatch.setattr(
-        "app.api.ocr._structured_by_deepseek", lambda db, texts: (_ for _ in ()).throw(AssertionError("模板命中不应调用 DeepSeek"))
+        "app.api.ocr._structured_by_text", lambda db, texts: (_ for _ in ()).throw(AssertionError("模板命中不应调用文本模型"))
     )
 
     r = client.post(f"/api/v1/ocr/recognize?file_id={file_id}&ocr_type=1&mode=template")
@@ -265,7 +265,7 @@ def test_ocr_recognize_generic_fallback(monkeypatch):
 
 
 def test_ocr_recognize_unconfigured(monkeypatch):
-    """SiliconFlow 未配置：任务 done 且无结构化（前端人工录入），不报错。"""
+    """视觉模型未配置：任务 done 且无结构化（前端人工录入），不报错。"""
     _login_admin()
     file_id = _upload_img()
     monkeypatch.setattr("app.services.llm.get_llm", lambda db, name="deepseek": (_ for _ in ()).throw(LLMNotConfigured()))
@@ -312,12 +312,12 @@ def test_ai_suggestion_flow(monkeypatch):
     r = client.post(f"/api/v1/ocr/quick?file_id={file_id}&ocr_type=2")
     assert r.json()["data"]["matches"] == []
 
-    # 从识别记录触发 AI 匹配（mock 豆包返回 JSON）
+    # 从识别记录触发 AI 匹配（mock 多模态大模型返回 JSON）
     recs = client.get("/api/v1/ocr/records?match_status=2").json()["data"]["list"]
     record_id = recs[0]["id"]
     monkeypatch.setattr(
         "app.api.ocr.get_llm",
-        lambda db, name: _FakeDoubao('{"name": "新型密封圈", "spec": "30x15", "category": "密封件", "note": ""}'),
+        lambda db, name: _FakeMMLLM('{"name": "新型密封圈", "spec": "30x15", "category": "密封件", "note": ""}'),
     )
     r = client.post(f"/api/v1/ocr/match?record_id={record_id}")
     assert r.json()["code"] == 0, r.text

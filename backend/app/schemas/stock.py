@@ -34,6 +34,8 @@ class PurchaseInReq(BaseModel):
     remark: str = Field(default="", max_length=200)
     ocr_record_id: int = 0  # 来源送货单 OCR 识别记录（0=手工录入）
     ocr_bill_no: str = Field(default="", max_length=60)  # 送货单号（OCR 识别带入/手工填写，可空）
+    plan_id: int = 0  # 来源采购计划单（0=无计划，手工入库）
+    delivery_file_ids: list[int] = []  # 送货单图片存底（可选，最多 10 张）
     items: list[PurchaseInItemReq] = Field(min_length=1)
 
 
@@ -68,8 +70,74 @@ class PurchaseInOut(BaseModel):
     bill_date: datetime
     operator_name: str = ""
     ocr_record_id: int = 0
+    plan_id: int = 0  # 来源采购计划单
+    plan_bill_no: str = ""  # 采购计划单号（来源单据）
+    delivery_file_ids: list[int] = []  # 送货单图片存底
     remark: str
     items: list[PurchaseInItemOut] = []
+
+    @field_serializer("total_qty", "total_amount")
+    def _ser(self, v: Decimal) -> str:
+        return format(v, "f")
+
+
+# ============================ 采购计划单 ============================
+
+
+class PurchasePlanItemReq(BaseModel):
+    product_id: int = Field(gt=0)
+    planned_qty: str
+    unit_name: str = ""
+    est_price: str = "0"  # 预计单价（可空/0，仅估金额，不影响入库实际价格）
+    remark: str = Field(default="", max_length=200)
+
+    @field_validator("planned_qty", "est_price")
+    @classmethod
+    def _dec(cls, v: str) -> str:
+        if not __import__("re").fullmatch(_DECIMAL_RE, v):
+            raise ValueError("数量/金额必须是数字")
+        return v
+
+
+class PurchasePlanReq(BaseModel):
+    supplier_id: int = 0
+    warehouse_id: int = Field(gt=0)
+    plan_date: datetime | None = None
+    remark: str = Field(default="", max_length=255)
+    items: list[PurchasePlanItemReq] = Field(min_length=1)
+
+
+class PurchasePlanItemOut(BaseModel):
+    id: int
+    product_id: int
+    product_name: str = ""
+    code: str = ""
+    planned_qty: Decimal
+    unit_name: str
+    est_price: Decimal
+    amount: Decimal
+    remark: str = ""
+    received_qty: Decimal = 0  # 已累计入库数量（按 plan 关联的入库单统计）
+
+    @field_serializer("planned_qty", "est_price", "amount", "received_qty")
+    def _ser(self, v: Decimal) -> str:
+        return format(v, "f")
+
+
+class PurchasePlanOut(BaseModel):
+    id: int
+    bill_no: str
+    supplier_id: int
+    supplier_name: str = ""
+    warehouse_id: int
+    warehouse_name: str = ""
+    status: int  # 0 草稿 / 1 已提交 / 2 部分入库 / 3 已完成 / -1 作废
+    total_qty: Decimal
+    total_amount: Decimal
+    plan_date: datetime
+    remark: str
+    creator_name: str = ""
+    items: list[PurchasePlanItemOut] = []
 
     @field_serializer("total_qty", "total_amount")
     def _ser(self, v: Decimal) -> str:

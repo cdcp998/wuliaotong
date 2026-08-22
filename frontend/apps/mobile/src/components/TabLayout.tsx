@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { TabBar } from "antd-mobile";
 
@@ -27,11 +27,11 @@ const TABS: TabItem[] = [
     activeIcon: stroke(<path d="M12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9.5z" />, true),
   },
   {
-    key: "scan",
-    title: "识别",
-    path: "/ocr/scan",
-    icon: stroke(<><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><rect x="7" y="7" width="10" height="10" rx="2" /></>),
-    activeIcon: stroke(<><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none" /></>, true),
+    key: "functions",
+    title: "功能",
+    path: "/functions",
+    icon: stroke(<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>),
+    activeIcon: stroke(<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>, true),
   },
   {
     key: "apply",
@@ -56,18 +56,27 @@ const TABS: TabItem[] = [
   },
 ];
 
-/** 手机端 TabBar 布局（《UI设计方案.md》§3.3）：首页/识别/领用/通知/我的。 */
+/** 手机端 TabBar 布局（《UI设计方案.md》§3.3）：首页/功能/领用/通知/我的。 */
 export function TabLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
   const hasPerm = useAuthStore((s) => s.hasPerm);
   const [unread, setUnread] = useState(0);
+  // 内容滚动容器：TabBar 点击当前 Tab → 平滑回到顶端；切换 Tab → 路由变化即时回顶端
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const activeKey = (() => {
+    // 拍照识别页（/ocr/scan）现归属「功能」Tab 高亮（功能卡片里的「拍照识别」进入）
+    if (location.pathname.startsWith("/ocr/scan")) return "functions";
     const hit = TABS.find((t) => (t.path !== "/" ? location.pathname.startsWith(t.path) : location.pathname === t.path));
     return hit?.key ?? "home";
   })();
+
+  // 路由切换（点击不同 Tab）时内容区即时回顶，避免停留在上一页的滚动位置
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [location.pathname]);
 
   // 未读角标：进入即拉取 + 30s 轮询（前端设计 §6）
   useEffect(() => {
@@ -93,7 +102,7 @@ export function TabLayout() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#f5f6f8" }}>
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto" }}>
         <Outlet />
       </div>
       <TabBar
@@ -110,6 +119,10 @@ export function TabLayout() {
             icon={(active: boolean) => (active ? t.activeIcon : t.icon)}
             title={t.title}
             badge={t.key === "notice" && unread > 0 ? (unread > 99 ? "99+" : String(unread)) : undefined}
+            onClick={() => {
+              // 再次点击当前 Tab：内容区平滑回到顶端（onChange 对同值不触发，故在 item 级处理）
+              if (t.key === activeKey) scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+            }}
           />
         ))}
       </TabBar>

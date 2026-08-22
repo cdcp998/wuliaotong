@@ -22,7 +22,7 @@ def dedupe_scan(db: Session, max_pairs: int = 60) -> list[dict]:
     """扫描启用材料，返回疑似重复分组 [{group: [...], reason, confidence}]。
 
     策略：①名称精确相同 → 必查分组（confidence=high）；②名称归一后互相包含/前缀相同且长度差≤4
-    → 候选对（≤max_pairs）交 DeepSeek 判断（confidence=low/medium）。
+    → 候选对（≤max_pairs）本地相似规则直接分组（confidence=medium）。
     """
     rows = db.scalars(select(BaseProduct).where(BaseProduct.status == 1).order_by(BaseProduct.id)).all()
     groups: list[dict] = []

@@ -315,7 +315,7 @@ export function InboundPage() {
   const fmtDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate("/")}>入库</NavBar>
 
       {/* 表头（标题行） */}
@@ -325,10 +325,10 @@ export function InboundPage() {
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
         }>入库仓库</List.Item>
-        <List.Item onClick={() => setSupPicker(true)} arrow="horizontal" extra={supplierId ? (suppliers.find((s) => s.id === supplierId)?.name ?? "-") : "可选"}>供应商</List.Item>
-        <List.Item onClick={() => setDatePicker(true)} arrow="horizontal" extra={fmtDate(billDate)}>入库日期</List.Item>
+        <List.Item onClick={() => setSupPicker(true)} extra={supplierId ? (suppliers.find((s) => s.id === supplierId)?.name ?? "-") : "可选"}>供应商</List.Item>
+        <List.Item onClick={() => setDatePicker(true)} extra={fmtDate(billDate)}>入库日期</List.Item>
         <List.Item extra={<Input placeholder="备注（可选）" value={remark} onChange={setRemark} style={{ textAlign: "right" }} />}>备注</List.Item>
-        <List.Item onClick={() => void openOcrSheet()} arrow="horizontal" extra={ocrLoading ? <DotLoading color="primary" /> : "拍照/相册"}>
+        <List.Item onClick={() => void openOcrSheet()} extra={ocrLoading ? <DotLoading color="primary" /> : "拍照/相册"}>
           送货单识别
         </List.Item>
       </List>
@@ -373,7 +373,7 @@ export function InboundPage() {
               </div>
             }>{r.product.name}</List.Item>
           ))}
-          <List.Item onClick={() => setPickerOpen(true)} arrow="horizontal">+ 添加材料</List.Item>
+          <List.Item onClick={() => setPickerOpen(true)}>+ 添加材料</List.Item>
         </List>
       </div>
 

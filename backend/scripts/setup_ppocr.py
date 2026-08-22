@@ -149,7 +149,7 @@ def _usage(model_version: str) -> None:
     print("  2. 如后端正在运行，请重启后端（uvicorn）使配置生效")
     print("  3. 验证：浏览器访问 /api/v1/health，ocr_engine=paddle、ocr_ready=true 即就绪")
     print("  4. 切换回 RapidOCR：系统设置 → OCR 与大模型 → 识别引擎选择 RapidOCR 并保存")
-    print("  5. 大模型开关：系统设置 → OCR 与大模型 → 豆包/DeepSeek 启用开关；关闭后对应功能自动降级并提示")
+    print("  5. 大模型开关：系统设置 → OCR 与大模型 → 多模态/文本模型启用开关；关闭后对应功能自动降级并提示")
     print("  6. 卸载：pip uninstall paddleocr paddlepaddle")
     print("=" * 62)
 

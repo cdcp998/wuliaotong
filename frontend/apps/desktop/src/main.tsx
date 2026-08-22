@@ -1,6 +1,6 @@
 import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
-import { RouterProvider, createBrowserRouter, Navigate } from "react-router";
+import { RouterProvider, createBrowserRouter, Navigate, useLocation } from "react-router";
 import { App as AntApp, ConfigProvider, Spin } from "antd";
 import zhCN from "antd/locale/zh_CN";
 
@@ -24,11 +24,13 @@ const HistoryPricePage = lazy(() => import("./pages/HistoryPrice").then((m) => (
 const InitPage = lazy(() => import("./pages/Init").then((m) => ({ default: m.InitPage })));
 const LandingPage = lazy(() => import("./pages/Landing").then((m) => ({ default: m.LandingPage })));
 const LogsPage = lazy(() => import("./pages/Logs").then((m) => ({ default: m.LogsPage })));
+const MenusPage = lazy(() => import("./pages/Menus").then((m) => ({ default: m.MenusPage })));
 const LoginPage = lazy(() => import("./pages/Login").then((m) => ({ default: m.LoginPage })));
-const CategoriesPage = lazy(() => import("./pages/Categories").then((m) => ({ default: m.CategoriesPage })));
-const MaterialsPage = lazy(() => import("./pages/Materials").then((m) => ({ default: m.MaterialsPage })));
+const MaterialsDataPage = lazy(() => import("./pages/MaterialsData").then((m) => ({ default: m.MaterialsDataPage })));
+const DeleteReviewsPage = lazy(() => import("./pages/DeleteReviews").then((m) => ({ default: m.DeleteReviewsPage })));
 const OtherIoPage = lazy(() => import("./pages/OtherIo").then((m) => ({ default: m.OtherIoPage })));
 const PurchaseInPage = lazy(() => import("./pages/PurchaseIn").then((m) => ({ default: m.PurchaseInPage })));
+const PurchasePlansPage = lazy(() => import("./pages/PurchasePlans").then((m) => ({ default: m.PurchasePlansPage })));
 const RegisterAppliesPage = lazy(() => import("./pages/RegisterApplies").then((m) => ({ default: m.RegisterAppliesPage })));
 const ReportsPage = lazy(() => import("./pages/Reports").then((m) => ({ default: m.ReportsPage })));
 const RequisitionApplyPage = lazy(() => import("./pages/RequisitionApply").then((m) => ({ default: m.RequisitionApplyPage })));
@@ -36,7 +38,6 @@ const RequisitionAuditPage = lazy(() => import("./pages/RequisitionAudit").then(
 const RequisitionQueryPage = lazy(() => import("./pages/RequisitionQuery").then((m) => ({ default: m.RequisitionQueryPage })));
 const RolesPage = lazy(() => import("./pages/Roles").then((m) => ({ default: m.RolesPage })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
-const ShelfMapPage = lazy(() => import("./pages/ShelfMap").then((m) => ({ default: m.ShelfMapPage })));
 const StockQueryPage = lazy(() => import("./pages/StockQuery").then((m) => ({ default: m.StockQueryPage })));
 const SuppliersPage = lazy(() => import("./pages/Suppliers").then((m) => ({ default: m.SuppliersPage })));
 const TransfersPage = lazy(() => import("./pages/Transfers").then((m) => ({ default: m.TransfersPage })));
@@ -49,12 +50,25 @@ function PageLoading() {
   return <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center" }}><Spin size="large" /></div>;
 }
 
+/** 页面进场动画包装：key=location.pathname，路由切换即重挂载，覆盖全部受保护业务页。
+ * 置于 Suspense 边界内：懒加载 chunk 未就绪时先显示 Loading，就绪后 PageShell+页面一起进场动画。 */
+function PageShell({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  return (
+    <div key={location.pathname} className="wlt-page">
+      {children}
+    </div>
+  );
+}
+
 /** 受保护页面统一套上应用骨架（侧边导航 + 顶栏）。 */
 function withLayout(page: React.ReactNode) {
   return (
     <RequireAuth>
       <AppLayout>
-        <Suspense fallback={<PageLoading />}>{page}</Suspense>
+        <Suspense fallback={<PageLoading />}>
+          <PageShell>{page}</PageShell>
+        </Suspense>
       </AppLayout>
     </RequireAuth>
   );
@@ -70,14 +84,19 @@ const router = createBrowserRouter(
   { path: "/dashboard", element: withLayout(<DashboardPage />) },
   { path: "/reports", element: withLayout(<ReportsPage />) },
   { path: "/warehouses", element: withLayout(<WarehousesPage />) },
-  { path: "/materials", element: withLayout(<MaterialsPage />) },
-  { path: "/categories", element: withLayout(<CategoriesPage />) },
+  { path: "/materials-data", element: withLayout(<MaterialsDataPage />) },
+  { path: "/delete-reviews", element: withLayout(<DeleteReviewsPage />) },
+  // 旧路由兼容：材料管理 / 分类管理 已合并为「物料数据管理」，重定向到新页
+  { path: "/materials", element: <Navigate to="/materials-data" replace /> },
+  { path: "/categories", element: <Navigate to="/materials-data" replace /> },
   { path: "/suppliers", element: withLayout(<SuppliersPage />) },
   { path: "/units", element: withLayout(<UnitsPage />) },
-  { path: "/warehouses/:id/map", element: withLayout(<ShelfMapPage />) },
+  // 旧 2D 货架图已并入「仓库与货架」内嵌 2.5D 视图，旧地址重定向
+  { path: "/warehouses/:id/map", element: <Navigate to="/warehouses" replace /> },
   { path: "/system/settings", element: withLayout(<SettingsPage />) },
   { path: "/system/users", element: withLayout(<UsersPage />) },
   { path: "/system/roles", element: withLayout(<RolesPage />) },
+  { path: "/system/menus", element: withLayout(<MenusPage />) },
   { path: "/system/logs", element: withLayout(<LogsPage />) },
   { path: "/system/backups", element: withLayout(<BackupsPage />) },
   { path: "/system/register-applies", element: withLayout(<RegisterAppliesPage />) },
@@ -91,6 +110,7 @@ const router = createBrowserRouter(
   { path: "/requisitions/query", element: withLayout(<RequisitionQueryPage />) },
   { path: "/requisitions", element: withLayout(<RequisitionAuditPage />) },
   { path: "/purchase-in", element: withLayout(<PurchaseInPage />) },
+  { path: "/purchase-plans", element: withLayout(<PurchasePlansPage />) },
   { path: "/stock", element: withLayout(<StockQueryPage />) },
   { path: "/ocr/delivery", element: withLayout(<DeliveryOcrPage />) },
   { path: "/ai-suggestions", element: withLayout(<AiSuggestionsPage />) },

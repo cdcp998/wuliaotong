@@ -194,7 +194,7 @@ OCR 结果示例（structured）：
 - **运行时日志**：级别 DEBUG/INFO/WARN/ERROR（默认 INFO，环境变量 `LOG_LEVEL` 或系统设置 `log.level` 覆盖，保存后立即生效无需重启）；文件按天轮转 `logs/app-YYYY-MM-DD.log`；覆盖关键操作（请求/登录/OCR 任务/大模型调用/备份/设置修改），uvicorn 访问日志同文件
 - 存储位置管理见 §7（/storages，**共用存储池**：多存储地址 fill 最空闲 / round 轮询 / manual 手动指定；路径支持相对 backend/ 或绝对路径）
 - GET /logs?username=&module=&method=&start=&end=&page= 操作日志（写操作审计查询）
-- GET /notifications?is_read=&page=、PUT /notifications/{id}/read、PUT /notifications/read-all、GET /notifications/unread-count
+- GET /notifications?is_read=&page=&page_size=、PUT /notifications/{id}/read、PUT /notifications/read-all、GET /notifications/unread-count、DELETE /notifications/{id}（单删）、POST /notifications/delete {ids:[]}（批量删，≤200）、DELETE /notifications（清空本人全部）；删除均仅限本人且同步失效未读数缓存（手机端/桌面端通知中心共用）
 - POST /backups（手动备份 mysqldump→gzip）、GET /backups、DELETE /backups/{id}、GET /backups/{id}/download（备份密码走 MYSQL_PWD 环境变量；每日 02:00 自动备份保留最近 14 份）
 - GET /health（服务 + 数据库/Redis 状态 + LLM 服务商状态 + 当前 OCR 引擎类型与状态，部署/运维用；**数据库不可用时不报错——返回 `db: "down"`（安装完成前数据库未就绪属正常态，不阻塞启动与安装流程；安装完成后 db down 即视为故障）；**Redis 不可用时返回 `redis: "down"` 且不影响业务降级直查数据库；`llm` 返回 doubao/deepseek/siliconflow 三家的 `{enabled, configured, model}`——只读 sys_config（启用开关 + Key 是否已配置 + 模型名），不做在线探测以免探活消耗配额）
 

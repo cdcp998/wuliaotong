@@ -202,7 +202,8 @@ def test_warehouse_shelf_location_crud():
     r = client.post("/api/v1/locations", json={"warehouse_id": wh_id, "shelf_id": shelf_id, "layer_no": 1})
     assert r.json()["code"] == 0, r.text
     loc = r.json()["data"]
-    assert loc["code"] == f"{wh_code}-J01-01"  # 自动生成库位编码
+    assert loc["code"] == f"{wh_code}-J01-L1R1C1"  # 自动生成库位编码（层×行×列=隔）
+    assert loc["row_no"] == 1 and loc["col_no"] == 1
 
     locs = client.get(f"/api/v1/locations?warehouse_id={wh_id}").json()["data"]
     assert len(locs) == 1

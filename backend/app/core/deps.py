@@ -167,6 +167,26 @@ def require_any_permission(*codes: str):
     return checker
 
 
+# 删除审核等管理动作：管理者及以上角色（super_admin / manager）
+MANAGER_ROLE_CODES = ("super_admin", "manager")
+
+
+def require_manager_role():
+    """管理者及以上角色校验（如删除审核批准/驳回）；超级管理员自动放行。"""
+
+    def checker(
+        user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> SysUser:
+        role_code = cache_aside(_role_cache_key(user.role_id), _ROLE_CACHE_TTL,
+                                lambda: _load_role_code(db, user.role_id))
+        if role_code not in MANAGER_ROLE_CODES:
+            raise BizError(E_NO_PERMISSION, "需要管理者及以上角色", http_status=403)
+        return user
+
+    return checker
+
+
 def _load_role_code(db: Session, role_id: int) -> str | None:
     role = db.get(SysRole, role_id)
     return role.code if role else None

@@ -2,7 +2,7 @@
 
 设计文档：《AI开发文档/AI赋能设计.md》P9-⑪。
 原则：**本地 OCR 是核心执行体**（识别/解析/匹配全部走本地引擎）；
-识图模型（SiliconFlow/豆包视觉）与生图模型（SiliconFlow images/generations）
+识图模型（视觉大模型）与生图模型（视觉大模型 images/generations）
 只做训练辅助——自动标注、样本校验、纹理素材。
 
 流水线：
@@ -24,7 +24,7 @@
   # 冒烟：零外部依赖（渲染 3 张 + 本地 OCR + 本地解析）
   .venv/Scripts/python.exe scripts/ocr_ai_train.py --mode self-test
 
-  # 送货单：合成 8 张（含生图纹理背景）→ SiliconFlow 识图校验 → 本地 OCR → 评测报告
+  # 送货单：合成 8 张（含生图纹理背景）→ 视觉模型识图校验 → 本地 OCR → 评测报告
   .venv/Scripts/python.exe scripts/ocr_ai_train.py --mode delivery --count 8 \
       --vision siliconflow --gen-bg
 
@@ -142,20 +142,20 @@ def _cfg(db, key: str, env: str = "", default: str = "") -> str:
 
 def _vision_client(db, name: str):
     """识图模型客户端（复用 app.services.llm 的 OpenAI 兼容客户端）。"""
-    from app.services.llm import DoubaoClient, SiliconFlowClient
+    from app.services.llm import MMLLMClient, SiliconFlowClient
 
-    if name == "doubao":
-        key = _cfg(db, "llm.doubao.api_key", "DOUBAO_API_KEY")
+    if name == "mm_llm":
+        key = _cfg(db, "llm.mm_llm.api_key", "MM_LLM_API_KEY")
         if not key:
-            return None, "豆包未配置"
-        return DoubaoClient(
-            api_key=key,
-            base_url=_cfg(db, "llm.doubao.base_url", "DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
-            model=_cfg(db, "llm.doubao.model", "DOUBAO_MODEL", "doubao-1-5-vision-pro-32k-250115"),
-        ), "doubao"
+            return None, "多模态大模型未配置"
+        base_url = _cfg(db, "llm.mm_llm.base_url", "MM_LLM_BASE_URL")
+        model = _cfg(db, "llm.mm_llm.model", "MM_LLM_MODEL")
+        if not base_url or not model:
+            return None, "多模态大模型未配置 Base URL/模型名"
+        return MMLLMClient(api_key=key, base_url=base_url, model=model), "mm_llm"
     key = _cfg(db, "llm.siliconflow.api_key", "SILICONFLOW_API_KEY")
     if not key:
-        return None, "SiliconFlow 未配置"
+        return None, "视觉模型未配置"
     return SiliconFlowClient(
         api_key=key,
         base_url=_cfg(db, "llm.siliconflow.base_url", "SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1"),
@@ -197,7 +197,7 @@ def _gen_texture_bg(db, model: str) -> Image.Image | None:
         return None
     key = _cfg(db, "llm.siliconflow.api_key", "SILICONFLOW_API_KEY")
     if not key:
-        print("AI_TRAIN: 生图模型未配置（SiliconFlow Key），跳过纹理生成，使用程序化纹理")
+        print("AI_TRAIN: 生图模型未配置（Key），跳过纹理生成，使用程序化纹理")
         return None
     base = _cfg(db, "llm.siliconflow.base_url", "SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
     prompt = "一张空白纸张的浅色纹理背景，接近纯白、微带纸纤维质感，无任何文字、无图案、无边框、无阴影"
@@ -750,9 +750,9 @@ def main() -> int:
     p.add_argument("--count", type=int, default=4, help="合成样本数（self-test 忽略）")
     p.add_argument("--engine", choices=["rapidocr", "paddle", "off"], default=None,
                    help="本地 OCR 引擎（默认取 .env OCR_ENGINE）")
-    p.add_argument("--vision", choices=["siliconflow", "doubao", "off"], default="siliconflow",
+    p.add_argument("--vision", choices=["siliconflow", "mm_llm", "off"], default="siliconflow",
                    help="识图模型（训练辅助）；off=跳过")
-    p.add_argument("--gen-bg", action="store_true", help="调用生图模型生成纸张纹理背景（需 SiliconFlow Key）")
+    p.add_argument("--gen-bg", action="store_true", help="调用生图模型生成纸张纹理背景（需已配置视觉模型 Key）")
     p.add_argument("--gen-model", default="Kwai-Kolors/Kolors", help="生图模型名")
     p.add_argument("--threshold", type=float, default=0.6, help="识图校验通过阈值（字段级准确率）")
     p.add_argument("--no-db", action="store_true", help="不连数据库（模板降级写本地文件）")

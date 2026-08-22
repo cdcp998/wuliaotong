@@ -7,7 +7,7 @@
 流水线（每张图）：
 ① 本地 OCR（按 sys_config ocr.engine 选择 PaddleOCR/RapidOCR；启动失败自动降级另一引擎）
    → 文本行（本地 OCR 是核心执行体，后续锚点验证依赖它）
-② SiliconFlow 视觉模型识图（默认 Qwen/Qwen3.6-35B-A3B，--model 可覆盖）→
+② 视觉模型识图（默认 Qwen/Qwen3.6-35B-A3B，--model 可覆盖）→
    {product_name, brand, spec}；提示词附上①的本地 OCR 文本行作为字符级证据
    （视觉模型负责语义结构化，本地 OCR 负责文字证据，两者互补）
 ③ build_anchors 提取锚点（品牌/规格/商品名，长度≥2 去重）；仅保留被本地 OCR 实际读到的
@@ -102,10 +102,10 @@ def _local_ocr_texts(db, data: bytes, engine_name: str | None) -> tuple[list[str
 
 
 def _vision_annotate(db, image_bytes: bytes, model: str, ocr_lines: list[str]) -> dict | None:
-    """SiliconFlow 视觉模型识图 → {product_name, brand, spec}；失败返回 None。"""
+    """视觉模型识图 → {product_name, brand, spec}；失败返回 None。"""
     key = _cfg(db, "llm.siliconflow.api_key")
     if not key:
-        print("  AI_TRAIN: SiliconFlow 未配置，跳过视觉识别")
+        print("  AI_TRAIN: 视觉模型未配置，跳过视觉识别")
         return None
     client = SiliconFlowClient(
         api_key=key,
@@ -150,7 +150,7 @@ def _blob(texts: list[str]) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description="真实商品标签照片 → 本地 OCR 商品识别模板")
     ap.add_argument("--dir", default=str(ROOT.parent / "testdata" / "物品标签"), help="照片目录（默认 testdata/物品标签）")
-    ap.add_argument("--model", default="Qwen/Qwen3.6-35B-A3B", help="SiliconFlow 视觉模型 ID")
+    ap.add_argument("--model", default="Qwen/Qwen3.6-35B-A3B", help="视觉模型 ID")
     ap.add_argument("--out", default=str(ROOT / "data" / "ocr_templates_物品标签.json"), help="JSON 报告/模板导出路径")
     ap.add_argument("--dry-run", action="store_true", help="只识别不写数据库，报告仍导出到 --out")
     args = ap.parse_args()

@@ -32,7 +32,7 @@ export function StockQueryPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate("/")}>库存查询</NavBar>
       <div style={{ padding: 12 }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>

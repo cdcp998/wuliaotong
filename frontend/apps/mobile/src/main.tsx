@@ -13,6 +13,7 @@ import { TabLayout } from "./components/TabLayout";
 // 页面按路由懒加载：首屏只加载当前 Tab 所需代码
 const CheckRunPage = lazy(() => import("./pages/CheckRun").then((m) => ({ default: m.CheckRunPage })));
 const ChecksPage = lazy(() => import("./pages/Checks").then((m) => ({ default: m.ChecksPage })));
+const FunctionsPage = lazy(() => import("./pages/Functions").then((m) => ({ default: m.FunctionsPage })));
 const HomePage = lazy(() => import("./pages/Home").then((m) => ({ default: m.HomePage })));
 const InboundPage = lazy(() => import("./pages/Inbound").then((m) => ({ default: m.InboundPage })));
 const LoginPage = lazy(() => import("./pages/Login").then((m) => ({ default: m.LoginPage })));
@@ -23,9 +24,12 @@ const OcrScanPage = lazy(() => import("./pages/OcrScan").then((m) => ({ default:
 const OutboundPage = lazy(() => import("./pages/Outbound").then((m) => ({ default: m.OutboundPage })));
 const RequisitionDetailPage = lazy(() => import("./pages/RequisitionDetail").then((m) => ({ default: m.RequisitionDetailPage })));
 const RequisitionNewPage = lazy(() => import("./pages/RequisitionNew").then((m) => ({ default: m.RequisitionNewPage })));
+const RequisitionAuditPage = lazy(() => import("./pages/RequisitionAudit").then((m) => ({ default: m.RequisitionAuditPage })));
 const StockQueryPage = lazy(() => import("./pages/StockQuery").then((m) => ({ default: m.StockQueryPage })));
+const TransfersPage = lazy(() => import("./pages/Transfers").then((m) => ({ default: m.TransfersPage })));
+const WarehousesPage = lazy(() => import("./pages/Warehouses").then((m) => ({ default: m.WarehousesPage })));
 
-/** TabBar 五页：首页/识别/领用/通知/我的（《UI设计方案.md》§3.3）。
+/** TabBar 五页：首页/功能/领用/通知/我的（《UI设计方案.md》§3.3）。
  * 生产环境经 Nginx 反代部署在 /m/ 前缀（入口后缀），路由 basename=/m/ 后
  * 应用内跳转不再拼接前缀，刷新/直达 /m/xxx 均正常；开发环境无前缀。 */
 const tabRouter = createBrowserRouter(
@@ -39,20 +43,24 @@ const tabRouter = createBrowserRouter(
       ),
       children: [
         { path: "/", element: <HomePage /> },
-        { path: "/ocr/scan", element: <OcrScanPage /> },
-        { path: "/requisitions/new", element: <RequisitionNewPage /> },
+        { path: "/functions", element: <FunctionsPage /> },
+        { path: "/ocr/scan", element: <RequireAuth perm="ocr:use"><OcrScanPage /></RequireAuth> },
+        { path: "/requisitions/new", element: <RequireAuth perm="req:apply"><RequisitionNewPage /></RequireAuth> },
         { path: "/notifications", element: <NotificationsPage /> },
         { path: "/mine", element: <MinePage /> },
       ],
     },
-    // 二级页面（带返回 NavBar）
-    { path: "/requisitions/list", element: <RequireAuth><MyRequisitionsPage /></RequireAuth> },
-    { path: "/requisitions/:id", element: <RequireAuth><RequisitionDetailPage /></RequireAuth> },
-    { path: "/stock/query", element: <RequireAuth><StockQueryPage /></RequireAuth> },
-    { path: "/inbound", element: <RequireAuth><InboundPage /></RequireAuth> },
-    { path: "/outbound", element: <RequireAuth><OutboundPage /></RequireAuth> },
-    { path: "/checks", element: <RequireAuth><ChecksPage /></RequireAuth> },
-    { path: "/checks/:id", element: <RequireAuth><CheckRunPage /></RequireAuth> },
+    // 二级页面（带返回 NavBar；perm 逗号分隔=任一命中）
+    { path: "/requisitions/list", element: <RequireAuth perm="req:apply"><MyRequisitionsPage /></RequireAuth> },
+    { path: "/requisitions/:id", element: <RequireAuth perm="req:apply,req:audit"><RequisitionDetailPage /></RequireAuth> },
+    { path: "/requisitions/audit", element: <RequireAuth perm="req:audit"><RequisitionAuditPage /></RequireAuth> },
+    { path: "/stock/query", element: <RequireAuth perm="stk:query"><StockQueryPage /></RequireAuth> },
+    { path: "/warehouses", element: <RequireAuth perm="base:warehouse"><WarehousesPage /></RequireAuth> },
+    { path: "/transfers", element: <RequireAuth perm="stk:transfer"><TransfersPage /></RequireAuth> },
+    { path: "/inbound", element: <RequireAuth perm="pch:in"><InboundPage /></RequireAuth> },
+    { path: "/outbound", element: <RequireAuth perm="stk:other"><OutboundPage /></RequireAuth> },
+    { path: "/checks", element: <RequireAuth perm="stk:check"><ChecksPage /></RequireAuth> },
+    { path: "/checks/:id", element: <RequireAuth perm="stk:check"><CheckRunPage /></RequireAuth> },
   ],
   // v7 future flags：react-router 6.30.4 运行时支持 v7_startTransition（类型声明滞后，故断言）；消除 v7 迁移警告
   { basename: import.meta.env.DEV ? "" : "/m/", future: { v7_startTransition: true, v7_relativeSplatPath: true, v7_fetcherPersist: true, v7_normalizeFormMethod: true, v7_partialHydration: true, v7_skipActionErrorRevalidation: true } as Record<string, boolean> }

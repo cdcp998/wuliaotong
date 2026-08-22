@@ -21,6 +21,7 @@ export function RequisitionDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<RequisitionDetail | null>(null);
+  const [loadState, setLoadState] = useState<"loading" | "ok" | "notfound">("loading"); // 加载中/成功/不存在（含无权限）
   const user = useAuthStore((s) => s.user);
   const hasPerm = useAuthStore((s) => s.hasPerm);
   const isAdmin = user?.role?.code === "super_admin" || hasPerm("req:audit");
@@ -38,11 +39,15 @@ export function RequisitionDetailPage() {
   const [previewing, setPreviewing] = useState(false);
 
   async function load() {
+    setLoadState("loading");
     try {
       const d = await requisitionApi.detail(Number(id));
       setDetail(d);
-    } catch (e) {
-      Toast.show(e instanceof Error ? e.message : "加载失败");
+      setLoadState("ok");
+    } catch {
+      // 单不存在/无权限 → 展示「未找到」视图（带返回键，避免卡死在无返回的空页）
+      setDetail(null);
+      setLoadState("notfound");
     }
   }
 
@@ -135,12 +140,34 @@ export function RequisitionDetailPage() {
     });
   }
 
-  if (!detail) return <div style={{ minHeight: "100dvh", background: "#f5f6f8", textAlign: "center", paddingTop: 80, color: "#646a73" }}>加载中…</div>;
+  // 加载中 / 单不存在：统一带返回 NavBar，不存在态提供「返回」按钮（防死端）
+  if (loadState !== "ok" || !detail) {
+    return (
+      <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+        <NavBar onBack={() => navigate(-1)}>申请详情</NavBar>
+        <div style={{ padding: "72px 40px", textAlign: "center" }}>
+          {loadState === "loading" ? (
+            <div style={{ color: "#646a73", fontSize: 14 }}>加载中…</div>
+          ) : (
+            <>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#1f2329" }}>未找到该领用单</div>
+              <div style={{ fontSize: 12.5, color: "#646a73", margin: "8px 0 24px", lineHeight: 1.7 }}>
+                单号可能已删除，或您没有查看该单的权限。
+              </div>
+              <Button block color="primary" style={{ height: 42, borderRadius: 9, maxWidth: 240, margin: "0 auto" }} onClick={() => navigate(-1)}>
+                返回
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const st = STATUS[detail.status];
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
       <NavBar onBack={() => navigate(-1)}>申请详情</NavBar>
       <div style={{ padding: 12 }}>
         {/* 单头信息 */}

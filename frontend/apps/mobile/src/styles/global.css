@@ -43,6 +43,82 @@ button:focus-visible,
   }
 }
 
+/* ---------- 3b. 进场动画（首页：hero / 快捷宫格 / 区块卡片） ----------
+ * 仅在首页使用（.wlt-hero/.wlt-home-section-head/.wlt-section/.wlt-action-cell 均出自 Home.tsx）。
+ * 统一用 backwards fill：进场延迟期间保持 opacity 0，动画结束后回落到自然样式，
+ * 不干扰 :active / :hover 的过渡反馈；reduced-motion 由第 5 节全局降级。 */
+@keyframes wlt-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wlt-cell-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.wlt-hero {
+  animation: wlt-fade-up 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+.wlt-home-section-head {
+  animation: wlt-fade-up 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.06s backwards;
+}
+
+.wlt-section {
+  animation: wlt-fade-up 0.42s cubic-bezier(0.22, 0.61, 0.36, 1) 0.1s backwards;
+}
+
+.wlt-action-cell {
+  animation: wlt-cell-in 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+/* 快捷宫格错峰入场：按网格位置分配延迟（最多 8 格） */
+.wlt-action-cell:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.wlt-action-cell:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.wlt-action-cell:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.wlt-action-cell:nth-child(4) {
+  animation-delay: 0.2s;
+}
+.wlt-action-cell:nth-child(5) {
+  animation-delay: 0.25s;
+}
+.wlt-action-cell:nth-child(6) {
+  animation-delay: 0.3s;
+}
+.wlt-action-cell:nth-child(7) {
+  animation-delay: 0.35s;
+}
+.wlt-action-cell:nth-child(8) {
+  animation-delay: 0.4s;
+}
+
+/* ---------- 3c. 二级页进场动画（同 Home 的 fade-up） ----------
+ * 应用于手机端二级页根容器（.wlt-page-enter）：
+ * MyRequisitions / RequisitionDetail / StockQuery / Inbound / Outbound / Checks / CheckRun。
+ * 进入页面时整页淡入+上移；重进入（返回）会重新播放。 */
+.wlt-page-enter {
+  animation: wlt-fade-up 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
 /* ---------- 4. 文本选区 ---------- */
 ::selection {
   background: rgba(22, 104, 220, 0.18);

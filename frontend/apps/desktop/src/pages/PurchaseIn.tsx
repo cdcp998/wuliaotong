@@ -5,7 +5,7 @@ import { CameraOutlined, PictureOutlined, PlusOutlined, ThunderboltOutlined } fr
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate, useSearchParams } from "react-router";
 
-import { baseApi, fileApi, ocrApi, purchaseApi, purchaseIn, resolveByBarcode, type CategoryNode, type HistoryPriceRow, type Product, type PurchaseInBill, type PurchaseInDetail, type Shelf, type Supplier } from "@wlt/shared";
+import { baseApi, fileApi, fileUrl, ocrApi, purchaseApi, purchaseIn, purchasePlanApi, resolveByBarcode, type CategoryNode, type HistoryPriceRow, type Product, type PurchaseInBill, type PurchaseInDetail, type Shelf, type Supplier } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
 
@@ -76,12 +76,19 @@ export function PurchaseInPage() {
   const [remark, setRemark] = useState("");
   const [ocrRecordId, setOcrRecordId] = useState(0);
   const [ocrBillNo, setOcrBillNo] = useState("");
+  // 来源采购计划单（URL ?plan_id= 带入；提交时关联，计划状态自动推进）
+  const [planId, setPlanId] = useState(0);
+  const [planBillNo, setPlanBillNo] = useState("");
+  const planPrefillDone = useRef(false); // 防 StrictMode/dev 双执行
+  // 送货单图片存底（可选，最多 10 张）
+  const [deliveryFiles, setDeliveryFiles] = useState<{ fileId: number; url: string }[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [nextKey, setNextKey] = useState(1);
   // 相机输入目标列：barcode=条码列 / name=材料名称列
   const scanTarget = useRef<{ kind: "barcode" | "name"; rowKey: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null); // 拍照输入（capture 直达相机）
   const albumRef = useRef<HTMLInputElement>(null); // 相册输入（不带 capture，可选图）
+  const deliveryFileRef = useRef<HTMLInputElement>(null); // 送货单图片存底（可选，最多 10 张）
   // 无材料新增（条码/OCR 未匹配 → 新增材料弹窗，预填识别数据）
   const [materialModal, setMaterialModal] = useState<{ open: boolean; rowKey: number; barcode: string; name: string; spec: string }>({ open: false, rowKey: -1, barcode: "", name: "", spec: "" });
   const [materialForm] = Form.useForm();
@@ -313,6 +320,56 @@ export function PurchaseInPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill, open]);
 
+  /** 从采购计划单预填（URL ?plan_id=）：计划明细 → 入库明细（实收数量可改），关联计划单号。 */
+  useEffect(() => {
+    const pid = Number(params.get("plan_id") || 0);
+    if (!pid || planPrefillDone.current) return;
+    planPrefillDone.current = true;
+    void (async () => {
+      try {
+        const plan = await purchasePlanApi.detail(pid);
+        if (plan.status !== 1 && plan.status !== 2) {
+          message.warning("该采购计划单当前状态不可入库（仅已提交/部分入库可入库）");
+          navigate("/purchase-plans", { replace: true });
+          return;
+        }
+        setPlanId(plan.id);
+        setPlanBillNo(plan.bill_no);
+        setWarehouseId(plan.warehouse_id);
+        setSupplierId(plan.supplier_id);
+        const rs: Row[] = [];
+        for (const it of plan.items) {
+          let p: Product | undefined;
+          try {
+            p = await baseApi.product(it.product_id);
+          } catch {
+            p = undefined;
+          }
+          rs.push({
+            key: nextKey + rs.length,
+            product: p ?? null,
+            material_code: p?.material_code ?? "",
+            spec: p?.spec ?? "",
+            unit: it.unit_name || p?.unit_name || "",
+            barcode: p?.barcode ?? "",
+            category_id: p?.category_id || undefined,
+            category_name: p?.category_name || "",
+            location_id: undefined,
+            qty: Number(it.planned_qty || 1), // 计划数量作为默认实收数，可改
+            price: Number(it.est_price || 0),
+          });
+        }
+        setRows((old) => [...old, ...rs]);
+        setNextKey((k) => k + rs.length);
+        setOpen(true);
+        message.success(`已带入采购计划单 ${plan.bill_no} 的明细，实收数量可修改`);
+      } catch (e) {
+        message.error(e instanceof Error ? e.message : "采购计划单加载失败");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, open]);
+
   async function loadLocs(whId: number) {
     setLocs((await baseApi.locations(whId)).map((l) => ({ id: l.id, display: l.display ?? l.code })));
     baseApi.shelves(whId).then(setShelves).catch(() => undefined);
@@ -362,6 +419,21 @@ export function PurchaseInPage() {
   function addEmptyRow() {
     setRows((rs) => [...rs, { key: nextKey, product: null, material_code: "", spec: "", unit: "", barcode: "", category_id: undefined, category_name: "", location_id: undefined, qty: 1, price: 0 }]);
     setNextKey((k) => k + 1);
+  }
+
+  /** 送货单图片上传（可选，最多 10 张，入库单存底可回看）。 */
+  async function uploadDelivery(f: File | undefined) {
+    if (!f) return;
+    if (deliveryFiles.length >= 10) {
+      message.warning("送货单图片最多 10 张");
+      return;
+    }
+    try {
+      const up = await fileApi.upload(f, "other");
+      setDeliveryFiles((fs) => [...fs, { fileId: up.file_id, url: up.url }]);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "上传失败");
+    }
   }
 
   /** 条形码识别：命中材料直接带入；未命中弹「新增材料」。 */
@@ -479,7 +551,7 @@ export function PurchaseInPage() {
       .map((r) => ({ product_id: r.product!.id, qty: String(r.qty), price: String(r.price || 0), location_id: r.location_id!, category_id: r.category_id ?? 0 }));
     if (!items.length) return message.warning("请至少填写一条数量大于 0 的明细");
     try {
-      const data = await purchaseIn(warehouseId, items, remark, supplierId, billDate || undefined, ocrRecordId, ocrBillNo.trim());
+      const data = await purchaseIn(warehouseId, items, remark, supplierId, billDate || undefined, ocrRecordId, ocrBillNo.trim(), planId, deliveryFiles.map((f) => f.fileId));
       sessionStorage.removeItem("purchaseInPrefill"); // 预填已消费，清除防止刷新重复导入
       message.success(`入库成功：${data.bill_no}`);
       setOpen(false);
@@ -514,6 +586,7 @@ export function PurchaseInPage() {
     { title: "仓库", dataIndex: "warehouse_name" },
     { title: "供应商", dataIndex: "supplier_name" },
     { title: "送货单号", dataIndex: "ocr_bill_no", render: (v?: string) => v || "-" },
+    { title: "计划单号", dataIndex: "plan_bill_no", width: 130, render: (v?: string) => v || "-" },
     { title: "数量", dataIndex: "total_qty" },
     { title: "金额", dataIndex: "total_amount" },
     { title: "日期", dataIndex: "bill_date" },
@@ -726,7 +799,7 @@ export function PurchaseInPage() {
     <div style={{ padding: 24 }}>
       <h2 style={{ margin: "0 0 16px" }}>材料入库</h2>
       <Space style={{ marginBottom: 16 }} wrap>
-        <Button type="primary" onClick={() => { setRows([]); setSupplierId(0); setOcrRecordId(0); setOcrBillNo(""); setBillDate(""); setRemark(""); setSubmitTried(false); setOpen(true); }}>新建入库</Button>
+        <Button type="primary" onClick={() => { setRows([]); setSupplierId(0); setOcrRecordId(0); setOcrBillNo(""); setBillDate(""); setRemark(""); setPlanId(0); setPlanBillNo(""); setDeliveryFiles([]); setSubmitTried(false); setOpen(true); }}>新建入库</Button>
         <Button onClick={() => navigate("/ocr/delivery")}>送货单识别入库</Button>
       </Space>
       <DataTable
@@ -756,7 +829,21 @@ export function PurchaseInPage() {
           { label: "入库日期", value: detail?.bill_date?.slice(0, 16) },
           { label: "总数量", value: detail?.total_qty },
           { label: "总金额", value: detail?.total_amount },
+          { label: "采购计划", value: detail?.plan_bill_no || "无" },
           { label: "送货单OCR", value: detail?.ocr_record_id ? `已关联（#${detail.ocr_record_id}）` : "手工录入", span: 2 },
+          {
+            label: "送货单图片",
+            value: (detail?.delivery_file_ids?.length ?? 0) > 0 ? (
+              <Space size={6} wrap>
+                {detail!.delivery_file_ids!.map((fid) => (
+                  <img key={fid} src={fileUrl(fid)} alt="送货单" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e6eb", cursor: "zoom-in" }} onClick={() => window.open(fileUrl(fid), "_blank")} />
+                ))}
+              </Space>
+            ) : (
+              "未上传"
+            ),
+            span: 2,
+          },
           { label: "备注", value: detail?.remark, span: 2 },
         ]}
         columns={[
@@ -795,8 +882,28 @@ export function PurchaseInPage() {
             <span>备注</span>
             <Input style={{ width: 180 }} placeholder="可选" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={255} />
             <span>送货单号</span>
-            <Input style={{ width: 240 }} placeholder="OCR 带入 / 可编辑" value={ocrBillNo} onChange={(e) => setOcrBillNo(e.target.value)} maxLength={60} />
+            <Input style={{ width: 200 }} placeholder="OCR 带入 / 可编辑" value={ocrBillNo} onChange={(e) => setOcrBillNo(e.target.value)} maxLength={60} />
+            {planId > 0 && <Tag color="blue">采购计划：{planBillNo}</Tag>}
           </Space>
+          <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ color: "#646a73", fontSize: 12 }}>送货单图片（可选，存底）：</span>
+            {deliveryFiles.map((f, i) => (
+              <span key={f.fileId} style={{ position: "relative", display: "inline-block" }}>
+                <img src={fileUrl(f.fileId)} alt={`送货单${i + 1}`} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e6eb" }} />
+                <a
+                  style={{ position: "absolute", top: -6, right: -6, background: "#f5222d", color: "#fff", borderRadius: "50%", width: 16, height: 16, lineHeight: "14px", textAlign: "center", fontSize: 11, cursor: "pointer" }}
+                  onClick={() => setDeliveryFiles((fs) => fs.filter((x) => x.fileId !== f.fileId))}
+                >
+                  ✕
+                </a>
+              </span>
+            ))}
+            {deliveryFiles.length < 10 && (
+              <Button size="small" icon={<PictureOutlined />} onClick={() => deliveryFileRef.current?.click()}>
+                添加图片（{deliveryFiles.length}/10）
+              </Button>
+            )}
+          </div>
         </div>
         <DataTable
           rowKey="key"
@@ -817,6 +924,7 @@ export function PurchaseInPage() {
         />
         <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { void handleCameraFile(e.target.files?.[0]); e.target.value = ""; }} />
         <input ref={albumRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { void handleCameraFile(e.target.files?.[0]); e.target.value = ""; }} />
+        <input ref={deliveryFileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { Array.from(e.target.files ?? []).forEach((f) => void uploadDelivery(f)); e.target.value = ""; }} />
       </Modal>
 
       {/* 创建新仓位：库位下拉找不到目标仓位时直接新增并选中 */}

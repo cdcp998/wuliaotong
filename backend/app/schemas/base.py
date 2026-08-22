@@ -113,6 +113,36 @@ class ProductCategoryReq(BaseModel):
     category_id: int = 0
 
 
+class DeleteReviewReq(BaseModel):
+    """提交删除审核申请（物料数据管理 → 删除走审批流）：biz_type=product（停用材料）/ category（删除分类）。"""
+
+    biz_type: str = Field(pattern="^(product|category)$")
+    target_id: int = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=500, description="删除原因，必填")
+
+
+class DeleteReviewRejectReq(BaseModel):
+    """驳回删除申请：驳回理由。"""
+
+    remark: str = Field(min_length=1, max_length=500)
+
+
+class DeleteReviewOut(BaseModel):
+    id: int
+    biz_type: str
+    target_id: int
+    target_name: str
+    target_desc: str = ""
+    reason: str
+    status: int  # 0 待审核 / 1 已通过（已删除）/ 2 已驳回
+    applicant_id: int
+    applicant_name: str
+    handled_by: int = 0
+    handled_at: datetime | None = None
+    review_remark: str = ""
+    created_at: datetime | None = None
+
+
 class ProductOut(BaseModel):
     id: int
     code: str
@@ -162,6 +192,9 @@ class WarehouseOut(BaseModel):
     address: str
     remark: str
     status: int
+    shelf_count: int = 0  # 货架数（聚合，仓库列表展示）
+    location_count: int = 0  # 库位数（聚合）
+    product_kind_count: int = 0  # 库内有货材料种数（聚合）
 
 
 class ShelfReq(BaseModel):
@@ -169,6 +202,10 @@ class ShelfReq(BaseModel):
     code: str = Field(min_length=1, max_length=30)
     name: str = ""
     remark: str = ""
+    # 层/行/列：新建货架时提供则按 层×行×列 批量生成库位（隔）；不提供则不自动生成（兼容旧用法）
+    layers: int | None = Field(default=None, ge=1, le=99)
+    rows: int | None = Field(default=None, ge=1, le=99)
+    cols: int | None = Field(default=None, ge=1, le=99)
 
 
 class ShelfOut(BaseModel):
@@ -177,13 +214,18 @@ class ShelfOut(BaseModel):
     code: str
     name: str
     remark: str
+    layers: int = 1  # 实际层数（由库位推导）
+    rows: int = 1
+    cols: int = 1
 
 
 class LocationReq(BaseModel):
     warehouse_id: int = Field(gt=0)
     shelf_id: int = Field(gt=0)
     layer_no: int = Field(ge=1, le=99)
-    code: str = ""  # 留空由服务端自动生成：仓库编码-货架编码-层号
+    row_no: int = Field(default=1, ge=1, le=99)
+    col_no: int = Field(default=1, ge=1, le=99)
+    code: str = ""  # 留空由服务端自动生成：仓库编码-货架编码-L{层}R{行}C{列}
     remark: str = ""
 
 
@@ -192,8 +234,10 @@ class LocationOut(BaseModel):
     warehouse_id: int
     shelf_id: int
     layer_no: int
+    row_no: int
+    col_no: int
     code: str
-    display: str = ""  # 友好库位名：仓库名-货架编码-层号（界面显示用，避免 WH 编码混淆）
+    display: str = ""  # 友好库位名：仓库名-货架编码-L{层}R{行}C{列}（界面显示用）
     remark: str
 
 
