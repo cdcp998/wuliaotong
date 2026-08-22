@@ -285,6 +285,8 @@ export const fileApi = {
     if (!json.data?.file_id) throw new Error("上传失败：服务端未返回文件信息");
     return json.data;
   },
+  /** 文件访问 URL（预览/下载用）：统一经 apiBase 拼接，两端共用一处定义（评审 P2-8）。 */
+  url: (fileId: number): string => `${apiBase()}/files/${fileId}`,
   /** 真实照片水印预览（完成工作拍照提交前）：按当前系统模板/位置渲染，返回 blob URL。 */
   watermarkPreview: async (fileId: number, body: { location?: string; time?: string; lat?: string; lng?: string }) => {
     const resp = await fetch(`${apiBase()}/files/${fileId}/watermark-preview`, {

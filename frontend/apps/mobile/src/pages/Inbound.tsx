@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ActionSheet, Button, DatePicker, Dialog, DotLoading, Input, List, NavBar, Popup, Tag, Toast } from "antd-mobile";
 import { useNavigate, useSearchParams } from "react-router";
-import { baseApi, fileApi, ocrApi, purchaseIn, resolveByBarcode, type Location, type OcrDeliveryItem, type OcrTask, type Product, type Supplier, type Unit, type Warehouse } from "@wlt/shared";
-import { CameraAlbum } from "../components/CameraAlbum";
-import { BarcodeScanner } from "../components/BarcodeScanner";
-import { ProductPicker } from "../components/ProductPicker";
-import { AlbumIcon, CameraIcon } from "../components/icons";
+import { AlbumIcon, BarcodeScanner, CameraAlbum, CameraIcon, ProductPicker, baseApi, fileApi, ocrApi, purchaseIn, resolveByBarcode, type Location, type OcrDeliveryItem, type OcrTask, type Product, type Supplier, type Unit, type Warehouse } from "@wlt/shared";
 
 interface Row {
   product: Product;

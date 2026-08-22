@@ -10,3 +10,10 @@ export * from "./api/report";
 export * from "./api/menu";
 export * from "./stores/auth";
 export * from "./utils/device";
+// 移动端通用组件/工具（评审 P2-6：从 apps/mobile 收敛进 shared，两端可复用、统一维护）
+export * from "./components/mobile/icons";
+export * from "./components/mobile/CameraAlbum";
+export * from "./components/mobile/PhotoUpload";
+export * from "./components/mobile/BarcodeScanner";
+export * from "./components/mobile/ProductPicker";
+export * from "./hooks/useBackToClose";

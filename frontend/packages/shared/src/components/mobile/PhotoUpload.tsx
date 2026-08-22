@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { ActionSheet, Button, Toast } from "antd-mobile";
 
-import { apiBase, fileApi, FileImage } from "@wlt/shared";
+import { fileApi } from "../../api/business";
+import { FileImage } from "../FileImage";
 
 import { CameraAlbum } from "./CameraAlbum";
 import { AlbumIcon, CameraIcon } from "./icons";
@@ -23,7 +24,7 @@ export function PhotoUpload({
   const camRef = useRef<HTMLInputElement>(null);
   const albRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(
-    fileId ? `${apiBase()}/files/${fileId}` : null
+    fileId ? fileApi.url(fileId) : null
   );
 
   async function handleFile(f: File | undefined) {

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, NavBar, Popup, Toast } from "antd-mobile";
 
-import { fileApi, ocrApi } from "@wlt/shared";
+import { fileApi, ocrApi } from "../../api/business";
 import type { ReaderOptions } from "zxing-wasm/reader";
 
 // zxing-cpp WASM 以静态资源导入（带 hash、自动 base 前缀，与 JS 同目录，部署必配）
-import zxingWasmUrl from "../assets/zxing_reader.wasm?url";
+import zxingWasmUrl from "../../assets/zxing_reader.wasm?url";
 
 /** 底部操作按钮：半透明玻璃文字框（blur 需 -webkit- 前缀兼容 iOS Safari；触屏高度 ≥44px）。 */
 const actionPillStyle: React.CSSProperties = {

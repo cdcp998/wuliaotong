@@ -2,10 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Dialog, NavBar, Popup, Tag, Toast } from "antd-mobile";
 import { useNavigate, useParams } from "react-router";
 
-import { fileApi, FileImage, requisitionApi, useAuthStore, type RequisitionDetail } from "@wlt/shared";
-
-import { PhotoUpload } from "../components/PhotoUpload";
-import { WarnIcon } from "../components/icons";
+import { PhotoUpload, WarnIcon, fileApi, FileImage, requisitionApi, useAuthStore, type RequisitionDetail } from "@wlt/shared";
 
 const STATUS: Record<number, { text: string; color: string }> = {
   1: { text: "待完成工作", color: "warning" },

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Input, NavBar, Popup, Tag, Toast } from "antd-mobile";
 
-import { baseApi, fileApi, ocrApi, resolveByBarcode, type Product } from "@wlt/shared";
+import { baseApi, resolveByBarcode, type Product } from "../../api/base";
+import { fileApi, ocrApi } from "../../api/business";
+import { useBackToClose } from "../../hooks/useBackToClose";
 
 import { BarcodeScanner } from "./BarcodeScanner";
-import { useBackToClose } from "../hooks/useBackToClose";
 
 /** 商品选择弹层：实时搜索 / 拍照 / 相册 / 扫码 → 选择（手机端仓管员出入库/盘点/领用新增物料用，
  * 四个页面共用：领用申请/入库/出库/盘点）。 */

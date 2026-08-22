@@ -2,12 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, Input, List, NavBar, Popup, Stepper, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
-import { baseApi, requisitionApi, type Location, type Product, type Warehouse } from "@wlt/shared";
-
-import { PhotoUpload } from "../components/PhotoUpload";
-import { ProductPicker } from "../components/ProductPicker";
-import { PlusIcon } from "../components/icons";
-import { useBackToClose } from "../hooks/useBackToClose";
+import { PhotoUpload, PlusIcon, ProductPicker, useBackToClose, baseApi, requisitionApi, type Location, type Product, type Warehouse } from "@wlt/shared";
 
 interface Row {
   product: Product;

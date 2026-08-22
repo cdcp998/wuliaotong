@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Dialog, List, NavBar, Popup, Stepper, Tabs, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
-import { baseApi, transferApi, type Location, type Product, type TransferBill, type TransferDetail, type Warehouse } from "@wlt/shared";
-
-import { ProductPicker } from "../components/ProductPicker";
+import { ProductPicker, baseApi, transferApi, type Location, type Product, type TransferBill, type TransferDetail, type Warehouse } from "@wlt/shared";
 
 const T_STATUS: Record<number, { text: string; color: "warning" | "success" | "danger" | "default" }> = {
   0: { text: "待审核", color: "warning" },

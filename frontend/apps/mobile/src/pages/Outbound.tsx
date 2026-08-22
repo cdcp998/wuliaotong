@@ -2,10 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Input, List, NavBar, Popup, Selector, Tag, Toast } from "antd-mobile";
 import { useNavigate, useSearchParams } from "react-router";
 
-import { baseApi, otherIo, type Location, type Product, type Warehouse } from "@wlt/shared";
-
-import { PhotoUpload } from "../components/PhotoUpload";
-import { ProductPicker } from "../components/ProductPicker";
+import { PhotoUpload, ProductPicker, baseApi, otherIo, type Location, type Product, type Warehouse } from "@wlt/shared";
 
 const IO_TYPES = ["报废", "报损", "赠品出", "其他出"];
 

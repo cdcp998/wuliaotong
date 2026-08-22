@@ -2,11 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Input, List, NavBar, Tag, Toast } from "antd-mobile";
 import { useNavigate, useParams } from "react-router";
 
-import { checkApi, type CheckBill, type CheckItem, type Product } from "@wlt/shared";
-
-import { PhotoUpload } from "../components/PhotoUpload";
-import { ProductPicker } from "../components/ProductPicker";
-import { PlusIcon } from "../components/icons";
+import { PhotoUpload, PlusIcon, ProductPicker, checkApi, type CheckBill, type CheckItem, type Product } from "@wlt/shared";
 
 interface ExtraRow {
   key: number;

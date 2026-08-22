@@ -2,10 +2,7 @@ import { useState } from "react";
 import { Button, List, NavBar, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
-import { resolveByBarcode, type Product } from "@wlt/shared";
-
-import { BarcodeScanner } from "../components/BarcodeScanner";
-import { CameraIcon } from "../components/icons";
+import { BarcodeScanner, CameraIcon, resolveByBarcode, type Product } from "@wlt/shared";
 
 /** 扫码页（扫码 Tab / 首页扫码入口）：进入页面即直接全屏相机扫码（无中间选择页、无确认弹窗）。
  * 扫码/拍照识别到条码 → 自动查材料：命中展示结果（可直接带入入库/出库），未命中提示重新扫码。 */

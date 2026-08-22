@@ -2,10 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Input, List, NavBar, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
-import { stockApi, type StockRow } from "@wlt/shared";
-
-import { BarcodeScanner } from "../components/BarcodeScanner";
-import { CameraIcon } from "../components/icons";
+import { BarcodeScanner, CameraIcon, stockApi, type StockRow } from "@wlt/shared";
 
 /** 库存查询（手机端）：关键词/条码 → 商品库存位置列表（《UI设计方案.md》§5.7）。 */
 export function StockQueryPage() {
