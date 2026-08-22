@@ -1,0 +1,421 @@
+"""device 模块接口（设备台账 CRUD/生命周期/设备维修任务（复用 task_engine）/领用关联，方案 §6.5）。
+
+router 级依赖：require_module_enabled("device")。
+架构说明：设备维修任务复用核心 task_engine；任务→物料领用链接复用 task 模块的 task_requisition
+表（task_type='device'）——因此 device 模块声明依赖 task>=1.0.0,<2.0.0（方案 §3「无依赖」的例外，
+领用链接表为共享基础设施，避免并行领用体系）。
+
+设备生命周期（§5.8）：1 在用 ⇄ 2 维修中 ⇄ 3 闲置 → 4 报废；2 维修中禁止报废；
+创建设备维修任务自动置维修中（previous_status 快照）；任务 verify/cancel 按快照回退。
+"""
+from __future__ import annotations
+
+import json
+import logging
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Header, Query
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.api import requisition as req_api
+from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_any_permission, require_permission
+from app.core.modules import require_module_enabled
+from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, ok
+from app.core.task_engine import ACTIVE_STATUSES, TERMINAL_STATUS, transition
+from app.db import get_db
+from app.models import SysNotification, SysRole, SysUser
+from app.modules.device.models import Device, DeviceTask, DeviceTaskRecord, DeviceTaskRecordFile
+from app.modules.device.schemas import (
+    AssignReq,
+    DeviceCreate,
+    DeviceRequisitionReq,
+    DeviceRecordCreate,
+    DeviceStatusReq,
+    DeviceStatusReqT,
+    DeviceTaskCreate,
+    DeviceUpdate,
+)
+
+logger = logging.getLogger("app.device")
+
+router = APIRouter(tags=["设备管理"], dependencies=[Depends(get_current_user), Depends(require_module_enabled("device"))])
+
+ALL_SCOPE_ROLES = (SUPER_ADMIN_ROLE_CODE, "manager", "dispatcher")
+STATUS_LABEL = {1: "在用", 2: "维修中", 3: "闲置", 4: "报废"}
+# 允许的状态流转：2（维修中）禁止 → 4（报废）
+_DEVICE_FLOW = {1: {2, 3}, 2: {1, 3}, 3: {1, 4}, 4: set()}
+
+
+def _scope_all(db: Session, user: SysUser) -> bool:
+    role = db.get(SysRole, user.role_id)
+    return (role.code if role else "") in ALL_SCOPE_ROLES
+
+
+def _device_or_404(db: Session, device_id: int) -> Device:
+    d = db.get(Device, device_id)
+    if d is None:
+        raise BizError(E_NOT_FOUND, "设备不存在")
+    return d
+
+
+def _task_or_404(db: Session, task_id: int) -> DeviceTask:
+    t = db.get(DeviceTask, task_id)
+    if t is None:
+        raise BizError(E_NOT_FOUND, "设备维修任务不存在")
+    return t
+
+
+def _notify(db: Session, user_id: int, title: str, content: str, link: str, biz_type: str = "待办") -> None:
+    if not user_id:
+        return
+    db.add(SysNotification(user_id=user_id, title=title, content=content, biz_type=biz_type, link=link))
+
+
+def _device_out(d: Device) -> dict:
+    return {
+        "id": d.id, "code": d.code, "name": d.name, "model": d.model, "category": d.category,
+        "department_id": d.department_id, "location": d.location,
+        "lat": float(d.lat) if d.lat is not None else None,
+        "lng": float(d.lng) if d.lng is not None else None,
+        "status": d.status,
+        "purchase_date": d.purchase_date.isoformat() if d.purchase_date else None,
+        "warranty_end": d.warranty_end.isoformat() if d.warranty_end else None,
+        "remark": d.remark,
+        "updated_at": d.updated_at.isoformat() if d.updated_at else None,
+    }
+
+
+def _task_out(db: Session, t: DeviceTask) -> dict:
+    assignee = db.get(SysUser, t.assignee_id) if t.assignee_id else None
+    creator = db.get(SysUser, t.created_by) if t.created_by else None
+    d = db.get(Device, t.device_id)
+    return {
+        "id": t.id, "task_no": t.task_no, "device_id": t.device_id,
+        "device_name": d.name if d else "", "device_code": d.code if d else "",
+        "title": t.title, "description": t.description,
+        "assignee_id": t.assignee_id, "assignee_name": assignee.real_name if assignee else "",
+        "status": t.status, "priority": t.priority,
+        "scheduled_time": t.scheduled_time.isoformat() if t.scheduled_time else None,
+        "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+        "verdict": t.verdict, "previous_status": t.previous_status,
+        "cancel_reason": t.cancel_reason,
+        "created_by": t.created_by, "creator_name": creator.real_name if creator else "",
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
+
+
+def _gen_task_no(db: Session) -> str:
+    """设备任务单号：WX-SB + 日期 + 序号。"""
+    from app.services.stock import generate_bill_no
+
+    for _ in range(5):
+        no = generate_bill_no(db, "WX-SB", DeviceTask, field="task_no")
+        if no:
+            return no
+    raise BizError(E_BILL_STATUS, "任务单号生成失败，请重试")
+
+
+# ============================ 设备台账 ============================
+
+@router.get("/devices", dependencies=[Depends(require_any_permission("device:manage", "device:task"))])
+def list_devices(
+    keyword: str = "",
+    status: str = "",
+    category: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> dict:
+    stmt = select(Device)
+    if keyword:
+        like = f"%{keyword}%"
+        stmt = stmt.where(Device.code.like(like) | Device.name.like(like) | Device.model.like(like))
+    if status:
+        stmt = stmt.where(Device.status == int(status))
+    if category:
+        stmt = stmt.where(Device.category == category)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.scalars(stmt.order_by(Device.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
+    return ok({"total": total, "page": page, "page_size": page_size, "items": [_device_out(d) for d in rows]})
+
+
+@router.get("/devices/{device_id}", dependencies=[Depends(require_any_permission("device:manage", "device:task"))])
+def get_device(device_id: int, db: Session = Depends(get_db)) -> dict:
+    return ok(_device_out(_device_or_404(db, device_id)))
+
+
+@router.post("/devices", dependencies=[Depends(require_permission("device:manage"))])
+def create_device(req: DeviceCreate, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    if db.scalar(select(Device.id).where(Device.code == req.code)):
+        raise BizError(E_PARAM, "设备编码已存在")
+    d = Device(**req.model_dump(), created_by=user.id, updated_by=user.id)
+    db.add(d)
+    db.commit()
+    db.refresh(d)
+    return ok(_device_out(d))
+
+
+@router.put("/devices/{device_id}", dependencies=[Depends(require_permission("device:manage"))])
+def update_device(device_id: int, req: DeviceUpdate, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    d = _device_or_404(db, device_id)
+    for k, v in req.model_dump(exclude_none=True).items():
+        setattr(d, k, v)
+    d.updated_by = user.id
+    db.commit()
+    return ok(_device_out(d))
+
+
+@router.put("/devices/{device_id}/status", dependencies=[Depends(require_permission("device:manage"))])
+def update_device_status(device_id: int, req: DeviceStatusReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    d = _device_or_404(db, device_id)
+    if req.status not in _DEVICE_FLOW.get(d.status, set()):
+        raise BizError(E_BILL_STATUS, f"设备状态不允许从「{STATUS_LABEL.get(d.status, d.status)}」流转到「{STATUS_LABEL.get(req.status, req.status)}」"
+                          + ("（维修中的设备禁止报废）" if d.status == 2 and req.status == 4 else ""))
+    d.status = req.status
+    d.updated_by = user.id
+    db.commit()
+    return ok(_device_out(d))
+
+
+# ============================ 设备维修任务 ============================
+
+@router.get("/device-tasks", dependencies=[Depends(require_any_permission("device:task", "device:manage"))])
+def list_device_tasks(
+    status: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    stmt = select(DeviceTask)
+    if not _scope_all(db, user):
+        stmt = stmt.where(DeviceTask.assignee_id == user.id)
+    if status:
+        stmt = stmt.where(DeviceTask.status == status)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.scalars(stmt.order_by(DeviceTask.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
+    return ok({"total": total, "page": page, "page_size": page_size, "items": [_task_out(db, t) for t in rows]})
+
+
+@router.post("/device-tasks", dependencies=[Depends(require_permission("device:task"))])
+def create_device_task(req: DeviceTaskCreate, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    d = _device_or_404(db, req.device_id)
+    if d.status == 4:
+        raise BizError(E_BILL_STATUS, "报废设备不可创建维修任务")
+    # 唯一活跃设备任务约束（应用层）
+    active = db.scalar(
+        select(func.count()).select_from(DeviceTask).where(
+            DeviceTask.device_id == d.id, DeviceTask.status.in_(ACTIVE_STATUSES),
+        )
+    )
+    if active:
+        raise BizError(E_BILL_STATUS, "该设备已存在未完结维修任务")
+    t = DeviceTask(
+        task_no="", device_id=d.id, title=req.title, description=req.description,
+        priority=req.priority, scheduled_time=req.scheduled_time,
+        created_by=user.id, status="pending",
+        previous_status=d.status,  # v2.1：创建时设备状态快照（完成/取消回退）
+    )
+    from sqlalchemy.exc import IntegrityError
+
+    for _ in range(5):
+        t.task_no = _gen_task_no(db)
+        db.add(t)
+        try:
+            d.status = 2  # 创建设备维修任务自动置维修中（§5.8）
+            d.updated_by = user.id
+            db.commit()
+            db.refresh(t)
+            return ok(_task_out(db, t))
+        except IntegrityError as exc:
+            db.rollback()
+            if "uk_task_no" not in str(getattr(exc, "orig", None) or ""):
+                raise BizError(E_PARAM, "任务保存失败，请重试（详情见系统日志）") from exc
+    raise BizError(E_BILL_STATUS, "任务单号生成失败，请重试")
+
+
+@router.post("/device-tasks/{task_id}/assign", dependencies=[Depends(require_permission("device:task"))])
+def assign_device_task(task_id: int, req: AssignReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    t = _task_or_404(db, task_id)
+    assignee = db.get(SysUser, req.assignee_id)
+    if assignee is None or assignee.status != 1:
+        raise BizError(E_PARAM, "维修人员不存在或已停用")
+
+    def _cb(db: Session, task, action, actor_id, actor_name):
+        if action == "assign":
+            _notify(db, task.assignee_id, "新设备维修任务",
+                    f"设备任务 {task.task_no}「{task.title}」已派发给你。", "/device/tasks")
+
+    transition(db, t, "assign", user.id, user.real_name, callbacks=[_cb], assignee_id=req.assignee_id)
+    db.commit()
+    return ok(_task_out(db, t))
+
+
+@router.post("/device-tasks/{task_id}/status", dependencies=[Depends(require_any_permission("device:task", "device:manage"))])
+def device_task_status(
+    task_id: int,
+    req: DeviceStatusReqT,
+    user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict:
+    t = _task_or_404(db, task_id)
+    if req.action in ("verify", "reject", "close", "cancel") and not _scope_all(db, user):
+        raise BizError(4005, "无权限（仅调度员可执行验收/关闭/取消）", http_status=403)
+    if req.action in ("accept", "complete") and not _scope_all(db, user) and t.assignee_id != user.id:
+        raise BizError(4005, "仅被指派人员可执行该操作", http_status=403)
+
+    def _cb(db: Session, task, action, actor_id, actor_name):
+        d = db.get(Device, task.device_id)
+        if d is None:
+            return
+        if action == "complete":
+            rec_cnt = db.scalar(select(func.count()).select_from(DeviceTaskRecord).where(DeviceTaskRecord.task_id == task.id)) or 0
+            file_cnt = db.scalar(
+                select(func.count()).select_from(DeviceTaskRecordFile)
+                .join(DeviceTaskRecord, DeviceTaskRecord.id == DeviceTaskRecordFile.record_id)
+                .where(DeviceTaskRecord.task_id == task.id)
+            ) or 0
+            if rec_cnt == 0 or file_cnt == 0:
+                raise BizError(E_BILL_STATUS, "完成任务前必须填写维修记录并上传维修照片")
+            _notify(db, task.assigned_by, "设备任务待验收",
+                    f"设备任务 {task.task_no}「{task.title}」已完成，等待验收。", "/device/tasks")
+        elif action == "verify":
+            # 验收通过：按快照回退（无快照回退在用）
+            d.status = task.previous_status if task.previous_status in (1, 3) else 1
+        elif action == "cancel":
+            d.status = task.previous_status if task.previous_status in (1, 3) else 1
+            _notify(db, task.assignee_id, "设备任务已取消",
+                    f"设备任务 {task.task_no}「{task.title}」已被取消：{task.cancel_reason}", "/device/tasks")
+        # reject：保持维修中
+
+    if req.action == "cancel":
+        from app.modules.task.models import TaskRequisition
+
+        link_cnt = db.scalar(select(func.count()).select_from(TaskRequisition).where(TaskRequisition.task_type == "device", TaskRequisition.task_id == t.id)) or 0
+        if link_cnt:
+            raise BizError(E_BILL_STATUS, "任务已关联领用单，请先取消领用再取消任务")
+    transition(db, t, req.action, user.id, user.real_name, callbacks=[_cb],
+               assignee_id=req.assignee_id or None, verdict=req.verdict, reason=req.reason)
+    db.commit()
+    return ok(_task_out(db, t))
+
+
+# ============================ 设备维修记录 ============================
+
+@router.get("/device-tasks/{task_id}/records", dependencies=[Depends(require_permission("device:task"))])
+def list_device_records(task_id: int, db: Session = Depends(get_db)) -> dict:
+    _task_or_404(db, task_id)
+    rows = db.scalars(select(DeviceTaskRecord).where(DeviceTaskRecord.task_id == task_id).order_by(DeviceTaskRecord.id)).all()
+    out = []
+    for r in rows:
+        files = db.scalars(select(DeviceTaskRecordFile).where(DeviceTaskRecordFile.record_id == r.id).order_by(DeviceTaskRecordFile.sort_order)).all()
+        out.append({
+            "id": r.id, "task_id": r.task_id, "content": r.content,
+            "materials_used": json.loads(r.materials_used) if r.materials_used else [],
+            "knowledge_snapshot": json.loads(r.knowledge_snapshot) if r.knowledge_snapshot else None,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "files": [{"id": f.id, "file_id": f.file_id, "category": f.category} for f in files],
+        })
+    return ok(out)
+
+
+@router.post("/device-tasks/{task_id}/records", dependencies=[Depends(require_permission("device:task"))])
+def create_device_record(task_id: int, req: DeviceRecordCreate, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    t = _task_or_404(db, task_id)
+    if t.status in TERMINAL_STATUS:
+        raise BizError(E_BILL_STATUS, "终态任务不可追加记录")
+    if not req.content and not req.files:
+        raise BizError(E_PARAM, "记录内容与照片至少填写一项")
+    r = DeviceTaskRecord(
+        task_id=task_id, content=req.content,
+        materials_used=json.dumps(req.materials_used, ensure_ascii=False) if req.materials_used else None,
+        knowledge_snapshot=json.dumps(req.knowledge_snapshot, ensure_ascii=False) if req.knowledge_snapshot else None,
+        created_by=user.id,
+    )
+    db.add(r)
+    db.flush()
+    for i, f in enumerate(req.files):
+        db.add(DeviceTaskRecordFile(record_id=r.id, file_id=f.file_id, category=f.category, sort_order=i, created_by=user.id))
+    db.commit()
+    return ok({"id": r.id})
+
+
+# ============================ 设备任务领用（复用 task_requisition 链接表） ============================
+
+@router.get("/device-tasks/{task_id}/requisitions", dependencies=[Depends(require_permission("device:task"))])
+def device_task_requisitions(task_id: int, db: Session = Depends(get_db)) -> dict:
+    _task_or_404(db, task_id)
+    from app.modules.task.models import TaskRequisition
+
+    links = db.scalars(select(TaskRequisition).where(TaskRequisition.task_type == "device", TaskRequisition.task_id == task_id)).all()
+    req_ids = [l.requisition_id for l in links]
+    rows = []
+    if req_ids:
+        from app.models import OutRequisition
+
+        for r in db.scalars(select(OutRequisition).where(OutRequisition.id.in_(req_ids))).all():
+            rows.append({"id": r.id, "bill_no": r.bill_no, "status": r.status, "use_location": r.use_location, "total_qty": str(r.total_qty)})
+    return ok(rows)
+
+
+@router.post("/device-tasks/{task_id}/requisitions", dependencies=[Depends(require_permission("device:task"))])
+def create_device_requisition(task_id: int, req: DeviceRequisitionReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """设备任务领用：复用领用流程 + task_requisition(task_type='device') 链接（同事务）。"""
+    t = _task_or_404(db, task_id)
+    if t.status in TERMINAL_STATUS:
+        raise BizError(E_BILL_STATUS, "终态任务不可发起领用")
+    if not req.items:
+        raise BizError(E_PARAM, "至少选择一项物料")
+    if len(req.items) > 50:
+        raise BizError(E_PARAM, "单次最多 50 项")
+    from sqlalchemy.exc import IntegrityError
+
+    from app.models import OutRequisition
+    from app.models.base import BaseLocation, BaseProduct, BaseWarehouse
+    from app.models.requisition import OutRequisitionItem
+    from app.modules.task.models import TaskRequisition
+    from app.services.stock import bill_no_conflict
+
+    if db.get(BaseWarehouse, req.warehouse_id) is None:
+        raise BizError(E_PARAM, "仓库不存在")
+    for attempt in range(5):
+        bill = OutRequisition(
+            bill_no="", applicant_id=user.id, use_location=req.use_location, use_reason=req.use_reason,
+            is_private=0, display_reason="", display_location="", location_photo_file_id=0,
+            warehouse_id=req.warehouse_id, status=req_api.REQ_STATUS_WORKING, remark=req.remark,
+        )
+        bill.bill_no = req_api.generate_bill_no(db, "LL", OutRequisition)
+        db.add(bill)
+        db.flush()
+        try:
+            total = 0.0
+            for idx, item in enumerate(req.items):
+                product_id = int(item.get("product_id") or 0)
+                qty = str(item.get("qty") or "")
+                location_id = int(item.get("location_id") or 0)
+                if product_id <= 0 or location_id <= 0 or not qty:
+                    raise BizError(E_PARAM, "物料/库位/数量必填")
+                if db.get(BaseProduct, product_id) is None:
+                    raise BizError(E_NOT_FOUND, f"商品 id={product_id} 不存在")
+                if db.get(BaseLocation, location_id) is None:
+                    raise BizError(E_NOT_FOUND, f"库位 id={location_id} 不存在")
+                db.add(OutRequisitionItem(
+                    requisition_id=bill.id, product_id=product_id, qty=qty,
+                    location_id=location_id, photo_file_id=int(item.get("photo_file_id") or 0), sort=idx,
+                ))
+                total += float(qty)
+            bill.total_qty = total
+            shortages = req_api._deduct_items(db, bill, user.id)
+            db.add(TaskRequisition(task_type="device", task_id=t.id, requisition_id=bill.id, created_by=user.id))
+            db.commit()
+            return ok({"id": bill.id, "bill_no": bill.bill_no, "status": bill.status, "shortages": shortages})
+        except IntegrityError as exc:
+            db.rollback()
+            if not bill_no_conflict(exc):
+                raise BizError(E_PARAM, "领用单保存失败，请重试（详情见系统日志）") from exc
+        except BizError:
+            db.rollback()
+            raise
+    raise BizError(E_BILL_STATUS, "单据编号生成失败，请重试")
