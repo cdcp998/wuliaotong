@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Dialog, List, NavBar, Tag, TextArea, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -68,7 +68,7 @@ export function RequisitionAuditPage() {
             onChange={(v) => {
               rejectRemarkRef.current = v;
             }}
-            style={{ background: "#F2F5FB", borderRadius: 8, padding: 8, "--font-size": "14px" } as React.CSSProperties}
+            style={{ background: "#F2F5FB", borderRadius: 12, padding: 8, "--font-size": "14px" } as React.CSSProperties}
           />
         </div>
       ),

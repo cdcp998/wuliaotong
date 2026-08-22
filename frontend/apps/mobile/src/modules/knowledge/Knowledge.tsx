@@ -52,7 +52,7 @@ export function MobileKnowledgePage() {
       <NavBar onBack={() => navigate(-1)}>知识库</NavBar>
       <div style={{ padding: 12 }}>
         <Input placeholder="检索已发布知识" value={keyword} onChange={setKeyword} onEnterPress={doSearch} clearable
-          style={{ background: "#F2F5FB", borderRadius: 8, padding: "8px 12px" }} />
+          style={{ background: "#F2F5FB", borderRadius: 12, padding: "8px 12px" }} />
       </div>
       <List style={{ minHeight: "60dvh" }}>
         {items.map((a) => (
@@ -63,7 +63,7 @@ export function MobileKnowledgePage() {
         {!loading && items.length === 0 && <List.Item>暂无已发布知识</List.Item>}
       </List>
       {detail && (
-        <Card className="wlt-mobile-sheet" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000, maxHeight: "75dvh", overflow: "auto", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+        <Card className="wlt-mobile-sheet" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000, maxHeight: "75dvh", overflow: "auto", borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <Tag color="primary">{detail.category || "未分类"}</Tag>
             <span onClick={() => setDetail(null)} style={{ color: "#999" }}>关闭 ×</span>

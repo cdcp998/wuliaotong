@@ -1,4 +1,4 @@
-﻿/** 手机端：地图工作台（map 模块，方案 §7.3）——全屏地图 + 底部工具栏（上报/故障管理/测距/导航），
+/** 手机端：地图工作台（map 模块，方案 §7.3）——全屏地图 + 底部工具栏（上报/故障管理/测距/导航），
  * 点击按钮弹窗打开对应面板（Popup 弹层，可关闭）。依赖 cable 模块数据（线缆/故障）。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -197,7 +197,7 @@ export function MobileMapPage() {
         <div
           onClick={() => setPanel(panel === "layers" ? null : "layers")}
           style={{
-            position: "absolute", top: 8, right: 8, zIndex: 1000, width: 34, height: 34, borderRadius: 8,
+            position: "absolute", top: 8, right: 8, zIndex: 1000, width: 34, height: 34, borderRadius: 10,
             background: "#fff", boxShadow: "0 1px 6px rgba(0,0,0,.18)", display: "flex", alignItems: "center",
             justifyContent: "center", cursor: "pointer",
           }}
@@ -207,14 +207,15 @@ export function MobileMapPage() {
             <path d="M3 13l9 5 9-5" />
           </svg>
         </div>
-        {mode === "fault" && <div style={{ position: "absolute", top: 8, left: 8, background: "#fff", padding: "4px 10px", borderRadius: 6, fontSize: 12, zIndex: 1000 }}>请点击地图选择故障位置</div>}
-        {navInfo && <div style={{ position: "absolute", bottom: 12, left: 8, right: 8, background: "#fff", padding: 8, borderRadius: 8, fontSize: 14, zIndex: 1000, textAlign: "center" }}>{navInfo}</div>}
+        {mode === "fault" && <div style={{ position: "absolute", top: 8, left: 8, background: "#fff", padding: "4px 10px", borderRadius: 8, fontSize: 12, zIndex: 1000 }}>请点击地图选择故障位置</div>}
+        {navInfo && <div style={{ position: "absolute", bottom: 12, left: 8, right: 8, background: "#fff", padding: 8, borderRadius: 12, fontSize: 14, zIndex: 1000, textAlign: "center" }}>{navInfo}</div>}
       </div>
 
       {/* 底部工具栏（固定；zIndex 低于 Popup，避免遮挡呼出的功能界面） */}
       <div style={{
         position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 900,
-        display: "flex", background: "#fff", borderTop: "1px solid #f0f1f3",
+        display: "flex", background: "rgba(255,255,255,0.94)", backdropFilter: "blur(10px)",
+        borderTop: "1px solid #E4EAF6", boxShadow: "0 -4px 16px rgba(30,36,51,.08)",
         paddingBottom: "env(safe-area-inset-bottom)",
       }}>
         {TOOLS.map((t) => (
@@ -227,7 +228,7 @@ export function MobileMapPage() {
       </div>
 
       {/* 图层叠加选择（右上角小图标呼出） */}
-      <Popup visible={panel === "layers"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+      <Popup visible={panel === "layers"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
         <div style={{ padding: 16, paddingBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontWeight: 600 }}>图层叠加</span>
@@ -249,7 +250,7 @@ export function MobileMapPage() {
       </Popup>
 
       {/* 弹窗式面板（Popup 底部弹层，可关闭） */}
-      <Popup visible={panel === "report"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "75dvh", overflow: "auto" }}>
+      <Popup visible={panel === "report"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "75dvh", overflow: "auto" }}>
         <div style={{ padding: 16, paddingBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontWeight: 600 }}>上报故障</span>
@@ -267,7 +268,7 @@ export function MobileMapPage() {
         </div>
       </Popup>
 
-      <Popup visible={panel === "faults"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "75dvh", overflow: "auto" }}>
+      <Popup visible={panel === "faults"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "75dvh", overflow: "auto" }}>
         <div style={{ padding: 16, paddingBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontWeight: 600 }}>故障管理（共 {faults.length} 条）</span>
@@ -289,7 +290,7 @@ export function MobileMapPage() {
         </div>
       </Popup>
 
-      <Popup visible={panel === "measure"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "60dvh", overflow: "auto" }}>
+      <Popup visible={panel === "measure"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "60dvh", overflow: "auto" }}>
         <div style={{ padding: 16, paddingBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontWeight: 600 }}>测距定位</span>
@@ -314,7 +315,7 @@ export function MobileMapPage() {
         </div>
       </Popup>
 
-      <Popup visible={panel === "nav"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "60dvh", overflow: "auto" }}>
+      <Popup visible={panel === "nav"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "60dvh", overflow: "auto" }}>
         <div style={{ padding: 16, paddingBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontWeight: 600 }}>故障导航</span>
