@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { Button, List, NavBar, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -59,11 +59,31 @@ export function OcrScanPage() {
               {hit.name}
             </List.Item>
           </List>
+          {/* 识别结果卡：命中 / 库存 / 单价（设计页 M8） */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 10 }}>
+            <div className="wlt-glass-card" style={{ padding: "10px 12px" }}>
+              <div style={{ fontSize: 11, color: "#5B6478" }}>命中</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#15803D", marginTop: 2 }}>已匹配</div>
+            </div>
+            <div className="wlt-glass-card" style={{ padding: "10px 12px" }}>
+              <div style={{ fontSize: 11, color: "#5B6478" }}>库存</div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>{hit.stock_qty ?? "0"}</div>
+            </div>
+            <div className="wlt-glass-card" style={{ padding: "10px 12px" }}>
+              <div style={{ fontSize: 11, color: "#5B6478" }}>单价</div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>¥ {hit.purchase_price || "0.00"}</div>
+            </div>
+          </div>
           <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-            <Button block color="primary" onClick={() => navigate(`/inbound?product_id=${hit.id}`)}>
-              入库
+            <Button block color="primary" onClick={() => navigate(`/requisitions/new?product_id=${hit.id}`)}>
+              加入领用单
             </Button>
-            <Button block color="warning" onClick={() => navigate(`/outbound?product_id=${hit.id}`)}>
+            <Button block color="success" onClick={() => navigate(`/inbound?product_id=${hit.id}`)}>
+              直接入库
+            </Button>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            <Button block fill="outline" color="warning" onClick={() => navigate(`/outbound?product_id=${hit.id}`)}>
               出库
             </Button>
             <Button block fill="outline" onClick={rescan}>
