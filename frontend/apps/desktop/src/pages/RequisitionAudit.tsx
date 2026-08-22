@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { App, Button, Drawer, Input, Modal, Popconfirm, Select, Space, Tag, Typography } from "antd";
 import { ExclamationCircleFilled } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -118,6 +118,15 @@ export function RequisitionAuditPage() {
         ),
     },
     { title: "项数", width: 70, render: (_, r) => r.items.length },
+    {
+      title: "风险",
+      width: 110,
+      render: (_, r) => {
+        // 由现有字段派生风险等级（设计页28）：私用=中风险；其余=正常。「高风险不足」需后端库存对比数据（登记为遗留）。
+        const meta = r.is_private === 1 ? { text: "中风险 · 私用", fg: "#B45309", bg: "#FEF4E2" } : { text: "正常", fg: "#15803D", bg: "#E8F9EF" };
+        return <span className="wlt-pill" style={{ background: meta.bg, color: meta.fg }}>{meta.text}</span>;
+      },
+    },
     { title: "总数量", dataIndex: "total_qty", width: 90, align: "right" as const },
     { title: "申请时间", dataIndex: "created_at", width: 150, render: (v: string) => v.slice(0, 16) },
     {
