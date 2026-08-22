@@ -12,6 +12,7 @@ import { initApi, otherEndInitUrl, useAuthStore } from "@wlt/shared";
 export function RequireAuth({ children, perm }: { children: ReactNode; perm?: string }) {
   const user = useAuthStore((s) => s.user);
   const fetchMe = useAuthStore((s) => s.fetchMe);
+  const fetchModules = useAuthStore((s) => s.fetchModules);
   const hasPerm = useAuthStore((s) => s.hasPerm);
   const navigate = useNavigate();
 
@@ -29,15 +30,21 @@ export function RequireAuth({ children, perm }: { children: ReactNode; perm?: st
         /* 状态接口异常不阻塞登录校验 */
       }
       if (alive && !user) {
-        fetchMe().catch(() => {
-          if (alive) navigate("/login");
-        });
+        fetchMe()
+          .then(() => {
+            if (alive) void fetchModules(); // 模块启用状态（RequireModule/moduleEnabled 用）
+          })
+          .catch(() => {
+            if (alive) navigate("/login");
+          });
+      } else if (alive) {
+        void fetchModules();
       }
     })();
     return () => {
       alive = false;
     };
-  }, [user, fetchMe, navigate]);
+  }, [user, fetchMe, fetchModules, navigate]);
 
   if (!user) return null;
 

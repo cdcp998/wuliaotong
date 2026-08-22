@@ -43,9 +43,11 @@ def test_module_access_control() -> None:
     # 未登录 → 401
     c = TestClient(app)
     assert c.get("/api/v1/modules").status_code == 401
-    # 普通用户无 module:manage → 403
+    # 普通用户：模块列表可读（前端 moduleEnabled 守卫需要），写操作需 module:manage → 403
     _login("tester_user", "123456")
     r = client.get("/api/v1/modules")
+    assert r.status_code == 200 and r.json()["code"] == 0
+    r = client.post("/api/v1/modules/cable/enable")
     assert r.status_code == 403 and r.json()["code"] == 4005
 
 

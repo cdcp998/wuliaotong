@@ -34,7 +34,7 @@ from app.services.module_manager import (
 
 logger = logging.getLogger("app.modules_api")
 
-router = APIRouter(tags=["模块管理"], dependencies=[Depends(get_current_user), Depends(require_permission("module:manage"))])
+router = APIRouter(tags=["模块管理"], dependencies=[Depends(get_current_user)])
 
 _RUNTIME_MANIFEST = BASE_DIR / "app" / "modules" / "manifest.json"
 
@@ -129,9 +129,9 @@ def list_modules(db: Session = Depends(get_db)) -> dict:
     return ok(data)
 
 
-@router.get("/modules/{code}")
+@router.get("/modules/{code}", dependencies=[Depends(require_permission("module:manage"))])
 def module_detail(code: str, db: Session = Depends(get_db)) -> dict:
-    """模块详情（config 脱敏）。"""
+    """模块详情（config 脱敏；仅模块管理权限可见）。"""
     row = db.scalar(select(SysModule).where(SysModule.code == code))
     if row is None:
         raise BizError(E_NOT_FOUND, f"模块 {code} 未登记")
@@ -159,32 +159,32 @@ def _do_action(code: str, action: str, db: Session, idempotency_key: str | None)
     return ok(data)
 
 
-@router.post("/modules/{code}/install")
+@router.post("/modules/{code}/install", dependencies=[Depends(require_permission("module:manage"))])
 def api_install(code: str, db: Session = Depends(get_db), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> dict:
     return _do_action(code, "install", db, idempotency_key)
 
 
-@router.post("/modules/{code}/enable")
+@router.post("/modules/{code}/enable", dependencies=[Depends(require_permission("module:manage"))])
 def api_enable(code: str, db: Session = Depends(get_db), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> dict:
     return _do_action(code, "enable", db, idempotency_key)
 
 
-@router.post("/modules/{code}/disable")
+@router.post("/modules/{code}/disable", dependencies=[Depends(require_permission("module:manage"))])
 def api_disable(code: str, db: Session = Depends(get_db), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> dict:
     return _do_action(code, "disable", db, idempotency_key)
 
 
-@router.post("/modules/{code}/upgrade")
+@router.post("/modules/{code}/upgrade", dependencies=[Depends(require_permission("module:manage"))])
 def api_upgrade(code: str, db: Session = Depends(get_db), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> dict:
     return _do_action(code, "upgrade", db, idempotency_key)
 
 
-@router.post("/modules/{code}/uninstall")
+@router.post("/modules/{code}/uninstall", dependencies=[Depends(require_permission("module:manage"))])
 def api_uninstall(code: str, db: Session = Depends(get_db), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> dict:
     return _do_action(code, "uninstall", db, idempotency_key)
 
 
-@router.post("/modules/rescan")
+@router.post("/modules/rescan", dependencies=[Depends(require_permission("module:manage"))])
 def api_rescan() -> dict:
     """「重新扫描模块源码」（只读预检）：等价 build_modules.py --check-only，不改数据库。
 
