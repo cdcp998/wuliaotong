@@ -104,6 +104,8 @@ export const systemApi = {
   },
   /** 批量删除大模型调用日志（勾选多条后删除）。 */
   deleteLlmLogs: (ids: number[]) => http.delete<{ deleted: number }>("/llm-logs", { ids }),
+  /** 重放失败的大模型调用（设计页 31 失败可重放）：用该日志 prompt 重新调用，返回新结果。 */
+  replayLlmLog: (id: number) => http.post<{ status: string; output: string }>(`/llm-logs/${id}/replay`),
   /** 读取最近一次获取的各服务商配额快照（含失败信息）。 */
   getQuota: () => http.get<{ providers: Record<string, QuotaPayload> }>("/llm/quota"),
   /** 立即从服务商获取配额/余额（失败返回 ok=false + error，不抛异常）。 */

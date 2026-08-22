@@ -23,7 +23,7 @@ from app.core.response import BizError, E_LLM_FAILED, E_PARAM, ok
 from app.db import get_db
 from app.models.sys import LlmLog, SysConfig
 from app.schemas.watermark import WatermarkPreviewReq
-from app.services.llm import invalidate_probe_cache, llm_availability_status
+from app.services.llm import chat_text_with_fallback, invalidate_probe_cache, llm_availability_status
 from app.services.ocr.client import ocr_engine_available
 from app.services.watermark import (
     WATERMARK_DEFAULT_POSITION,
@@ -498,3 +498,17 @@ def delete_llm_logs(req: LlmLogDeleteReq, db: Session = Depends(get_db)) -> dict
     db.commit()
     logger.info("批量删除大模型调用日志 %d 条", result.rowcount or 0)
     return ok({"deleted": result.rowcount or 0})
+
+
+@router.post("/llm-logs/{log_id}/replay", dependencies=[Depends(require_permission("sys:llm-log"))])
+def replay_llm_log(log_id: int, db: Session = Depends(get_db)) -> dict:
+    """重放失败的大模型调用（设计页 31 失败可重放）：用该日志记录的 prompt 重新调用当前配置的模型。
+    重放会写入一条新的调用日志（记录本次重放结果），便于对照学习。"""
+    log = db.get(LlmLog, log_id)
+    if log is None:
+        raise BizError(E_PARAM, "日志不存在")
+    try:
+        out = chat_text_with_fallback(db, "", log.prompt or "", log.scene or "")
+        return ok({"status": "ok", "output": out})
+    except Exception as e:  # noqa: BLE001
+        raise BizError(E_LLM_FAILED, f"重放失败：{e}") from e

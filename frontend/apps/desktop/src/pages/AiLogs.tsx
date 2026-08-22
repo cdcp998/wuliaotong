@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { App, Button, Descriptions, Drawer, Select, Space, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { EyeOutlined } from "@ant-design/icons";
+import { EyeOutlined, ReloadOutlined } from "@ant-design/icons";
 
 import { systemApi } from "@wlt/shared";
 
@@ -73,6 +73,7 @@ export function AiLogsPage() {
   const [scene, setScene] = useState("");
   const [status, setStatus] = useState("");
   const [detail, setDetail] = useState<LlmLogRow | null>(null);
+  const [replaying, setReplaying] = useState<number | undefined>(undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,6 +87,20 @@ export function AiLogsPage() {
       setLoading(false);
     }
   }, [scene, status, page, pageSize, message]);
+
+  /** 重放失败的大模型调用（设计页 31 失败可重放）。 */
+  async function doReplay(r: LlmLogRow) {
+    setReplaying(r.id);
+    try {
+      await systemApi.replayLlmLog(r.id);
+      message.success("重放成功，已生成新的调用日志");
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "重放失败");
+    } finally {
+      setReplaying(undefined);
+    }
+  }
 
   useEffect(() => {
     void load();
@@ -120,6 +135,18 @@ export function AiLogsPage() {
     {
       title: "错误", dataIndex: "error", width: 200, ellipsis: true,
       render: (v: string) => (v ? <Typography.Text type="danger" style={{ fontSize: 12 }}>{v.slice(0, 120)}</Typography.Text> : ""),
+    },
+    {
+      title: "操作",
+      width: 110,
+      render: (_, r) => (
+        <Space>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => setDetail(r)}>详情</Button>
+          {r.status === "error" && (
+            <Button size="small" icon={<ReloadOutlined />} loading={replaying === r.id} onClick={() => void doReplay(r)}>重放</Button>
+          )}
+        </Space>
+      ),
     },
   ];
 

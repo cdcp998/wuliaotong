@@ -293,6 +293,7 @@ _AUDIT_ACTIONS: dict[tuple[str, str], str] = {
     ("PUT", "/storages/{id}"): "编辑存储位置",
     ("DELETE", "/storages/{id}"): "删除存储位置",
     ("DELETE", "/llm-logs"): "批量删除 AI 调用日志",
+    ("POST", "/llm-logs/{id}/replay"): "重放大模型调用",
     ("POST", "/backups"): "创建数据备份",
     ("DELETE", "/backups/{id}"): "删除备份文件",
     ("POST", "/ocr/install-paddle"): "安装 PP-OCR 引擎",
