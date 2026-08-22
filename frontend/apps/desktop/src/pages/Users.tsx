@@ -66,10 +66,28 @@ export function UsersPage() {
 
   const columns: ColumnsType<SysUser> = [
     { title: "登录名", dataIndex: "username", width: 120 },
-    { title: "姓名", dataIndex: "real_name", width: 120 },
+    {
+      title: "姓名",
+      dataIndex: "real_name",
+      width: 160,
+      render: (v: string, r) => (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+              background: "linear-gradient(135deg,#5B7FFF,#7C93FF)", color: "#fff",
+              display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600,
+            }}
+          >
+            {(v || r.username || "?")[0]}
+          </span>
+          <span>{v}</span>
+        </span>
+      ),
+    },
     { title: "手机", dataIndex: "phone", width: 130 },
     { title: "邮箱", dataIndex: "email", width: 170, render: (v: string) => v || "-" },
-    { title: "角色", dataIndex: "role_name", width: 110 },
+    { title: "角色", dataIndex: "role_name", width: 110, render: (v: string) => (v ? <span className="wlt-pill" style={{ background: "#EAEFFF", color: "#3B5BDB" }}>{v}</span> : "-") },
     { title: "状态", width: 90, render: (_, r) => (r.status === 1 ? <Tag color="green">启用</Tag> : <Tag color="default">停用</Tag>) },
     { title: "最近登录", dataIndex: "last_login_at", width: 160, render: (v: string | null) => v ?? "-" },
     {
