@@ -14,7 +14,7 @@ jobs:
   # ==================== 针对性测试（PR）====================
   targeted:
     if: github.event_name == 'pull_request'
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     services:
       mysql:
         image: mysql:8.0
@@ -58,7 +58,7 @@ jobs:
           from app.api.init import _split_sql
           for _ in range(30):
               try:
-                  conn = pymysql.connect(host="127.0.0.1", user="root", password="test123", connect_timeout=3)
+                  conn = pymysql.connect(host="127.0.0.1", user="root", password="test123", db="wuliaotong", connect_timeout=3)
                   break
               except Exception:
                   time.sleep(2)
@@ -82,7 +82,7 @@ jobs:
   # ==================== 全量测试（main / tag / 手动）====================
   full:
     if: github.event_name != 'pull_request'
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     services:
       mysql:
         image: mysql:8.0
@@ -124,7 +124,7 @@ jobs:
           from app.api.init import _split_sql
           for _ in range(30):
               try:
-                  conn = pymysql.connect(host="127.0.0.1", user="root", password="test123", connect_timeout=3)
+                  conn = pymysql.connect(host="127.0.0.1", user="root", password="test123", db="wuliaotong", connect_timeout=3)
                   break
               except Exception:
                   time.sleep(2)
