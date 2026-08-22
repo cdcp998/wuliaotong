@@ -47,3 +47,9 @@ backend/tests/_tmp/
 
 # DSH 会话使用记录（本机助手环境数据，不属于项目）
 dsh-usage/
+
+# Windows 本地开发启动脚本（不入库）
+/一键启动全部.bat
+/启动后端.bat
+/启动手机端.bat
+/启动桌面端.bat

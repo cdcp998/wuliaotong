@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+logs
+certs
+data
+model
+ocr
+tests
+scripts/ocr_ai_train.py
+scripts/ocr_train_from_photos.py
+*.log

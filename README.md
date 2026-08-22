@@ -97,7 +97,9 @@
 
 ## 快速启动
 
-**一键启动（推荐）**：双击仓库根目录的 `启动后端.bat`（HTTPS 8443）、`启动桌面端.bat`（5174）、`启动手机端.bat`（5175），或 `一键启动全部.bat` 同时拉起三者（各占一个窗口，自动检查 venv/证书/npm，首次自动 `npm install`）。三个服务窗口**常驻不自动关闭**：服务退出/启动失败后按任意键可重启，关闭窗口即停止对应服务。以下为手动命令（与启动器等价）：
+**一键启动（推荐，Windows 本机）**：双击仓库根目录的 `启动后端.bat`（HTTPS 8443）、`启动桌面端.bat`（5174）、`启动手机端.bat`（5175），或 `一键启动全部.bat` 同时拉起三者（各占一个窗口，自动检查 venv/证书/npm，首次自动 `npm install`）。三个服务窗口**常驻不自动关闭**：服务退出/启动失败后按任意键可重启，关闭窗口即停止对应服务。以下为手动命令（与启动器等价）：
+
+> 说明：根目录 4 个 `*.bat` 为 **Windows 本机开发便利脚本（不入库）**，已 gitignore；跨平台部署请用下方 **Docker 部署**。
 
 ```bash
 # 0. 启动 Redis（缓存层；本机已装为 Windows 服务 RedisWLT 可跳过）
@@ -144,6 +146,39 @@ npm run dev:mobile    # 手机端
 # 本机：电脑端 https://localhost:5174  手机端 https://localhost:5175
 # 内网设备：https://<内网IP>:5174（电脑端）/ https://<内网IP>:5175（手机端）
 ```
+
+## Docker 部署（跨平台，推荐生产/演示）
+
+一条命令拉起全部服务（MySQL 8 + Redis 7 + 后端 FastAPI + 前端 Nginx，前端同时托管电脑端 `/` 与手机端 `/m/`）：
+
+```bash
+docker compose up -d --build
+# 打开 http://localhost:8080（端口可用环境变量 WEB_PORT 改）
+```
+
+**首次初始化**：打开页面后会自动进入「初始化向导」——数据库/Redis 连接信息已由编排预填（`mysql`/`redis` 服务名），只需设置**管理员账号与密码**并提交；`backend/sql/init.sql` 已在 MySQL 首次启动时自动导入（表结构 + 种子数据），无需手工建库。
+
+**常用操作**：
+
+```bash
+docker compose logs -f backend     # 查看后端日志
+docker compose down                # 停止（保留数据卷）
+docker compose down -v             # 停止并删除数据卷（清空数据库/上传，重新初始化）
+```
+
+**环境变量**（`.env` 或 `docker compose run -e`）：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `MYSQL_ROOT_PASSWORD` | `root` | MySQL root 密码（首次初始化用，勿用于生产） |
+| `WEB_PORT` | `8080` | 前端映射端口 |
+
+**数据持久化**：`mysql_data`（数据库）、`uploads`（后端 `/app/data`：上传照片/备份/初始化标记）。
+
+**注意事项**：
+- 后端镜像含 PaddleOCR，**首次 OCR 识别自动下载模型（需外网）**；离线环境可把模型目录挂载到容器 `/root/.paddlex` 复用
+- 前端走 Nginx 同源反代 `/api/` → 后端 `:8000`，无需跨域；大文件上传限制 20MB（nginx.conf 可调）
+- 会话 Cookie 非 HTTPS（`COOKIE_SECURE=false`）；生产建议前置 HTTPS 网关（如 Caddy/Traefik）并置 `COOKIE_SECURE=true`
 
 ## 生产部署（Windows + Nginx + HTTPS）
 

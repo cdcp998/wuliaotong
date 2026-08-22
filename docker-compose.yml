@@ -1,0 +1,77 @@
+# 物料通 Docker 编排：MySQL 8 + Redis 7 + 后端(FastAPI) + 前端(Nginx)
+#
+# 快速开始：
+#   docker compose up -d --build
+#   打开 http://localhost:8080 → 首次进入「初始化向导」（设置管理员账号/密码，数据库/Redis 已由本编排提供）
+#   完成后自动登录，即可使用。
+#
+# 环境变量：
+#   MYSQL_ROOT_PASSWORD   MySQL root 密码（默认 root，首次初始化用）
+#   WEB_PORT              前端映射端口（默认 8080）
+#
+# 数据持久化：
+#   mysql_data   MySQL 数据卷（首次启动自动导入 backend/sql/init.sql 表结构与种子）
+#   uploads      后端 /app/data（上传照片、备份、初始化标记文件）
+#
+# 注意：后端镜像含 PaddleOCR，首次 OCR 识别自动下载模型（需外网）；离线模型可挂载到 /root/.paddlex。
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: wlt-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: wuliaotong
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: wlt-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build: ./backend
+    container_name: wlt-backend
+    restart: unless-stopped
+    environment:
+      DB_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-root}@mysql:3306/wuliaotong?charset=utf8mb4
+      REDIS_URL: redis://redis:6379/0
+      COOKIE_SECURE: "false"
+      INIT_ALLOW_PUBLIC: "false"
+      TZ: Asia/Shanghai
+    volumes:
+      - uploads:/app/data
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  frontend:
+    build: ./frontend
+    container_name: wlt-frontend
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+  uploads:
