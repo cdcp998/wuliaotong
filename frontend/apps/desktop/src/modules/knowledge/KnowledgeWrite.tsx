@@ -1,14 +1,24 @@
-/** knowledge 模块：知识库管理（/knowledge/write，knowledge:write/review）——草稿/发布/归档/AI 生成。 */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { App, Alert, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
-import { PlusOutlined, RobotOutlined } from "@ant-design/icons";
+/** knowledge 模块：知识库管理（/knowledge/write，knowledge:write/review）——草稿/发布/归档/AI 生成。
+ *  v2 界面：状态胶囊 Tabs + 玻璃表格（与设计稿一致）。 */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { App, Alert, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, theme } from "antd";
+import { PlusOutlined, RobotOutlined, ReloadOutlined, CheckOutlined, InboxOutlined, EditOutlined } from "@ant-design/icons";
+import type { ColumnsType } from "antd/es/table";
 
 import { knowledgeApi, type ArticleItem, type GenerateStatus } from "./api";
 
+const STATUS_META: Record<number, { label: string; fg: string; bg: string }> = {
+  0: { label: "草稿", fg: "#B45309", bg: "#FEF4E2" },
+  1: { label: "已发布", fg: "#15803D", bg: "#E8F9EF" },
+  2: { label: "已归档", fg: "#64748B", bg: "#EFF3FC" },
+};
+
 export function KnowledgeWritePage() {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [rows, setRows] = useState<ArticleItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<number | "">("");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ArticleItem | null>(null);
   const [saving, setSaving] = useState(false);
@@ -32,6 +42,15 @@ export function KnowledgeWritePage() {
   }, [message]);
 
   useEffect(() => { void load(); return () => { if (timer.current) window.clearInterval(timer.current); }; }, [load]);
+
+  const counts = useMemo(() => ({
+    all: rows.length,
+    draft: rows.filter((r) => r.status === 0).length,
+    published: rows.filter((r) => r.status === 1).length,
+    archived: rows.filter((r) => r.status === 2).length,
+  }), [rows]);
+
+  const filtered = useMemo(() => rows.filter((r) => statusFilter === "" || r.status === statusFilter), [rows, statusFilter]);
 
   const openCreate = () => {
     setEditing(null);
@@ -91,7 +110,6 @@ export function KnowledgeWritePage() {
     try {
       const r = await knowledgeApi.generate({ title: v.title ?? "", topic: v.topic, context: v.context ?? "" });
       const taskId = r.task_id;
-      // 轮询状态（success 返回 article_id）
       timer.current = window.setInterval(async () => {
         try {
           const st = await knowledgeApi.generateStatus(taskId);
@@ -117,46 +135,73 @@ export function KnowledgeWritePage() {
     }
   };
 
+  const columns: ColumnsType<ArticleItem> = [
+    { title: "知识条目", width: 320, render: (_, a) => (
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 13.5 }}>{a.title}</div>
+        <div style={{ fontSize: 11, color: token.colorTextTertiary, marginTop: 2 }}>{a.category || "未分类"} · {a.author_type === "ai" ? "AI 生成" : "人工编写"}</div>
+      </div>
+    ) },
+    { title: "版本", width: 130, render: (_, a) => <span style={{ fontSize: 12 }}>v{a.version}（发布 v{a.published_version || "—"}）</span> },
+    { title: "来源", width: 100, render: (_, a) => (a.author_type === "ai" ? <Tag color="purple" style={{ borderRadius: 999 }}>AI</Tag> : <Tag style={{ borderRadius: 999 }}>人工</Tag>) },
+    { title: "状态", width: 110, render: (_, a) => { const s = STATUS_META[a.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? a.status}</Tag>; } },
+    { title: "更新时间", dataIndex: "updated_at", width: 150, render: (v: string) => (v ? <span style={{ fontSize: 12 }}>{new Date(v).toLocaleString()}</span> : <span style={{ color: token.colorTextTertiary }}>—</span>) },
+    {
+      title: "操作", width: 220,
+      render: (_, a) => (
+        <Space size={4}>
+          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(a)}>编辑</Button>
+          {a.status !== 1 && a.status !== 2 && <Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => publish(a)}>发布</Button>}
+          {a.status === 2 && <Button size="small" onClick={() => publish(a)}>恢复发布</Button>}
+          {a.status !== 2 && (
+            <Popconfirm title="归档该知识？" onConfirm={() => archive(a)}>
+              <Button size="small" icon={<InboxOutlined />}>归档</Button>
+            </Popconfirm>
+          )}
+        </Space>
+      ),
+    },
+  ];
+
   return (
-    <div>
-      <Space style={{ marginBottom: 12, width: "100%", justifyContent: "space-between" }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>知识库管理</Typography.Title>
+    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>知识库管理</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>知识条目的新建 / 编辑 / 审核发布；AI 生成结果一律落草稿，人工审核后方可发布</p>
+        </div>
         <Space>
+          <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
           <Button icon={<RobotOutlined />} onClick={() => { setGenOpen(true); genForm.resetFields(); }}>AI 生成</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新建知识</Button>
         </Space>
-      </Space>
-      <Alert style={{ marginBottom: 12 }} type="info" showIcon
-        message="AI 生成结果一律为草稿，必须人工审核发布后才对维修人员可见（方案 §5.7）。" />
-      <Table<ArticleItem>
-        rowKey="id" loading={loading} dataSource={rows} pagination={{ pageSize: 20, showSizeChanger: true }}
-        columns={[
-          { title: "标题", dataIndex: "title", ellipsis: true },
-          { title: "分类", dataIndex: "category", width: 110, render: (v: string) => v || "—" },
-          { title: "版本", dataIndex: "version", width: 90, render: (_, a) => `v${a.version}（发布 v${a.published_version || "—"}）` },
-          { title: "来源", dataIndex: "author_type", width: 90, render: (v: string) => (v === "ai" ? <Tag color="purple">AI</Tag> : "人工") },
-          { title: "状态", dataIndex: "status", width: 100, render: (v: number) => <Tag color={v === 1 ? "success" : v === 2 ? "default" : "orange"}>{["草稿", "已发布", "已归档"][v]}</Tag> },
-          { title: "更新时间", dataIndex: "updated_at", width: 160, render: (v: string) => (v ? new Date(v).toLocaleString() : "—") },
-          {
-            title: "操作", width: 240,
-            render: (_, a) => (
-              <Space size={4}>
-                <Button size="small" onClick={() => openEdit(a)}>编辑</Button>
-                {a.status !== 1 && a.status !== 2 && (
-                  <Button size="small" type="primary" onClick={() => publish(a)}>发布</Button>
-                )}
-                {a.status === 2 && <Button size="small" onClick={() => publish(a)}>恢复发布</Button>}
-                {a.status !== 2 && (
-                  <Popconfirm title="归档该知识？" onConfirm={() => archive(a)}>
-                    <Button size="small">归档</Button>
-                  </Popconfirm>
-                )}
-              </Space>
-            ),
-          },
-        ]}
-      />
+      </div>
 
+      <Alert style={{ marginBottom: 14 }} type="info" showIcon
+        message="AI 生成结果一律为草稿，必须人工审核发布后才对维修人员可见（方案 §5.7）。" />
+
+      {/* 状态 Tabs */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        {([["", "全部", counts.all], [0, "草稿", counts.draft], [1, "已发布", counts.published], [2, "已归档", counts.archived]] as const).map(([st, label, count]) => {
+          const active = statusFilter === st;
+          return (
+            <button key={String(st)} type="button" onClick={() => setStatusFilter(st as number | "")}
+              style={{ cursor: "pointer", border: `1px solid ${active ? "#5B7FFF" : token.colorBorder}`, background: active ? "#5B7FFF" : "#fff", color: active ? "#fff" : token.colorTextSecondary, borderRadius: 999, padding: "6px 14px", fontSize: 12.5, fontWeight: active ? 600 : 500, display: "inline-flex", gap: 6, alignItems: "center", fontFamily: "inherit", transition: "all .2s ease" }}>
+              {label} <span style={{ opacity: 0.75, fontWeight: 600 }}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <Table<ArticleItem>
+          rowKey="id" loading={loading} dataSource={filtered} locale={{ emptyText: "暂无知识条目" }}
+          pagination={{ pageSize: 20, showSizeChanger: true }}
+          columns={columns}
+        />
+      </div>
+
+      {/* 新建/编辑 */}
       <Modal open={open} onCancel={() => setOpen(false)} onOk={save} confirmLoading={saving} title={editing ? "编辑知识" : "新建知识"} width={760} destroyOnHidden>
         <Form form={form} layout="vertical">
           <Form.Item name="title" label="标题" rules={[{ required: true, message: "请输入标题" }]}>
@@ -176,6 +221,7 @@ export function KnowledgeWritePage() {
         </Form>
       </Modal>
 
+      {/* AI 生成 */}
       <Modal open={genOpen} onCancel={() => { if (!genRunning) setGenOpen(false); }} onOk={startGenerate} confirmLoading={genRunning} title="AI 生成知识（草稿）" width={560} destroyOnHidden>
         <Form form={genForm} layout="vertical">
           <Form.Item name="topic" label="生成主题（故障/场景）" rules={[{ required: true, message: "请输入主题" }]}>
