@@ -58,3 +58,6 @@ dsh-usage/
 
 # 模块插件运行时目录（scripts/build_modules.py 生成，禁止手工修改；源码在 backend/modules/）
 backend/app/modules/
+
+# 本地草稿（AI 开发阶段临时文件）
+AI开发文档/New *.txt
