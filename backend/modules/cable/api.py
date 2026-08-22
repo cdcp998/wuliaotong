@@ -606,6 +606,52 @@ def _tile_bbox_to_xy_range(bbox: list[float], z: int) -> tuple[int, int, int, in
     return max(0, lon2x(west)), min(n - 1, lon2x(east)), max(0, lat2y(north)), min(n - 1, lat2y(south))
 
 
+@router.post("/map/cache/regions/{region_id}/pause", dependencies=[Depends(require_permission("map:cache"))])
+def pause_region_download(region_id: int, db: Session = Depends(get_db)) -> dict:
+    """暂停区域下载（worker 跳过暂停区域；恢复=再次 start）。"""
+    r = db.get(MapCacheRegion, region_id)
+    if r is None:
+        raise BizError(E_NOT_FOUND, "缓存区域不存在")
+    r.status = 3
+    db.commit()
+    return ok()
+
+
+@router.post("/map/cache/regions/{region_id}/clear", dependencies=[Depends(require_permission("map:cache"))])
+def clear_region(region_id: int, db: Session = Depends(get_db)) -> dict:
+    """清理区域缓存：删除下载任务 + 重置统计（磁盘瓦片保留在前端可继续命中的公共缓存，统一入口见 tile_cache）。"""
+    r = db.get(MapCacheRegion, region_id)
+    if r is None:
+        raise BizError(E_NOT_FOUND, "缓存区域不存在")
+    from sqlalchemy import delete
+
+    db.execute(delete(MapDownloadTask).where(MapDownloadTask.region_id == region_id))
+    r.tile_count = 0
+    r.cache_size = 0
+    r.status = 0
+    r.last_download_at = None
+    db.commit()
+    return ok()
+
+
+@router.get("/map/downloads", dependencies=[Depends(require_permission("map:cache"))])
+def download_progress(db: Session = Depends(get_db)) -> dict:
+    """下载进度（全局 + 分区域统计）。"""
+    global_pending = db.scalar(select(func.count()).select_from(MapDownloadTask).where(MapDownloadTask.status == 0)) or 0
+    global_done = db.scalar(select(func.count()).select_from(MapDownloadTask).where(MapDownloadTask.status == 1)) or 0
+    global_failed = db.scalar(select(func.count()).select_from(MapDownloadTask).where(MapDownloadTask.status == 2)) or 0
+    regions = db.scalars(select(MapCacheRegion).order_by(MapCacheRegion.id.desc())).all()
+    per_region = []
+    for r in regions:
+        pending = db.scalar(select(func.count()).select_from(MapDownloadTask).where(MapDownloadTask.region_id == r.id, MapDownloadTask.status == 0)) or 0
+        per_region.append({
+            "id": r.id, "name": r.name, "status": r.status, "tile_count": r.tile_count,
+            "pending": pending,
+            "last_download_at": r.last_download_at.isoformat() if r.last_download_at else None,
+        })
+    return ok({"pending": global_pending, "done": global_done, "failed": global_failed, "regions": per_region})
+
+
 def _download_region_tiles(db: Session, region: MapCacheRegion) -> int:
     """生成区域瓦片下载任务（uk(region_id,z,x,y) 幂等；P6 起由 Redis 队列 + worker 消费）。"""
     if not region.geometry:

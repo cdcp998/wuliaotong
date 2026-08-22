@@ -19,6 +19,7 @@ from app.models.stock import StkStock
 from app.models.sys import SysNotification, SysRole, SysUser
 from app.services.backup import cleanup_auto_backups, run_backup
 from app.services.ai.alert_text import generate_alert_text
+from app.services.notify.worker import notify_worker_tick
 from app.services.quota import check_quota_warnings
 
 logger = logging.getLogger(__name__)
@@ -139,9 +140,17 @@ def start_scheduler() -> None:
             replace_existing=True,
             next_run_time=datetime.now(),
         )
+        scheduler.add_job(
+            notify_worker_tick,
+            "interval",
+            seconds=30,
+            id="notify_worker",
+            replace_existing=True,
+            next_run_time=datetime.now(),
+        )
         _register_module_jobs()
         scheduler.start()
-        logger.info("scheduler started: stock_alerts(1min), daily_backup(02:00), quota_refresh+check(5min trigger)")
+        logger.info("scheduler started: stock_alerts(1min), daily_backup(02:00), quota_warnings(5min), notify_worker(30s)")
 
 
 def _register_module_jobs() -> None:
