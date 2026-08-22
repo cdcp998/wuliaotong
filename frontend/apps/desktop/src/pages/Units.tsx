@@ -1,10 +1,31 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { App, Button, Form, Input, Modal, Popconfirm, Space } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, type Unit } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
+
+/** 国标常用计量单位（设计页 16：国标 51 项）——材料/入库场景常用 SI 单位 + 计数单位。 */
+const GB_UNITS: { name: string; remark: string }[] = [
+  { name: "个", remark: "GB/T 计数" }, { name: "件", remark: "GB/T 计数" }, { name: "套", remark: "GB/T 计数" },
+  { name: "台", remark: "GB/T 计数" }, { name: "辆", remark: "GB/T 计数" }, { name: "箱", remark: "GB/T 计数" },
+  { name: "盒", remark: "GB/T 计数" }, { name: "包", remark: "GB/T 计数" }, { name: "捆", remark: "GB/T 计数" },
+  { name: "卷", remark: "GB/T 计数" }, { name: "张", remark: "GB/T 计数" }, { name: "片", remark: "GB/T 计数" },
+  { name: "块", remark: "GB/T 计数" }, { name: "根", remark: "GB/T 计数" }, { name: "支", remark: "GB/T 计数" },
+  { name: "把", remark: "GB/T 计数" }, { name: "条", remark: "GB/T 计数" }, { name: "桶", remark: "GB/T 计数" },
+  { name: "罐", remark: "GB/T 计数" }, { name: "瓶", remark: "GB/T 计数" }, { name: "袋", remark: "GB/T 计数" },
+  { name: "粒", remark: "GB/T 计数" }, { name: "颗", remark: "GB/T 计数" }, { name: "副", remark: "GB/T 计数" },
+  { name: "组", remark: "GB/T 计数" }, { name: "板", remark: "GB/T 计数" }, { name: "米", remark: "长度" },
+  { name: "厘米", remark: "长度" }, { name: "毫米", remark: "长度" }, { name: "千米", remark: "长度" },
+  { name: "平方米", remark: "面积" }, { name: "立方米", remark: "体积" }, { name: "升", remark: "容积" },
+  { name: "毫升", remark: "容积" }, { name: "克", remark: "质量" }, { name: "千克", remark: "质量" },
+  { name: "公斤", remark: "质量" }, { name: "吨", remark: "质量" }, { name: "毫克", remark: "质量" },
+  { name: "千瓦时", remark: "能量" }, { name: "千瓦", remark: "功率" }, { name: "瓦", remark: "功率" },
+  { name: "伏", remark: "电压" }, { name: "安培", remark: "电流" }, { name: "欧姆", remark: "电阻" },
+  { name: "赫兹", remark: "频率" }, { name: "帕斯卡", remark: "压强" }, { name: "摄氏度", remark: "温度" },
+  { name: "转每分钟", remark: "转速" },
+];
 
 /** 材料单位管理（电脑端，base:product）：计量单位维护。材料/入库/送货单识别等场景的单位下拉均来自本表。 */
 export function UnitsPage() {
@@ -66,6 +87,20 @@ export function UnitsPage() {
     }
   }
 
+  /** 导入国标常用单位（设计页 16：国标 51 项）——仅补缺失项。 */
+  async function importGbUnits() {
+    const existing = new Set(list.map((u) => u.name.trim()));
+    const missing = GB_UNITS.filter((u) => !existing.has(u.name.trim()));
+    if (!missing.length) return message.info("国标单位均已存在");
+    try {
+      for (const u of missing) await baseApi.createUnit({ name: u.name.trim(), remark: u.remark });
+      message.success(`已导入 ${missing.length} 个国标单位`);
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "导入失败");
+    }
+  }
+
   const columns: ColumnsType<Unit> = [
     { title: "名称", dataIndex: "name", width: 160, render: (v: string) => <b>{v}</b> },
     { title: "备注", dataIndex: "remark", render: (v?: string) => v || "-" },
@@ -76,6 +111,7 @@ export function UnitsPage() {
       <h2 style={{ margin: "0 0 16px" }}>材料单位管理</h2>
       <Space style={{ marginBottom: 16 }} wrap>
         <Button type="primary" onClick={openCreate}>新建单位</Button>
+        <Button onClick={() => void importGbUnits()}>导入国标单位（{GB_UNITS.length} 项）</Button>
         <span style={{ fontSize: 12, color: "#5B6478" }}>
           材料 / 新建入库 / 送货单识别等场景的单位选项均来自本表，请使用规范单位名（个 / 件 / 套 / 箱 / 盒 / 包 / 台 / 米 / kg 等）
         </span>
