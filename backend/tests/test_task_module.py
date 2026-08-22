@@ -25,9 +25,11 @@ def _login(username: str, password: str) -> None:
 
 @pytest.fixture(scope="module", autouse=True)
 def _ensure_modules():
-    """前置：cable + task 安装启用（收尾由 _data_cleanup 复位）。"""
+    """前置：cable + map + task 安装启用（cable 依赖 map；收尾由 _data_cleanup 复位）。"""
     _login("admin", "admin123")
     client.post("/api/v1/modules/cable/install")
+    client.post("/api/v1/modules/map/install")
+    client.post("/api/v1/modules/map/enable")
     client.post("/api/v1/modules/cable/enable")
     client.post("/api/v1/modules/task/install")
     r = client.post("/api/v1/modules/task/enable")

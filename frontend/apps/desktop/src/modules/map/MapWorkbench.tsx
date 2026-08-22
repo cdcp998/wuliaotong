@@ -1,17 +1,18 @@
-/** cable 模块：地图工作台（/cable/map，cable:view）——底图 + 叠加层开关 + 测距定位 + 故障导航。
- * 左侧工具栏可折叠（地图全宽/还原）。 */
+/** map 模块：地图工作台（/cable/map，cable:view）——底图 + 叠加层开关 + 测距定位 + 故障导航。
+ * 左侧工具栏可折叠（地图全宽/还原）。依赖 cable 模块数据（线缆/故障/标记）。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Card, Descriptions, InputNumber, Select, Space, Switch, Typography } from "antd";
 import { AimOutlined, DoubleLeftOutlined, EnvironmentOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 
 import type { LatLng } from "@wlt/shared";
 
-import { cableApi, type CableItem, type FaultItem, type MapSourceInfo, type MarkerItem, type MeasureResult, type NavigateResult } from "./api";
+import { cableApi, type CableItem, type FaultItem, type MarkerItem, type MeasureResult, type NavigateResult } from "../cable/api";
+import { mapApi, type MapSourceInfo } from "./api";
 import { MapView } from "./MapView";
 
 const TYPE_LABEL: Record<string, string> = { wire: "电线", fiber: "光缆", network: "网线" };
 
-export function CableMapPage() {
+export function MapWorkbenchPage() {
   const { message } = App.useApp();
   const [sources, setSources] = useState<Record<string, MapSourceInfo>>({});
   const [cables, setCables] = useState<CableItem[]>([]);
@@ -34,7 +35,7 @@ export function CableMapPage() {
   const load = useCallback(async () => {
     try {
       const [src, cablesResp, faultsResp] = await Promise.all([
-        cableApi.mapSources(),
+        mapApi.mapSources(),
         cableApi.listCables({ page_size: 100 }),
         cableApi.listFaults({ page_size: 100, exclude_closed: true }),
       ]);

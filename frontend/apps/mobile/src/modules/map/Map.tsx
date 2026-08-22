@@ -1,5 +1,5 @@
-/** 手机端：地图工作台（方案 §7.3）——全屏地图 + 底部工具栏（上报/故障管理/测距/导航），
- * 点击按钮弹窗打开对应面板（Popup 弹层，可关闭）。2026-08-22 v3：底部工具栏 + 弹窗式。 */
+/** 手机端：地图工作台（map 模块，方案 §7.3）——全屏地图 + 底部工具栏（上报/故障管理/测距/导航），
+ * 点击按钮弹窗打开对应面板（Popup 弹层，可关闭）。依赖 cable 模块数据（线缆/故障）。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Dialog, Input, NavBar, Picker, Popup, Selector, Tag, TextArea, Toast } from "antd-mobile";
@@ -8,7 +8,8 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 import { ModuleGate } from "../../components/ModuleGate";
-import { cableApi, type CableItem, type FaultItem } from "./api";
+import { cableApi, type CableItem, type FaultItem } from "../cable/api";
+import { mapApi } from "./api";
 
 interface MeasureResult {
   lat: number;
@@ -45,7 +46,7 @@ const TOOLS: { key: Exclude<PanelKey, null>; label: string; color: string }[] = 
   { key: "nav", label: "导航", color: "#fa541c" },
 ];
 
-export function MobileCableMapPage() {
+export function MobileMapPage() {
   const navigate = useNavigate();
   const [cables, setCables] = useState<CableItem[]>([]);
   const [faults, setFaults] = useState<FaultItem[]>([]);
@@ -174,13 +175,13 @@ export function MobileCableMapPage() {
   };
 
   return (
-    <ModuleGate code="cable" title="地图">
+    <ModuleGate code="map" title="地图">
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh" }}>
       <NavBar onBack={() => navigate(-1)}>地图工作台</NavBar>
       {/* 地图区（全屏最大化；底部工具栏常驻） */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, marginBottom: 56 }}>
         <MapContainer center={[30.2741, 120.1551]} zoom={12} style={{ height: "100%", width: "100%" }}>
-          <TileLayer url={cableApi.tileUrl("esri", "{z}", "{x}", "{y}")} maxZoom={19} attribution="© 卫星影像" />
+          <TileLayer url={mapApi.tileUrl("esri", "{z}", "{x}", "{y}")} maxZoom={19} attribution="© 卫星影像" />
           <ClickCatcher onPick={(lat, lng) => {
             if (mode === "fault") { setPick({ lat, lng }); setMode("none"); }
             else if (mode === "navStart") { setNavStart([lat, lng]); setMode("none"); }

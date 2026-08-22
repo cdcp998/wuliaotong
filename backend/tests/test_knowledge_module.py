@@ -24,8 +24,9 @@ def _login(username: str, password: str) -> None:
 @pytest.fixture(scope="module", autouse=True)
 def _ensure_modules():
     _login("admin", "admin123")
-    for code in ("cable", "task", "knowledge"):
+    for code in ("cable", "map", "task", "knowledge"):
         client.post(f"/api/v1/modules/{code}/install")
+    for code in ("map", "cable", "task", "knowledge"):
         r = client.post(f"/api/v1/modules/{code}/enable")
         assert r.json()["code"] == 0, r.text
     yield

@@ -312,13 +312,21 @@ def register_modules(app: Any) -> dict[str, Any]:
                     )
                 )
                 summary["registered"] += 1
-            elif row.state == ST_ENABLED:
-                ok, reason = check_dependencies(db, d.code, d.dependencies)
-                if not ok:
-                    row.state = ST_ERROR
-                    row.last_error = f"依赖不满足: {reason}"
-                    row.last_error_at = __import__("datetime").datetime.now()
-                    logger.warning("模块 %s 依赖不满足，置 ERROR：%s", d.code, reason)
+            else:
+                # 依赖声明同步（模块依赖变更时随重启生效，保证 dependents/check 使用最新声明）
+                try:
+                    cur_deps = json.loads(row.depends or "[]")
+                except (TypeError, ValueError):
+                    cur_deps = []
+                if cur_deps != list(d.dependencies):
+                    row.depends = json.dumps(d.dependencies, ensure_ascii=False) if d.dependencies else None
+                if row.state == ST_ENABLED:
+                    ok, reason = check_dependencies(db, d.code, d.dependencies)
+                    if not ok:
+                        row.state = ST_ERROR
+                        row.last_error = f"依赖不满足: {reason}"
+                        row.last_error_at = __import__("datetime").datetime.now()
+                        logger.warning("模块 %s 依赖不满足，置 ERROR：%s", d.code, reason)
             db.commit()
         # 挂载路由（全部挂载、依赖门控）
         for d in defs:

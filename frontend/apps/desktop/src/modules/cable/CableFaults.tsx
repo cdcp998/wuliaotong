@@ -5,8 +5,9 @@ import { AimOutlined, CameraOutlined, CheckCircleOutlined, CheckOutlined, Delete
 
 import { baseApi, fileApi } from "@wlt/shared";
 
-import { cableApi, type CableItem, type FaultItem, type MapSourceInfo } from "./api";
-import { MapView } from "./MapView";
+import { cableApi, type CableItem, type FaultItem } from "./api";
+import { mapApi, type MapSourceInfo } from "../map/api";
+import { MapView } from "../map/MapView";
 
 /** 状态推进动作 → 图标（操作列图标化，tooltip 提示）。 */
 const NEXT_ICON: Record<number, React.ReactNode> = {
@@ -77,7 +78,7 @@ export function CableFaultsPage() {
     void load();
   }, [load]);
   useEffect(() => {
-    cableApi.mapSources().then((s) => setSources(s.map_sources)).catch(() => undefined);
+    mapApi.mapSources().then((s) => setSources(s.map_sources)).catch(() => undefined);
     cableApi.listCables({ page_size: 100 }).then((r) => setCables(r.items)).catch(() => undefined);
   }, []);
 

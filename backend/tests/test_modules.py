@@ -28,9 +28,12 @@ def _login(username: str, password: str) -> None:
 
 @pytest.fixture(scope="module", autouse=True)
 def _ensure_cable_installed():
-    """前置：cable 模块安装并启用（保证测试可运行；收尾由 _data_cleanup 复位隔离库）。"""
+    """前置：cable + map 模块安装并启用（cable 依赖 map；map 钩子归一菜单/权限归属；收尾由 _data_cleanup 复位隔离库）。"""
     _login("admin", "admin123")
     client.post("/api/v1/modules/cable/install")
+    client.post("/api/v1/modules/map/install")
+    r = client.post("/api/v1/modules/map/enable")
+    assert r.json()["code"] == 0, r.text
     r = client.post("/api/v1/modules/cable/enable")
     assert r.json()["code"] == 0, r.text
     yield
@@ -58,7 +61,14 @@ def test_module_list_install_upgrade() -> None:
     row = next(m for m in r.json()["data"] if m["code"] == "cable")
     assert row["deployed"] is True and row["state"] == "ENABLED"
     assert row["source_version"] == "1.0.0" and row["version"] == "1.0.0"
-    assert row["menu_count"] == 5 and row["perm_count"] == 6
+    assert row["depends"] == ["map"]
+    # 地图部分已拆分：菜单/权限（地图工作台/缓存管理 + map:config/map:cache）归属 map 模块
+    assert row["menu_count"] == 3 and row["perm_count"] == 4
+
+    mrow = next(m for m in r.json()["data"] if m["code"] == "map")
+    assert mrow["deployed"] is True and mrow["state"] == "ENABLED"
+    assert mrow["depends"] == []
+    assert mrow["menu_count"] == 3 and mrow["perm_count"] == 2
 
     # 已启用状态下重复安装 → 拒绝（状态机：先停用再重装）
     r = client.post("/api/v1/modules/cable/install")
@@ -94,9 +104,11 @@ def test_module_uninstall_keeps_data_and_reinstall() -> None:
     assert r.json()["code"] == 0, r.text
     cable_id = r.json()["data"]["id"]
 
-    # 停用 → 卸载
+    # 停用 → 卸载（cable 依赖 map：先卸 cable，再卸 map）
     assert client.post("/api/v1/modules/cable/disable").json()["code"] == 0
     assert client.post("/api/v1/modules/cable/uninstall").json()["code"] == 0
+    assert client.post("/api/v1/modules/map/disable").json()["code"] == 0
+    assert client.post("/api/v1/modules/map/uninstall").json()["code"] == 0
     r = client.get("/api/v1/modules")
     row = next(m for m in r.json()["data"] if m["code"] == "cable")
     assert row["state"] == "NOT_INSTALLED"
@@ -119,8 +131,10 @@ def test_module_uninstall_keeps_data_and_reinstall() -> None:
     finally:
         db.close()
 
-    # 重装幂等续用：数据仍在
+    # 重装幂等续用：数据仍在（cable 依赖 map；map 安装钩子归一菜单/权限归属）
     assert client.post("/api/v1/modules/cable/install").json()["code"] == 0
+    assert client.post("/api/v1/modules/map/install").json()["code"] == 0
+    assert client.post("/api/v1/modules/map/enable").json()["code"] == 0
     assert client.post("/api/v1/modules/cable/enable").json()["code"] == 0
     r = client.get("/api/v1/cables", params={"keyword": code})
     assert r.json()["code"] == 0 and r.json()["data"]["total"] == 1

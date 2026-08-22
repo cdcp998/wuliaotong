@@ -1,9 +1,9 @@
-"""cable 模块：瓦片批量下载 worker（方案 §5.4/§9.2，P6 完善）。
+"""map 模块：瓦片批量下载 worker（方案 §5.4/§9.2）。
 
 - 消费 map_download_task（status=0 待下载），经 tile_cache 抓取落盘（容量/每日配额保护）。
 - 失败重试 ≤2；区域（非暂停）无待下载任务后置「完成」并更新统计。
 - 与瓦片清理接口共用 tile_cache.py 统一入口（进程锁，v2.1 ⑭）。
-- 源：当前取配置中第一个启用源（后续可扩展 task 级 source 字段）。
+- 源：优先任务记录的 source；无记录/未配置回退当前首个启用源。
 """
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from app.db import SessionLocal
-from app.modules.cable.models import MapCacheRegion, MapDownloadTask
-from app.modules.cable.services import config_store, tile_cache
+from app.modules.map.models import MapCacheRegion, MapDownloadTask
+from app.modules.map.services import config_store, tile_cache
 
-logger = logging.getLogger("app.cable.download")
+logger = logging.getLogger("app.map.download")
 
 _TICK_LIMIT = 20
 _MAX_RETRY = 2

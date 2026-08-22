@@ -1,4 +1,4 @@
-/** cable 模块前端 API（线缆/故障/测距导航/地图缓存；对应方案 §6.2）。 */
+/** cable 模块前端 API（线缆/故障/测距导航；地图相关见 map 模块）。 */
 import { http } from "@wlt/shared";
 
 export interface CablePointItem {
@@ -52,17 +52,6 @@ export interface Page<T> {
   page?: number;
   page_size?: number;
   items: T[];
-}
-
-export interface MapSourceInfo {
-  key: string;
-  name: string;
-  type: string;
-  coordinate_space: "wgs84" | "gcj02" | "bd09";
-  url_template?: string;
-  enabled: boolean;
-  api_key?: string;
-  api_secret?: string;
 }
 
 export interface MeasureResult {
@@ -130,25 +119,4 @@ export const cableApi = {
     http.post<NavigateResult>("/geo/navigate", body),
   nearbyFaults: (lat: number, lng: number, radius = 500) =>
     http.get<{ items: (FaultItem & { distance: number })[] }>(`/geo/nearby-faults?lat=${lat}&lng=${lng}&radius=${radius}`),
-  // ---- 地图源/缓存区域 ----
-  mapSources: () => http.get<{ map_sources: Record<string, MapSourceInfo> }>("/map/sources"),
-  saveMapSources: (sources: MapSourceInfo[]) => http.put<{ saved: number }>("/map/sources", sources),
-  deleteMapSource: (key: string) => http.delete<{ removed: string; remaining: number }>(`/map/sources/${key}`),
-  listRegions: () =>
-    http.get<
-      { id: number; name: string; geometry: unknown; min_zoom: number; max_zoom: number; tile_count: number; cache_size: number; last_download_at: string | null; update_mode: string; status: number }[]
-    >("/map/cache/regions"),
-  createRegion: (body: { name: string; geometry?: unknown; min_zoom: number; max_zoom: number; update_mode: string }) =>
-    http.post<{ id: number }>("/map/cache/regions", body),
-  startRegionDownload: (id: number) => http.post<{ tiles_queued?: number }>(`/map/cache/regions/${id}/start`),
-  pauseRegionDownload: (id: number) => http.post<null>(`/map/cache/regions/${id}/pause`),
-  clearRegion: (id: number) => http.post<{ tiles_removed?: number }>(`/map/cache/regions/${id}/clear`),
-  downloadProgress: () =>
-    http.get<{ pending: number; done: number; failed: number; regions: { id: number; name: string; status: number; tile_count: number; pending: number; done: number; failed: number; total: number; last_download_at: string | null }[] }>("/map/downloads"),
-  /** 瓦片代理 URL（经后端缓存；Session Cookie 同源携带）。 */
-  tileUrl: (source: string, z: number | string, x: number | string, y: number | string) =>
-    `${import.meta.env?.VITE_API_BASE ?? "/api/v1"}/map/tile/${source}/${z}/${x}/${y}`,
-  /** 图源更新时间：该源最近一次成功抓取瓦片的时间。 */
-  tileUpdated: (source: string) =>
-    http.get<{ source: string; updated_at: string | null }>(`/map/tile-updated/${source}`),
 };

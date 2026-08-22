@@ -1,4 +1,4 @@
-/** cable 模块：Leaflet 地图基础组件（方案 §5.2/§7.1 MapView）。
+/** map 模块：Leaflet 地图基础组件（方案 §5.2/§7.1 MapView；cable 模块复用）。
  *
  * - 底图：后端瓦片代理 /map/tile/{source}/{z}/{x}/{y}（缓存优先，未命中抓在线源）
  * - 叠加层：线缆 GeoJSON / 故障点 / 标记点 / 路径（导航）
@@ -12,7 +12,8 @@ import { Empty } from "antd";
 
 import { fromDisplaySpace, toDisplaySpace, type LatLng } from "@wlt/shared";
 
-import { cableApi, type FaultItem, type MapSourceInfo, type MarkerItem, type CableItem } from "./api";
+import type { CableItem, FaultItem, MarkerItem } from "../cable/api";
+import { mapApi, type MapSourceInfo } from "./api";
 
 /** 业务叠加层数据集合。 */
 export interface MapOverlayData {
@@ -109,7 +110,7 @@ function FitCables({ cables, previewPath }: { cables: CableItem[]; previewPath?:
 function BaseTile({ sources, sourceKey }: { sources: Record<string, MapSourceInfo>; sourceKey?: string }) {
   const key = sourceKey && sources[sourceKey]?.enabled ? sourceKey : Object.keys(sources).find((k) => sources[k]?.enabled);
   if (!key) return null;
-  const url = cableApi.tileUrl(key, "{z}", "{x}", "{y}");
+  const url = mapApi.tileUrl(key, "{z}", "{x}", "{y}");
   return <TileLayer key={key} url={url} maxZoom={19} attribution="© 卫星影像" />;
 }
 

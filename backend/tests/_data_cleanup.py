@@ -409,7 +409,10 @@ def cleanup_test_data() -> None:
             _exec("DELETE FROM sys_notification WHERE biz_type LIKE 'T-%'")
         # 隔离测试库：模块状态/配置复位（cable/task 安装/启停/地图源配置不影响其他测试；migration 记录保留）
         if os.getenv("TEST_DB_URL", "") and table_exists(db, "sys_module"):
-            db.execute(text("UPDATE sys_module SET state='NOT_INSTALLED', last_error='', config=NULL WHERE code IN ('cable','task','knowledge','device') AND (state <> 'NOT_INSTALLED' OR config IS NOT NULL)"))
+            db.execute(text("UPDATE sys_module SET state='NOT_INSTALLED', last_error='', config=NULL WHERE code IN ('cable','map','task','knowledge','device') AND (state <> 'NOT_INSTALLED' OR config IS NOT NULL)"))
+            # 失败迁移记录清理（避免失败 baseline 阻塞重装；成功记录保留以校验 checksum）
+            if table_exists(db, "sys_module_migration"):
+                db.execute(text("DELETE FROM sys_module_migration WHERE module_code IN ('cable','map','task','knowledge','device') AND success = 0"))
             db.commit()
         db.commit()
     finally:

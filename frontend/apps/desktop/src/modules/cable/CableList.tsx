@@ -3,8 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 
-import { cableApi, type CableItem, type MapSourceInfo, type MarkerItem } from "./api";
-import { MapView } from "./MapView";
+import { cableApi, type CableItem, type MarkerItem } from "./api";
+import { mapApi, type MapSourceInfo } from "../map/api";
+import { MapView } from "../map/MapView";
 
 const TYPE_LABEL: Record<string, { label: string; color: string }> = {
   wire: { label: "电线", color: "blue" },
@@ -58,7 +59,7 @@ export function CableListPage() {
     void load();
   }, [load]);
   useEffect(() => {
-    cableApi.mapSources().then((s) => setSources(s.map_sources)).catch(() => undefined);
+    mapApi.mapSources().then((s) => setSources(s.map_sources)).catch(() => undefined);
   }, []);
 
   const openCreate = () => {

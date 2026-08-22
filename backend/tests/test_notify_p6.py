@@ -24,6 +24,8 @@ def _login(username: str = "admin", password: str = "admin123") -> None:
 def _ensure_cable():
     _login()
     client.post("/api/v1/modules/cable/install")
+    client.post("/api/v1/modules/map/install")
+    assert client.post("/api/v1/modules/map/enable").json()["code"] == 0
     assert client.post("/api/v1/modules/cable/enable").json()["code"] == 0
     yield
 
@@ -180,7 +182,7 @@ def test_tile_batch_download_flow() -> None:
     assert r.json()["code"] == 0
     assert r.json()["data"]["tiles_queued"] > 0
 
-    from app.modules.cable.services.download_worker import download_worker_tick
+    from app.modules.map.services.download_worker import download_worker_tick
 
     # worker 消费（离线源抓取失败 → 标失败/重试；不抛异常）
     for _ in range(4):
@@ -200,7 +202,7 @@ def test_tile_batch_download_flow() -> None:
     try:
         t = db.execute(text("SELECT source, z, x, y FROM map_download_task WHERE region_id = :r LIMIT 1"), {"r": region_id}).fetchone()
         assert t is not None and t[0] == "esri"
-        from app.modules.cable.services import tile_cache
+        from app.modules.map.services import tile_cache
 
         png = tile_cache._tile_path("esri", int(t[1]), int(t[2]), int(t[3]))
         png.parent.mkdir(parents=True, exist_ok=True)
@@ -219,7 +221,7 @@ def test_tile_batch_download_flow() -> None:
 def test_tile_config_default_fallback() -> None:
     """系统自带图源写入配置库（on_enable 钩子 ensure_seeded）：config 不再是 NULL，
     内置 Esri 为真实配置（可测试/编辑/停用），effective 兜底仅用于全删后的回退。"""
-    from app.modules.cable.services import config_store
+    from app.modules.map.services import config_store
 
     db = SessionLocal()
     try:
@@ -229,7 +231,7 @@ def test_tile_config_default_fallback() -> None:
         # 已持久化落库（不再仅虚拟回退）
         from app.models import SysModule
 
-        row = db.scalar(text("SELECT config FROM sys_module WHERE code = 'cable'"))
+        row = db.scalar(text("SELECT config FROM sys_module WHERE code = 'map'"))
         assert row is not None and "esri" in row
     finally:
         db.close()
@@ -242,4 +244,4 @@ def test_scheduler_module_job_registered() -> None:
     job_ids = [j.id for j in scheduler.get_jobs()] if scheduler.running else []
     if not scheduler.running:
         pytest.skip("scheduler 未运行（TestClient 未走 lifespan）")
-    assert "mod:cable:download_worker_tick" in job_ids
+    assert "mod:map:download_worker_tick" in job_ids

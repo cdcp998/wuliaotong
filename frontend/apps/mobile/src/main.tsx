@@ -29,7 +29,7 @@ const StockQueryPage = lazy(() => import("./pages/StockQuery").then((m) => ({ de
 const TransfersPage = lazy(() => import("./pages/Transfers").then((m) => ({ default: m.TransfersPage })));
 const WarehousesPage = lazy(() => import("./pages/Warehouses").then((m) => ({ default: m.WarehousesPage })));
 // 模块页面（方案 §2.3：apps/mobile/src/modules/{code}/）
-const MobileCableMapPage = lazy(() => import("./modules/cable/CableMap").then((m) => ({ default: m.MobileCableMapPage })));
+const MobileMapPage = lazy(() => import("./modules/map/Map").then((m) => ({ default: m.MobileMapPage })));
 const MyTasksPage = lazy(() => import("./modules/task/MyTasks").then((m) => ({ default: m.MyTasksPage })));
 const MobileKnowledgePage = lazy(() => import("./modules/knowledge/Knowledge").then((m) => ({ default: m.MobileKnowledgePage })));
 const MobileDevicesPage = lazy(() => import("./modules/device/Devices").then((m) => ({ default: m.MobileDevicesPage })));
@@ -67,7 +67,7 @@ const tabRouter = createBrowserRouter(
     { path: "/checks", element: <RequireAuth perm="stk:check"><ChecksPage /></RequireAuth> },
     { path: "/checks/:id", element: <RequireAuth perm="stk:check"><CheckRunPage /></RequireAuth> },
     // 线缆和设备插件模块页面（页面内再校验模块启用：moduleEnabled）
-    { path: "/cable/map", element: <RequireAuth perm="cable:view"><MobileCableMapPage /></RequireAuth> },
+    { path: "/cable/map", element: <RequireAuth perm="cable:view"><MobileMapPage /></RequireAuth> },
     { path: "/tasks/mine", element: <RequireAuth perm="task:process"><MyTasksPage /></RequireAuth> },
     { path: "/knowledge", element: <RequireAuth perm="knowledge:view"><MobileKnowledgePage /></RequireAuth> },
     { path: "/devices", element: <RequireAuth perm="device:task,device:manage"><MobileDevicesPage /></RequireAuth> },

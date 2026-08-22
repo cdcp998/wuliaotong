@@ -1,11 +1,11 @@
-/** cable 模块：地图缓存管理（/cable/cache，map:cache）+ 图源管理（map:config 编辑/新增/删除，查看脱敏）。 */
+/** map 模块：地图缓存管理（/cable/cache，map:cache）+ 图源管理（map:config 编辑/新增/删除，查看脱敏）。 */
 import { useCallback, useEffect, useState } from "react";
 import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Progress, Select, Space, Table, Tag, Typography } from "antd";
 import { CaretRightOutlined, EnvironmentOutlined, PauseOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
 
 import { useAuthStore } from "@wlt/shared";
 
-import { cableApi, type MapSourceInfo } from "./api";
+import { mapApi, type MapSourceInfo } from "./api";
 import { MapView } from "./MapView";
 
 const REGION_STATUS: Record<number, { label: string; color: string }> = {
@@ -31,7 +31,7 @@ interface RegionRow {
   total?: number;
 }
 
-export function CableCachePage() {
+export function MapCachePage() {
   const { message } = App.useApp();
   const hasPerm = useAuthStore((s) => s.hasPerm);
   const [regions, setRegions] = useState<RegionRow[]>([]);
@@ -72,7 +72,7 @@ export function CableCachePage() {
     setRegionPicking(false);
   };
 
-  const applyProgress = useCallback((p: Awaited<ReturnType<typeof cableApi.downloadProgress>>) => {
+  const applyProgress = useCallback((p: Awaited<ReturnType<typeof mapApi.downloadProgress>>) => {
     const stat = Object.fromEntries(p.regions.map((x) => [x.id, x]));
     setRegions((prev) =>
       prev.map((x) => ({
@@ -89,7 +89,7 @@ export function CableCachePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, p] = await Promise.all([cableApi.listRegions(), cableApi.downloadProgress()]);
+      const [r, p] = await Promise.all([mapApi.listRegions(), mapApi.downloadProgress()]);
       setRegions(r.map((x) => ({ ...x, pending: 0, done: 0, failed: 0, total: 0 })));
       applyProgress(p);
     } catch (e) {
@@ -104,14 +104,14 @@ export function CableCachePage() {
   useEffect(() => {
     if (!downloading) return;
     const timer = window.setInterval(() => {
-      cableApi.downloadProgress().then(applyProgress).catch(() => {});
+      mapApi.downloadProgress().then(applyProgress).catch(() => {});
     }, 3000);
     return () => window.clearInterval(timer);
   }, [downloading, applyProgress]);
 
   const loadSources = useCallback(async () => {
     try {
-      const r = await cableApi.mapSources();
+      const r = await mapApi.mapSources();
       // 后端每个源对象不含 key（key 为外层对象键），注入 key 供表格行内操作（测试/编辑/停用/删除）使用
       const withKey = Object.fromEntries(Object.entries(r.map_sources).map(([k, v]) => [k, { ...v, key: k }]));
       setSources(withKey);
@@ -137,7 +137,7 @@ export function CableCachePage() {
     setSaving(true);
     try {
       const geometry = { type: "Polygon", bbox: [v.west, v.south, v.east, v.north] };
-      await cableApi.createRegion({ name: v.name, geometry, min_zoom: v.min_zoom, max_zoom: v.max_zoom, update_mode: v.update_mode ?? "manual" });
+      await mapApi.createRegion({ name: v.name, geometry, min_zoom: v.min_zoom, max_zoom: v.max_zoom, update_mode: v.update_mode ?? "manual" });
       message.success("区域已创建（点击「开始下载」生成瓦片任务）");
       setOpen(false);
       form.resetFields();
@@ -156,13 +156,13 @@ export function CableCachePage() {
     try {
       let msg = "";
       if (action === "start") {
-        const resp = await cableApi.startRegionDownload(r.id);
+        const resp = await mapApi.startRegionDownload(r.id);
         msg = `已生成 ${resp.tiles_queued ?? 0} 个下载任务，后台开始下载`;
       } else if (action === "pause") {
-        await cableApi.pauseRegionDownload(r.id);
+        await mapApi.pauseRegionDownload(r.id);
         msg = "已暂停";
       } else {
-        await cableApi.clearRegion(r.id);
+        await mapApi.clearRegion(r.id);
         msg = "已清理";
       }
       message.success(msg);
@@ -196,7 +196,7 @@ export function CableCachePage() {
     }
     setSrcSaving(true);
     try {
-      await cableApi.saveMapSources([{
+      await mapApi.saveMapSources([{
         key: v.key, name: v.name, type: v.type ?? "xyz", coordinate_space: v.coordinate_space ?? "wgs84",
         url_template: v.url_template, api_key: v.api_key ?? "", api_secret: v.api_secret ?? "", enabled: v.enabled ?? true,
       }]);
@@ -213,7 +213,7 @@ export function CableCachePage() {
   const toggleSource = async (s: MapSourceInfo) => {
     if (!canConfig) return;
     try {
-      await cableApi.saveMapSources([{ ...s, enabled: !s.enabled }]);
+      await mapApi.saveMapSources([{ ...s, enabled: !s.enabled }]);
       message.success(s.enabled ? "已停用" : "已启用");
       void loadSources();
     } catch (e) {
@@ -224,7 +224,7 @@ export function CableCachePage() {
   const deleteSource = async (key: string) => {
     if (!canConfig) return;
     try {
-      await cableApi.deleteMapSource(key);
+      await mapApi.deleteMapSource(key);
       message.success("已删除（若删除后无可用源，瓦片代理将回退内置默认 Esri）");
       void loadSources();
     } catch (e) {
@@ -235,7 +235,7 @@ export function CableCachePage() {
   const testSource = async (s: MapSourceInfo) => {
     setTestingKey(s.key);
     try {
-      const url = cableApi.tileUrl(s.key, 2, 1, 1);
+      const url = mapApi.tileUrl(s.key, 2, 1, 1);
       const resp = await fetch(url, { credentials: "include" });
       if (resp.ok) {
         message.success(`「${s.name}」连接正常（瓦片 ${resp.status}）`);

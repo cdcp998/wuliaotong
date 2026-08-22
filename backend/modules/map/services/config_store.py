@@ -1,10 +1,12 @@
-"""cable 模块：模块配置存取（sys_module.config，敏感字段加密，方案 §5.10 / §13.6）。
+"""map 模块：模块配置存取（sys_module.config，敏感字段加密，方案 §5.10 / §13.6）。
 
-- 配置存 cable 模块的 sys_module.config（JSON）：
+- 配置存 map 模块的 sys_module.config（JSON）：
   {"map_sources": {key: {...}}, "cache": {"max_size": ..., "max_daily": ...}}
 - api_secret/api_key 用 Fernet 加密存储：密钥取后端 data/.module_config_key（首启生成，0600），
   可被 MODULE_CONFIG_KEY 环境变量覆盖（部署时注入）。
 - 接口返回一律脱敏（密文→"******"），永不下发明文/密文（方案 §5.10）。
+- 兼容：图源配置原存于 cable 模块（cable 未拆分前），首次安装/启用时若 cable 配置
+  已有 map_sources 则**迁移到 map 模块**，保留用户已编辑图源。
 """
 from __future__ import annotations
 
@@ -20,9 +22,9 @@ from sqlalchemy.orm import Session
 from app.config import BASE_DIR
 from app.models import SysModule
 
-logger = logging.getLogger("app.cable.config")
+logger = logging.getLogger("app.map.config")
 
-MODULE_CODE = "cable"
+MODULE_CODE = "map"
 _SENSITIVE_KEYS = ("secret", "password", "key", "token")
 
 _KEY_FILE = Path(os.getenv("MODULE_CONFIG_KEY_FILE", str(BASE_DIR / "data" / ".module_config_key")))
@@ -82,11 +84,12 @@ def load_config(db: Session) -> dict:
     """读取模块配置（敏感字段返回明文供后端使用；接口层用 mask_config）。"""
     row = db.scalar(select(SysModule).where(SysModule.code == MODULE_CODE))
     if row is None or not row.config:
-        return {"map_sources": {}, "cache": {}}
+        # 兼容迁移：map 配置为空时回读 cable 模块旧配置（拆分前图源存在 cable）
+        return _legacy_from_cable(db)
     try:
         config = json.loads(row.config)
     except (TypeError, ValueError):
-        return {"map_sources": {}, "cache": {}}
+        return _legacy_from_cable(db)
     # 解密密文敏感字段
     for src in config.get("map_sources", {}).values():
         if isinstance(src, dict):
@@ -94,6 +97,24 @@ def load_config(db: Session) -> dict:
                 if src.get(k):
                     src[k] = _decrypt(str(src[k]))
     return config
+
+
+def _legacy_from_cable(db: Session) -> dict:
+    """读取 cable 模块旧配置（含 map_sources/cache；仅 map 相关键，敏感字段解密）。"""
+    row = db.scalar(select(SysModule).where(SysModule.code == "cable"))
+    if row is None or not row.config:
+        return {"map_sources": {}, "cache": {}}
+    try:
+        config = json.loads(row.config)
+    except (TypeError, ValueError):
+        return {"map_sources": {}, "cache": {}}
+    out = {"map_sources": config.get("map_sources") or {}, "cache": config.get("cache") or {}}
+    for src in out["map_sources"].values():
+        if isinstance(src, dict):
+            for k in ("api_key", "api_secret", "api_token"):
+                if src.get(k):
+                    src[k] = _decrypt(str(src[k]))
+    return out
 
 
 def save_config(db: Session, config: dict) -> None:
@@ -105,7 +126,7 @@ def save_config(db: Session, config: dict) -> None:
                     src[k] = _encrypt(str(src[k]))
     row = db.scalar(select(SysModule).where(SysModule.code == MODULE_CODE))
     if row is None:
-        raise ValueError("cable 模块未登记")
+        raise ValueError("map 模块未登记")
     row.config = json.dumps(config, ensure_ascii=False)
     db.commit()
     from app.core.modules import invalidate_module_cache
@@ -128,7 +149,7 @@ def effective_config(db: Session) -> dict:
 def ensure_seeded(db: Session) -> dict:
     """把系统自带图源（默认 Esri + 缓存配额）写入配置数据库（幂等：config 为空才写）。
 
-    由 cable 模块 on_install/on_enable 钩子调用，保证「安装即持久化」；
+    由 map 模块 on_install/on_enable 钩子调用，保证「安装即持久化」；
     图源管理界面的「系统自带」源从此为真实配置（可测试/编辑/停用）。
     """
     config = load_config(db)

@@ -47,6 +47,4 @@ export const cableApi = {
     http.post<{ straight_distance: number; projection: { lat: number; lng: number; cumulative_distance: number } | null; fault_cumulative: number; remaining_distance: number; path: [number, number][]; candidates: { cable_id: number; cable_name: string }[] }>("/geo/navigate", body),
   nearbyFaults: (lat: number, lng: number, radius = 500) =>
     http.get<{ items: (FaultItem & { distance: number })[] }>(`/geo/nearby-faults?lat=${lat}&lng=${lng}&radius=${radius}`),
-  tileUrl: (source: string, z: number | string, x: number | string, y: number | string) =>
-    `${import.meta.env?.VITE_API_BASE ?? "/api/v1"}/map/tile/${source}/${z}/${x}/${y}`,
 };
