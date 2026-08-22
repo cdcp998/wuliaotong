@@ -6,7 +6,15 @@ import { baseApi, type Product, type Supplier, type SupplierInput } from "@wlt/s
 
 import { DataTable } from "../components/DataTable";
 
-/** 供应商管理（电脑端，base:supplier）：新建/编辑/删除（软删）/查看关联材料。 */
+/** 简称归一（设计页 15「简称归一 / 待合并」）：剥离常见公司后缀并去空白、转小写，得到归一简称。 */
+function normShort(name: string): string {
+  return name
+    .replace(/(股份有限公司|有限责任公司|有限公司|公司)/g, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+/** 供应商管理（电脑端，base:supplier）：新建/编辑/删除（软删）/查看关联材料；简称归一标注「待合并」。 */
 export function SuppliersPage() {
   const { message } = App.useApp();
   const [list, setList] = useState<Supplier[]>([]);
@@ -21,6 +29,9 @@ export function SuppliersPage() {
   const [detail, setDetail] = useState<Supplier | null>(null);
   const [detailProducts, setDetailProducts] = useState<Product[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  // 简称归一「待合并」：归一简称冲突的供应商集合 + 各供应商的归一简称
+  const [dupIds, setDupIds] = useState<Set<number>>(new Set());
+  const [shortNames, setShortNames] = useState<Map<number, string>>(new Map());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,6 +48,39 @@ export function SuppliersPage() {
   useEffect(() => {
     void load().catch((e) => message.error(e instanceof Error ? e.message : "加载失败"));
   }, [load]);
+
+  // 简称归一：分页取全部启用供应商，归一简称，冲突者标记「待合并」（不影响主列表）
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const all: Supplier[] = [];
+        for (let p = 1; p <= 5; p++) {
+          const d = await baseApi.suppliers(1, "", p, 100);
+          all.push(...d.list);
+          if (all.length >= d.total) break;
+        }
+        if (!alive) return;
+        const groups = new Map<string, number[]>();
+        const short = new Map<number, string>();
+        for (const s of all) {
+          const k = normShort(s.name);
+          short.set(s.id, k);
+          if (!groups.has(k)) groups.set(k, []);
+          groups.get(k)!.push(s.id);
+        }
+        const dup = new Set<number>();
+        for (const ids of groups.values()) if (ids.length > 1) ids.forEach((id) => dup.add(id));
+        setDupIds(dup);
+        setShortNames(short);
+      } catch {
+        /* 简称归一失败不影响主列表 */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function openCreate() {
     setEditing(null);
@@ -109,6 +153,22 @@ export function SuppliersPage() {
 
   const columns: ColumnsType<Supplier> = [
     { title: "名称", dataIndex: "name", width: 180 },
+    {
+      title: "简称归一",
+      key: "shortname",
+      width: 180,
+      render: (_, s) => {
+        const short = shortNames.get(s.id) ?? normShort(s.name);
+        return (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "#5B6478" }}>{short || "—"}</span>
+            {dupIds.has(s.id) && (
+              <span className="wlt-pill" style={{ background: "#FEF4E2", color: "#B45309" }} title="多个供应商简称归一后相同，建议合并">待合并</span>
+            )}
+          </span>
+        );
+      },
+    },
     { title: "联系人", dataIndex: "contact", width: 100, render: (v: string) => v || "-" },
     { title: "电话", dataIndex: "phone", width: 130, render: (v: string) => v || "-" },
     { title: "地址", dataIndex: "address", render: (v: string) => v || "-" },
