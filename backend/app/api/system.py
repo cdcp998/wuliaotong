@@ -23,6 +23,7 @@ from app.core.response import BizError, E_LLM_FAILED, E_PARAM, ok
 from app.db import get_db
 from app.models.sys import LlmLog, SysConfig
 from app.schemas.watermark import WatermarkPreviewReq
+from app.services.llm import invalidate_probe_cache, llm_availability_status
 from app.services.ocr.client import ocr_engine_available
 from app.services.watermark import (
     WATERMARK_DEFAULT_POSITION,
@@ -165,6 +166,9 @@ def health(db: Session = Depends(get_db)) -> dict:
         }
         for name in ("mm_llm", "deepseek", "siliconflow")
     }
+    # 模型可用性（评审 P1-5）：免费探测（GET /models，不消耗 token）结果缓存 5 分钟，
+    # 防止默认模型下线导致功能静默失效；db 不可用时无法读取配置 → 置空
+    llm_availability = llm_availability_status(db) if db_ok else {}
     return ok(
         {
             "status": "ok",
@@ -172,6 +176,7 @@ def health(db: Session = Depends(get_db)) -> dict:
             "db": "ok" if db_ok else "down",
             "redis": "ok" if redis_ping() else "down",
             "llm": llm_state,
+            "llm_availability": llm_availability,
             "ocr_engine": engine,
             "ocr_model_version": ver.config_value if ver and ver.config_value else ("PP-OCRv6" if engine == "paddle" else ""),
             "ocr_ready": ocr_engine_available(engine),
@@ -228,6 +233,9 @@ def update_settings(body: dict[str, str], db: Session = Depends(get_db)) -> dict
         from app.core.deps import invalidate_session_cfg_cache
 
         invalidate_session_cfg_cache()
+    if any(str(k).startswith("llm.") for k in body):
+        # LLM 配置变更：清空模型可用性探测缓存，下次读取按新配置重新探测
+        invalidate_probe_cache()
     logger.info("系统设置已更新：%s", ", ".join(body.keys()))
     return ok()
 
