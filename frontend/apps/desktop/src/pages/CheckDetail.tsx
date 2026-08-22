@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { App, Button, InputNumber, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate, useParams } from "react-router";
@@ -133,6 +133,22 @@ export function CheckDetailPage() {
         </h2>
         <Space2 status={status} saving={saving} auditing={auditing} onExport={() => window.open(checkApi.exportUrl(Number(id)), "_self")} onSave={() => void save()} onAudit={() => void audit()} onBack={() => navigate("/checks")} />
       </div>
+      {/* 盘点进度（设计页 25：进度条） */}
+      {items.length > 0 && (() => {
+        const done = items.filter((it) => it.real_qty !== null).length;
+        const pct = Math.round((done / items.length) * 100);
+        return (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#5B6478", marginBottom: 6 }}>
+              <span>盘点进度</span>
+              <span>{done}/{items.length}（{pct}%）</span>
+            </div>
+            <div style={{ height: 8, borderRadius: 999, background: "#EFF3FC", overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: "100%", background: status === 2 ? "#22C55E" : "#5B7FFF", borderRadius: 999, transition: "width .3s" }} />
+            </div>
+          </div>
+        );
+      })()}
       <DataTable rowKey="id" locale={{ emptyText: "暂无数据" }} columns={columns} dataSource={items} pagination={false}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
 
       {!readonly && (
