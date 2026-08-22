@@ -1,5 +1,5 @@
-﻿import { useCallback, useEffect, useState } from "react";
-import { App, Button, Drawer, Input, Modal, Select, Space, Tag } from "antd";
+import { useCallback, useEffect, useState } from "react";
+import { App, Button, Drawer, Input, Modal, Space, Tabs, Tag } from "antd";
 import { ExclamationCircleFilled } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
@@ -97,23 +97,23 @@ export function RequisitionQueryPage() {
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ margin: "0 0 16px" }}>领用申请单查询</h2>
+      {/* 状态 Tabs（设计页 27） */}
+      <Tabs
+        activeKey={String(status ?? "all")}
+        onChange={(k) => {
+          setStatus(k === "all" ? undefined : Number(k));
+          setPage(1);
+        }}
+        items={[
+          { key: "all", label: "全部" },
+          { key: "1", label: "待完成工作" },
+          { key: "2", label: "待审计" },
+          { key: "3", label: "已完成" },
+          { key: "4", label: "已驳回" },
+          { key: "5", label: "已取消" },
+        ]}
+      />
       <Space wrap style={{ marginBottom: 16 }}>
-        <Select
-          value={status}
-          onChange={(v) => {
-            setStatus(v);
-            setPage(1);
-          }}
-          style={{ width: 140 }}
-          options={[
-            { value: undefined, label: "全部状态" },
-            { value: 1, label: "待完成工作" },
-            { value: 2, label: "待审计" },
-            { value: 3, label: "已完成" },
-            { value: 4, label: "已驳回" },
-            { value: 5, label: "已取消" },
-          ]}
-        />
         <Input.Search
           placeholder="单号 / 使用地点 / 因何使用"
           allowClear
