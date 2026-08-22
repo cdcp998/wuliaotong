@@ -702,20 +702,6 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
       open={noticeOpen}
       onClose={() => setNoticeOpen(false)}
       destroyOnHidden
-      extra={
-        <Button
-          type="link"
-          size="small"
-          onClick={() => {
-            notificationApi.markReadAll().then(() => {
-              setUnread(0);
-              setNotices((ns) => ns.map((n) => ({ ...n, is_read: 1 })));
-            }).catch(() => undefined);
-          }}
-        >
-          全部已读
-        </Button>
-      }
     >
       <Tabs
         activeKey={noticeTab}
@@ -728,14 +714,22 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
           { key: "all", label: "全部" },
         ]}
       />
-      {/* 工具栏：全选 / 删除选中 / 清空全部（与手机端同功能） */}
+      {/* 工具栏（右对齐）：全部已读 / 删除选中 / 清空全部 统一靠右（与手机端行为一致） */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "4px 2px 10px", borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={toggleSelectAll}>
           <Checkbox checked={allSelected} />
           <span style={{ fontSize: 13 }}>全选</span>
         </span>
-        <span style={{ fontSize: 12, color: token.colorTextTertiary }}>已选 {noticeSelected.size} 条</span>
         <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 12, color: token.colorTextTertiary }}>已选 {noticeSelected.size} 条</span>
+        <Button type="link" size="small" onClick={() => {
+          notificationApi.markReadAll().then(() => {
+            setUnread(0);
+            setNotices((ns) => ns.map((n) => ({ ...n, is_read: 1 })));
+          }).catch(() => undefined);
+        }}>
+          全部已读
+        </Button>
         <Button size="small" danger disabled={noticeSelected.size === 0} onClick={() => void deleteSelectedNotices()}>
           删除选中（{noticeSelected.size}）
         </Button>

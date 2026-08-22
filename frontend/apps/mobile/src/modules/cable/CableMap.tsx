@@ -1,9 +1,8 @@
-/** 手机端：地图工作台（方案 §7.3）——全屏地图 + 可收缩面板（故障上报/故障管理/测距/导航）。
- * 2026-08-22 重设计：所有功能面板默认收起、可展开/收缩（地图最大可视）；新增「故障管理」
- * 供维修人员删除错误标点（软删除，仅本人上报或调度员可删）。 */
+/** 手机端：地图工作台（方案 §7.3）——全屏地图 + 底部工具栏（上报/故障管理/测距/导航），
+ * 点击按钮弹窗打开对应面板（Popup 弹层，可关闭）。2026-08-22 v3：底部工具栏 + 弹窗式。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { Button, Card, Dialog, Input, NavBar, Picker, Selector, Tag, TextArea, Toast } from "antd-mobile";
+import { Button, Dialog, Input, NavBar, Picker, Popup, Selector, Tag, TextArea, Toast } from "antd-mobile";
 import { MapContainer, Marker, Polyline, TileLayer, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -37,29 +36,20 @@ function ClickCatcher({ onPick }: { onPick: (lat: number, lng: number) => void }
   return null;
 }
 
-/** 可收缩面板：头部点击切换展开/收起。 */
-function Sheet({ title, color, open, onToggle, children }: {
-  title: string; color: string; open: boolean; onToggle: () => void; children: React.ReactNode;
-}) {
-  return (
-    <Card style={{ borderTopLeftRadius: 14, borderTopRightRadius: 14, margin: 0 }}>
-      <div onClick={onToggle} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
-        <Tag color={color}>{title}</Tag>
-        <span style={{ fontSize: 12, color: "#999" }}>{open ? "收起 ▲" : "展开 ▼"}</span>
-      </div>
-      {open && <div style={{ marginTop: 10 }}>{children}</div>}
-    </Card>
-  );
-}
+type PanelKey = "report" | "faults" | "measure" | "nav" | null;
+
+const TOOLS: { key: Exclude<PanelKey, null>; label: string; color: string }[] = [
+  { key: "report", label: "上报", color: "#ff4d4f" },
+  { key: "faults", label: "故障", color: "#fa8c16" },
+  { key: "measure", label: "测距", color: "#1668dc" },
+  { key: "nav", label: "导航", color: "#fa541c" },
+];
 
 export function MobileCableMapPage() {
   const navigate = useNavigate();
   const [cables, setCables] = useState<CableItem[]>([]);
   const [faults, setFaults] = useState<FaultItem[]>([]);
-  const [faultsOpen, setFaultsOpen] = useState(false);
-  const [reportOpen, setReportOpen] = useState(false);
-  const [measureOpen, setMeasureOpen] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
+  const [panel, setPanel] = useState<PanelKey>(null);
 
   const [pick, setPick] = useState<{ lat: number; lng: number } | null>(null);
   const [mode, setMode] = useState<"none" | "fault" | "navStart">("none");
@@ -89,7 +79,14 @@ export function MobileCableMapPage() {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  // 导航轮询：watchPosition 每 2s 调 /geo/navigate，<50m 震动+语音（方案 §13.5）
+  const stopNav = () => {
+    if (watchRef.current) { window.clearInterval(watchRef.current); watchRef.current = null; }
+    setNavigating(false);
+    setNavInfo("");
+    if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+  };
+  useEffect(() => () => { stopNav(); }, []);
+
   const startNav = () => {
     if (!selFaultId) { Toast.show("请先选择故障点"); return; }
     navigator.geolocation?.getCurrentPosition((pos) => {
@@ -121,15 +118,8 @@ export function MobileCableMapPage() {
       };
       tick();
       watchRef.current = window.setInterval(tick, 2000);
-    }, () => { Toast.show("无法获取定位，请展开「故障导航」在地图上设置起点"); setNavOpen(true); setMode("navStart"); });
+    }, () => { Toast.show("无法获取定位，请在导航弹窗中「选起点」"); setPanel("nav"); setMode("navStart"); });
   };
-  const stopNav = () => {
-    if (watchRef.current) { window.clearInterval(watchRef.current); watchRef.current = null; }
-    setNavigating(false);
-    setNavInfo("");
-    if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
-  };
-  useEffect(() => () => { stopNav(); }, []);
 
   const submitFault = async () => {
     if (!pick) return;
@@ -143,7 +133,7 @@ export function MobileCableMapPage() {
       }
       Toast.show("故障已上报");
       setPick(null); setDesc(""); setPhoto(null);
-      setReportOpen(false); // 提交后自动收缩
+      setPanel(null); // 弹窗关闭
       setReporting(false);
       void load();
     } catch (e) {
@@ -178,12 +168,17 @@ export function MobileCableMapPage() {
     }
   };
 
+  const openPanel = (key: Exclude<PanelKey, null>) => {
+    setPanel((cur) => (cur === key ? null : key));
+    if (key === "faults") void load();
+  };
+
   return (
     <ModuleGate code="cable" title="地图">
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh" }}>
       <NavBar onBack={() => navigate(-1)}>地图工作台</NavBar>
-      {/* 地图区（尽可能大；底部面板可收缩） */}
-      <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+      {/* 地图区（全屏最大化；底部工具栏常驻） */}
+      <div style={{ flex: 1, position: "relative", minHeight: 0, marginBottom: 56 }}>
         <MapContainer center={[30.2741, 120.1551]} zoom={12} style={{ height: "100%", width: "100%" }}>
           <TileLayer url={cableApi.tileUrl("esri", "{z}", "{x}", "{y}")} maxZoom={19} attribution="© 卫星影像" />
           <ClickCatcher onPick={(lat, lng) => {
@@ -201,14 +196,32 @@ export function MobileCableMapPage() {
             <Polyline positions={navPath} pathOptions={{ color: "#fa541c", weight: 5, dashArray: "8 6" }} />
           )}
         </MapContainer>
-        {/* 取点提示 */}
         {mode === "fault" && <div style={{ position: "absolute", top: 8, left: 8, background: "#fff", padding: "4px 10px", borderRadius: 6, fontSize: 12, zIndex: 1000 }}>请点击地图选择故障位置</div>}
         {navInfo && <div style={{ position: "absolute", bottom: 12, left: 8, right: 8, background: "#fff", padding: 8, borderRadius: 8, fontSize: 14, zIndex: 1000, textAlign: "center" }}>{navInfo}</div>}
       </div>
 
-      {/* 可收缩面板（默认全部收起，地图可视最大化） */}
-      <div style={{ overflow: "auto", maxHeight: "55dvh" }}>
-        <Sheet title="上报故障" color="danger" open={reportOpen} onToggle={() => setReportOpen(!reportOpen)}>
+      {/* 底部工具栏（固定） */}
+      <div style={{
+        position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 1100,
+        display: "flex", background: "#fff", borderTop: "1px solid #f0f1f3",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}>
+        {TOOLS.map((t) => (
+          <div key={t.key} onClick={() => openPanel(t.key)}
+            style={{ flex: 1, padding: "8px 0 6px", textAlign: "center", cursor: "pointer", color: panel === t.key ? t.color : "#646a73", fontSize: 11 }}>
+            <div style={{ width: 22, height: 22, margin: "0 auto 2px", borderRadius: 11, background: panel === t.key ? t.color : "#f2f3f5", color: "#fff", lineHeight: "22px", fontSize: 13 }}>●</div>
+            {t.label}
+          </div>
+        ))}
+      </div>
+
+      {/* 弹窗式面板（Popup 底部弹层，可关闭） */}
+      <Popup visible={panel === "report"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "75dvh", overflow: "auto" }}>
+        <div style={{ padding: 16, paddingBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontWeight: 600 }}>上报故障</span>
+            <span style={{ color: "#999", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
+          </div>
           {pick && <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>位置：{pick.lat.toFixed(6)}, {pick.lng.toFixed(6)}</div>}
           <Button block size="small" fill="outline" color="danger" onClick={() => setMode(mode === "fault" ? "none" : "fault")} style={{ marginBottom: 8 }}>
             {mode === "fault" ? "点击地图取点中…（再点取消）" : (pick ? "重新选择位置" : "在地图上选择位置")}
@@ -218,31 +231,37 @@ export function MobileCableMapPage() {
           <input type="file" accept="image/*" style={{ display: "none" }} id="fault-photo" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />
           <label htmlFor="fault-photo" style={{ display: "inline-block", marginBottom: 8, color: "#1668dc", fontSize: 14 }}>{photo ? "已选照片（点击更换）" : "+ 拍照/选择现场照片"}</label>
           <Button block color="danger" loading={reporting} disabled={!pick} onClick={submitFault}>提交故障上报</Button>
-        </Sheet>
+        </div>
+      </Popup>
 
-        <Sheet title="故障管理" color="warning" open={faultsOpen} onToggle={() => { setFaultsOpen(!faultsOpen); if (!faultsOpen) void load(); }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 12, color: "#888" }}>共 {faults.length} 条</span>
-            <span style={{ fontSize: 12, color: "#1668dc" }} onClick={() => void load()}>刷新</span>
+      <Popup visible={panel === "faults"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "75dvh", overflow: "auto" }}>
+        <div style={{ padding: 16, paddingBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontWeight: 600 }}>故障管理（共 {faults.length} 条）</span>
+            <span style={{ color: "#1668dc", fontSize: 13 }} onClick={() => void load()}>刷新</span>
           </div>
-          <div style={{ maxHeight: "30dvh", overflow: "auto" }}>
-            {faults.map((f) => (
-              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #f5f6f8" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13 }}>
-                    #{f.id}　{f.fault_type || "未分类"}　<Tag color={f.severity === 3 ? "danger" : f.severity === 2 ? "warning" : "default"}>{["低", "中", "高"][f.severity - 1] ?? f.severity}</Tag>
-                  </div>
-                  <div style={{ fontSize: 11, color: "#888" }}>{f.lat.toFixed(5)}, {f.lng.toFixed(5)}　{FAULT_STATUS[f.status] ?? f.status}</div>
+          {faults.map((f) => (
+            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #f5f6f8" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13 }}>
+                  #{f.id}　{f.fault_type || "未分类"}　<Tag color={f.severity === 3 ? "danger" : f.severity === 2 ? "warning" : "default"}>{["低", "中", "高"][f.severity - 1] ?? f.severity}</Tag>
                 </div>
-                <Button size="mini" color="primary" fill="outline" onClick={() => { setHighlight([f.lat, f.lng]); }}>定位</Button>
-                <Button size="mini" color="danger" fill="outline" onClick={() => deleteFault(f)}>删除标点</Button>
+                <div style={{ fontSize: 11, color: "#888" }}>{f.lat.toFixed(5)}, {f.lng.toFixed(5)}　{FAULT_STATUS[f.status] ?? f.status}</div>
               </div>
-            ))}
-            {faults.length === 0 && <div style={{ textAlign: "center", color: "#999", padding: 16 }}>暂无故障</div>}
-          </div>
-        </Sheet>
+              <Button size="mini" color="primary" fill="outline" onClick={() => { setHighlight([f.lat, f.lng]); setPanel(null); }}>定位</Button>
+              <Button size="mini" color="danger" fill="outline" onClick={() => deleteFault(f)}>删除标点</Button>
+            </div>
+          ))}
+          {faults.length === 0 && <div style={{ textAlign: "center", color: "#999", padding: 16 }}>暂无故障</div>}
+        </div>
+      </Popup>
 
-        <Sheet title="测距定位" color="primary" open={measureOpen} onToggle={() => setMeasureOpen(!measureOpen)}>
+      <Popup visible={panel === "measure"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "60dvh", overflow: "auto" }}>
+        <div style={{ padding: 16, paddingBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontWeight: 600 }}>测距定位</span>
+            <span style={{ color: "#999", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
             <Picker
               columns={[cables.filter((c) => c.status === 1).map((c) => ({ label: `${c.name}（${Math.round(c.total_length)}m）`, value: c.id }))]}
@@ -259,9 +278,15 @@ export function MobileCableMapPage() {
               {measureResult.nearest_marker && `　最近：${measureResult.nearest_marker.label}（${measureResult.nearest_marker.distance.toFixed(1)}m）`}
             </div>
           )}
-        </Sheet>
+        </div>
+      </Popup>
 
-        <Sheet title="故障导航" color="orange" open={navOpen} onToggle={() => setNavOpen(!navOpen)}>
+      <Popup visible={panel === "nav"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "60dvh", overflow: "auto" }}>
+        <div style={{ padding: 16, paddingBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontWeight: 600 }}>故障导航</span>
+            <span style={{ color: "#999", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
             <Picker
               columns={[faults.map((f) => ({ label: `#${f.id} ${f.fault_type || "故障"}（${f.description?.slice(0, 10) || ""}）`, value: f.id }))]}
@@ -278,8 +303,8 @@ export function MobileCableMapPage() {
             <Button block color="primary" size="small" onClick={startNav} disabled={!selFaultId}>{navigating ? "导航中…" : "开始导航"}</Button>
             <Button block size="small" fill="outline" onClick={stopNav}>停止</Button>
           </div>
-        </Sheet>
-      </div>
+        </div>
+      </Popup>
     </div>
     </ModuleGate>
   );

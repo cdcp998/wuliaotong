@@ -20,7 +20,8 @@ export function MyTasksPage() {
     setLoading(true);
     try {
       const r = await taskApi.list({ page_size: 100 });
-      setRows(r.items);
+      // 已关闭/已取消的任务不再显示（用户要求）
+      setRows(r.items.filter((t) => t.status !== "closed" && t.status !== "cancelled"));
     } finally {
       setLoading(false);
     }
