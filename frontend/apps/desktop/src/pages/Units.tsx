@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { App, Button, Form, Input, Modal, Popconfirm, Space } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
@@ -76,7 +76,7 @@ export function UnitsPage() {
       <h2 style={{ margin: "0 0 16px" }}>材料单位管理</h2>
       <Space style={{ marginBottom: 16 }} wrap>
         <Button type="primary" onClick={openCreate}>新建单位</Button>
-        <span style={{ fontSize: 12, color: "#646a73" }}>
+        <span style={{ fontSize: 12, color: "#5B6478" }}>
           材料 / 新建入库 / 送货单识别等场景的单位选项均来自本表，请使用规范单位名（个 / 件 / 套 / 箱 / 盒 / 包 / 台 / 米 / kg 等）
         </span>
       </Space>

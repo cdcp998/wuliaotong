@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Button, Input, List, NavBar, Popup, Selector, Tag, Toast } from "antd-mobile";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -79,7 +79,7 @@ export function OutboundPage() {
   }
 
   return (
-    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate("/")}>其他出库</NavBar>
       <List header="出库类型">
         <List.Item>
@@ -133,7 +133,7 @@ export function OutboundPage() {
                   <Tag color="danger" fill="outline" onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>
                     删除
                   </Tag>
-                  <span style={{ color: "#646a73", fontSize: 12 }}>
+                  <span style={{ color: "#5B6478", fontSize: 12 }}>
                     {r.product.code}
                     {r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}
                   </span>

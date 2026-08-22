@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { App, Button, Drawer, Input, Modal, Popconfirm, Select, Space, Tag, Typography } from "antd";
 import { ExclamationCircleFilled } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -164,7 +164,7 @@ export function RequisitionAuditPage() {
           }}
           style={{ width: 240 }}
         />
-        <span style={{ color: "#646a73", fontSize: 12 }}>流程：领用申请 → 完成工作拍照（含定位水印）→ 审计 → 完成 · 仅「待审计」可操作</span>
+        <span style={{ color: "#5B6478", fontSize: 12 }}>流程：领用申请 → 完成工作拍照（含定位水印）→ 审计 → 完成 · 仅「待审计」可操作</span>
       </Space>
       <DataTable
         rowKey="id"
@@ -204,7 +204,7 @@ export function RequisitionAuditPage() {
       >
         {detail && (
           <div>
-            <div style={{ border: "1px solid #e5e6eb", borderRadius: 8, padding: 12, marginBottom: 12, background: "#fafbfc" }}>
+            <div style={{ border: "1px solid #E4EAF6", borderRadius: 8, padding: 12, marginBottom: 12, background: "#fafbfc" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <b>AI 审核摘要</b>
                 {aiLoading && <Tag>生成中…</Tag>}
@@ -230,16 +230,16 @@ export function RequisitionAuditPage() {
               )}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", background: "#fafbfc", border: "1px solid #f0f1f3", borderRadius: 8, padding: "12px 14px" }}>
-              <div><div style={{ fontSize: 12, color: "#646a73" }}>单号</div><div style={{ fontWeight: 600 }}>{detail.bill_no}</div></div>
-              <div><div style={{ fontSize: 12, color: "#646a73" }}>申请人</div><div>{detail.applicant_name}</div></div>
-              <div><div style={{ fontSize: 12, color: "#646a73" }}>出库仓库</div><div>{detail.warehouse_name}</div></div>
-              <div><div style={{ fontSize: 12, color: "#646a73" }}>申请时间</div><div>{detail.created_at.slice(0, 16)}</div></div>
+              <div><div style={{ fontSize: 12, color: "#5B6478" }}>单号</div><div style={{ fontWeight: 600 }}>{detail.bill_no}</div></div>
+              <div><div style={{ fontSize: 12, color: "#5B6478" }}>申请人</div><div>{detail.applicant_name}</div></div>
+              <div><div style={{ fontSize: 12, color: "#5B6478" }}>出库仓库</div><div>{detail.warehouse_name}</div></div>
+              <div><div style={{ fontSize: 12, color: "#5B6478" }}>申请时间</div><div>{detail.created_at.slice(0, 16)}</div></div>
               <div style={{ gridColumn: "1/-1" }}>
-                <div style={{ fontSize: 12, color: "#646a73" }}>使用地点（必填）</div>
+                <div style={{ fontSize: 12, color: "#5B6478" }}>使用地点（必填）</div>
                 <div style={{ fontWeight: 500 }}>{detail.use_location}</div>
               </div>
               <div style={{ gridColumn: "1/-1" }}>
-                <div style={{ fontSize: 12, color: "#646a73" }}>因何使用（必填）</div>
+                <div style={{ fontSize: 12, color: "#5B6478" }}>因何使用（必填）</div>
                 <div style={{ fontWeight: 500 }}>
                   {detail.use_reason}
                   {detail.is_private === 1 && <Tag color="red" style={{ marginLeft: 8 }}>私用</Tag>}
@@ -249,10 +249,10 @@ export function RequisitionAuditPage() {
 
             {detail.work_photo_file_id > 0 && (
               <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 12, color: "#646a73", marginBottom: 6 }}>完成工作照片（工作地点留痕，下载时自动添加地点/时间/定位水印）</div>
+                <div style={{ fontSize: 12, color: "#5B6478", marginBottom: 6 }}>完成工作照片（工作地点留痕，下载时自动添加地点/时间/定位水印）</div>
                 <Space>
                   <FileImage fileId={detail.work_photo_file_id} size={96} alt="完成工作照片" />
-                  <div style={{ fontSize: 12, color: "#646a73" }}>
+                  <div style={{ fontSize: 12, color: "#5B6478" }}>
                     <div>{detail.work_done_at ? `完成时间：${detail.work_done_at.slice(0, 16)}` : ""}</div>
                     <div>{detail.work_lat ? `定位：${detail.work_lat}, ${detail.work_lng}` : "未获取定位"}</div>
                     <Button size="small" style={{ marginTop: 6 }} onClick={() => window.open(requisitionApi.workPhotoUrl(detail.id), "_self")}>
@@ -287,7 +287,7 @@ export function RequisitionAuditPage() {
               pagination={false}
               dataSource={detail.items}
               columns={[
-                { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#646a73" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
+                { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#5B6478" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
                 { title: "库位", dataIndex: "location_code", width: 110 },
                 { title: "数量", dataIndex: "qty", width: 80, align: "right" as const },
                 { title: "出库拍照", width: 90, render: (_, r) => (r.photo_file_id ? <Tag color="blue">已留痕</Tag> : <span style={{ color: "#c9cdd4" }}>未拍</span>) },
@@ -327,7 +327,7 @@ export function RequisitionAuditPage() {
         onCancel={() => setDisplayOpen(false)}
         okText="保存"
       >
-        <div style={{ marginBottom: 12, fontSize: 12, color: "#646a73", lineHeight: 1.7 }}>
+        <div style={{ marginBottom: 12, fontSize: 12, color: "#5B6478", lineHeight: 1.7 }}>
           以下内容将固定展示给非管理员（含申请人本人）作为「使用地点 / 因何使用」，真实状态仅管理员可见。
         </div>
         <Input

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Button, Input, List, NavBar, Tag, Toast } from "antd-mobile";
 import { useNavigate, useParams } from "react-router";
 
@@ -69,7 +69,7 @@ export function CheckRunPage() {
   }
 
   return (
-    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate("/checks")}>{bill.bill_no}</NavBar>
       <List header={`${bill.warehouse_name} · 共 ${bill.items.length} 项（物品级盘点）`}>
         {bill.items.map((it: CheckItem) => {
@@ -99,7 +99,7 @@ export function CheckRunPage() {
                       />
                     )}
                   </div>
-                  <span style={{ color: "#646a73", fontSize: 12 }}>
+                  <span style={{ color: "#5B6478", fontSize: 12 }}>
                     {it.material_code || it.code}
                     {it.spec && ` / ${it.spec}`}
                     {it.unit_name && ` / ${it.unit_name}`}
@@ -123,7 +123,7 @@ export function CheckRunPage() {
                 height: 40,
                 border: "1px dashed #c9cdd4",
                 borderRadius: 10,
-                color: "#1668dc",
+                color: "#5B7FFF",
                 fontSize: 13.5,
                 cursor: "pointer",
                 background: "#fafbfd",
@@ -150,9 +150,9 @@ export function CheckRunPage() {
                     onChange={(v) => setExtraRows((rs) => rs.map((x) => (x.key === r.key ? { ...x, real: v } : x)))}
                     style={{ flex: 1, border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }}
                   />
-                  <span style={{ color: "#ff4d4f", fontSize: 12, cursor: "pointer" }} onClick={() => setExtraRows((rs) => rs.filter((x) => x.key !== r.key))}>删</span>
+                  <span style={{ color: "#EF4444", fontSize: 12, cursor: "pointer" }} onClick={() => setExtraRows((rs) => rs.filter((x) => x.key !== r.key))}>删</span>
                 </div>
-                <span style={{ color: "#646a73", fontSize: 12 }}>
+                <span style={{ color: "#5B6478", fontSize: 12 }}>
                   {r.product.code}
                   {r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}
                 </span>
@@ -172,7 +172,7 @@ export function CheckRunPage() {
         </div>
       )}
       {readonly && (
-        <div style={{ padding: 16, textAlign: "center", color: "#646a73" }}>该盘点单已审核（只读）</div>
+        <div style={{ padding: 16, textAlign: "center", color: "#5B6478" }}>该盘点单已审核（只读）</div>
       )}
 
       <ProductPicker

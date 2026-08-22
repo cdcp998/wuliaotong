@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   App,
   Button,
@@ -714,7 +714,7 @@ export function MaterialsDataPage() {
         <main style={{ flex: 1, minWidth: 0, padding: 16, display: "flex", flexDirection: "column" }}>
           {/* 选中分类信息 + 分类操作（仅选中真实分类时展示） */}
           {selCat && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8, padding: "8px 12px", background: "#f5f6f8", borderRadius: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8, padding: "8px 12px", background: "#F2F5FB", borderRadius: 8 }}>
               <Space size={8} wrap>
                 <span style={{ fontWeight: 600 }}>{selectionTitle}</span>
                 {selCat.parent_id === 0 ? <Tag color="blue">顶级分类（仅分组，聚合子树材料）</Tag> : <Tag color="blue">{selCat.product_count ?? 0} 种材料</Tag>}
@@ -887,8 +887,8 @@ export function MaterialsDataPage() {
             <Form.Item name="name" label="材料名称" rules={[{ required: true, message: "请输入材料名称" }]} style={{ width: 320 }}>
               <Space.Compact style={{ width: "100%" }}>
                 <Input placeholder="如：轴承6204" maxLength={100} value={nameValue} onChange={(e) => form.setFieldValue("name", e.target.value)} />
-                <Button icon={<CameraOutlined style={{ color: "#1668dc" }} />} title="拍照识别名称" onClick={() => nameFileRef.current?.click()} />
-                <Button icon={<PictureOutlined style={{ color: "#1668dc" }} />} title="相册选图识别名称" onClick={() => nameAlbumRef.current?.click()} />
+                <Button icon={<CameraOutlined style={{ color: "#5B7FFF" }} />} title="拍照识别名称" onClick={() => nameFileRef.current?.click()} />
+                <Button icon={<PictureOutlined style={{ color: "#5B7FFF" }} />} title="相册选图识别名称" onClick={() => nameAlbumRef.current?.click()} />
               </Space.Compact>
             </Form.Item>
             <Form.Item name="unit_id" label="基本单位" rules={[{ required: true, message: "请选择单位" }]} style={{ width: 120 }}>
@@ -897,8 +897,8 @@ export function MaterialsDataPage() {
             <Form.Item name="barcode" label="条码（可选，扫码录入用）" style={{ width: 280 }}>
               <Space.Compact style={{ width: "100%" }}>
                 <Input placeholder="扫码枪/手输，或拍照扫码" maxLength={50} value={barcodeValue} onChange={(e) => form.setFieldValue("barcode", e.target.value)} />
-                <Button icon={<CameraOutlined style={{ color: "#1668dc" }} />} title="拍照识别条码" onClick={() => barcodeFileRef.current?.click()} />
-                <Button icon={<PictureOutlined style={{ color: "#1668dc" }} />} title="相册选图识别条码" onClick={() => barcodeAlbumRef.current?.click()} />
+                <Button icon={<CameraOutlined style={{ color: "#5B7FFF" }} />} title="拍照识别条码" onClick={() => barcodeFileRef.current?.click()} />
+                <Button icon={<PictureOutlined style={{ color: "#5B7FFF" }} />} title="相册选图识别条码" onClick={() => barcodeAlbumRef.current?.click()} />
               </Space.Compact>
             </Form.Item>
             <Form.Item name="material_code" label="物料编码（公司系统编码，可选）" style={{ width: 240 }}>
@@ -1006,7 +1006,7 @@ export function MaterialsDataPage() {
       <Drawer title="材料查重建议（仅供参考）" open={dedupeOpen} onClose={() => setDedupeOpen(false)} size={680}>
         {dedupeGroups.length === 0 && !dedupeLoading && <Typography.Text type="secondary">未发现疑似重复材料</Typography.Text>}
         {dedupeGroups.map((g, gi) => (
-          <div key={gi} style={{ border: "1px solid #e5e6eb", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+          <div key={gi} style={{ border: "1px solid #E4EAF6", borderRadius: 8, padding: 12, marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <Tag color={g.confidence === "high" ? "red" : "orange"}>{g.confidence === "high" ? "高置信" : "相似"}</Tag>
               <Typography.Text>{g.reason}</Typography.Text>
@@ -1016,7 +1016,7 @@ export function MaterialsDataPage() {
                 <span>
                   <b>{m.name}</b>
                   {m.spec ? `（${m.spec}）` : ""}
-                  <span style={{ color: "#646a73", fontSize: 12, marginLeft: 8 }}>
+                  <span style={{ color: "#5B6478", fontSize: 12, marginLeft: 8 }}>
                     {m.material_code ? `编码 ${m.material_code}` : "无物料编码"} · {m.unit_name || "-"}
                   </span>
                 </span>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { List, NavBar, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -53,10 +53,10 @@ export function WarehousesPage() {
 
   if (selWh) {
     return (
-      <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+      <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
         <NavBar onBack={() => setSelWh(null)}>{selWh.name}</NavBar>
         <div style={{ padding: 12 }}>
-          <div style={{ fontSize: 12, color: "#646a73", marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: "#5B6478", marginBottom: 8 }}>
             {selWh.code} · {shelves.length} 个货架 · {stocks.length} 个有货库位（手机端只读，编辑请用电脑端）
           </div>
           {loading && <List.Item>加载中…</List.Item>}
@@ -66,13 +66,13 @@ export function WarehousesPage() {
               const locs = byShelf.get(sh.id) ?? [];
               return (
                 <div key={sh.id} style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, marginBottom: 10, overflow: "hidden" }}>
-                  <div style={{ padding: "10px 14px", borderBottom: "1px solid #f5f6f8", fontSize: 13.5, fontWeight: 600 }}>
+                  <div style={{ padding: "10px 14px", borderBottom: "1px solid #F2F5FB", fontSize: 13.5, fontWeight: 600 }}>
                     {sh.name || sh.code} <span style={{ color: "#c9cdd4", fontSize: 11, fontWeight: 400 }}>{sh.code}</span>
                     {locs.length === 0 && <span style={{ color: "#c9cdd4", fontSize: 11, fontWeight: 400, marginLeft: 8 }}>无库存</span>}
                   </div>
                   {locs.map((loc) => (
-                    <div key={loc.location_id} style={{ padding: "10px 14px", borderBottom: "1px solid #f5f6f8" }}>
-                      <div style={{ fontSize: 12, color: "#1668dc", fontWeight: 500 }}>{loc.location_code}</div>
+                    <div key={loc.location_id} style={{ padding: "10px 14px", borderBottom: "1px solid #F2F5FB" }}>
+                      <div style={{ fontSize: 12, color: "#5B7FFF", fontWeight: 500 }}>{loc.location_code}</div>
                       {loc.items.length === 0 && <div style={{ fontSize: 11.5, color: "#c9cdd4", marginTop: 2 }}>空库位</div>}
                       {loc.items.map((it, i) => (
                         <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontSize: 12.5 }}>
@@ -94,10 +94,10 @@ export function WarehousesPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate("/")}>仓库与货架</NavBar>
       {/* 手机端只读提示：编辑/新增在电脑端 */}
-      <div style={{ background: "#e8f1fd", borderBottom: "1px solid #d6e4ff", color: "#1668dc", fontSize: 12, lineHeight: 1.6, padding: "8px 14px" }}>
+      <div style={{ background: "#EAEFFF", borderBottom: "1px solid #D9E3FF", color: "#5B7FFF", fontSize: 12, lineHeight: 1.6, padding: "8px 14px" }}>
         手机端仅可查看库存；新增/编辑仓库、货架、库位请到电脑端「仓库与货架」操作。
       </div>
       <List style={{ "--border-top": "0" } as React.CSSProperties}>
@@ -106,7 +106,7 @@ export function WarehousesPage() {
             key={w.id}
             onClick={() => void openWh(w)}
             description={
-              <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 3 }}>
+              <div style={{ fontSize: 11.5, color: "#5B6478", marginTop: 3 }}>
                 {w.code}
                 {w.address ? ` · ${w.address}` : ""}
               </div>

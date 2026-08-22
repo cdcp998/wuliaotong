@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Button, Input, InputNumber, Space, Spin } from "antd";
 
 import { geoApi } from "@wlt/shared";
@@ -114,7 +114,7 @@ export function GeoAddressPanel({
         </Space>
       </div>
 
-      {hint && <div style={{ fontSize: 12, color: hint.includes("失败") || hint.includes("错误") || hint.includes("为空") ? "#cf1322" : "#646a73" }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 12, color: hint.includes("失败") || hint.includes("错误") || hint.includes("为空") ? "#cf1322" : "#5B6478" }}>{hint}</div>}
 
       <Space>
         <Button type="primary" loading={saving} onClick={() => void save()}>

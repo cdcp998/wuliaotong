@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Button, Modal, Select, Tag } from "antd";
 
@@ -6,8 +6,8 @@ import { baseApi, reportApi, type LocationStock, type Shelf } from "@wlt/shared"
 
 const ALERT_COLOR: Record<string, string> = {
   low: "#f5222d",
-  high: "#faad14",
-  normal: "#52c41a",
+  high: "#F59E0B",
+  normal: "#22C55E",
 };
 const ALERT_TEXT: Record<string, string> = {
   low: "低于下限",
@@ -73,7 +73,7 @@ export function ShelfMapPage() {
     <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <h2 style={{ margin: 0 }}>
-          <a onClick={() => navigate("/warehouses")} style={{ color: "#1668dc", cursor: "pointer" }}>仓库货架图</a>
+          <a onClick={() => navigate("/warehouses")} style={{ color: "#5B7FFF", cursor: "pointer" }}>仓库货架图</a>
           {" / "}{whName}
         </h2>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -124,13 +124,13 @@ export function ShelfMapPage() {
                     {it.alert !== "normal" && <Tag style={{ marginLeft: 4, fontSize: 10 }} color={ALERT_COLOR[it.alert]}>{ALERT_TEXT[it.alert]}</Tag>}
                   </div>
                 ))}
-                {loc.items.length > 2 && <div style={{ fontSize: 11, color: "#646a73", marginTop: 2 }}>…共 {loc.items.length} 种材料</div>}
+                {loc.items.length > 2 && <div style={{ fontSize: 11, color: "#5B6478", marginTop: 2 }}>…共 {loc.items.length} 种材料</div>}
               </button>
             ))}
           </div>
         </div>
       ))}
-      {!rows.length && !err && <p style={{ color: "#646a73", marginTop: 24 }}>该仓库暂无库位。</p>}
+      {!rows.length && !err && <p style={{ color: "#5B6478", marginTop: 24 }}>该仓库暂无库位。</p>}
 
       <Modal title={`库位 ${detail?.location_code ?? ""} 明细`} open={Boolean(detail)} onCancel={() => setDetail(null)} footer={null}>
         {detail && (
@@ -143,13 +143,13 @@ export function ShelfMapPage() {
             <tbody>
               {detail.items.map((it) => (
                 <tr key={it.product_id}>
-                  <td style={tdStyle}>{it.name} <span style={{ color: "#646a73" }}>{it.spec}</span></td>
+                  <td style={tdStyle}>{it.name} <span style={{ color: "#5B6478" }}>{it.spec}</span></td>
                   <td style={tdStyle}>{it.code}</td>
                   <td style={tdStyle}>{it.qty}</td>
                   <td style={tdStyle}><Tag color={ALERT_COLOR[it.alert]}>{ALERT_TEXT[it.alert]}</Tag></td>
                 </tr>
               ))}
-              {!detail.items.length && <tr><td colSpan={4} style={{ ...tdStyle, textAlign: "center", color: "#646a73" }}>空库位</td></tr>}
+              {!detail.items.length && <tr><td colSpan={4} style={{ ...tdStyle, textAlign: "center", color: "#5B6478" }}>空库位</td></tr>}
             </tbody>
           </table>
         )}

@@ -1,4 +1,4 @@
-import { DotLoading, unstableSetRender } from "antd-mobile";
+﻿import { DotLoading, unstableSetRender } from "antd-mobile";
 import React, { lazy, Suspense } from "react";
 import ReactDOM, { type Root } from "react-dom/client";
 import { RouterProvider, createBrowserRouter } from "react-router";
@@ -89,7 +89,7 @@ unstableSetRender((node, container) => {
 });
 
 function PageLoading() {
-  return <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", color: "#646a73" }}><DotLoading /></div>;
+  return <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", color: "#5B6478" }}><DotLoading /></div>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

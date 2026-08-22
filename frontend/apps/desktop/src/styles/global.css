@@ -1,4 +1,4 @@
-/* ==========================================================================
+﻿/* ==========================================================================
  * 物料通电脑端 —— 全局基础样式（《UI设计方案.md》§2 设计系统）
  *
  * 1. 只放「设计系统级」规则：字体栈、标题层级、焦点环、数字排版、微交互；
@@ -91,8 +91,8 @@ button:focus-visible,
 }
 
 .wlt-cat-cell-active {
-  border-color: #1668dc !important;
-  box-shadow: inset 0 0 0 1px #1668dc;
+  border-color: #5B7FFF !important;
+  box-shadow: inset 0 0 0 1px #5B7FFF;
 }
 
 .wlt-cat-add {
@@ -100,8 +100,8 @@ button:focus-visible,
 }
 
 .wlt-cat-add:hover {
-  color: #1668dc !important;
-  border-color: #1668dc !important;
+  color: #5B7FFF !important;
+  border-color: #5B7FFF !important;
   background: rgba(22, 104, 220, 0.03);
 }
 
@@ -178,16 +178,16 @@ button:focus-visible,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #1f2329;
+  color: #1E2433;
 }
 .loc-cell3d-mat-qty {
   flex-shrink: 0;
   font-weight: 600;
-  color: #1668dc;
+  color: #5B7FFF;
 }
 .loc-cell3d-more {
   font-size: 10px;
-  color: #646a73;
+  color: #5B6478;
 }
 .loc-cell3d-empty-text {
   font-size: 11px;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Input, Modal, Popconfirm, Space, Table, Tabs, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { AuditOutlined, CheckOutlined, CloseOutlined } from "@ant-design/icons";
@@ -145,7 +145,7 @@ export function DeleteReviewsPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>删除审核</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#646a73" }}>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
             物料/分类/已关闭故障删除审批流：仓管员及以上提交删除申请，管理者及以上审核通过后才执行删除；审核结果站内通知申请人
           </p>
         </div>
@@ -153,7 +153,7 @@ export function DeleteReviewsPage() {
       </div>
 
       {!isManager && (
-        <div style={{ marginBottom: 12, fontSize: 12.5, color: "#646a73" }}>
+        <div style={{ marginBottom: 12, fontSize: 12.5, color: "#5B6478" }}>
           <Tag color="orange">当前为 {user?.role?.name ?? "未知角色"}：可查看删除申请进度，审核操作需管理者及以上角色</Tag>
         </div>
       )}
@@ -197,7 +197,7 @@ export function DeleteReviewsPage() {
         width={440}
         destroyOnHidden
       >
-        <div style={{ marginBottom: 8, fontSize: 13, color: "#646a73" }}>
+        <div style={{ marginBottom: 8, fontSize: 13, color: "#5B6478" }}>
           删除原因（申请人填写）：{rejecting?.reason}
         </div>
         <Input.TextArea

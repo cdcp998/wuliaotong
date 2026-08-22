@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { App, Button, Input, Select, Space } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
@@ -74,7 +74,7 @@ export function HistoryPricePage() {
           onChange={(v) => { setSupplierId(v ?? 0); setPage(1); }}
         />
         <Button onClick={() => { setKeyword(""); setSupplierId(0); setPage(1); }}>重置</Button>
-        <span style={{ color: "#646a73", fontSize: 12 }}>共 {total} 条历史采购记录（按入库日期倒序）</span>
+        <span style={{ color: "#5B6478", fontSize: 12 }}>共 {total} 条历史采购记录（按入库日期倒序）</span>
       </Space>
       <DataTable
         rowKey={(r) => `${r.bill_no}-${r.product_id}`}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { App, Alert, Button, Drawer, Input, InputNumber, Modal, Space, Spin, Tag, Upload } from "antd";
 import { CameraOutlined, CheckCircleFilled, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -411,7 +411,7 @@ export function DeliveryOcrPage() {
 
       {/* 原始单据参考：图片（带可用标记，点击放大）+ OCR 原文（整理） */}
       {(uploadUrl || lines.length > 0) && (
-        <div style={{ margin: "16px 0 12px", maxWidth: 780, border: "1px solid #e5e6eb", borderRadius: 8, padding: 12, background: "#fff" }}>
+        <div style={{ margin: "16px 0 12px", maxWidth: 780, border: "1px solid #E4EAF6", borderRadius: 8, padding: 12, background: "#fff" }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>原始单据参考</div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <div>
@@ -422,16 +422,16 @@ export function DeliveryOcrPage() {
                     src={uploadUrl}
                     alt="送货单"
                     onClick={() => setPreview(uploadUrl)}
-                    style={{ maxWidth: 320, maxHeight: 220, borderRadius: 8, border: "1px solid #e5e6eb", cursor: "zoom-in", display: "block", marginTop: 6 }}
+                    style={{ maxWidth: 320, maxHeight: 220, borderRadius: 8, border: "1px solid #E4EAF6", cursor: "zoom-in", display: "block", marginTop: 6 }}
                   />
-                  <div style={{ fontSize: 11, color: "#646a73", marginTop: 4 }}>点击图片放大查看</div>
+                  <div style={{ fontSize: 11, color: "#5B6478", marginTop: 4 }}>点击图片放大查看</div>
                 </>
               ) : (
                 <Tag>图片 —</Tag>
               )}
             </div>
             <div style={{ flex: 1, minWidth: 260 }}>
-              <div style={{ fontSize: 12, color: "#646a73", marginBottom: 6 }}>OCR 原文（{lines.length} 行）</div>
+              <div style={{ fontSize: 12, color: "#5B6478", marginBottom: 6 }}>OCR 原文（{lines.length} 行）</div>
               {lines.length ? (
                 <pre style={{ background: "#f6f8fa", padding: 12, borderRadius: 8, whiteSpace: "pre-wrap", fontSize: 12, lineHeight: 1.8, margin: 0 }}>
                   {lines.map((l, i) => `${String(i + 1).padStart(2, "0")}  ${l}`).join("\n")}
@@ -451,12 +451,12 @@ export function DeliveryOcrPage() {
               <Space style={{ marginBottom: 8 }}>
                 <Tag color="blue">视觉识别 + 文本模型分类</Tag>
                 <Tag color="green">识别到 {rows.length} 项材料</Tag>
-                <span style={{ fontSize: 12, color: "#646a73" }}>漏识条目可点击下方「+ 添加明细」手动补录；确认时系统不存在物料将自动新增</span>
+                <span style={{ fontSize: 12, color: "#5B6478" }}>漏识条目可点击下方「+ 添加明细」手动补录；确认时系统不存在物料将自动新增</span>
               </Space>
               <Space style={{ marginBottom: 8 }} wrap>
                 <span>供应商：</span>
                 <Input style={{ width: 260 }} placeholder="从识别结果提取，可修改" value={supplierName} onChange={(e) => setSupplierName(e.target.value)} />
-                <span style={{ fontSize: 11, color: "#646a73" }}>输入系统中不存在的供应商名时，确认后将自动创建新供应商</span>
+                <span style={{ fontSize: 11, color: "#5B6478" }}>输入系统中不存在的供应商名时，确认后将自动创建新供应商</span>
                 <span>送货单号：</span>
                 <Input style={{ width: 220 }} placeholder="可空" value={billNo} onChange={(e) => setBillNo(e.target.value)} />
               </Space>
@@ -470,9 +470,9 @@ export function DeliveryOcrPage() {
                 footer={() => (
                   <Space style={{ width: "100%", justifyContent: "space-between" }}>
                     <Button size="small" onClick={addRow}>+ 添加明细（手动补录漏识条目）</Button>
-                    <span style={{ color: "#646a73", fontSize: 12 }}>
+                    <span style={{ color: "#5B6478", fontSize: 12 }}>
                       共 {rows.length} 项 ｜ 总金额：
-                      <b style={{ color: "#1f2329" }}>
+                      <b style={{ color: "#1E2433" }}>
                         {rows.reduce((s, r) => s + (Number(r.price) || 0) * (Number(r.qty) || 0), 0).toFixed(2)}
                       </b>
                     </span>

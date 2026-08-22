@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { InfiniteScroll, List, NavBar, SpinLoading, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -62,7 +62,7 @@ export function MyRequisitionsPage() {
   }, []);
 
   return (
-    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate("/")}>我的申请</NavBar>
       <List>
         {list.map((r) => (
@@ -77,7 +77,7 @@ export function MyRequisitionsPage() {
               <span style={{ marginLeft: 8, color: "#666" }}>{r.use_reason}</span>
             </div>
             {r.status === 4 && r.audit_remark && (
-              <div style={{ color: "#ff4d4f", fontSize: 12, marginTop: 4 }}>驳回原因：{r.audit_remark}</div>
+              <div style={{ color: "#EF4444", fontSize: 12, marginTop: 4 }}>驳回原因：{r.audit_remark}</div>
             )}
           </List.Item>
         ))}

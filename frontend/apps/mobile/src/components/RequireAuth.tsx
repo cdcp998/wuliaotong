@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+﻿import { useEffect, type ReactNode } from "react";
 import { Button, NavBar } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -57,11 +57,11 @@ export function RequireAuth({ children, perm }: { children: ReactNode; perm?: st
     const allowed = codes.length === 0 || codes.some((c) => hasPerm(c));
     if (!allowed) {
       return (
-        <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+        <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
           <NavBar onBack={() => navigate("/")}>功能</NavBar>
           <div style={{ padding: "72px 40px", textAlign: "center" }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: "#1f2329" }}>无权限访问</div>
-            <div style={{ fontSize: 12.5, color: "#646a73", margin: "8px 0 24px", lineHeight: 1.7 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "#1E2433" }}>无权限访问</div>
+            <div style={{ fontSize: 12.5, color: "#5B6478", margin: "8px 0 24px", lineHeight: 1.7 }}>
               当前账号没有使用该功能的权限，请联系管理员在「用户权限设置」中授权。
             </div>
             <Button block color="primary" style={{ height: 42, borderRadius: 9, maxWidth: 240, margin: "0 auto" }} onClick={() => navigate("/")}>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Badge, Button, List, Modal, NavBar, Selector, Tabs, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -64,7 +64,7 @@ export function ChecksPage() {
   }
 
   return (
-    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar
         onBack={() => navigate("/")}
         right={
@@ -101,7 +101,7 @@ export function ChecksPage() {
         title="发起盘点"
         content={
           <div>
-            <div style={{ fontSize: 13, color: "#646a73", marginBottom: 10 }}>
+            <div style={{ fontSize: 13, color: "#5B6478", marginBottom: 10 }}>
               选择要盘点的仓库，创建后自动带出该仓库全部库存物品（按物品汇总账面数量），手机/电脑均可录入实盘。
             </div>
             <Selector

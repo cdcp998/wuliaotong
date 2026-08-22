@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { App, Alert, Button, Checkbox, Form, Input, Modal, theme } from "antd";
 
@@ -183,7 +183,7 @@ export function LoginPage() {
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
         <div style={{ width: 340 }}>
           <h2 style={{ fontSize: 22, margin: 0 }}>登录系统</h2>
-          <div style={{ fontSize: 13, color: "#646a73", margin: "6px 0 26px" }}>物料通管理系统 · 企业内部使用</div>
+          <div style={{ fontSize: 13, color: "#5B6478", margin: "6px 0 26px" }}>物料通管理系统 · 企业内部使用</div>
           <Form layout="vertical" onFinish={(v) => void onSubmit(v)}>
             <Form.Item name="username" rules={[{ required: true, message: "请输入账号" }]}>
               <Input placeholder="账号 / 用户名" size="large" autoFocus />
@@ -227,8 +227,8 @@ export function LoginPage() {
               登 录
             </Button>
           </Form>
-          <div style={{ marginTop: 18, textAlign: "center", fontSize: 12.5, color: "#646a73" }}>
-            手机端操作请前往 <a href={otherEndUrl("mobile")} style={{ color: "#1668dc" }}>手机版入口</a>
+          <div style={{ marginTop: 18, textAlign: "center", fontSize: 12.5, color: "#5B6478" }}>
+            手机端操作请前往 <a href={otherEndUrl("mobile")} style={{ color: "#5B7FFF" }}>手机版入口</a>
           </div>
           <div style={{ marginTop: 10, textAlign: "center", fontSize: 11.5, color: "#a0a4ab" }}>
             物料通管理系统 v{__APP_VERSION__}
@@ -273,7 +273,7 @@ export function LoginPage() {
             <Alert type="info" showIcon title={forgotInfo.message} style={{ marginBottom: 14 }} />
             {forgotInfo.contact_phone && (
               <p style={{ fontSize: 15, textAlign: "center" }}>
-                管理员联系电话：<b style={{ color: "#1668dc" }}>{forgotInfo.contact_phone}</b>
+                管理员联系电话：<b style={{ color: "#5B7FFF" }}>{forgotInfo.contact_phone}</b>
               </p>
             )}
             <Button block onClick={() => setForgotOpen(false)}>知道了</Button>
@@ -300,7 +300,7 @@ export function LoginPage() {
           <Form.Item name="real_name" label="姓名"><Input /></Form.Item>
           <Form.Item name="phone" label="手机"><Input maxLength={20} /></Form.Item>
           <Form.Item name="email" label="邮箱（找回密码用）"><Input maxLength={100} /></Form.Item>
-          <p style={{ color: "#646a73", fontSize: 12 }}>
+          <p style={{ color: "#5B6478", fontSize: 12 }}>
             {regStatus?.mode === "review" ? "审核注册模式：提交后需管理员审核通过方可登录。" : "开放注册模式：注册即开通使用者账号。"}
           </p>
         </Form>

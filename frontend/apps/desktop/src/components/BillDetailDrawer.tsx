@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+﻿import type { ReactNode } from "react";
 import { Drawer, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
@@ -52,7 +52,7 @@ export function BillDetailDrawer({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", background: "#fafbfc", border: "1px solid #f0f1f3", borderRadius: 8, padding: "12px 14px" }}>
         {fields.map((f) => (
           <div key={f.label} style={f.span === 2 ? { gridColumn: "1/-1" } : undefined}>
-            <div style={{ fontSize: 12, color: "#646a73" }}>{f.label}</div>
+            <div style={{ fontSize: 12, color: "#5B6478" }}>{f.label}</div>
             <div style={{ fontWeight: 500 }}>{f.value || "-"}</div>
           </div>
         ))}

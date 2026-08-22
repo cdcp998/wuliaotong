@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, Input, List, NavBar, Popup, Stepper, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -110,7 +110,7 @@ export function RequisitionNewPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8", paddingBottom: "calc(84px + env(safe-area-inset-bottom))" }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: "calc(84px + env(safe-area-inset-bottom))" }}>
       <NavBar onBack={() => navigate("/")}>领用申请</NavBar>
       <div style={{ padding: 12 }}>
         {/* 出库仓库 */}
@@ -134,12 +134,12 @@ export function RequisitionNewPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 500 }}>{r.product.name}</div>
-                <div style={{ fontSize: 11, color: "#646a73", marginTop: 1 }}>
+                <div style={{ fontSize: 11, color: "#5B6478", marginTop: 1 }}>
                   {r.product.code}
                   {r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}
                 </div>
               </div>
-              <span style={{ color: "#ff4d4f", fontSize: 12, cursor: "pointer" }} onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>
+              <span style={{ color: "#EF4444", fontSize: 12, cursor: "pointer" }} onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>
                 删除
               </span>
             </div>
@@ -149,7 +149,7 @@ export function RequisitionNewPage() {
               </Tag>
               <div style={{ flex: 1 }} />
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 12, color: "#646a73" }}>数量</span>
+                <span style={{ fontSize: 12, color: "#5B6478" }}>数量</span>
                 <Stepper min={1} value={Number(r.qty) || 1} onChange={(v) => updateRow(i, { qty: String(v) })} />
               </div>
             </div>
@@ -167,7 +167,7 @@ export function RequisitionNewPage() {
             height: 40,
             border: "1px dashed #c9cdd4",
             borderRadius: 10,
-            color: "#1668dc",
+            color: "#5B7FFF",
             fontSize: 13.5,
             cursor: "pointer",
             background: "#fafbfd",
@@ -184,13 +184,13 @@ export function RequisitionNewPage() {
         <div style={{ fontSize: 12.5, fontWeight: 600, color: "#4e5969", margin: "10px 2px 8px" }}>使用信息（必填）</div>
         <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 10, padding: 12, marginBottom: 8 }}>
           <div style={{ fontSize: 13, marginBottom: 8 }}>
-            使用地点<span style={{ color: "#ff4d4f" }}>*</span>
+            使用地点<span style={{ color: "#EF4444" }}>*</span>
           </div>
           <Input placeholder="如：维修部 · 3 号线" value={useLocation} onChange={setUseLocation} />
         </div>
         <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 10, padding: 12, marginBottom: 8 }}>
           <div style={{ fontSize: 13, marginBottom: 8 }}>
-            因何使用<span style={{ color: "#ff4d4f" }}>*</span>
+            因何使用<span style={{ color: "#EF4444" }}>*</span>
             {isPrivate && <Tag color="danger" fill="outline" style={{ marginLeft: 8, fontSize: 10 }}>私用</Tag>}
           </div>
           <textarea
@@ -208,11 +208,11 @@ export function RequisitionNewPage() {
               fontFamily: "inherit",
               resize: "none",
               background: isPrivate ? "#fafbfd" : "transparent",
-              color: isPrivate ? "#646a73" : "inherit",
+              color: isPrivate ? "#5B6478" : "inherit",
             }}
           />
           {isPrivate && (
-            <div style={{ fontSize: 11, color: "#646a73", marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: "#5B6478", marginTop: 4 }}>
               已锁定为私用：对外显示为固定话术，真实状态仅管理员可见。
             </div>
           )}
@@ -227,7 +227,7 @@ export function RequisitionNewPage() {
         {/* 出库拍照留痕 */}
         <div style={{ fontSize: 12.5, fontWeight: 600, color: "#4e5969", margin: "14px 2px 8px" }}>出库拍照留痕（选填）</div>
         <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 10, padding: 12, marginBottom: 8 }}>
-          <div style={{ fontSize: 12, color: "#646a73", marginBottom: 10 }}>拍材料本身，照片随申请提交供仓管员审计核对（不强制）。</div>
+          <div style={{ fontSize: 12, color: "#5B6478", marginBottom: 10 }}>拍材料本身，照片随申请提交供仓管员审计核对（不强制）。</div>
           <PhotoUpload translucent bizType="requisition_item" fileId={rows[0]?.photoFileId} onChange={(fid) => rows[0] && updateRow(0, { photoFileId: fid })} />
         </div>
       </div>
@@ -252,8 +252,8 @@ export function RequisitionNewPage() {
           zIndex: 20,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", fontSize: 13, color: "#646a73", paddingLeft: 4, whiteSpace: "nowrap", flexShrink: 0 }}>
-          共 <b style={{ color: "#1f2329", fontSize: 15, margin: "0 2px" }}>{totalQty}</b> 件
+        <div style={{ display: "flex", alignItems: "center", fontSize: 13, color: "#5B6478", paddingLeft: 4, whiteSpace: "nowrap", flexShrink: 0 }}>
+          共 <b style={{ color: "#1E2433", fontSize: 15, margin: "0 2px" }}>{totalQty}</b> 件
         </div>
         <Button block color="primary" loading={submitting} style={{ height: 44, fontSize: 15, borderRadius: 10, flex: 1, minWidth: 0 }} onClick={() => void submit()}>
           提交申请

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { NavBar } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -40,11 +40,11 @@ export function FunctionsPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar
         onBack={() => navigate("/")}
         right={
-          <span style={{ fontSize: 12, color: editMode ? "#ff4d4f" : "#1668dc" }} onClick={() => setEditMode((v) => !v)}>
+          <span style={{ fontSize: 12, color: editMode ? "#EF4444" : "#5B7FFF" }} onClick={() => setEditMode((v) => !v)}>
             {editMode ? "完成" : "编辑"}
           </span>
         }
@@ -52,13 +52,13 @@ export function FunctionsPage() {
         功能
       </NavBar>
       <div style={{ padding: 12 }}>
-        <div style={{ fontSize: 12, color: "#646a73", lineHeight: 1.7, padding: "2px 4px 10px" }}>
+        <div style={{ fontSize: 12, color: "#5B6478", lineHeight: 1.7, padding: "2px 4px 10px" }}>
           {editMode ? (
             "按住卡片拖动调整功能顺序（与首页「快捷操作」同步）。"
           ) : (
             <>
               全部功能（{visible.length} 项）——点卡片进入；点右上角
-              <span style={{ color: "#faad14", fontWeight: 600, margin: "0 2px" }}>★</span>
+              <span style={{ color: "#F59E0B", fontWeight: 600, margin: "0 2px" }}>★</span>
               可加入 / 移出首页「快捷操作」。
             </>
           )}
@@ -107,14 +107,14 @@ export function FunctionsPage() {
                       right: 7,
                       fontSize: 13,
                       lineHeight: 1,
-                      color: pinned ? "#faad14" : "#c9cdd4",
+                      color: pinned ? "#F59E0B" : "#c9cdd4",
                     }}
                     title={pinned ? "已在首页快捷操作" : "未加入首页快捷操作"}
                   >
                     {pinned ? "★" : "☆"}
                   </span>
-                  <span style={{ color: "#1668dc" }}>{a.icon}</span>
-                  <span style={{ fontSize: 11.5, color: "#1f2329", fontWeight: 500 }}>{a.title}</span>
+                  <span style={{ color: "#5B7FFF" }}>{a.icon}</span>
+                  <span style={{ fontSize: 11.5, color: "#1E2433", fontWeight: 500 }}>{a.title}</span>
                   <span style={{ fontSize: 9.5, color: "#c9cdd4" }}>{a.sub}</span>
                 </div>
               );
@@ -162,14 +162,14 @@ export function FunctionsPage() {
                       fontSize: 15,
                       lineHeight: 1,
                       cursor: "pointer",
-                      color: pinned ? "#faad14" : "#c9cdd4",
+                      color: pinned ? "#F59E0B" : "#c9cdd4",
                       padding: 2,
                     }}
                   >
                     {pinned ? "★" : "☆"}
                   </span>
-                  <span style={{ color: "#1668dc" }}>{a.icon}</span>
-                  <span style={{ fontSize: 11.5, color: "#1f2329", fontWeight: 500 }}>{a.title}</span>
+                  <span style={{ color: "#5B7FFF" }}>{a.icon}</span>
+                  <span style={{ fontSize: 11.5, color: "#1E2433", fontWeight: 500 }}>{a.title}</span>
                   <span style={{ fontSize: 9.5, color: "#c9cdd4" }}>{a.sub}</span>
                 </div>
               );

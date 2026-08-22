@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
+﻿import { useState, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
 import { App, Button, Checkbox, Popover, Table, Tooltip } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
 import { DeleteOutlined, SettingOutlined } from "@ant-design/icons";
@@ -200,7 +200,7 @@ export function DataTable<T extends object>(props: DataTableProps<T>) {
             </Button>
           ))}
         {enableSelect && selectedKeys.length > 0 && (
-          <span style={{ color: "#646a73", fontSize: 12 }}>已选 {selectedKeys.length} 行</span>
+          <span style={{ color: "#5B6478", fontSize: 12 }}>已选 {selectedKeys.length} 行</span>
         )}
         <div style={{ flex: 1 }} />
         {columnSelector && selectorCols.length > 1 && (

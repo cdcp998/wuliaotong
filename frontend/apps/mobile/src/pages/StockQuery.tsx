@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Button, Input, List, NavBar, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -29,7 +29,7 @@ export function StockQueryPage() {
   }
 
   return (
-    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate("/")}>库存查询</NavBar>
       <div style={{ padding: 12 }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
@@ -43,7 +43,7 @@ export function StockQueryPage() {
               height: 42,
               background: "#fff",
               borderRadius: 9,
-              border: "1px solid #e5e6eb",
+              border: "1px solid #E4EAF6",
               padding: "0 12px",
               fontSize: 14,
             }}
@@ -58,7 +58,7 @@ export function StockQueryPage() {
             </span>
           </Button>
         </div>
-        <div style={{ fontSize: 11.5, color: "#646a73", marginBottom: 8, padding: "0 2px" }}>扫码 / 条码查询更快捷，也可点击「扫码」按钮调用摄像头</div>
+        <div style={{ fontSize: 11.5, color: "#5B6478", marginBottom: 8, padding: "0 2px" }}>扫码 / 条码查询更快捷，也可点击「扫码」按钮调用摄像头</div>
         <List style={{ "--border-top": "0" } as React.CSSProperties}>
           {list.map((r) => (
             <List.Item
@@ -69,8 +69,8 @@ export function StockQueryPage() {
                     width: 36,
                     height: 36,
                     borderRadius: 9,
-                    background: "#e8f1fd",
-                    color: "#1668dc",
+                    background: "#EAEFFF",
+                    color: "#5B7FFF",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -82,14 +82,14 @@ export function StockQueryPage() {
                 </span>
               }
               description={
-                <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 2 }}>
+                <div style={{ fontSize: 11.5, color: "#5B6478", marginTop: 2 }}>
                   {r.location_code}
                   {r.spec ? ` · ${r.spec}` : ""}
                 </div>
               }
               extra={
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: Number(r.qty) <= 0 ? "#cf1322" : "#1f2329" }}>{r.qty}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: Number(r.qty) <= 0 ? "#cf1322" : "#1E2433" }}>{r.qty}</div>
                   <Tag color={Number(r.qty) <= 0 ? "danger" : "success"} style={{ fontSize: 9.5, padding: "1px 5px", borderRadius: 4, marginTop: 2 }}>
                     {Number(r.qty) <= 0 ? "无库存" : "正常"}
                   </Tag>

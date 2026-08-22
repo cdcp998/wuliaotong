@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { App, Button, Card, Input, InputNumber, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router";
@@ -111,7 +111,7 @@ export function RequisitionApplyPage() {
             }}
           />
           {r.product && (
-            <div style={{ fontSize: 12, color: "#646a73", marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: "#5B6478", marginTop: 4 }}>
               物料编码：{r.product.material_code || "-"} ｜ 规格：{r.product.spec || "-"} ｜ 单位：{r.product.unit_name || "-"}
             </div>
           )}
@@ -161,7 +161,7 @@ export function RequisitionApplyPage() {
                 value={applicantId || undefined}
                 onChange={(v) => setApplicantId(v ?? 0)}
               />
-              <span style={{ color: "#646a73", fontSize: 12 }}>仓管员/管理员可代使用者提交</span>
+              <span style={{ color: "#5B6478", fontSize: 12 }}>仓管员/管理员可代使用者提交</span>
             </>
           )}
           <span>出库仓库</span>
@@ -189,11 +189,11 @@ export function RequisitionApplyPage() {
       <Card title="使用信息" size="small" style={{ marginBottom: 16 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
           <div>
-            <div style={{ marginBottom: 6, fontWeight: 500 }}>使用地点<span style={{ color: "#ff4d4f" }}>*</span></div>
+            <div style={{ marginBottom: 6, fontWeight: 500 }}>使用地点<span style={{ color: "#EF4444" }}>*</span></div>
             <Input placeholder="如：维修部 · 3 号线" value={useLocation} onChange={(e) => setUseLocation(e.target.value)} />
           </div>
           <div>
-            <div style={{ marginBottom: 6, fontWeight: 500 }}>因何使用<span style={{ color: "#ff4d4f" }}>*</span></div>
+            <div style={{ marginBottom: 6, fontWeight: 500 }}>因何使用<span style={{ color: "#EF4444" }}>*</span></div>
             <Input placeholder="如：维修 XX 设备" value={useReason} onChange={(e) => setUseReason(e.target.value)} />
           </div>
         </div>
@@ -207,7 +207,7 @@ export function RequisitionApplyPage() {
         <Button type="primary" size="large" loading={submitting} onClick={() => void submit()} style={{ minWidth: 180 }}>
           提交申请
         </Button>
-        <span style={{ color: "#646a73", fontSize: 12 }}>
+        <span style={{ color: "#5B6478", fontSize: 12 }}>
           已填 {validCount}/{rows.length} 项材料，合计数量 {totalQty}
         </span>
       </Space>

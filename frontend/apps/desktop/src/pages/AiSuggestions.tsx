@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, App, Button, Divider, Form, Input, InputNumber, Modal, Popconfirm, Select, Space } from "antd";
 import { EditOutlined, PlusOutlined, RobotOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -192,20 +192,20 @@ export function AiSuggestionsPage() {
       {/* 页头：图标 + 标题 + 说明，右侧待确认数 */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 280, flex: 1 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: "#1668dc", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, flexShrink: 0 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: "#5B7FFF", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, flexShrink: 0 }}>
             <RobotOutlined />
           </div>
           <div>
             <h2 style={{ margin: 0 }}>AI 建议处理</h2>
-            <p style={{ margin: "4px 0 0", fontSize: 12.5, lineHeight: 1.6, color: "#646a73" }}>
+            <p style={{ margin: "4px 0 0", fontSize: 12.5, lineHeight: 1.6, color: "#5B6478" }}>
               拍照识别中未匹配到系统资料的材料，由视觉识别后生成建议；
-              <strong style={{ color: "#1f2329", fontWeight: 600 }}>人工确认后才新增材料</strong>
+              <strong style={{ color: "#1E2433", fontWeight: 600 }}>人工确认后才新增材料</strong>
               （可在系统设置配置模型配置）。
             </p>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", borderRadius: 999, background: "#eef4ff", border: "1px solid #d6e4ff", flexShrink: 0 }}>
-          <RobotOutlined style={{ color: "#1668dc", fontSize: 15 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", borderRadius: 999, background: "#eef4ff", border: "1px solid #D9E3FF", flexShrink: 0 }}>
+          <RobotOutlined style={{ color: "#5B7FFF", fontSize: 15 }} />
           <span style={{ fontSize: 13, color: "#3d5a8f", fontWeight: 500 }}>待确认</span>
           <strong style={{ fontSize: 18, color: "#0958d9", lineHeight: 1 }}>{total}</strong>
           <span style={{ fontSize: 13, color: "#3d5a8f" }}>条</span>
@@ -233,7 +233,7 @@ export function AiSuggestionsPage() {
 
       {/* 确认新增材料 */}
       <Modal
-        title={<Space size={8}><RobotOutlined style={{ color: "#1668dc" }} />确认新增材料</Space>}
+        title={<Space size={8}><RobotOutlined style={{ color: "#5B7FFF" }} />确认新增材料</Space>}
         open={Boolean(accepting)}
         onOk={() => void doAccept()}
         okText="确认新增"

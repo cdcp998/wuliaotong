@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Dialog, List, NavBar, Tag, TextArea, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -68,7 +68,7 @@ export function RequisitionAuditPage() {
             onChange={(v) => {
               rejectRemarkRef.current = v;
             }}
-            style={{ background: "#f5f6f8", borderRadius: 8, padding: 8, "--font-size": "14px" } as React.CSSProperties}
+            style={{ background: "#F2F5FB", borderRadius: 8, padding: 8, "--font-size": "14px" } as React.CSSProperties}
           />
         </div>
       ),
@@ -96,29 +96,29 @@ export function RequisitionAuditPage() {
 
   if (sel) {
     return (
-      <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+      <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
         <NavBar onBack={() => setSel(null)}>领用审计</NavBar>
         <div style={{ padding: 12 }}>
           <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, padding: 14, marginBottom: 10 }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>{sel.bill_no}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px", marginTop: 10, fontSize: 12.5 }}>
-              <div><div style={{ color: "#646a73" }}>申请人</div><div style={{ marginTop: 2 }}>{sel.applicant_name}</div></div>
-              <div><div style={{ color: "#646a73" }}>仓库</div><div style={{ marginTop: 2 }}>{sel.warehouse_name}</div></div>
-              <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#646a73" }}>使用地点</div><div style={{ marginTop: 2, fontWeight: 500 }}>{sel.use_location}</div></div>
-              <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#646a73" }}>因何使用</div><div style={{ marginTop: 2, fontWeight: 500 }}>{sel.use_reason}</div></div>
-              <div><div style={{ color: "#646a73" }}>完成工作</div><div style={{ marginTop: 2 }}>{sel.work_done_at ? sel.work_done_at.slice(0, 16) : "—"}</div></div>
-              <div><div style={{ color: "#646a73" }}>总数量</div><div style={{ marginTop: 2 }}>{sel.total_qty}</div></div>
+              <div><div style={{ color: "#5B6478" }}>申请人</div><div style={{ marginTop: 2 }}>{sel.applicant_name}</div></div>
+              <div><div style={{ color: "#5B6478" }}>仓库</div><div style={{ marginTop: 2 }}>{sel.warehouse_name}</div></div>
+              <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#5B6478" }}>使用地点</div><div style={{ marginTop: 2, fontWeight: 500 }}>{sel.use_location}</div></div>
+              <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#5B6478" }}>因何使用</div><div style={{ marginTop: 2, fontWeight: 500 }}>{sel.use_reason}</div></div>
+              <div><div style={{ color: "#5B6478" }}>完成工作</div><div style={{ marginTop: 2 }}>{sel.work_done_at ? sel.work_done_at.slice(0, 16) : "—"}</div></div>
+              <div><div style={{ color: "#5B6478" }}>总数量</div><div style={{ marginTop: 2 }}>{sel.total_qty}</div></div>
             </div>
           </div>
           <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, overflow: "hidden", marginBottom: 10 }}>
-            <div style={{ padding: "11px 14px", borderBottom: "1px solid #f5f6f8", fontSize: 13.5, fontWeight: 600 }}>
+            <div style={{ padding: "11px 14px", borderBottom: "1px solid #F2F5FB", fontSize: 13.5, fontWeight: 600 }}>
               领用明细（{sel.items.length} 项）
             </div>
             {sel.items.map((it) => (
-              <div key={it.id} style={{ padding: "10px 14px", borderBottom: "1px solid #f5f6f8", display: "flex", alignItems: "center", gap: 10 }}>
+              <div key={it.id} style={{ padding: "10px 14px", borderBottom: "1px solid #F2F5FB", display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 500 }}>{it.product_name}</div>
-                  <div style={{ fontSize: 11, color: "#646a73", marginTop: 2 }}>{it.location_code}</div>
+                  <div style={{ fontSize: 11, color: "#5B6478", marginTop: 2 }}>{it.location_code}</div>
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{it.qty}</div>
               </div>
@@ -138,7 +138,7 @@ export function RequisitionAuditPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate("/")}>领用审计</NavBar>
       <List style={{ "--border-top": "0" } as React.CSSProperties}>
         {list.map((b) => (
@@ -146,14 +146,14 @@ export function RequisitionAuditPage() {
             key={b.id}
             onClick={() => void openBill(b)}
             description={
-              <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 3 }}>
+              <div style={{ fontSize: 11.5, color: "#5B6478", marginTop: 3 }}>
                 {b.applicant_name} · {b.warehouse_name} · {b.created_at.slice(0, 16)}
               </div>
             }
             extra={<Tag color="warning">待审计</Tag>}
           >
             <span style={{ fontSize: 14, fontWeight: 500 }}>{b.bill_no}</span>
-            <span style={{ fontSize: 12, color: "#646a73", marginLeft: 8 }}>共 {b.total_qty} 件</span>
+            <span style={{ fontSize: 12, color: "#5B6478", marginLeft: 8 }}>共 {b.total_qty} 件</span>
           </List.Item>
         ))}
         {loading && <List.Item>加载中…</List.Item>}

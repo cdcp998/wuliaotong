@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { ActionSheet, Button, DatePicker, Dialog, DotLoading, Input, List, NavBar, Popup, Tag, Toast } from "antd-mobile";
 import { useNavigate, useSearchParams } from "react-router";
 import { AlbumIcon, BarcodeScanner, CameraAlbum, CameraIcon, ProductPicker, baseApi, fileApi, ocrApi, purchaseIn, resolveByBarcode, type Location, type OcrDeliveryItem, type OcrTask, type Product, type Supplier, type Unit, type Warehouse } from "@wlt/shared";
@@ -311,7 +311,7 @@ export function InboundPage() {
   const fmtDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
   return (
-    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate("/")}>入库</NavBar>
 
       {/* 表头（标题行） */}
@@ -334,9 +334,9 @@ export function InboundPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid #f0f1f3" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: "#1d2129" }}>材料明细</span>
-            <span style={{ fontSize: 12, color: "#646a73" }}>{rows.length} 项</span>
+            <span style={{ fontSize: 12, color: "#5B6478" }}>{rows.length} 项</span>
           </div>
-          <span style={{ fontSize: 12, color: "#646a73" }}>条码可识别 / 手输后回车</span>
+          <span style={{ fontSize: 12, color: "#5B6478" }}>条码可识别 / 手输后回车</span>
         </div>
         <List>
           {rows.map((r, i) => (
@@ -352,20 +352,20 @@ export function InboundPage() {
                 {/* 数量 / 价格 */}
                 <div style={{ display: "flex", gap: 8 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: "#646a73", marginBottom: 2 }}>数量</div>
+                    <div style={{ fontSize: 11, color: "#5B6478", marginBottom: 2 }}>数量</div>
                     <Input placeholder="必填" type="number" value={r.qty} onChange={(v) => updateRow(i, { qty: v })} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: "#646a73", marginBottom: 2 }}>价格</div>
+                    <div style={{ fontSize: 11, color: "#5B6478", marginBottom: 2 }}>价格</div>
                     <Input placeholder="0" type="number" value={r.price} onChange={(v) => updateRow(i, { price: v })} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
                   </div>
                 </div>
                 {/* 条码：扫码或手输后回车自动匹配 */}
                 <div>
-                  <div style={{ fontSize: 11, color: "#646a73", marginBottom: 2 }}>条码（识别或手输后回车自动匹配）</div>
+                  <div style={{ fontSize: 11, color: "#5B6478", marginBottom: 2 }}>条码（识别或手输后回车自动匹配）</div>
                   <Input placeholder="未匹配时自动填入条码" value={r.barcode} onChange={(v) => updateRow(i, { barcode: v })} onEnterPress={() => void scanBarcode(i, r.barcode)} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", border: "1px solid #eee", borderRadius: 6, padding: "4px 8px" }} />
                 </div>
-                <span style={{ color: "#646a73", fontSize: 12 }}>{r.product.code}{r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}</span>
+                <span style={{ color: "#5B6478", fontSize: 12 }}>{r.product.code}{r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}</span>
               </div>
             }>{r.product.name}</List.Item>
           ))}
@@ -409,7 +409,7 @@ export function InboundPage() {
       <Popup visible={!!ocrConfirm} onMaskClick={cancelOcr} bodyStyle={{ height: "auto", maxHeight: "80vh" }}>
         <div style={{ padding: 16 }}>
           <h4 style={{ margin: "0 0 4px" }}>送货单识别结果</h4>
-          <p style={{ color: "#646a73", fontSize: 12, margin: "0 0 12px" }}>识别内容可修改；确认后供应商落库、物料自动匹配/新增并带入明细</p>
+          <p style={{ color: "#5B6478", fontSize: 12, margin: "0 0 12px" }}>识别内容可修改；确认后供应商落库、物料自动匹配/新增并带入明细</p>
           <List>
             <List.Item extra={<Input placeholder="识别到的供应商（可改）" value={ocrConfirm?.supplierName ?? ""} onChange={(v) => setOcrConfirm((s) => (s ? { ...s, supplierName: v } : s))} />}>
               供应商
@@ -431,7 +431,7 @@ export function InboundPage() {
                   <span style={{ color: "#666" }}>{it.qty || "1"} × ¥{it.price || "0"}</span>
                 </div>
               ))}
-              {!ocrConfirm?.items.length && <div style={{ color: "#646a73", padding: "8px 0" }}>未识别到明细条目，可确认后手动添加材料</div>}
+              {!ocrConfirm?.items.length && <div style={{ color: "#5B6478", padding: "8px 0" }}>未识别到明细条目，可确认后手动添加材料</div>}
             </div>
           </div>
           <Button block color="primary" style={{ marginTop: 12 }} loading={ocrLoading} onClick={() => void confirmDelivery()}>
@@ -447,7 +447,7 @@ export function InboundPage() {
       <Popup visible={newMaterial.open} onMaskClick={() => setNewMaterial((s) => ({ ...s, open: false }))} bodyStyle={{ height: "auto" }}>
         <div style={{ padding: 16 }}>
           <h4 style={{ margin: "0 0 4px" }}>新增材料</h4>
-          <p style={{ color: "#646a73", fontSize: 12, margin: "0 0 12px" }}>未匹配到该条码对应的材料，确认信息后新增（条码可选）</p>
+          <p style={{ color: "#5B6478", fontSize: 12, margin: "0 0 12px" }}>未匹配到该条码对应的材料，确认信息后新增（条码可选）</p>
           <List>
             <List.Item extra={
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>

@@ -1,4 +1,4 @@
-/** map 模块：Leaflet 地图基础组件（方案 §5.2/§7.1 MapView；cable 模块复用）。
+﻿/** map 模块：Leaflet 地图基础组件（方案 §5.2/§7.1 MapView；cable 模块复用）。
  *
  * - 底图：后端瓦片代理 /map/tile/{source}/{z}/{x}/{y}（缓存优先，未命中抓在线源）
  * - 叠加层：线缆 GeoJSON / 故障点 / 标记点 / 路径（导航）
@@ -196,7 +196,7 @@ export function MapView({
           <GeoJSON
             key={JSON.stringify(cableGeojson.features.map((f) => f.properties?.code))}
             data={cableGeojson}
-            style={{ color: "#1668dc", weight: 4 }}
+            style={{ color: "#5B7FFF", weight: 4 }}
           />
         )}
         {faultPoints.map(({ lat, lng, f }) => {
@@ -251,7 +251,7 @@ export function MapView({
           </Marker>
         )}
         {navPath && navPath.length > 1 && (
-          <Polyline positions={navPath.map(([lat, lng]) => toDisplaySpace(lng, lat, space).reverse() as L.LatLngTuple)} pathOptions={{ color: "#fa541c", weight: 5, dashArray: "8 6" }} />
+          <Polyline positions={navPath.map(([lat, lng]) => toDisplaySpace(lng, lat, space).reverse() as L.LatLngTuple)} pathOptions={{ color: "#EF4444", weight: 5, dashArray: "8 6" }} />
         )}
         {/* 草稿预览线：已选点自动连线（蓝实线 + 起点绿/终点橙） */}
         {previewPath && previewPath.length >= 2 && (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { App, Button, DatePicker, Select, Space, Tabs, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
@@ -177,7 +177,7 @@ function FlowExportTab() {
   const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   return (
     <div>
-      <p style={{ color: "#646a73", fontSize: 12 }}>
+      <p style={{ color: "#5B6478", fontSize: 12 }}>
         按条件导出库存流水明细（stk_stock_log）。条件可留空（全量导出，数据量大时建议限定日期）。
       </p>
       <Space wrap>
@@ -249,7 +249,7 @@ function AiSummaryTab() {
         <Button type="primary" loading={loading} onClick={() => void generate()}>生成 AI 月报摘要</Button>
       </Space>
       {summary && (
-        <div style={{ border: "1px solid #e5e6eb", borderRadius: 8, padding: 16, background: "#fafbfc", whiteSpace: "pre-wrap", lineHeight: 1.8 }}>
+        <div style={{ border: "1px solid #E4EAF6", borderRadius: 8, padding: 16, background: "#fafbfc", whiteSpace: "pre-wrap", lineHeight: 1.8 }}>
           <Typography.Paragraph>{summary}</Typography.Paragraph>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {ai ? "AI 生成，仅供参考" : "规则版摘要（文本模型未配置或生成失败）"} · {range?.[0]?.format("YYYY-MM-DD")} ~ {range?.[1]?.format("YYYY-MM-DD")}

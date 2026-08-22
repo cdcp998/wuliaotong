@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Button, Dialog, List, NavBar, Popup, Stepper, Tabs, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -184,7 +184,7 @@ export function TransfersPage() {
   if (sel) {
     const st = T_STATUS[sel.status] ?? { text: String(sel.status), color: "default" as const };
     return (
-      <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+      <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
         <NavBar onBack={() => setSel(null)}>调拨详情</NavBar>
         <div style={{ padding: 12 }}>
           <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, padding: 14, marginBottom: 10 }}>
@@ -193,24 +193,24 @@ export function TransfersPage() {
               <Tag color={st.color}>{st.text}</Tag>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px", marginTop: 10, fontSize: 12.5 }}>
-              <div><div style={{ color: "#646a73" }}>调出仓库</div><div style={{ marginTop: 2 }}>{sel.from_warehouse_name}</div></div>
-              <div><div style={{ color: "#646a73" }}>调入仓库</div><div style={{ marginTop: 2 }}>{sel.to_warehouse_name}</div></div>
-              <div><div style={{ color: "#646a73" }}>创建时间</div><div style={{ marginTop: 2 }}>{sel.created_at.slice(0, 16)}</div></div>
-              <div><div style={{ color: "#646a73" }}>审核人</div><div style={{ marginTop: 2 }}>{sel.audit_name || "—"}</div></div>
+              <div><div style={{ color: "#5B6478" }}>调出仓库</div><div style={{ marginTop: 2 }}>{sel.from_warehouse_name}</div></div>
+              <div><div style={{ color: "#5B6478" }}>调入仓库</div><div style={{ marginTop: 2 }}>{sel.to_warehouse_name}</div></div>
+              <div><div style={{ color: "#5B6478" }}>创建时间</div><div style={{ marginTop: 2 }}>{sel.created_at.slice(0, 16)}</div></div>
+              <div><div style={{ color: "#5B6478" }}>审核人</div><div style={{ marginTop: 2 }}>{sel.audit_name || "—"}</div></div>
             </div>
-            {sel.remark && <div style={{ fontSize: 12, color: "#646a73", marginTop: 10 }}>备注：{sel.remark}</div>}
+            {sel.remark && <div style={{ fontSize: 12, color: "#5B6478", marginTop: 10 }}>备注：{sel.remark}</div>}
           </div>
           <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, overflow: "hidden", marginBottom: 10 }}>
-            <div style={{ padding: "11px 14px", borderBottom: "1px solid #f5f6f8", fontSize: 13.5, fontWeight: 600 }}>
+            <div style={{ padding: "11px 14px", borderBottom: "1px solid #F2F5FB", fontSize: 13.5, fontWeight: 600 }}>
               调拨明细（{sel.items.length} 项）
             </div>
             {sel.items.map((it) => (
-              <div key={it.id} style={{ padding: "10px 14px", borderBottom: "1px solid #f5f6f8" }}>
+              <div key={it.id} style={{ padding: "10px 14px", borderBottom: "1px solid #F2F5FB" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13.5 }}>
                   <span style={{ fontWeight: 500 }}>{it.product_name}</span>
                   <span style={{ fontWeight: 600 }}>{it.qty}</span>
                 </div>
-                <div style={{ fontSize: 11, color: "#646a73", marginTop: 3 }}>
+                <div style={{ fontSize: 11, color: "#5B6478", marginTop: 3 }}>
                   {it.from_location_code} → {it.to_location_code}
                 </div>
               </div>
@@ -242,7 +242,7 @@ export function TransfersPage() {
 
   // ===== 列表视图 =====
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8", paddingBottom: 72 }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: 72 }}>
       <NavBar onBack={() => navigate("/")}>库存调拨</NavBar>
       <Tabs activeKey={tab} onChange={setTab}>
         <Tabs.Tab title="全部" key="all" />
@@ -258,7 +258,7 @@ export function TransfersPage() {
               key={b.id}
               onClick={() => void openBill(b)}
               description={
-                <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 3 }}>
+                <div style={{ fontSize: 11.5, color: "#5B6478", marginTop: 3 }}>
                   {b.from_warehouse_name} → {b.to_warehouse_name} · {b.created_at.slice(0, 16)}
                 </div>
               }
@@ -295,7 +295,7 @@ export function TransfersPage() {
       </div>
 
       {/* 新建调拨：全屏表单 */}
-      <Popup visible={createOpen} onMaskClick={() => setCreateOpen(false)} bodyStyle={{ height: "100dvh", background: "#f5f6f8" }} destroyOnClose>
+      <Popup visible={createOpen} onMaskClick={() => setCreateOpen(false)} bodyStyle={{ height: "100dvh", background: "#F2F5FB" }} destroyOnClose>
         <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
           <NavBar onBack={() => setCreateOpen(false)}>新建调拨</NavBar>
           <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
@@ -322,13 +322,13 @@ export function TransfersPage() {
                     {r.product ? (
                       <>
                         <div style={{ fontSize: 13.5, fontWeight: 500 }}>{r.product.name}</div>
-                        <div style={{ fontSize: 11, color: "#646a73", marginTop: 1 }}>{r.product.code}</div>
+                        <div style={{ fontSize: 11, color: "#5B6478", marginTop: 1 }}>{r.product.code}</div>
                       </>
                     ) : (
-                      <span style={{ color: "#1668dc", fontSize: 13 }} onClick={() => setPickerOpen(true)}>选择材料</span>
+                      <span style={{ color: "#5B7FFF", fontSize: 13 }} onClick={() => setPickerOpen(true)}>选择材料</span>
                     )}
                   </div>
-                  <span style={{ color: "#ff4d4f", fontSize: 12, cursor: "pointer" }} onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>
+                  <span style={{ color: "#EF4444", fontSize: 12, cursor: "pointer" }} onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>
                     删除
                   </span>
                 </div>
@@ -348,7 +348,7 @@ export function TransfersPage() {
             <div
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 6, height: 40,
-                border: "1px dashed #c9cdd4", borderRadius: 10, color: "#1668dc", fontSize: 13.5, cursor: "pointer",
+                border: "1px dashed #c9cdd4", borderRadius: 10, color: "#5B7FFF", fontSize: 13.5, cursor: "pointer",
                 background: "#fafbfd", marginBottom: 12,
               }}
               onClick={() => setPickerOpen(true)}

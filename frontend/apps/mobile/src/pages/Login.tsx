@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Button, Checkbox, Form, Input, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -114,20 +114,20 @@ export function LoginPage() {
             width: 58,
             height: 58,
             borderRadius: 15,
-            background: "#1668dc",
+            background: "#5B7FFF",
             color: "#fff",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             fontSize: 26,
             fontWeight: 700,
-            boxShadow: "0 6px 18px rgba(22,104,220,.32)",
+            boxShadow: "0 6px 18px rgba(91,127,255,.32)",
           }}
         >
           物
         </div>
         <div style={{ fontSize: 19, fontWeight: 700, marginTop: 12 }}>物料通</div>
-        <div style={{ fontSize: 12, color: "#646a73", marginTop: 3 }}>
+        <div style={{ fontSize: 12, color: "#5B6478", marginTop: 3 }}>
           {mode === "login" ? "企业内部物料管理 · 入库 / 出库 / 领用" : mode === "forgot" ? "找回密码" : mode === "reset" ? forgotInfo?.message ?? "重置密码" : "注册账号"}
         </div>
       </div>
@@ -155,10 +155,10 @@ export function LoginPage() {
               </Form.Item>
             )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "2px 2px 0" }}>
-              <Checkbox checked={remember} onChange={(v) => setRemember(v)} style={{ "--icon-size": "18px", fontSize: 12.5, color: "#646a73" }}>
+              <Checkbox checked={remember} onChange={(v) => setRemember(v)} style={{ "--icon-size": "18px", fontSize: 12.5, color: "#5B6478" }}>
                 记住登录状态
               </Checkbox>
-              <span style={{ fontSize: 12.5, color: "#646a73" }}>
+              <span style={{ fontSize: 12.5, color: "#5B6478" }}>
                 <a onClick={() => setMode("forgot")} style={{ marginRight: 10 }}>忘记密码？</a>
                 {regStatus && regStatus.mode !== "closed" && <a onClick={() => setMode("register")}>注册账号</a>}
               </span>
@@ -196,7 +196,7 @@ export function LoginPage() {
             }
           >
             {forgotInfo?.method === "phone" && forgotInfo.contact_phone && (
-              <div style={{ fontSize: 14, color: "#1668dc", textAlign: "center", marginBottom: 12 }}>
+              <div style={{ fontSize: 14, color: "#5B7FFF", textAlign: "center", marginBottom: 12 }}>
                 管理员联系电话：{forgotInfo.contact_phone}
               </div>
             )}
@@ -231,7 +231,7 @@ export function LoginPage() {
             <Form.Item name="real_name"><Input placeholder="姓名（可选）" clearable /></Form.Item>
             <Form.Item name="phone"><Input placeholder="手机（可选）" clearable /></Form.Item>
             <Form.Item name="email"><Input placeholder="邮箱（可选，找回密码用）" clearable /></Form.Item>
-            <div style={{ fontSize: 12, color: "#646a73", textAlign: "center", marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: "#5B6478", textAlign: "center", marginBottom: 10 }}>
               {regStatus?.mode === "review" ? "审核注册模式：提交后需管理员审核通过方可登录。" : "开放注册模式：注册即开通使用者账号。"}
             </div>
           </Form>
@@ -240,15 +240,15 @@ export function LoginPage() {
         {mode !== "login" && (
           <div style={{ textAlign: "center", marginTop: 14 }}>
             {/* 放在 Form 外，避免被渲染进列表导致左对齐错位；内边距保证触屏目标 ≥44px */}
-            <a onClick={() => setMode("login")} style={{ display: "inline-block", padding: "12px 24px", fontSize: 13, color: "#646a73" }}>
+            <a onClick={() => setMode("login")} style={{ display: "inline-block", padding: "12px 24px", fontSize: 13, color: "#5B6478" }}>
               返回登录
             </a>
           </div>
         )}
 
         {mode === "login" && (
-          <div style={{ textAlign: "center", fontSize: 12, color: "#646a73", marginTop: 18 }}>
-            大屏操作请前往 <a href={otherEndUrl("desktop")} style={{ color: "#1668dc" }}>电脑版入口</a>
+          <div style={{ textAlign: "center", fontSize: 12, color: "#5B6478", marginTop: 18 }}>
+            大屏操作请前往 <a href={otherEndUrl("desktop")} style={{ color: "#5B7FFF" }}>电脑版入口</a>
           </div>
         )}
 

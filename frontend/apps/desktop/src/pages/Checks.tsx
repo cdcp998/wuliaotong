@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { App, Button, Modal, Popconfirm, Radio, Select, Space } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router";
@@ -85,7 +85,7 @@ export function ChecksPage() {
 
       <Modal title="新建盘点单" open={open} onOk={() => void create()} onCancel={() => setOpen(false)}>
         <Select style={{ width: "100%" }} placeholder="选择盘点仓库" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={whId} onChange={setWhId} />
-        <p style={{ color: "#646a73", fontSize: 12 }}>创建后自动带出该仓库全部库存物品（按物品汇总账面数量），逐项录入实盘数量。</p>
+        <p style={{ color: "#5B6478", fontSize: 12 }}>创建后自动带出该仓库全部库存物品（按物品汇总账面数量），逐项录入实盘数量。</p>
       </Modal>
     </div>
   );

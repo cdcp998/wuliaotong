@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Alert, App, Button, Form, Input, InputNumber, Steps } from "antd";
 
@@ -183,7 +183,7 @@ export function InitPage() {
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
         <div style={{ width: 440 }}>
           <h2 style={{ fontSize: 22, margin: 0 }}>初始化安装</h2>
-          <div style={{ fontSize: 13, color: "#646a73", margin: "6px 0 26px" }}>物料通管理系统 · 首次使用引导</div>
+          <div style={{ fontSize: 13, color: "#5B6478", margin: "6px 0 26px" }}>物料通管理系统 · 首次使用引导</div>
           <Steps
             current={step}
             size="small"

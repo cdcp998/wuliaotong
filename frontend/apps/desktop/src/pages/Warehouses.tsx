@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { App, Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Space, Spin, Tag } from "antd";
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 
@@ -6,8 +6,8 @@ import { baseApi, reportApi, type LocationStock, type Shelf, type Warehouse } fr
 
 const ALERT_COLOR: Record<string, string> = {
   low: "#f5222d",
-  high: "#faad14",
-  normal: "#52c41a",
+  high: "#F59E0B",
+  normal: "#22C55E",
 };
 const ALERT_TEXT: Record<string, string> = {
   low: "低于下限",
@@ -35,7 +35,7 @@ function Shelf25D({ shelf, cells, onCell }: {
   const layerKeys = Array.from({ length: layers }, (_, i) => layers - i); // 顶→底（顶层最亮）
   return (
     <>
-      <div style={{ fontSize: 12, color: "#646a73", marginBottom: 8 }}>
+      <div style={{ fontSize: 12, color: "#5B6478", marginBottom: 8 }}>
         {layers}层 × {rows}行 × {cols}列 · 格子内直接显示物料，点击格子查看完整明细
       </div>
       {/* 层从顶到底堆叠，每层一个托盘面板；格子为 3D 方块（loc-cell3d） */}
@@ -227,7 +227,7 @@ export function WarehousesPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>仓库与货架</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#646a73" }}>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
             点击仓库直接查看其 2.5D 货架视图（层 × 行 × 列 → 隔）；新建货架时按层行列批量生成库位；删除有保护
           </p>
         </div>
@@ -248,7 +248,7 @@ export function WarehousesPage() {
                 style={{
                   padding: "10px 12px",
                   borderRadius: 8,
-                  border: selectedWh?.id === w.id ? "1px solid #1668dc" : "1px solid #f0f1f3",
+                  border: selectedWh?.id === w.id ? "1px solid #5B7FFF" : "1px solid #f0f1f3",
                   background: selectedWh?.id === w.id ? "#f0f7ff" : "#fff",
                   cursor: "pointer",
                   marginBottom: 8,
@@ -258,7 +258,7 @@ export function WarehousesPage() {
                   <b>{w.name}</b>
                   {w.status === 1 ? <Tag color="green" style={{ marginInlineEnd: 0 }}>启用</Tag> : <Tag style={{ marginInlineEnd: 0 }}>停用</Tag>}
                 </div>
-                <div style={{ fontSize: 12, color: "#646a73", marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: "#5B6478", marginTop: 2 }}>
                   {w.shelf_count ?? 0} 货架 · {w.location_count ?? 0} 库位 · {w.product_kind_count ?? 0} 种材料
                 </div>
                 {w.address && <div style={{ fontSize: 12, color: "#c0c4cc" }}>{w.address}</div>}
@@ -301,7 +301,7 @@ export function WarehousesPage() {
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(560px, 1fr))", gap: 14 }}>
                   {shelves.map((s) => (
-                    <div key={s.id} style={{ border: "1px solid #e5e6eb", borderRadius: 10, background: "#fafbfc", padding: 10 }}>
+                    <div key={s.id} style={{ border: "1px solid #E4EAF6", borderRadius: 10, background: "#fafbfc", padding: 10 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                         <b>{s.code}{s.name ? ` ${s.name}` : ""}</b>
                         <Space size={4}>
@@ -406,12 +406,12 @@ export function WarehousesPage() {
             <tbody>
               {detail.items.map((it) => (
                 <tr key={it.product_id}>
-                  <td style={tdStyle}>{it.name} <span style={{ color: "#646a73" }}>{it.spec}</span></td>
+                  <td style={tdStyle}>{it.name} <span style={{ color: "#5B6478" }}>{it.spec}</span></td>
                   <td style={tdStyle}>{it.qty}</td>
                   <td style={tdStyle}><Tag color={ALERT_COLOR[it.alert]}>{ALERT_TEXT[it.alert]}</Tag></td>
                 </tr>
               ))}
-              {!detail.items.length && <tr><td colSpan={3} style={{ ...tdStyle, textAlign: "center", color: "#646a73" }}>空库位</td></tr>}
+              {!detail.items.length && <tr><td colSpan={3} style={{ ...tdStyle, textAlign: "center", color: "#5B6478" }}>空库位</td></tr>}
             </tbody>
           </table>
         )}

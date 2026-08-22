@@ -1,4 +1,4 @@
-/** 手机端：地图工作台（map 模块，方案 §7.3）——全屏地图 + 底部工具栏（上报/故障管理/测距/导航），
+﻿/** 手机端：地图工作台（map 模块，方案 §7.3）——全屏地图 + 底部工具栏（上报/故障管理/测距/导航），
  * 点击按钮弹窗打开对应面板（Popup 弹层，可关闭）。依赖 cable 模块数据（线缆/故障）。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -23,12 +23,12 @@ const FAULT_STATUS = ["待处理", "处理中", "待验证", "已修复", "已�
 
 const warnIcon = L.divIcon({
   className: "wlt-m",
-  html: '<div style="width:14px;height:14px;border-radius:50%;background:#ff4d4f;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:#EF4444;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [14, 14], iconAnchor: [7, 7],
 });
 const navIcon = L.divIcon({
   className: "wlt-m",
-  html: '<div style="width:16px;height:16px;border-radius:50%;background:#fa541c;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  html: '<div style="width:16px;height:16px;border-radius:50%;background:#EF4444;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [16, 16], iconAnchor: [8, 8],
 });
 
@@ -40,10 +40,10 @@ function ClickCatcher({ onPick }: { onPick: (lat: number, lng: number) => void }
 type PanelKey = "report" | "faults" | "measure" | "nav" | "layers" | null;
 
 const TOOLS: { key: Exclude<PanelKey, null>; label: string; color: string }[] = [
-  { key: "report", label: "上报", color: "#ff4d4f" },
+  { key: "report", label: "上报", color: "#EF4444" },
   { key: "faults", label: "故障", color: "#fa8c16" },
-  { key: "measure", label: "测距", color: "#1668dc" },
-  { key: "nav", label: "导航", color: "#fa541c" },
+  { key: "measure", label: "测距", color: "#5B7FFF" },
+  { key: "nav", label: "导航", color: "#EF4444" },
 ];
 
 export function MobileMapPage() {
@@ -185,12 +185,12 @@ export function MobileMapPage() {
           }} />
           {layers.cables && cables.filter((c) => c.geometry).map((c) => (
             <Polyline key={c.id} positions={(c.geometry!.coordinates as [number, number][]).map(([lng, lat]) => [lat, lng] as [number, number])}
-              pathOptions={{ color: "#1668dc", weight: 4 }} />
+              pathOptions={{ color: "#5B7FFF", weight: 4 }} />
           ))}
           {layers.faults && faults.map((f) => <Marker key={f.id} position={[f.lat, f.lng]} icon={warnIcon} />)}
           {highlight && <Marker position={highlight} icon={navIcon} />}
           {navPath && navPath.length > 1 && (
-            <Polyline positions={navPath} pathOptions={{ color: "#fa541c", weight: 5, dashArray: "8 6" }} />
+            <Polyline positions={navPath} pathOptions={{ color: "#EF4444", weight: 5, dashArray: "8 6" }} />
           )}
         </MapContainer>
         {/* 图层叠加选择（右上角小图标，主流地图交互） */}
@@ -202,7 +202,7 @@ export function MobileMapPage() {
             justifyContent: "center", cursor: "pointer",
           }}
         >
-          <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke={panel === "layers" ? "#1668dc" : "#555"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke={panel === "layers" ? "#5B7FFF" : "#555"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 3l9 5-9 5-9-5 9-5z" />
             <path d="M3 13l9 5 9-5" />
           </svg>
@@ -219,7 +219,7 @@ export function MobileMapPage() {
       }}>
         {TOOLS.map((t) => (
           <div key={t.key} onClick={() => openPanel(t.key)}
-            style={{ flex: 1, padding: "8px 0 6px", textAlign: "center", cursor: "pointer", color: panel === t.key ? t.color : "#646a73", fontSize: 11 }}>
+            style={{ flex: 1, padding: "8px 0 6px", textAlign: "center", cursor: "pointer", color: panel === t.key ? t.color : "#5B6478", fontSize: 11 }}>
             <div style={{ width: 22, height: 22, margin: "0 auto 2px", borderRadius: 11, background: panel === t.key ? t.color : "#f2f3f5", color: "#fff", lineHeight: "22px", fontSize: 13 }}>●</div>
             {t.label}
           </div>
@@ -234,10 +234,10 @@ export function MobileMapPage() {
             <span style={{ color: "#999", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
           {[
-            { key: "cables" as const, label: "线缆", color: "#1668dc" },
-            { key: "faults" as const, label: "故障点", color: "#ff4d4f" },
+            { key: "cables" as const, label: "线缆", color: "#5B7FFF" },
+            { key: "faults" as const, label: "故障点", color: "#EF4444" },
           ].map((l) => (
-            <div key={l.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f5f6f8" }}>
+            <div key={l.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F2F5FB" }}>
               <span style={{ fontSize: 14 }}>
                 <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: l.key === "cables" ? 1 : 5, background: l.color, marginRight: 8, verticalAlign: "middle" }} />
                 {l.label}
@@ -262,7 +262,7 @@ export function MobileMapPage() {
           <Selector options={[{ label: "低", value: 1 }, { label: "中", value: 2 }, { label: "高", value: 3 }]} value={[sev]} onChange={(v) => setSev(v[0] ?? 1)} style={{ marginBottom: 8 }} />
           <TextArea placeholder="故障描述（可选）" value={desc} onChange={setDesc} rows={2} maxLength={500} style={{ marginBottom: 8 }} />
           <input type="file" accept="image/*" style={{ display: "none" }} id="fault-photo" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />
-          <label htmlFor="fault-photo" style={{ display: "inline-block", marginBottom: 8, color: "#1668dc", fontSize: 14 }}>{photo ? "已选照片（点击更换）" : "+ 拍照/选择现场照片"}</label>
+          <label htmlFor="fault-photo" style={{ display: "inline-block", marginBottom: 8, color: "#5B7FFF", fontSize: 14 }}>{photo ? "已选照片（点击更换）" : "+ 拍照/选择现场照片"}</label>
           <Button block color="danger" loading={reporting} disabled={!pick} onClick={submitFault}>提交故障上报</Button>
         </div>
       </Popup>
@@ -271,10 +271,10 @@ export function MobileMapPage() {
         <div style={{ padding: 16, paddingBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontWeight: 600 }}>故障管理（共 {faults.length} 条）</span>
-            <span style={{ color: "#1668dc", fontSize: 13 }} onClick={() => void load()}>刷新</span>
+            <span style={{ color: "#5B7FFF", fontSize: 13 }} onClick={() => void load()}>刷新</span>
           </div>
           {faults.map((f) => (
-            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #f5f6f8" }}>
+            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #F2F5FB" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13 }}>
                   #{f.id}　{f.fault_type || "未分类"}　<Tag color={f.severity === 3 ? "danger" : f.severity === 2 ? "warning" : "default"}>{["低", "中", "高"][f.severity - 1] ?? f.severity}</Tag>

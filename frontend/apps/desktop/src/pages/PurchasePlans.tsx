@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { useNavigate } from "react-router";
 import { App, Button, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
@@ -236,14 +236,14 @@ export function PurchasePlansPage() {
   }
 
   const detailColumns: ColumnsType<PurchasePlanBill["items"][number]> = [
-    { title: "材料", dataIndex: "product_name", render: (v: string, r) => <span>{v} <span style={{ color: "#646a73" }}>{r.code}</span></span> },
+    { title: "材料", dataIndex: "product_name", render: (v: string, r) => <span>{v} <span style={{ color: "#5B6478" }}>{r.code}</span></span> },
     { title: "计划数量", dataIndex: "planned_qty", width: 100, align: "right" as const },
     {
       title: "已入库",
       dataIndex: "received_qty",
       width: 100,
       align: "right" as const,
-      render: (v: string, r) => <span style={{ color: Number(v) >= Number(r.planned_qty) ? "#52c41a" : "#fa8c16" }}>{v}</span>,
+      render: (v: string, r) => <span style={{ color: Number(v) >= Number(r.planned_qty) ? "#22C55E" : "#fa8c16" }}>{v}</span>,
     },
     { title: "单位", dataIndex: "unit_name", width: 70 },
     { title: "备注", dataIndex: "remark", render: (v?: string) => v || "-" },
@@ -257,7 +257,7 @@ export function PurchasePlansPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>采购计划单</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#646a73" }}>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
             事物流：采购计划单 → 材料入库（送货单图片可选存底）→ 库存落账；计划按累计实收自动推进状态
           </p>
         </div>
@@ -323,7 +323,7 @@ export function PurchasePlansPage() {
         styles={{ body: { maxHeight: "calc(100dvh - 260px)", overflow: "auto" } }}
       >
         {/* 基本信息卡片 */}
-        <div style={{ padding: 12, border: "1px solid #e5e6eb", borderRadius: 8, background: "#fafbfc", marginBottom: 12 }}>
+        <div style={{ padding: 12, border: "1px solid #E4EAF6", borderRadius: 8, background: "#fafbfc", marginBottom: 12 }}>
           <Form form={form} layout="vertical">
             <Space size={16} wrap>
               <Form.Item name="warehouse_id" label="入库仓库" rules={[{ required: true, message: "请选择仓库" }]} style={{ width: 220, marginBottom: 0 }}>
@@ -403,7 +403,7 @@ export function PurchasePlansPage() {
           />
           <div style={{ padding: "6px 12px", borderTop: "1px solid #f0f0f0", display: "flex", alignItems: "center", gap: 8 }}>
             <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addRow}>添加明细</Button>
-            <span style={{ fontSize: 12, color: "#646a73" }}>实收数量在入库时按实际填写，可分批多次入库</span>
+            <span style={{ fontSize: 12, color: "#5B6478" }}>实收数量在入库时按实际填写，可分批多次入库</span>
           </div>
         </div>
       </Modal>

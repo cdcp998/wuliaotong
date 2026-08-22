@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { App, Button, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
@@ -92,7 +92,7 @@ export function RegisterAppliesPage() {
           ))}
         </Space>
       </div>
-      <p style={{ color: "#646a73", fontSize: 12, marginBottom: 16 }}>
+      <p style={{ color: "#5B6478", fontSize: 12, marginBottom: 16 }}>
         审核注册模式下，新用户提交的注册申请在此处理；通过后账号即为"使用者"角色。
       </p>
       <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection

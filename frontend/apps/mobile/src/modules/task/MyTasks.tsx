@@ -1,4 +1,4 @@
-/** 手机端：我的任务（方案 §7.3）——被指派任务处理（接单/完成+记录照片/知识推荐）。 */
+﻿/** 手机端：我的任务（方案 §7.3）——被指派任务处理（接单/完成+记录照片/知识推荐）。 */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Card, List, NavBar, Tag, TextArea, Toast } from "antd-mobile";
@@ -89,7 +89,7 @@ export function MyTasksPage() {
           <div style={{ fontWeight: 600, marginBottom: 8 }}>{current.title}</div>
           <TextArea placeholder="维修内容（完成必填）" value={content} onChange={setContent} rows={3} />
           <input type="file" accept="image/*" id="task-photo" style={{ display: "none" }} onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />
-          <label htmlFor="task-photo" style={{ display: "inline-block", margin: "8px 0", color: "#1668dc" }}>{photo ? "已选照片（点击更换）" : "+ 维修照片（完成必填）"}</label>
+          <label htmlFor="task-photo" style={{ display: "inline-block", margin: "8px 0", color: "#5B7FFF" }}>{photo ? "已选照片（点击更换）" : "+ 维修照片（完成必填）"}</label>
           <div style={{ display: "flex", gap: 8 }}>
             {current.status === "in_progress" && <Button block color="primary" loading={busy} onClick={complete}>完成任务</Button>}
             <Button block fill="outline" onClick={() => {
@@ -98,7 +98,7 @@ export function MyTasksPage() {
             <Button block fill="outline" onClick={() => setCurrent(null)}>关闭</Button>
           </div>
           {recommend.map((a) => (
-            <div key={a.id} style={{ marginTop: 8, padding: 8, background: "#f5f6f8", borderRadius: 8 }}>
+            <div key={a.id} style={{ marginTop: 8, padding: 8, background: "#F2F5FB", borderRadius: 8 }}>
               <div style={{ fontWeight: 600 }}>{a.title}</div>
               <div style={{ fontSize: 12, color: "#666" }}>{a.snippet}</div>
             </div>

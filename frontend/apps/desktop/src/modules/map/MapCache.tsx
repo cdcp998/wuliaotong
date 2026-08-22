@@ -1,4 +1,4 @@
-/** map 模块：地图缓存管理（/cable/cache，map:cache）+ 图源管理（map:config 编辑/新增/删除，查看脱敏）。 */
+﻿/** map 模块：地图缓存管理（/cable/cache，map:cache）+ 图源管理（map:config 编辑/新增/删除，查看脱敏）。 */
 import { useCallback, useEffect, useState } from "react";
 import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Progress, Select, Space, Table, Tag, Typography } from "antd";
 import { CaretRightOutlined, EnvironmentOutlined, PauseOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
@@ -423,7 +423,7 @@ export function MapCachePage() {
           </Form.Item>
           {/* 地图框选区域：点两角自动填 bbox（可再手调） */}
           <Typography.Text strong>地图选择区域（点击两角拖动另算：点两个对角点即可）</Typography.Text>
-          <div style={{ height: 240, margin: "8px 0", border: "1px solid #e5e6eb", borderRadius: 6, overflow: "hidden" }}>
+          <div style={{ height: 240, margin: "8px 0", border: "1px solid #E4EAF6", borderRadius: 6, overflow: "hidden" }}>
             <MapView
               sources={regionSources}
               overlays={{ cables: [], faults: [], markersByCable: {} }}

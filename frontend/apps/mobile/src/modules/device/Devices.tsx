@@ -1,4 +1,4 @@
-/** 手机端：设备（方案 §7.3）——列表（定位/状态/首图）+ 新增设备（定位获取经纬度 + 图片上传可选）。 */
+﻿/** 手机端：设备（方案 §7.3）——列表（定位/状态/首图）+ 新增设备（定位获取经纬度 + 图片上传可选）。 */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Form, Input, List, NavBar, Popup, Tag, Toast } from "antd-mobile";
@@ -84,7 +84,7 @@ export function MobileDevicesPage() {
 
   return (
     <ModuleGate code="device" title="设备">
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate(-1)} right={
         <Button size="mini" color="primary" onClick={() => { form.resetFields(); setLat(""); setLng(""); setLocInfo(""); setPhotos([]); setOpen(true); }}>+ 添加</Button>
       }>设备</NavBar>
@@ -95,7 +95,7 @@ export function MobileDevicesPage() {
               d.cover_file_id ? (
                 <img src={`/api/v1/files/${d.cover_file_id}`} width={44} height={44} style={{ borderRadius: 8, objectFit: "cover" }} alt="" />
               ) : (
-                <div style={{ width: 44, height: 44, borderRadius: 8, background: "#e8f1fd", color: "#1668dc", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>📷</div>
+                <div style={{ width: 44, height: 44, borderRadius: 8, background: "#EAEFFF", color: "#5B7FFF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>📷</div>
               )
             }>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -132,7 +132,7 @@ export function MobileDevicesPage() {
                 <Input placeholder="经度" value={lng} onChange={setLng} style={{ flex: 1 }} />
                 <Button size="small" color="primary" fill="outline" loading={locating} onClick={locate}>定位获取</Button>
               </div>
-              {locInfo && <div style={{ fontSize: 11, color: "#1668dc", marginTop: 4 }}>{locInfo}</div>}
+              {locInfo && <div style={{ fontSize: 11, color: "#5B7FFF", marginTop: 4 }}>{locInfo}</div>}
             </Form.Item>
             <Form.Item label="设备图片（可选，最多 3 张）">
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -140,7 +140,7 @@ export function MobileDevicesPage() {
                   <div key={i} style={{ position: "relative" }}>
                     <img src={p.preview} width={64} height={64} style={{ borderRadius: 8, objectFit: "cover" }} alt="" />
                     <span onClick={() => setPhotos((ps) => ps.filter((_, x) => x !== i))}
-                      style={{ position: "absolute", top: -6, right: -6, background: "#ff4d4f", color: "#fff", borderRadius: 10, width: 18, height: 18, fontSize: 11, lineHeight: "18px", textAlign: "center" }}>×</span>
+                      style={{ position: "absolute", top: -6, right: -6, background: "#EF4444", color: "#fff", borderRadius: 10, width: 18, height: 18, fontSize: 11, lineHeight: "18px", textAlign: "center" }}>×</span>
                   </div>
                 ))}
                 {photos.length < 3 && (

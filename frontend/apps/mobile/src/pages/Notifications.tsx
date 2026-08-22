@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { Button, Checkbox, Dialog, List, NavBar, SpinLoading, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -136,7 +136,7 @@ export function NotificationsPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8", paddingBottom: manage ? 64 : 0 }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: manage ? 64 : 0 }}>
       <NavBar
         onBack={() => navigate("/")}
         right={
@@ -145,12 +145,12 @@ export function NotificationsPage() {
               marking ? (
                 <SpinLoading style={{ "--size": "18px" } as React.CSSProperties} />
               ) : (
-                <span style={{ fontSize: 12, color: "#1668dc" }} onClick={() => void markAllRead()}>
+                <span style={{ fontSize: 12, color: "#5B7FFF" }} onClick={() => void markAllRead()}>
                   全部已读
                 </span>
               )
             )}
-            <span style={{ fontSize: 12, color: manage ? "#ff4d4f" : "#1668dc" }} onClick={toggleManage}>
+            <span style={{ fontSize: 12, color: manage ? "#EF4444" : "#5B7FFF" }} onClick={toggleManage}>
               {manage ? "完成" : "管理"}
             </span>
           </span>
@@ -172,11 +172,11 @@ export function NotificationsPage() {
         >
           <div style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={toggleAll}>
             <Checkbox checked={allSelected} style={{ "--icon-size": "18px" } as React.CSSProperties} />
-            <span style={{ fontSize: 13, color: "#1f2329" }}>全选</span>
+            <span style={{ fontSize: 13, color: "#1E2433" }}>全选</span>
           </div>
-          <span style={{ fontSize: 12, color: "#646a73", display: "flex", alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "#5B6478", display: "flex", alignItems: "center" }}>
             已选 {selected.size} 条
-            <span style={{ color: "#1668dc", marginLeft: 12 }} onClick={() => void clearAll()}>
+            <span style={{ color: "#5B7FFF", marginLeft: 12 }} onClick={() => void clearAll()}>
               清空全部
             </span>
           </span>
@@ -200,13 +200,13 @@ export function NotificationsPage() {
                       width: 34,
                       height: 34,
                       borderRadius: 9,
-                      background: n.is_read ? "#f2f3f5" : "#e8f1fd",
+                      background: n.is_read ? "#f2f3f5" : "#EAEFFF",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                     }}
                   >
-                    {!n.is_read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#1668dc" }} />}
+                    {!n.is_read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#5B7FFF" }} />}
                   </span>
                 )
               }
@@ -252,8 +252,8 @@ export function NotificationsPage() {
             zIndex: 20,
           }}
         >
-          <div style={{ flex: 1, fontSize: 13, color: "#646a73", textAlign: "right", marginRight: 10 }}>
-            共 <b style={{ color: "#1f2329", fontSize: 15, margin: "0 2px" }}>{list.length}</b> 条
+          <div style={{ flex: 1, fontSize: 13, color: "#5B6478", textAlign: "right", marginRight: 10 }}>
+            共 <b style={{ color: "#1E2433", fontSize: 15, margin: "0 2px" }}>{list.length}</b> 条
           </div>
           <Button block color="danger" loading={deleting} disabled={selected.size === 0} style={{ height: 40, fontSize: 14, borderRadius: 10, flex: 2 }} onClick={() => void deleteSelected()}>
             删除选中（{selected.size}）

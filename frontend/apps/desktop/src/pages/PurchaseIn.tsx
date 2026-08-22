@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { App, AutoComplete, Button, DatePicker, Divider, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag } from "antd";
 import { CameraOutlined, PictureOutlined, PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
@@ -836,7 +836,7 @@ export function PurchaseInPage() {
             value: (detail?.delivery_file_ids?.length ?? 0) > 0 ? (
               <Space size={6} wrap>
                 {detail!.delivery_file_ids!.map((fid) => (
-                  <img key={fid} src={fileUrl(fid)} alt="送货单" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e6eb", cursor: "zoom-in" }} onClick={() => window.open(fileUrl(fid), "_blank")} />
+                  <img key={fid} src={fileUrl(fid)} alt="送货单" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 6, border: "1px solid #E4EAF6", cursor: "zoom-in" }} onClick={() => window.open(fileUrl(fid), "_blank")} />
                 ))}
               </Space>
             ) : (
@@ -847,7 +847,7 @@ export function PurchaseInPage() {
           { label: "备注", value: detail?.remark, span: 2 },
         ]}
         columns={[
-          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#646a73" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
+          { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#5B6478" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
           { title: "库位", dataIndex: "location_code", width: 120 },
           { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
           { title: "单价", dataIndex: "price", width: 90, align: "right" as const },
@@ -871,7 +871,7 @@ export function PurchaseInPage() {
           },
         }}
       >
-        <div style={{ padding: 12, border: "1px solid #e5e6eb", borderRadius: 8, background: "#fafbfc", marginBottom: 12 }}>
+        <div style={{ padding: 12, border: "1px solid #E4EAF6", borderRadius: 8, background: "#fafbfc", marginBottom: 12 }}>
           <Space wrap>
             <span>入库仓库</span>
             <Select style={{ width: 200 }} placeholder="选择" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={warehouseId} onChange={(v) => { setWarehouseId(v); void loadLocs(v); }} />
@@ -886,10 +886,10 @@ export function PurchaseInPage() {
             {planId > 0 && <Tag color="blue">采购计划：{planBillNo}</Tag>}
           </Space>
           <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ color: "#646a73", fontSize: 12 }}>送货单图片（可选，存底）：</span>
+            <span style={{ color: "#5B6478", fontSize: 12 }}>送货单图片（可选，存底）：</span>
             {deliveryFiles.map((f, i) => (
               <span key={f.fileId} style={{ position: "relative", display: "inline-block" }}>
-                <img src={fileUrl(f.fileId)} alt={`送货单${i + 1}`} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e6eb" }} />
+                <img src={fileUrl(f.fileId)} alt={`送货单${i + 1}`} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid #E4EAF6" }} />
                 <a
                   style={{ position: "absolute", top: -6, right: -6, background: "#f5222d", color: "#fff", borderRadius: "50%", width: 16, height: 16, lineHeight: "14px", textAlign: "center", fontSize: 11, cursor: "pointer" }}
                   onClick={() => setDeliveryFiles((fs) => fs.filter((x) => x.fileId !== f.fileId))}
@@ -916,7 +916,7 @@ export function PurchaseInPage() {
           footer={() => (
             <Space wrap>
               <Button size="small" onClick={addEmptyRow}>+ 添加明细</Button>
-              <span style={{ color: "#646a73", fontSize: 12 }}>
+              <span style={{ color: "#5B6478", fontSize: 12 }}>
                 条码/名称列支持拍照/相册识别；名称未匹配自动大模型兜底分析；合计金额：{rows.reduce((s, r) => s + (r.qty > 0 ? r.qty * (r.price || 0) : 0), 0).toFixed(2)}
               </span>
             </Space>
@@ -937,7 +937,7 @@ export function PurchaseInPage() {
         width={440}
         destroyOnHidden
       >
-        <p style={{ color: "#646a73", fontSize: 12, marginTop: 0 }}>
+        <p style={{ color: "#5B6478", fontSize: 12, marginTop: 0 }}>
           新仓位将立即保存并选中当前明细行；编码自动生成（仓库编码-货架编码-层号）。
         </p>
         <Form form={locForm} layout="vertical">
@@ -959,7 +959,7 @@ export function PurchaseInPage() {
 
       {/* 无材料新增（条码/OCR 未匹配） */}
       <Modal title="材料不存在，是否新增材料？" open={materialModal.open} onOk={() => void createMaterial()} onCancel={() => setMaterialModal((s) => ({ ...s, open: false }))} width={480} destroyOnHidden>
-        <p style={{ color: "#646a73", fontSize: 12, marginTop: 0 }}>系统未匹配到该条码/名称对应的材料，确认信息后新增（条码可选），保存后自动带入当前明细行。</p>
+        <p style={{ color: "#5B6478", fontSize: 12, marginTop: 0 }}>系统未匹配到该条码/名称对应的材料，确认信息后新增（条码可选），保存后自动带入当前明细行。</p>
         <Form form={materialForm} layout="vertical">
           <Form.Item name="name" label="材料名称" rules={[{ required: true, message: "请输入材料名称" }]} initialValue={materialModal.name}>
             <Input placeholder="如：轴承6204" maxLength={100} />

@@ -1,4 +1,4 @@
-/** 手机端：知识（方案 §7.3）——已发布知识检索与浏览。 */
+﻿/** 手机端：知识（方案 §7.3）——已发布知识检索与浏览。 */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Card, Input, List, NavBar, Tag, Toast } from "antd-mobile";
@@ -52,7 +52,7 @@ export function MobileKnowledgePage() {
       <NavBar onBack={() => navigate(-1)}>知识库</NavBar>
       <div style={{ padding: 12 }}>
         <Input placeholder="检索已发布知识" value={keyword} onChange={setKeyword} onEnterPress={doSearch} clearable
-          style={{ background: "#f5f6f8", borderRadius: 8, padding: "8px 12px" }} />
+          style={{ background: "#F2F5FB", borderRadius: 8, padding: "8px 12px" }} />
       </div>
       <List style={{ minHeight: "60dvh" }}>
         {items.map((a) => (

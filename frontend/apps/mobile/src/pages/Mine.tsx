@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Button, Dialog, Form, Input, List, NavBar, Popup, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -47,7 +47,7 @@ export function MinePage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate("/")}>我的</NavBar>
       <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, padding: 16, margin: 12 }}>
         <div
@@ -55,7 +55,7 @@ export function MinePage() {
             width: 48,
             height: 48,
             borderRadius: 14,
-            background: "#1668dc",
+            background: "#5B7FFF",
             color: "#fff",
             display: "flex",
             alignItems: "center",
@@ -69,7 +69,7 @@ export function MinePage() {
         </div>
         <div>
           <div style={{ fontSize: 15.5, fontWeight: 600 }}>{user?.real_name}</div>
-          <div style={{ fontSize: 12, color: "#646a73", marginTop: 3 }}>{user?.role?.name}</div>
+          <div style={{ fontSize: 12, color: "#5B6478", marginTop: 3 }}>{user?.role?.name}</div>
         </div>
       </div>
 
@@ -99,11 +99,11 @@ export function MinePage() {
 
       {/* 修改密码：全屏弹层界面（标题栏 + 账号提示 + 表单卡片 + 底部主按钮） */}
       <Popup visible={pwdVisible} onMaskClick={() => setPwdVisible(false)} bodyStyle={{ height: "100dvh" }} destroyOnClose>
-        <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#f5f6f8" }}>
+        <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#F2F5FB" }}>
           <NavBar
             onBack={() => setPwdVisible(false)}
             right={
-              <span onClick={() => setPwdVisible(false)} style={{ fontSize: 14, color: "#1668dc", padding: "0 12px" }}>
+              <span onClick={() => setPwdVisible(false)} style={{ fontSize: 14, color: "#5B7FFF", padding: "0 12px" }}>
                 关闭
               </span>
             }
@@ -124,14 +124,14 @@ export function MinePage() {
                 alignItems: "center",
               }}
             >
-              <span style={{ fontSize: 13, color: "#646a73" }}>当前账号</span>
+              <span style={{ fontSize: 13, color: "#5B6478" }}>当前账号</span>
               <span style={{ fontSize: 14, fontWeight: 500 }}>{user?.username}</span>
             </div>
             {/* 表单卡片 */}
             <div style={{ background: "#fff", borderRadius: 12, padding: "4px 16px 16px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0 4px" }}>
                 <span style={{ fontSize: 13, color: "#4e5969" }}>输入新密码</span>
-                <span onClick={() => setShowPwd((v) => !v)} style={{ fontSize: 13, color: "#1668dc", padding: 4 }}>
+                <span onClick={() => setShowPwd((v) => !v)} style={{ fontSize: 13, color: "#5B7FFF", padding: 4 }}>
                   {showPwd ? "隐藏密码" : "显示密码"}
                 </span>
               </div>
@@ -139,7 +139,7 @@ export function MinePage() {
                 <Form.Item label="原密码">
                   <Input type={showPwd ? "text" : "password"} placeholder="请输入原密码" value={oldPwd} onChange={setOldPwd} />
                 </Form.Item>
-                <Form.Item label="新密码" extra={<span style={{ fontSize: 11, color: "#646a73" }}>至少 6 位</span>}>
+                <Form.Item label="新密码" extra={<span style={{ fontSize: 11, color: "#5B6478" }}>至少 6 位</span>}>
                   <Input type={showPwd ? "text" : "password"} placeholder="请输入新密码" value={newPwd} onChange={setNewPwd} />
                 </Form.Item>
                 <Form.Item label="确认新密码">

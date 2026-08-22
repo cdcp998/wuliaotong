@@ -1,4 +1,4 @@
-/** 手机端模块守卫：区分「加载中 / 加载失败（可重试）/ 确认未启用」。
+﻿/** 手机端模块守卫：区分「加载中 / 加载失败（可重试）/ 确认未启用」。
  * 解决刷新瞬间模块状态未拉取导致误报「模块未启用」的问题（与桌面端 RequireModule 行为一致）。 */
 import { Button, DotLoading, NavBar } from "antd-mobile";
 import { useNavigate } from "react-router";
@@ -13,7 +13,7 @@ export function ModuleGate({ code, title, children }: { code: string; title: str
 
   if (modulesStatus === "idle" || modulesStatus === "loading") {
     return (
-      <div style={{ minHeight: "70dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#646a73" }}>
+      <div style={{ minHeight: "70dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#5B6478" }}>
         <NavBar onBack={() => navigate(-1)}>{title}</NavBar>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 24 }}>
           <DotLoading /> 正在加载模块状态…

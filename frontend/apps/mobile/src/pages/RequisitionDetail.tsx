@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Button, Dialog, NavBar, Popup, Tag, Toast } from "antd-mobile";
 import { useNavigate, useParams } from "react-router";
 
@@ -140,15 +140,15 @@ export function RequisitionDetailPage() {
   // 加载中 / 单不存在：统一带返回 NavBar，不存在态提供「返回」按钮（防死端）
   if (loadState !== "ok" || !detail) {
     return (
-      <div style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+      <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
         <NavBar onBack={() => navigate(-1)}>申请详情</NavBar>
         <div style={{ padding: "72px 40px", textAlign: "center" }}>
           {loadState === "loading" ? (
-            <div style={{ color: "#646a73", fontSize: 14 }}>加载中…</div>
+            <div style={{ color: "#5B6478", fontSize: 14 }}>加载中…</div>
           ) : (
             <>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#1f2329" }}>未找到该领用单</div>
-              <div style={{ fontSize: 12.5, color: "#646a73", margin: "8px 0 24px", lineHeight: 1.7 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#1E2433" }}>未找到该领用单</div>
+              <div style={{ fontSize: 12.5, color: "#5B6478", margin: "8px 0 24px", lineHeight: 1.7 }}>
                 单号可能已删除，或您没有查看该单的权限。
               </div>
               <Button block color="primary" style={{ height: 42, borderRadius: 9, maxWidth: 240, margin: "0 auto" }} onClick={() => navigate(-1)}>
@@ -164,7 +164,7 @@ export function RequisitionDetailPage() {
   const st = STATUS[detail.status];
 
   return (
-    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#f5f6f8" }}>
+    <div className="wlt-page-enter" style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate(-1)}>申请详情</NavBar>
       <div style={{ padding: 12 }}>
         {/* 单头信息 */}
@@ -184,20 +184,20 @@ export function RequisitionDetailPage() {
             </div>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px", marginTop: 12, fontSize: 12.5 }}>
-            <div><div style={{ color: "#646a73" }}>申请人</div><div style={{ marginTop: 2 }}>{detail.applicant_name}</div></div>
-            <div><div style={{ color: "#646a73" }}>仓库</div><div style={{ marginTop: 2 }}>{detail.warehouse_name}</div></div>
-            <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#646a73" }}>使用地点（必填）</div><div style={{ marginTop: 2, fontWeight: 500 }}>{detail.use_location}</div></div>
-            <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#646a73" }}>因何使用（必填）</div><div style={{ marginTop: 2, fontWeight: 500 }}>{detail.use_reason}</div></div>
-            <div><div style={{ color: "#646a73" }}>申请时间</div><div style={{ marginTop: 2 }}>{detail.created_at.slice(0, 16)}</div></div>
-            <div><div style={{ color: "#646a73" }}>总数量</div><div style={{ marginTop: 2 }}>{detail.total_qty}</div></div>
+            <div><div style={{ color: "#5B6478" }}>申请人</div><div style={{ marginTop: 2 }}>{detail.applicant_name}</div></div>
+            <div><div style={{ color: "#5B6478" }}>仓库</div><div style={{ marginTop: 2 }}>{detail.warehouse_name}</div></div>
+            <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#5B6478" }}>使用地点（必填）</div><div style={{ marginTop: 2, fontWeight: 500 }}>{detail.use_location}</div></div>
+            <div style={{ gridColumn: "1/-1" }}><div style={{ color: "#5B6478" }}>因何使用（必填）</div><div style={{ marginTop: 2, fontWeight: 500 }}>{detail.use_reason}</div></div>
+            <div><div style={{ color: "#5B6478" }}>申请时间</div><div style={{ marginTop: 2 }}>{detail.created_at.slice(0, 16)}</div></div>
+            <div><div style={{ color: "#5B6478" }}>总数量</div><div style={{ marginTop: 2 }}>{detail.total_qty}</div></div>
           </div>
         </div>
 
         {/* 完成工作（拍照留痕 + 定位水印）—— 待完成工作状态、本人操作 */}
         {detail.status === 1 && isOwner && (
-          <div style={{ background: "#fff", border: "1px solid #e8f1fd", borderRadius: 12, padding: 14, marginBottom: 10 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: "#1668dc", marginBottom: 6 }}>完成工作（拍照留痕）</div>
-            <div style={{ fontSize: 12, color: "#646a73", lineHeight: 1.7, marginBottom: 10 }}>
+          <div style={{ background: "#fff", border: "1px solid #EAEFFF", borderRadius: 12, padding: 14, marginBottom: 10 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: "#5B7FFF", marginBottom: 6 }}>完成工作（拍照留痕）</div>
+            <div style={{ fontSize: 12, color: "#5B6478", lineHeight: 1.7, marginBottom: 10 }}>
               材料已领用，请在工作完成后于工作地点拍照。系统读取手机定位，下载照片时自动添加地点/时间/坐标水印（原始照片不保存水印）。
             </div>
             <PhotoUpload bizType="requisition_work" fileId={workFileId} onChange={setWorkFileId} />
@@ -208,7 +208,7 @@ export function RequisitionDetailPage() {
               <Button size="small" fill="outline" color="primary" loading={locating} onClick={getLocation}>
                 获取定位
               </Button>
-              <span style={{ fontSize: 11.5, color: lat ? "#389e0d" : "#646a73", flex: 1 }}>
+              <span style={{ fontSize: 11.5, color: lat ? "#389e0d" : "#5B6478", flex: 1 }}>
                 {locText || (lat ? `已获取：${lat}, ${lng}` : "点击获取手机定位（水印坐标）")}
               </span>
             </div>
@@ -223,7 +223,7 @@ export function RequisitionDetailPage() {
           <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, padding: 14, marginBottom: 10 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 8 }}>完成工作照片（工作地点留痕）</div>
             <FileImage fileId={detail.work_photo_file_id} size={140} alt="完成工作照片" />
-            <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 6 }}>
+            <div style={{ fontSize: 11.5, color: "#5B6478", marginTop: 6 }}>
               {detail.work_done_at ? `完成时间：${detail.work_done_at.slice(0, 16)}` : ""}
               {detail.work_lat ? `　定位：${detail.work_lat}, ${detail.work_lng}` : "　未获取定位"}
             </div>
@@ -235,14 +235,14 @@ export function RequisitionDetailPage() {
 
         {/* 明细 */}
         <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, overflow: "hidden", marginBottom: 10 }}>
-          <div style={{ padding: "11px 14px", borderBottom: "1px solid #f5f6f8", fontSize: 13.5, fontWeight: 600 }}>
+          <div style={{ padding: "11px 14px", borderBottom: "1px solid #F2F5FB", fontSize: 13.5, fontWeight: 600 }}>
             领用明细（{detail.items.length} 项）
           </div>
           {detail.items.map((it) => (
-            <div key={it.id} style={{ padding: "11px 14px", borderBottom: "1px solid #f5f6f8", display: "flex", alignItems: "center", gap: 10 }}>
+            <div key={it.id} style={{ padding: "11px 14px", borderBottom: "1px solid #F2F5FB", display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 500 }}>{it.product_name}</div>
-                <div style={{ fontSize: 11.5, color: "#646a73", marginTop: 2 }}>
+                <div style={{ fontSize: 11.5, color: "#5B6478", marginTop: 2 }}>
                   {it.location_code}
                   {it.spec ? ` · ${it.spec}` : ""}
                 </div>
@@ -286,7 +286,7 @@ export function RequisitionDetailPage() {
         )}
       </div>
       {/* 水印预览弹层 */}
-      <Popup visible={previewOpen} onMaskClick={() => setPreviewOpen(false)} bodyStyle={{ height: "70vh", background: "#1f2329", padding: 12, overflow: "auto" }}>
+      <Popup visible={previewOpen} onMaskClick={() => setPreviewOpen(false)} bodyStyle={{ height: "70vh", background: "#1E2433", padding: 12, overflow: "auto" }}>
         <div style={{ color: "#fff", fontSize: 13, fontWeight: 600, marginBottom: 10 }}>水印预览（实际照片下载时按同样规则添加）</div>
         {previewUrl && <img src={previewUrl} alt="水印预览" style={{ width: "100%", borderRadius: 8 }} />}
         <Button block fill="outline" color="primary" style={{ marginTop: 12, height: 40, borderRadius: 9 }} onClick={() => setPreviewOpen(false)}>

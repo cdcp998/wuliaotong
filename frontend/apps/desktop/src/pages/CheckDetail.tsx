@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { App, Button, InputNumber, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate, useParams } from "react-router";
@@ -118,7 +118,7 @@ export function CheckDetailPage() {
         />
       ),
     },
-    { title: "差异", render: (_, r) => <span style={{ color: Number(diffText[r.id]) > 0 ? "#f5222d" : Number(diffText[r.id]) < 0 ? "#52c41a" : "#646a73" }}>{diffText[r.id]}</span> },
+    { title: "差异", render: (_, r) => <span style={{ color: Number(diffText[r.id]) > 0 ? "#f5222d" : Number(diffText[r.id]) < 0 ? "#22C55E" : "#5B6478" }}>{diffText[r.id]}</span> },
     { title: "照片", render: (_, r) => (r.photo_file_id ? <FileImage fileId={r.photo_file_id} size={48} /> : "-") },
   ];
 
@@ -127,7 +127,7 @@ export function CheckDetailPage() {
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}>
           {billNo} · {warehouseName}
-          <span style={{ fontSize: 13, color: "#646a73", marginLeft: 12 }}>
+          <span style={{ fontSize: 13, color: "#5B6478", marginLeft: 12 }}>
             {["待盘点", "盘点中", "已审核"][status]}（{items.length} 项）
           </span>
         </h2>
