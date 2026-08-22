@@ -297,9 +297,15 @@ function desktopLink(link: string): string {
  * 通知中心：顶栏铃铛 → 抽屉，与手机端通知页同功能（未读/全部、标记已读、删除、全选一键删除、清空、点击联动）。 */
 export function AppLayout({ children }: { children?: React.ReactNode }) {
   const { message, modal } = App.useApp();
-  // 移动端（≤768px，与 mobile.css 断点一致）默认折叠为 64px 图标栏，避免展开导航遮住内容；
-  // 桌面端保持默认展开。折叠状态切换仍由顶栏按钮控制。
-  const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth <= 768);
+  // 平板/窄窗（≤992px，与 mobile.css 断点一致）默认折叠为 64px 图标栏，避免展开导航遮住内容；
+  // 桌面端保持默认展开。折叠状态切换仍由顶栏按钮控制；跨断点自动跟随。
+  const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth <= 992);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 992px)");
+    const onChange = () => setCollapsed((c) => (mq.matches ? c : false) as boolean);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
   const [noticeOpen, setNoticeOpen] = useState(false); // 通知中心抽屉
   const [notices, setNotices] = useState<NotificationItem[]>([]);
   const [noticeTab, setNoticeTab] = useState<"unread" | "all">("unread"); // 未读 / 全部
@@ -529,20 +535,20 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
   // 菜单展开状态（受控）：桌面默认全部分类展开（原设计）；移动端只展开当前分类，
   // 路径切换时跟随（收起侧栏再展开不会回到"全部展开"）
   const [openKeys, setOpenKeys] = useState<string[]>(() => {
-    const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
-    if (isMobile && currentGroupKey) return [currentGroupKey];
+    const isNarrow = typeof window !== "undefined" && window.innerWidth <= 992;
+    if (isNarrow && currentGroupKey) return [currentGroupKey];
     return navTree.map((g) => g.key);
   });
 
   useEffect(() => {
-    if (window.innerWidth <= 768 && currentGroupKey) {
+    if (window.innerWidth <= 992 && currentGroupKey) {
       setOpenKeys((prev) => (prev.includes(currentGroupKey) ? prev : [...prev, currentGroupKey]));
     }
   }, [currentGroupKey]);
 
-  /** 移动端（≤768px）：跳转后自动收起侧栏，避免展开态遮住目标页面。 */
+  /** 平板/窄窗（≤992px）：跳转后自动收起侧栏，避免展开态遮住目标页面。 */
   function collapseOnMobile() {
-    if (window.innerWidth <= 768) setCollapsed(true);
+    if (window.innerWidth <= 992) setCollapsed(true);
   }
 
   // 导航"全部展开/全部收缩"：menuItems 已按权限过滤，以其分类 key 集合为准
@@ -562,22 +568,23 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
         width={216}
         collapsedWidth={64}
         theme="light"
-        style={{ borderRight: `1px solid ${token.colorBorderSecondary}`, boxShadow: "0 1px 2px rgba(31,35,41,.04)" }}
+        style={{ borderRight: `1px solid ${token.colorBorder}`, boxShadow: "0 1px 2px rgba(30,36,51,.04)" }}
       >
-        <div style={{ height: 56, display: "flex", alignItems: "center", gap: 10, padding: "0 18px", borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+        <div style={{ height: 60, display: "flex", alignItems: "center", gap: 10, padding: "0 16px" }}>
           <div
             style={{
-              width: 30,
-              height: 30,
-              borderRadius: 8,
-              background: token.colorPrimary,
+              width: 34,
+              height: 34,
+              borderRadius: 11,
+              background: "linear-gradient(135deg, #5B7FFF 0%, #7C93FF 100%)",
               color: "#fff",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 15,
+              fontSize: 16,
               fontWeight: 700,
               flexShrink: 0,
+              boxShadow: "0 4px 12px rgba(91,127,255,.35)",
             }}
           >
             物
@@ -633,13 +640,17 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
       <Layout>
         <Header
           style={{
-            height: 56,
+            height: 60,
             padding: "0 20px",
-            background: token.colorBgContainer,
-            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            background: "rgba(255,255,255,0.92)",
+            backdropFilter: "blur(8px)",
+            borderBottom: `1px solid ${token.colorBorder}`,
             display: "flex",
             alignItems: "center",
             gap: 16,
+            position: "sticky",
+            top: 0,
+            zIndex: 10,
           }}
         >
           <Button type="text" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed(!collapsed)} />
@@ -679,12 +690,12 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
               },
             }}
           >
-            <div className="wlt-user-chip" style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer", padding: "4px 8px", borderRadius: 8 }}>
-              <div style={{ width: 30, height: 30, borderRadius: "50%", background: token.colorPrimary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600 }}>
+            <div className="wlt-user-chip" style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer", padding: "4px 10px", borderRadius: 999, border: `1px solid ${token.colorBorder}`, background: token.colorBgContainer }}>
+              <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,#5B7FFF,#7C93FF)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600 }}>
                 {(user?.real_name ?? "用")[0]}
               </div>
               <div style={{ lineHeight: 1.15 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{user?.real_name}</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{user?.real_name}</div>
                 <div style={{ fontSize: 11, color: token.colorTextTertiary }}>{user?.role?.name ?? ""}</div>
               </div>
             </div>

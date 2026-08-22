@@ -10,18 +10,18 @@
  */
 
 @media (min-width: 768px) {
-  /* 窗口外背景：与 App 内 #f5f6f8 区分的浅灰，突出「应用窗口」；清除默认 8px 边距保证精确居中 */
+  /* 窗口外背景：与 App 内 #F2F5FB 区分的浅灰蓝，突出「应用窗口」；清除默认 8px 边距保证精确居中 */
   body {
-    background: #e9ebef;
+    background: #e6ebf5;
     margin: 0;
   }
 
   /* 页面根容器限宽居中（统一命中所有 #root 直接子级，含无 100dvh 的模块页：
      我的任务/知识库/设备等；登录页下方另有 480px 特例） */
   #root > div {
-    max-width: 520px;
+    max-width: 600px;
     margin: 0 auto;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.07);
+    box-shadow: 0 2px 16px rgba(30, 36, 51, 0.08);
   }
 
   /* 登录页根容器收窄为居中登录卡片（480px），类名见 Login.tsx */
@@ -31,7 +31,7 @@
 
   /* 地图页底部工具栏（fixed 定位）限宽居中，避免横贯全屏 */
   #root > div[style*="100dvh"] > div[style*="fixed"] {
-    max-width: 520px;
+    max-width: 600px;
     left: 50%;
     transform: translateX(-50%);
   }
@@ -40,11 +40,27 @@
      antd-mobile 的 bottom body 是 width:100% + left:0，auto margin 不生效（fixed 定位），
      用 left:50% 平移居中；不动 transform，避免破坏滑入动画 */
   .adm-popup-body {
-    max-width: 520px;
+    max-width: 600px;
   }
   .adm-popup-body-position-bottom {
     left: 50%;
-    margin-left: -260px; /* 520px / 2 */
+    margin-left: -300px; /* 600px / 2 */
+  }
+}
+
+/* ---------- 平板（≥1024px）：内容加宽至 720px，保持窗口化 ---------- */
+@media (min-width: 1024px) {
+  #root > div {
+    max-width: 720px;
+  }
+  #root > div[style*="100dvh"] > div[style*="fixed"] {
+    max-width: 720px;
+  }
+  .adm-popup-body {
+    max-width: 720px;
+  }
+  .adm-popup-body-position-bottom {
+    margin-left: -360px; /* 720px / 2 */
   }
 }
 

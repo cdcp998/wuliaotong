@@ -158,17 +158,54 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       locale={zhCN}
       theme={{
         token: {
-          // 设计系统 token（《UI设计方案.md》§2.1/§2.2）
-          colorPrimary: "#1668dc",
-          colorInfo: "#1668dc",
-          colorLink: "#1668dc",
-          colorBgLayout: "#f5f6f8",
-          colorText: "#1f2329",
-          colorTextSecondary: "#646a73",
-          borderRadius: 6,
+          // 设计系统 token v2（浅色玻璃/大圆角现代风，与 OpenPencil 设计稿一致）：
+          // 品牌蓝 #5B7FFF · 页面底 #F2F5FB · 卡片 #FFFFFF + 1px 描边 + 柔和投影 · 圆角 10
+          colorPrimary: "#5B7FFF",
+          colorInfo: "#5B7FFF",
+          colorLink: "#5B7FFF",
+          colorSuccess: "#22C55E",
+          colorWarning: "#F59E0B",
+          colorError: "#EF4444",
+          colorBgLayout: "#F2F5FB",
+          colorBgContainer: "#FFFFFF",
+          colorText: "#1E2433",
+          colorTextSecondary: "#5B6478",
+          colorTextTertiary: "#8A93A8",
+          colorBorder: "#E4EAF6",
+          colorBorderSecondary: "#EFF3FC",
+          borderRadius: 10,
+          borderRadiusLG: 14,
+          borderRadiusSM: 8,
           fontSize: 14,
           fontFamily:
             '-apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
+        },
+        components: {
+          // 玻璃卡片手感：白卡片 + 轻描边 + 柔和投影由 global.css .wlt-glass 承担，
+          // 这里统一 Antd 组件的圆角/配色基调
+          Card: { borderRadiusLG: 16 },
+          Button: { borderRadius: 10, borderRadiusLG: 12 },
+          Table: {
+            headerBg: "#F6F8FE",
+            headerColor: "#5B6478",
+            headerSplitColor: "transparent",
+            rowHoverBg: "#F6F8FE",
+            cellPaddingBlock: 10,
+          },
+          Modal: { borderRadiusLG: 16 },
+          Drawer: { colorBgElevated: "#FFFFFF" },
+          Menu: {
+            itemBorderRadius: 10,
+            itemSelectedBg: "#EAEFFF",
+            itemSelectedColor: "#3B5BDB",
+            itemHeight: 40,
+            itemMarginInline: 8,
+          },
+          Input: { borderRadius: 10 },
+          Select: { borderRadius: 10 },
+          Tag: { borderRadiusSM: 6 },
+          Tabs: { itemSelectedColor: "#3B5BDB" },
+          Segmented: { borderRadius: 10 },
         },
       }}
     >

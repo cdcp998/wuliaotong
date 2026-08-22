@@ -25,7 +25,7 @@ body {
 a:focus-visible,
 button:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid rgba(22, 104, 220, 0.55);
+  outline: 2px solid rgba(91, 127, 255, 0.5);
   outline-offset: 2px;
 }
 
@@ -35,9 +35,9 @@ button:focus-visible,
 .ant-layout-content h2 {
   font-size: 24px;
   line-height: 32px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
-  color: #1f2329;
+  color: #1e2433;
 }
 
 /* ---------- 4. 数字排版：统计与表格数字等宽（§2.2 Number tabular-nums） ---------- */
@@ -56,7 +56,7 @@ button:focus-visible,
 }
 
 .wlt-notice-item:hover {
-  background: rgba(31, 35, 41, 0.04);
+  background: rgba(91, 127, 255, 0.05);
 }
 
 .wlt-user-chip {
@@ -64,7 +64,7 @@ button:focus-visible,
 }
 
 .wlt-user-chip:hover {
-  background: rgba(31, 35, 41, 0.06);
+  background: rgba(91, 127, 255, 0.08);
 }
 
 .wlt-todo-row {
@@ -72,7 +72,7 @@ button:focus-visible,
 }
 
 .wlt-todo-row:hover {
-  background: rgba(22, 104, 220, 0.05);
+  background: rgba(91, 127, 255, 0.06);
 }
 
 /* ---------- 5b. 分类管理树形页：子分类卡片 / 新建砖块交互反馈 ---------- */
@@ -242,4 +242,45 @@ button:focus-visible,
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---------- 9. 浅色玻璃 / 大圆角（设计规范 v2 通用工具类） ----------
+ * 与 OpenPencil 设计稿一致：白色玻璃卡片 = #FFF + 1px #E4EAF6 描边 + 柔和投影；
+ * 页面级容器用 `.wlt-glass` 替代手工 border+shadow，保持全局统一。 */
+.wlt-glass {
+  background: #ffffff;
+  border: 1px solid #e4eaf6;
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(30, 36, 51, 0.06);
+}
+
+.wlt-glass-sm {
+  background: #ffffff;
+  border: 1px solid #e4eaf6;
+  border-radius: 12px;
+  box-shadow: 0 3px 12px rgba(30, 36, 51, 0.05);
+}
+
+/* 状态徽标（胶囊）基础外观：页面内 Tag 统一走 Antd，自定义徽标用 class 复用 */
+.wlt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+/* 表格微调：表头更轻、行悬浮更柔和（配合 ConfigProvider Table token） */
+.ant-layout-content .ant-table-wrapper .ant-table-thead > tr > th {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* 页面卡片间距统一呼吸感：桌面内容区默认 24px 内边距不变，卡片内 16~20 */
+.ant-layout-content .ant-card {
+  border: 1px solid #e4eaf6;
 }

@@ -94,8 +94,9 @@ function PageLoading() {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    {/* 品牌主色（《UI设计方案.md》§2.1）：antd-mobile 通过 CSS 变量换肤 */}
-    <style>{`:root{--adm-color-primary:#1668dc;--adm-color-success:#52c41a;--adm-color-warning:#faad14;--adm-color-danger:#ff4d4f}`}</style>
+    {/* 品牌主题 v2（浅色玻璃/大圆角现代风，与 OpenPencil 设计稿一致）：
+        antd-mobile 通过 CSS 变量换肤 */}
+    <style>{`:root{--adm-color-primary:#5B7FFF;--adm-color-success:#22C55E;--adm-color-warning:#F59E0B;--adm-color-danger:#EF4444;--adm-color-background:#F2F5FB;--adm-color-box:#FFFFFF;--adm-color-text:#1E2433;--adm-color-weak:#5B6478;--adm-color-light:#8A93A8;--adm-color-border:#E4EAF6;--adm-radius-s:8px;--adm-radius-m:10px;--adm-radius-l:16px}`}</style>
     <Suspense fallback={<PageLoading />}>
       <RouterProvider router={tabRouter} />
     </Suspense>

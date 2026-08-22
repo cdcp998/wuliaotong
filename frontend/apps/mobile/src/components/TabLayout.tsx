@@ -101,7 +101,7 @@ export function TabLayout() {
   const visibleTabs = TABS.filter((t) => (t.key === "apply" ? hasPerm("req:apply") || user?.role?.code === "super_admin" : true));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#f5f6f8" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#F2F5FB" }}>
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto" }}>
         <Outlet />
       </div>
@@ -111,7 +111,13 @@ export function TabLayout() {
           const tab = TABS.find((t) => t.key === key);
           if (tab) navigate(tab.path);
         }}
-        style={{ borderTop: "1px solid #f0f1f3", background: "#fff", paddingBottom: 4 }}
+        style={{
+          borderTop: "1px solid #E4EAF6",
+          background: "rgba(255,255,255,0.94)",
+          backdropFilter: "blur(10px)",
+          paddingBottom: 6,
+          boxShadow: "0 -4px 16px rgba(30,36,51,0.05)",
+        }}
       >
         {visibleTabs.map((t) => (
           <TabBar.Item

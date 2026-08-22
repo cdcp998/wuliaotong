@@ -13,7 +13,7 @@ body {
   font-family:
     -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei",
     "Helvetica Neue", sans-serif;
-  background: #f5f6f8;
+  background: #f2f5fb;
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -23,7 +23,7 @@ body {
 a:focus-visible,
 button:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid rgba(22, 104, 220, 0.55);
+  outline: 2px solid rgba(91, 127, 255, 0.5);
   outline-offset: 2px;
 }
 
@@ -34,12 +34,12 @@ button:focus-visible,
 
 .wlt-action-cell:active {
   transform: scale(0.96);
-  background: #eef4fd;
+  background: #eaefff;
 }
 
 @media (min-width: 768px) {
   .wlt-action-cell:hover {
-    box-shadow: 0 4px 14px rgba(22, 104, 220, 0.1);
+    box-shadow: 0 4px 14px rgba(91, 127, 255, 0.12);
   }
 }
 
@@ -121,7 +121,7 @@ button:focus-visible,
 
 /* ---------- 4. 文本选区 ---------- */
 ::selection {
-  background: rgba(22, 104, 220, 0.18);
+  background: rgba(91, 127, 255, 0.18);
 }
 
 /* ---------- 5. 减少动态效果偏好（无障碍）：全局降级动画/过渡 ---------- */
@@ -133,4 +133,40 @@ button:focus-visible,
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---------- 6. 浅色玻璃 / 大圆角（设计规范 v2） ----------
+ * 与 OpenPencil 手机端设计稿一致：白卡片 16~18px 圆角 + 1px 描边 + 柔和投影。 */
+.wlt-glass-card {
+  background: #ffffff;
+  border: 1px solid #e4eaf6;
+  border-radius: 18px;
+  box-shadow: 0 6px 20px rgba(30, 36, 51, 0.06);
+}
+
+.wlt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+/* 大圆角按钮基调（antd-mobile 默认 border-radius 较小） */
+.adm-button {
+  border-radius: 12px;
+}
+
+.adm-nav-bar {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.adm-list,
+.adm-card {
+  border-radius: 18px;
 }
