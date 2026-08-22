@@ -2,34 +2,35 @@ import { useCallback, useEffect, useState } from "react";
 import {
   App,
   Alert,
-  Badge,
   Button,
   Descriptions,
   Modal,
   Popconfirm,
   Space,
-  Table,
   Tag,
   Tooltip,
   Typography,
+  theme,
 } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 
 import { moduleApi, type ModuleInfo, type ModuleRescanResult, type ModuleState } from "@wlt/shared";
 
-const STATE_META: Record<ModuleState, { color: string; label: string }> = {
-  NOT_INSTALLED: { color: "default", label: "未安装" },
-  INSTALLING: { color: "processing", label: "安装中" },
-  INSTALLED: { color: "cyan", label: "已安装(停用)" },
-  ENABLED: { color: "success", label: "已启用" },
-  DISABLED: { color: "warning", label: "已停用" },
-  ERROR: { color: "error", label: "异常" },
-  UPGRADING: { color: "processing", label: "升级中" },
+const STATE_META: Record<ModuleState, { color: string; label: string; fg?: string; bg?: string }> = {
+  NOT_INSTALLED: { color: "default", label: "未安装", fg: "#5B6478", bg: "#EFF3FC" },
+  INSTALLING: { color: "processing", label: "安装中", fg: "#0E7490", bg: "#E0F2FE" },
+  INSTALLED: { color: "cyan", label: "已安装(停用)", fg: "#0E7490", bg: "#E0F2FE" },
+  ENABLED: { color: "success", label: "已启用", fg: "#15803D", bg: "#E8F9EF" },
+  DISABLED: { color: "warning", label: "已停用", fg: "#B45309", bg: "#FEF4E2" },
+  ERROR: { color: "error", label: "异常", fg: "#DC2626", bg: "#FDEBEC" },
+  UPGRADING: { color: "processing", label: "升级中", fg: "#0E7490", bg: "#E0F2FE" },
 };
 
-/** 安装模块（系统管理，module:manage）：源码已部署模块的安装/启停/升级/卸载 + 源码重扫预检。 */
+/** 安装模块（系统管理，module:manage）：源码已部署模块的安装/启停/升级/卸载 + 源码重扫预检。
+ * 设计页 32：模块卡片墙（浅色玻璃卡片 + 状态胶囊 + 依赖链标注），.wlt-grid 响应式（桌面多列→平板减列→手机单列）。 */
 export function ModulesPage() {
   const { message, modal } = App.useApp();
+  const { token } = theme.useToken();
   const [rows, setRows] = useState<ModuleInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [acting, setActing] = useState<string>("");
@@ -100,121 +101,102 @@ export function ModulesPage() {
     (!m.source_version || m.source_version !== m.version);
   const canUninstall = (m: ModuleInfo) => ["INSTALLED", "DISABLED", "ERROR"].includes(m.state) && !acting;
 
+  function renderStatePill(m: ModuleInfo) {
+    const meta = STATE_META[m.state] ?? { color: "default", label: m.state, fg: "#5B6478", bg: "#EFF3FC" };
+    return (
+      <Tooltip title={m.state === "ERROR" ? m.last_error : undefined}>
+        <span className="wlt-pill" style={{ background: meta.bg, color: meta.fg }}>{meta.label}</span>
+      </Tooltip>
+    );
+  }
+
   return (
-    <div>
-      <Space style={{ marginBottom: 12, justifyContent: "space-between", width: "100%" }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>
-          安装模块
-        </Typography.Title>
+    <div style={{ padding: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>安装模块</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+            模块插件机制：源码存在 ≠ 已安装 ≠ 已启用。安装/启停由管理员触发；卸载不删除任何表与数据；升级后需重启后端进程加载新代码。
+          </p>
+        </div>
         <Button icon={<ReloadOutlined />} onClick={rescan} loading={rescanning}>
           重新扫描模块源码
         </Button>
-      </Space>
+      </div>
+
       <Alert
-        style={{ marginBottom: 12 }}
+        style={{ marginBottom: 16 }}
         type="info"
         showIcon
-        message="模块插件机制：源码存在 ≠ 已安装 ≠ 已启用。安装/启停由管理员触发；卸载不删除任何表与数据；升级后需重启后端进程加载新代码。"
+        message="模块卡片墙：上方为模块状态胶囊（已启用/已停用/未安装/异常），依赖不满足时启用会被拒（4002）；「可升级」标注源码已更新。"
       />
-      <Table<ModuleInfo>
-        rowKey="code"
-        loading={loading}
-        dataSource={rows}
-        pagination={false}
-        columns={[
-          {
-            title: "模块",
-            dataIndex: "name",
-            render: (_, m) => (
-              <Space direction="vertical" size={0}>
-                <Space>
-                  <Typography.Text strong>{m.name}</Typography.Text>
-                  <Tag>{m.code}</Tag>
-                </Space>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {m.description || "—"}
-                </Typography.Text>
-              </Space>
-            ),
-          },
-          {
-            title: "版本",
-            dataIndex: "version",
-            width: 170,
-            render: (_, m) => (
-              <Space direction="vertical" size={0}>
+
+      <div className="wlt-grid" style={{ gap: 14 }}>
+        {loading && !rows.length && (
+          <div className="wlt-glass" style={{ padding: 40, textAlign: "center", color: token.colorTextTertiary }}>加载模块中…</div>
+        )}
+        {!loading && rows.length === 0 && (
+          <div className="wlt-glass" style={{ padding: 40, textAlign: "center", color: token.colorTextTertiary }}>暂无已部署模块，点击「重新扫描模块源码」预检</div>
+        )}
+        {rows.map((m) => {
+          const installing = acting === `install:${m.code}`;
+          const enabling = acting === `enable:${m.code}`;
+          const disabling = acting === `disable:${m.code}`;
+          const upgrading = acting === `upgrade:${m.code}`;
+          const uninstalling = acting === `uninstall:${m.code}`;
+          return (
+            <div key={m.code} className="wlt-glass" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+              {/* 头部：名称 + 编码 + 状态胶囊 */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>{m.name}</span>
+                <Tag style={{ marginInlineEnd: 0, borderRadius: 6 }}>{m.code}</Tag>
+                <span style={{ marginLeft: "auto" }}>{renderStatePill(m)}</span>
+              </div>
+              <div style={{ fontSize: 12.5, color: token.colorTextSecondary, lineHeight: 1.6, minHeight: 38 }}>{m.description || "—"}</div>
+
+              {/* 版本 / 依赖 */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <Space size={4}>
-                  <Tag color="blue">{m.version}</Tag>
+                  <Tag color="blue" style={{ marginInlineEnd: 0 }}>v{m.version}</Tag>
                   {m.deployed && m.source_version && m.source_version !== m.version && (
                     <Tooltip title="源码已更新，可升级（升级后需重启后端）">
-                      <Tag color="gold">可升级</Tag>
+                      <Tag color="gold" style={{ marginInlineEnd: 0 }}>可升级</Tag>
                     </Tooltip>
                   )}
+                  {!m.deployed && <Tag style={{ marginInlineEnd: 0 }}>源码未部署</Tag>}
                 </Space>
-                {!m.deployed && <Typography.Text type="secondary" style={{ fontSize: 12 }}>源码未部署</Typography.Text>}
-              </Space>
-            ),
-          },
-          {
-            title: "状态",
-            dataIndex: "state",
-            width: 110,
-            render: (_, m) => (
-              <Tooltip title={m.state === "ERROR" ? m.last_error : undefined}>
-                <Badge status={m.state === "ERROR" ? "error" : m.state === "ENABLED" ? "success" : "default"} text={STATE_META[m.state]?.label ?? m.state} />
-              </Tooltip>
-            ),
-          },
-          {
-            title: "依赖",
-            dataIndex: "depends",
-            width: 130,
-            render: (deps: string[]) =>
-              deps?.length ? <Space size={4}>{deps.map((d) => <Tag key={d}>{d}</Tag>)}</Space> : <Typography.Text type="secondary">无</Typography.Text>,
-          },
-          { title: "菜单", dataIndex: "menu_count", width: 60, align: "center" },
-          { title: "权限点", dataIndex: "perm_count", width: 70, align: "center" },
-          { title: "SQL 版本", dataIndex: "schema_version", width: 90, align: "center" },
-          {
-            title: "checksum",
-            dataIndex: "source_checksum_prefix",
-            width: 110,
-            render: (v: string, m) => (
-              <Tooltip title={m.source_checksum || "无"}>
-                <Typography.Text code style={{ fontSize: 12 }}>{v || "—"}</Typography.Text>
-              </Tooltip>
-            ),
-          },
-          {
-            title: "安装时间",
-            dataIndex: "installed_at",
-            width: 160,
-            render: (v: string | null) => (v ? new Date(v).toLocaleString() : "—"),
-          },
-          {
-            title: "操作",
-            key: "action",
-            width: 300,
-            render: (_, m) => (
-              <Space wrap size={4}>
+                <span style={{ fontSize: 11, color: token.colorTextTertiary }}>
+                  依赖：{m.depends?.length ? m.depends.map((d) => <Tag key={d} style={{ marginInlineEnd: 4 }}>{d}</Tag>) : "无"}
+                </span>
+              </div>
+
+              {/* 元信息 */}
+              <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 11.5, color: token.colorTextSecondary, padding: "8px 10px", background: "#F8FAFF", borderRadius: 8 }}>
+                <span>菜单 {m.menu_count}</span>
+                <span>权限点 {m.perm_count}</span>
+                <span>SQL v{m.schema_version}</span>
+                <Tooltip title={m.source_checksum || "无"}>
+                  <span style={{ fontFamily: "monospace" }}>checksum {m.source_checksum_prefix || "—"}</span>
+                </Tooltip>
+                <span>装于 {m.installed_at ? new Date(m.installed_at).toLocaleString() : "—"}</span>
+              </div>
+
+              {/* 操作区 */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", borderTop: `1px solid ${token.colorBorderSecondary}`, paddingTop: 10 }}>
                 {canInstall(m) && (
-                  <Button size="small" type="primary" loading={acting === `install:${m.code}`} onClick={() => act(m, "install")}>
-                    安装
-                  </Button>
+                  <Button size="small" type="primary" loading={installing} onClick={() => act(m, "install")}>安装</Button>
                 )}
                 {canEnable(m) && (
-                  <Button size="small" loading={acting === `enable:${m.code}`} onClick={() => act(m, "enable")}>
-                    启用
-                  </Button>
+                  <Button size="small" loading={enabling} onClick={() => act(m, "enable")}>启用</Button>
                 )}
                 {canDisable(m) && (
                   <Popconfirm title="停用后模块接口 403、菜单隐藏，数据保留" onConfirm={() => act(m, "disable")}>
-                    <Button size="small" loading={acting === `disable:${m.code}`}>停用</Button>
+                    <Button size="small" loading={disabling}>停用</Button>
                   </Popconfirm>
                 )}
                 {canUpgrade(m) && (
                   <Popconfirm title={`升级到 ${m.source_version ?? m.version}？应用新迁移后需重启后端`} onConfirm={() => act(m, "upgrade")}>
-                    <Button size="small" loading={acting === `upgrade:${m.code}`}>升级</Button>
+                    <Button size="small" loading={upgrading}>升级</Button>
                   </Popconfirm>
                 )}
                 {canUninstall(m) && (
@@ -223,15 +205,15 @@ export function ModulesPage() {
                     description="⚠ 不删除任何表与数据，可重装幂等续用"
                     onConfirm={() => act(m, "uninstall")}
                   >
-                    <Button size="small" danger loading={acting === `uninstall:${m.code}`}>卸载</Button>
+                    <Button size="small" danger loading={uninstalling}>卸载</Button>
                   </Popconfirm>
                 )}
-                <Button size="small" type="link" onClick={() => setDetail(m)}>详情</Button>
-              </Space>
-            ),
-          },
-        ]}
-      />
+                <Button size="small" type="link" style={{ marginLeft: "auto" }} onClick={() => setDetail(m)}>详情</Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {/* 重扫预检结果 */}
       <Modal
