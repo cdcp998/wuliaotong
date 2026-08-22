@@ -1,7 +1,7 @@
 /** cable 模块：故障管理（/cable/faults，fault:manage / fault:report）——上报、状态流转、照片。 */
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Drawer, Form, Image, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography, Upload } from "antd";
-import { CameraOutlined, CheckCircleOutlined, CheckOutlined, LockOutlined, PlayCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
+import { App, Button, Drawer, Form, Image, Input, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography, Upload } from "antd";
+import { CameraOutlined, CheckCircleOutlined, CheckOutlined, DeleteOutlined, LockOutlined, PlayCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
 
 import { fileApi } from "@wlt/shared";
 
@@ -131,6 +131,16 @@ export function CableFaultsPage() {
     }
   };
 
+  const removeFault = async (f: FaultItem) => {
+    try {
+      await cableApi.deleteFault(f.id);
+      message.success("故障已删除（软删除，列表与地图均不再显示）");
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "删除失败");
+    }
+  };
+
   const openDetail = async (f: FaultItem) => {
     setDetail(f);
     setPhotos([]);
@@ -182,7 +192,7 @@ export function CableFaultsPage() {
           { title: "上报时间", dataIndex: "reported_at", width: 160, render: (v: string) => (v ? new Date(v).toLocaleString() : "—") },
           {
             title: "操作",
-            width: 140,
+            width: 160,
             render: (_, f) => (
               <Space size={2}>
                 {STATUS[f.status]?.next && (
@@ -193,6 +203,11 @@ export function CableFaultsPage() {
                 <Tooltip title="照片/详情">
                   <Button size="small" icon={<CameraOutlined />} onClick={() => openDetail(f)} />
                 </Tooltip>
+                <Popconfirm title={`确认删除故障 #${f.id}？删除后列表与地图均不再显示。`} onConfirm={() => removeFault(f)}>
+                  <Tooltip title="删除">
+                    <Button size="small" danger icon={<DeleteOutlined />} />
+                  </Tooltip>
+                </Popconfirm>
               </Space>
             ),
           },

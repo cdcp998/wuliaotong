@@ -317,6 +317,7 @@ def list_faults(
     status: str = "",
     severity: str = "",
     near: str = "",
+    exclude_closed: bool = False,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user: SysUser = Depends(get_current_user),
@@ -324,6 +325,9 @@ def list_faults(
 ) -> dict:
     scope, _ids = _user_scope(db, user)
     stmt = select(CableFault).where(CableFault.deleted == 0)
+    if exclude_closed:
+        # 地图层使用：已关闭（status=4）故障不再显示
+        stmt = stmt.where(CableFault.status != 4)
     if scope == "OWN":
         stmt = stmt.where(CableFault.reported_by == user.id)
     if status:

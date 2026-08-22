@@ -108,13 +108,14 @@ export const cableApi = {
   deleteMarker: (cableId: number, markerId: number) =>
     http.delete<null>(`/cables/${cableId}/markers/${markerId}`),
   // ---- 故障 ----
-  listFaults: (params: { status?: string; severity?: string; near?: string; page?: number; page_size?: number } = {}) => {
+  listFaults: (params: { status?: string; severity?: string; near?: string; exclude_closed?: boolean; page?: number; page_size?: number } = {}) => {
     const p = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== "") p.set(k, String(v));
     });
     return http.get<Page<FaultItem>>(`/faults?${p.toString()}`);
   },
+  deleteFault: (id: number) => http.delete<null>(`/faults/${id}`),
   createFault: (body: { cable_id?: number | null; lat: number; lng: number; fault_type?: string; severity?: number; description?: string }) =>
     http.post<{ id: number }>("/faults", body),
   updateFaultStatus: (id: number, status: number) =>

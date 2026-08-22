@@ -36,7 +36,7 @@ export function CableMapPage() {
       const [src, cablesResp, faultsResp] = await Promise.all([
         cableApi.mapSources(),
         cableApi.listCables({ page_size: 100 }),
-        cableApi.listFaults({ page_size: 100 }),
+        cableApi.listFaults({ page_size: 100, exclude_closed: true }),
       ]);
       setSources(src.map_sources);
       setCables(cablesResp.items);

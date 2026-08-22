@@ -33,7 +33,7 @@ export const cableApi = {
     const p = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
     return http.get<Page<CableItem>>(`/cables?${p.toString()}`);
   },
-  faults: (params: { page_size?: number } = {}) => {
+  faults: (params: { page_size?: number; exclude_closed?: boolean } = {}) => {
     const p = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
     return http.get<Page<FaultItem>>(`/faults?${p.toString()}`);
   },

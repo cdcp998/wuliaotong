@@ -70,7 +70,7 @@ export function MobileCableMapPage() {
 
   const load = useCallback(async () => {
     try {
-      const [c, f] = await Promise.all([cableApi.list({ page_size: 50 }), cableApi.faults({ page_size: 50 })]);
+      const [c, f] = await Promise.all([cableApi.list({ page_size: 50 }), cableApi.faults({ page_size: 50, exclude_closed: true })]);
       setCables(c.items);
       setFaults(f.items);
     } catch {
