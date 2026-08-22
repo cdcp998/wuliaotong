@@ -33,6 +33,8 @@ interface MapViewProps {
   highlight?: LatLng | null;
   /** 导航路径 [lat, lng][] WGS84 */
   navPath?: LatLng[] | null;
+  /** 草稿预览线（新增线缆选点自动连线：蓝色实线 + 绿起点/橙终点标记 + 自动 fit） */
+  previewPath?: LatLng[] | null;
   /** 地图点击回调（已转换为 WGS84 lat/lng） */
   onPick?: (lat: number, lng: number) => void;
   /** 初始中心 [lat, lng] 与缩放 */
@@ -65,6 +67,20 @@ const deviceIcon = L.divIcon({
   iconAnchor: [6, 6],
 });
 
+const startIcon = L.divIcon({
+  className: "wlt-map-marker",
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:#52c41a;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+const endIcon = L.divIcon({
+  className: "wlt-map-marker",
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:#fa8c16;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
 function ClickCatcher({ onPick, space }: { onPick?: (lat: number, lng: number) => void; space: string }) {
   useMapEvents({
     click(e) {
@@ -76,15 +92,16 @@ function ClickCatcher({ onPick, space }: { onPick?: (lat: number, lng: number) =
   return null;
 }
 
-function FitCables({ cables }: { cables: CableItem[] }) {
+function FitCables({ cables, previewPath }: { cables: CableItem[]; previewPath?: LatLng[] | null }) {
   const map = useMap();
   useEffect(() => {
     const pts: L.LatLngTuple[] = [];
     for (const c of cables) {
       for (const [lng, lat] of c.geometry?.coordinates ?? []) pts.push([lat, lng]);
     }
+    for (const [lat, lng] of previewPath ?? []) pts.push([lat, lng]);
     if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { padding: [40, 40] });
-  }, [cables, map]);
+  }, [cables, previewPath, map]);
   return null;
 }
 
@@ -102,6 +119,7 @@ export function MapView({
   overlays = { cables: [], faults: [], markersByCable: {} },
   highlight = null,
   navPath = null,
+  previewPath = null,
   onPick,
   center = [30.2741, 120.1551],
   zoom = 12,
@@ -155,7 +173,7 @@ export function MapView({
       >
         <BaseTile sources={sources} sourceKey={sourceKey} />
         <ClickCatcher onPick={onPick} space={space} />
-        <FitCables cables={overlays.cables} />
+        <FitCables cables={overlays.cables} previewPath={previewPath} />
         {cableGeojson.features.length > 0 && (
           <GeoJSON
             key={JSON.stringify(cableGeojson.features.map((f) => f.properties?.code))}
@@ -216,6 +234,24 @@ export function MapView({
         )}
         {navPath && navPath.length > 1 && (
           <Polyline positions={navPath.map(([lat, lng]) => toDisplaySpace(lng, lat, space).reverse() as L.LatLngTuple)} pathOptions={{ color: "#fa541c", weight: 5, dashArray: "8 6" }} />
+        )}
+        {/* 草稿预览线：已选点自动连线（蓝实线 + 起点绿/终点橙） */}
+        {previewPath && previewPath.length >= 2 && (
+          <>
+            <Polyline
+              positions={previewPath.map(([lat, lng]) => toDisplaySpace(lng, lat, space).reverse() as L.LatLngTuple)}
+              pathOptions={{ color: "#13c2c2", weight: 5, opacity: 0.9 }}
+            />
+            {(() => {
+              const start = toDisplaySpace(previewPath[0][1], previewPath[0][0], space).reverse() as L.LatLngTuple;
+              return <Marker position={start} icon={startIcon} />;
+            })()}
+            {(() => {
+              const end = previewPath[previewPath.length - 1];
+              const pos = toDisplaySpace(end[1], end[0], space).reverse() as L.LatLngTuple;
+              return <Marker position={pos} icon={endIcon} />;
+            })()}
+          </>
         )}
       </MapContainer>
     </div>

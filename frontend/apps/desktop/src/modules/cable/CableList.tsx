@@ -217,8 +217,9 @@ export function CableListPage() {
           <MapView
             sources={sources}
             overlays={{ cables: editing ? [editing] : [], faults: [], markersByCable: {} }}
+            previewPath={points.map((p) => [p.lat, p.lng])}
             onPick={addPoint}
-            picking={picking ? "点击地图添加路径节点（自动转换为 WGS84）" : undefined}
+            picking={picking ? "点击地图添加路径节点（选点自动连线预览）" : undefined}
             height="300px"
           />
         </div>
