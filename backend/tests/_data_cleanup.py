@@ -390,6 +390,12 @@ def cleanup_test_data() -> None:
             _exec("DELETE FROM task_record WHERE task_id IN (SELECT id FROM maintenance_task WHERE title LIKE 'T-%')")
             _exec("DELETE FROM task_requisition WHERE task_type = 'cable' AND task_id IN (SELECT id FROM maintenance_task WHERE title LIKE 'T-%')")
             _exec("DELETE FROM maintenance_task WHERE title LIKE 'T-%'")
+        # ---- 模块插件（knowledge）测试数据：标题/主题 T- 前缀 ----
+        if table_exists(db, "knowledge_article"):
+            _exec("DELETE FROM knowledge_material_link WHERE article_id IN (SELECT id FROM knowledge_article WHERE title LIKE 'T-%')")
+            _exec("DELETE FROM knowledge_article_revision WHERE article_id IN (SELECT id FROM knowledge_article WHERE title LIKE 'T-%')")
+            _exec("DELETE FROM knowledge_article WHERE title LIKE 'T-%' OR source_task_id IN (SELECT id FROM knowledge_generate_task WHERE input LIKE '%T-%')")
+            _exec("DELETE FROM knowledge_generate_task WHERE input LIKE '%T-%' OR article_id NOT IN (SELECT id FROM knowledge_article)")
         # 隔离测试库：模块状态/配置复位（cable/task 安装/启停/地图源配置不影响其他测试；migration 记录保留）
         if os.getenv("TEST_DB_URL", "") and table_exists(db, "sys_module"):
             db.execute(text("UPDATE sys_module SET state='NOT_INSTALLED', last_error='', config=NULL WHERE code IN ('cable','task','knowledge','device') AND (state <> 'NOT_INSTALLED' OR config IS NOT NULL)"))

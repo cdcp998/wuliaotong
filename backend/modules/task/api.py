@@ -387,9 +387,30 @@ def create_task_requisition(task_id: int, req: TaskRequisitionReq, user: SysUser
 
 @router.post("/tasks/{task_id}/knowledge-recommend", dependencies=[Depends(require_permission("task:process"))])
 def knowledge_recommend(task_id: int, db: Session = Depends(get_db)) -> dict:
-    """任务知识推荐：knowledge 模块未启用时返回空列表与提示（P4 后接入真实检索）。"""
-    _task_or_404(db, task_id)
+    """任务知识推荐：knowledge 模块启用时按任务标题/描述/故障类型检索已发布知识（RAG-lite）。"""
+    t = _task_or_404(db, task_id)
     if not module_enabled(db, "knowledge"):
         return ok({"items": [], "message": "知识库模块未启用，暂无可推荐知识"})
-    # TODO(P4)：调 knowledge 模块检索（故障类型/线缆类型 → 已发布文章）
-    return ok({"items": [], "message": "知识模块已启用，检索待 P4 接入"})
+    from app.modules.knowledge.services.article_search import search_articles
+
+    # 关键词：故障类型优先，其次任务标题/描述
+    keywords: list[str] = []
+    if t.fault_id:
+        from app.modules.cable.models import CableFault
+
+        fault = db.get(CableFault, t.fault_id)
+        if fault and fault.fault_type:
+            keywords.append(fault.fault_type)
+    for text in (t.title, t.description):
+        if text:
+            keywords.append(text[:30])
+    items: list[dict] = []
+    seen: set[int] = set()
+    for kw in keywords:
+        for item in search_articles(db, kw, 5):
+            if item["id"] not in seen:
+                seen.add(item["id"])
+                items.append(item)
+        if len(items) >= 5:
+            break
+    return ok({"items": items[:5], "message": ""})
