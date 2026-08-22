@@ -4,7 +4,7 @@
  * - 叠加层：线缆 GeoJSON / 故障点 / 标记点 / 路径（导航）
  * - 坐标：数据与接口一律 WGS84，仅本组件按源 coordinate_space 做显示层转换（共享 geo.ts）
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents, ZoomControl } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -113,15 +113,12 @@ function BaseTile({ sources, sourceKey }: { sources: Record<string, MapSourceInf
   return <TileLayer key={key} url={url} maxZoom={19} attribution="© 卫星影像" />;
 }
 
-/** 右下角信息条：当前图源名称 + 图源更新时间（该源最近一次成功抓取瓦片，attribution 上方）。 */
-function SourceInfoBadge({ sourceName, updatedAt }: { sourceName: string; updatedAt: string | null }) {
-  const fmt = updatedAt
-    ? new Date(updatedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })
-    : "—";
+/** 右下角信息条：当前图源名称（attribution 上方）。 */
+function SourceInfoBadge({ sourceName }: { sourceName: string }) {
   return (
     <div style={{ position: "absolute", right: 50, bottom: 16, zIndex: 1000, pointerEvents: "none" }}>
       <span style={{ background: "rgba(255,255,255,.85)", padding: "2px 8px", borderRadius: 4, fontSize: 11, color: "#555", boxShadow: "0 1px 4px rgba(0,0,0,.12)" }}>
-        图源：{sourceName} · 更新 {fmt}
+        图源：{sourceName}
       </span>
     </div>
   );
@@ -141,23 +138,9 @@ export function MapView({
   picking,
 }: MapViewProps) {
   const space = (sourceKey && sources[sourceKey]?.coordinate_space) || (Object.values(sources).find((s) => s.enabled)?.coordinate_space) || "wgs84";
-  // 当前底图源（与 BaseTile 选择逻辑一致）：源名 + 图源更新时间显示在右下角 attribution 上方
+  // 当前底图源（与 BaseTile 选择逻辑一致）：源名显示在右下角 attribution 上方
   const activeKey = sourceKey && sources[sourceKey]?.enabled ? sourceKey : Object.keys(sources).find((k) => sources[k]?.enabled);
   const sourceName = activeKey ? (sources[activeKey]?.name ?? activeKey) : "卫星影像";
-  const [sourceUpdatedAt, setSourceUpdatedAt] = useState<string | null>(null);
-  useEffect(() => {
-    if (!activeKey) {
-      setSourceUpdatedAt(null);
-      return;
-    }
-    let alive = true;
-    const fetchUpdated = () => {
-      cableApi.tileUpdated(activeKey).then((r) => { if (alive) setSourceUpdatedAt(r.updated_at); }).catch(() => {});
-    };
-    fetchUpdated();
-    const timer = window.setInterval(fetchUpdated, 30000);
-    return () => { alive = false; window.clearInterval(timer); };
-  }, [activeKey]);
 
   const cableGeojson = useMemo(() => {
     const feats = overlays.cables
@@ -207,7 +190,7 @@ export function MapView({
         <BaseTile sources={sources} sourceKey={sourceKey} />
         <ClickCatcher onPick={onPick} space={space} />
         <FitCables cables={overlays.cables} previewPath={previewPath} />
-        <SourceInfoBadge sourceName={sourceName} updatedAt={sourceUpdatedAt} />
+        <SourceInfoBadge sourceName={sourceName} />
         {cableGeojson.features.length > 0 && (
           <GeoJSON
             key={JSON.stringify(cableGeojson.features.map((f) => f.properties?.code))}
