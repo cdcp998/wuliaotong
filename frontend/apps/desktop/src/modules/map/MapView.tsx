@@ -49,35 +49,35 @@ interface MapViewProps {
 /** 未知图标修复：Leaflet 默认 Marker 图标在打包器下 404。 */
 const defaultIcon = L.divIcon({
   className: "wlt-map-marker",
-  html: '<div style="width:14px;height:14px;border-radius:50%;background:#1668dc;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:#5B7FFF;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [14, 14],
   iconAnchor: [7, 7],
 });
 
 const navIcon = L.divIcon({
   className: "wlt-map-marker",
-  html: '<div style="width:16px;height:16px;border-radius:50%;background:#fa541c;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  html: '<div style="width:16px;height:16px;border-radius:50%;background:#EF4444;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [16, 16],
   iconAnchor: [8, 8],
 });
 
 const deviceIcon = L.divIcon({
   className: "wlt-map-marker",
-  html: '<div style="width:13px;height:13px;border-radius:3px;background:#722ed1;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  html: '<div style="width:13px;height:13px;border-radius:3px;background:#7C3AED;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [13, 13],
   iconAnchor: [6, 6],
 });
 
 const startIcon = L.divIcon({
   className: "wlt-map-marker",
-  html: '<div style="width:14px;height:14px;border-radius:50%;background:#52c41a;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:#22C55E;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [14, 14],
   iconAnchor: [7, 7],
 });
 
 const endIcon = L.divIcon({
   className: "wlt-map-marker",
-  html: '<div style="width:14px;height:14px;border-radius:50%;background:#fa8c16;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:#F59E0B;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [14, 14],
   iconAnchor: [7, 7],
 });
