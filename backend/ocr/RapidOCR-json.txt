@@ -1,0 +1,2 @@
+--ensureAscii=0 --models=models --det=ch_PP-OCRv4_det_infer.onnx --rec=rec_ch_PP-OCRv4_infer.onnx --doAngle=0 mostAngle=0
+./RapidOCR-json.exe --models=models --det=ch_PP-OCRv4_det_infer.onnx --rec=rec_ch_PP-OCRv4_infer.onnx --image=test.jpg
