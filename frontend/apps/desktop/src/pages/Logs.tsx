@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { App, Button, Input, Select, Space, Tag } from "antd";
+import { DownloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type OperationLog } from "@wlt/shared";
@@ -36,6 +37,20 @@ export function LogsPage() {
     void load().catch((e) => messageError(e));
   }, [load]);
 
+  /** 导出当前页为 CSV（设计页 37：可导出）。 */
+  function exportCsv() {
+    const header = ["时间", "用户", "操作", "模块", "方法", "URL", "参数", "IP", "耗时(ms)"];
+    const esc = (s: unknown) => `"${String(s ?? "").replace(/"/g, '""').replace(/\n/g, " ")}"`;
+    const rowsCsv = list.map((r) => [r.created_at, r.username, r.action, r.module, r.method, r.url, r.params, r.ip, r.duration_ms]);
+    const csv = [header, ...rowsCsv].map((row) => row.map(esc).join(",")).join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `操作日志_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
   const columns: ColumnsType<OperationLog> = [
     { title: "时间", dataIndex: "created_at", width: 160 },
     { title: "用户", dataIndex: "username", width: 90 },
@@ -68,6 +83,7 @@ export function LogsPage() {
           onChange={(v) => { setMethod(v ?? ""); setPage(1); }}
         />
         <Button onClick={() => void load()}>查询</Button>
+        <Button icon={<DownloadOutlined />} onClick={exportCsv}>导出 CSV</Button>
       </Space>
       <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
     </div>
