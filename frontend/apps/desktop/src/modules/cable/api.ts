@@ -143,8 +143,11 @@ export const cableApi = {
   pauseRegionDownload: (id: number) => http.post<null>(`/map/cache/regions/${id}/pause`),
   clearRegion: (id: number) => http.post<{ tiles_removed?: number }>(`/map/cache/regions/${id}/clear`),
   downloadProgress: () =>
-    http.get<{ pending: number; done: number; failed: number; regions: { id: number; name: string; status: number; tile_count: number; pending: number; last_download_at: string | null }[] }>("/map/downloads"),
+    http.get<{ pending: number; done: number; failed: number; regions: { id: number; name: string; status: number; tile_count: number; pending: number; done: number; failed: number; total: number; last_download_at: string | null }[] }>("/map/downloads"),
   /** 瓦片代理 URL（经后端缓存；Session Cookie 同源携带）。 */
   tileUrl: (source: string, z: number | string, x: number | string, y: number | string) =>
     `${import.meta.env?.VITE_API_BASE ?? "/api/v1"}/map/tile/${source}/${z}/${x}/${y}`,
+  /** 图源更新时间：该源最近一次成功抓取瓦片的时间。 */
+  tileUpdated: (source: string) =>
+    http.get<{ source: string; updated_at: string | null }>(`/map/tile-updated/${source}`),
 };

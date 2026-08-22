@@ -35,6 +35,34 @@ def _meta_path(source: str, z: int, x: int, y: int) -> Path:
     return _tile_path(source, z, x, y).with_suffix(".meta.json")
 
 
+def _source_meta_path(source: str) -> Path:
+    """每源最近更新时间标记（本进程最后一次成功抓取在线源的时间）。"""
+    return TILE_CACHE_ROOT / source / "__source_meta__.json"
+
+
+def _write_source_meta(source: str, fetched_at: int) -> None:
+    """原子写入源更新时间标记（抓取成功落盘后调用；失败不影响主流程）。"""
+    try:
+        p = _source_meta_path(source)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"fetched_at": fetched_at}), encoding="utf-8")
+        os.replace(tmp, p)
+    except OSError as exc:  # noqa: BLE001 标记文件失败不影响瓦片
+        logger.debug("写入源更新时间标记失败 %s：%s", source, exc)
+
+
+def source_updated_at(source: str) -> float | None:
+    """该源最近一次成功抓取瓦片的时间戳（无记录返回 None）。"""
+    try:
+        p = _source_meta_path(source)
+        if not p.exists():
+            return None
+        return float(json.loads(p.read_text(encoding="utf-8")).get("fetched_at") or 0) or None
+    except (OSError, ValueError):
+        return None
+
+
 def _daily_ok(max_daily: int) -> bool:
     """每日抓取配额（默认 0=不限）。"""
     if max_daily <= 0:
@@ -79,6 +107,7 @@ def get_tile(source_cfg: dict, source: str, z: int, x: int, y: int, cache_ttl: i
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
             meta.write_text(json.dumps({"etag": "", "last_modified": "", "fetched_at": int(time.time())}), encoding="utf-8")
+            _write_source_meta(source, int(time.time()))
             return data
         except Exception as exc:  # noqa: BLE001
             logger.warning("瓦片刷新失败，回退缓存 %s/%d/%d/%d：%s", source, z, x, y, exc)
@@ -89,6 +118,7 @@ def get_tile(source_cfg: dict, source: str, z: int, x: int, y: int, cache_ttl: i
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     meta.write_text(json.dumps({"etag": "", "last_modified": "", "fetched_at": int(time.time())}), encoding="utf-8")
+    _write_source_meta(source, int(time.time()))
     return data
 
 

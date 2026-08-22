@@ -1,7 +1,7 @@
 /** cable 模块：地图缓存管理（/cable/cache，map:cache）+ 图源管理（map:config 编辑/新增/删除，查看脱敏）。 */
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
-import { EnvironmentOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
+import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Progress, Select, Space, Table, Tag, Typography } from "antd";
+import { CaretRightOutlined, EnvironmentOutlined, PauseOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
 
 import { useAuthStore } from "@wlt/shared";
 
@@ -26,6 +26,9 @@ interface RegionRow {
   update_mode: string;
   status: number;
   pending?: number;
+  done?: number;
+  failed?: number;
+  total?: number;
 }
 
 export function CableCachePage() {
@@ -69,18 +72,42 @@ export function CableCachePage() {
     setRegionPicking(false);
   };
 
+  const applyProgress = useCallback((p: Awaited<ReturnType<typeof cableApi.downloadProgress>>) => {
+    const stat = Object.fromEntries(p.regions.map((x) => [x.id, x]));
+    setRegions((prev) =>
+      prev.map((x) => ({
+        ...x,
+        pending: stat[x.id]?.pending ?? 0,
+        done: stat[x.id]?.done ?? 0,
+        failed: stat[x.id]?.failed ?? 0,
+        total: stat[x.id]?.total ?? 0,
+      }))
+    );
+    setProgress({ pending: p.pending, done: p.done, failed: p.failed });
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [r, p] = await Promise.all([cableApi.listRegions(), cableApi.downloadProgress()]);
-      setRegions(r.map((x) => ({ ...x, pending: p.regions.find((y) => y.id === x.id)?.pending ?? 0 })));
-      setProgress({ pending: p.pending, done: p.done, failed: p.failed });
+      setRegions(r.map((x) => ({ ...x, pending: 0, done: 0, failed: 0, total: 0 })));
+      applyProgress(p);
     } catch (e) {
       message.error(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, [message]);
+  }, [applyProgress, message]);
+
+  // 任一区域下载中 → 每 3 秒轮询进度（实时进度条；暂停/完成后自动停止）
+  const downloading = regions.some((r) => r.status === 1);
+  useEffect(() => {
+    if (!downloading) return;
+    const timer = window.setInterval(() => {
+      cableApi.downloadProgress().then(applyProgress).catch(() => {});
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [downloading, applyProgress]);
 
   const loadSources = useCallback(async () => {
     try {
@@ -130,7 +157,7 @@ export function CableCachePage() {
       let msg = "";
       if (action === "start") {
         const resp = await cableApi.startRegionDownload(r.id);
-        msg = `已生成 ${resp.tiles_queued ?? 0} 个下载任务（后台 worker 自动抓取）`;
+        msg = `已生成 ${resp.tiles_queued ?? 0} 个下载任务，后台开始下载`;
       } else if (action === "pause") {
         await cableApi.pauseRegionDownload(r.id);
         msg = "已暂停";
@@ -236,8 +263,21 @@ export function CableCachePage() {
         </Space>
       </Space>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        下载进度：待下载 <Tag color="blue">{progress.pending}</Tag>　成功 <Tag color="green">{progress.done}</Tag>　失败 <Tag color="red">{progress.failed}</Tag>
-        <span style={{ marginLeft: 12 }}>瓦片经后端代理缓存（磁盘优先命中 → 在线源抓取落盘），可离线使用。</span>
+        <Space size={12} wrap>
+          <span>下载进度：</span>
+          <Progress
+            percent={progress.pending + progress.done + progress.failed > 0
+              ? Math.round(((progress.done + progress.failed) / (progress.pending + progress.done + progress.failed)) * 100)
+              : 0}
+            size="small" style={{ width: 220 }}
+            status={progress.failed > 0 ? "exception" : undefined}
+            format={() => `${progress.done + progress.failed} / ${progress.pending + progress.done + progress.failed}`}
+          />
+          <span>待 <Tag color="blue">{progress.pending}</Tag></span>
+          <span>成功 <Tag color="green">{progress.done}</Tag></span>
+          <span>失败 <Tag color="red">{progress.failed}</Tag></span>
+          <span>瓦片经后端代理缓存（磁盘优先命中 → 在线源抓取落盘），可离线使用。</span>
+        </Space>
       </Typography.Paragraph>
 
       <Table<RegionRow>
@@ -245,16 +285,35 @@ export function CableCachePage() {
         columns={[
           { title: "区域", dataIndex: "name" },
           { title: "缩放", key: "zoom", width: 110, render: (_, r) => `z${r.min_zoom}–${r.max_zoom}` },
-          { title: "任务数", dataIndex: "tile_count", width: 90, render: (v: number, r) => `${v}${r.pending ? `（待 ${r.pending}）` : ""}` },
+          {
+            title: "下载进度", key: "progress", width: 230,
+            render: (_, r) => {
+              const total = r.total ?? 0;
+              const done = r.done ?? 0;
+              const failed = r.failed ?? 0;
+              if (!total) return <Typography.Text type="secondary">—</Typography.Text>;
+              const percent = Math.round(((done + failed) / total) * 100);
+              return (
+                <div style={{ minWidth: 190 }}>
+                  <Progress percent={percent} size="small" status={failed > 0 ? "exception" : undefined} format={() => `${done} / ${total}`} />
+                  <div style={{ fontSize: 12, color: "#86909c", marginTop: 2 }}>
+                    待 {r.pending ?? 0} · 成功 {done}
+                    {failed > 0 && <span style={{ color: "#cf1322" }}> · 失败 {failed}</span>}
+                  </div>
+                </div>
+              );
+            },
+          },
           { title: "模式", dataIndex: "update_mode", width: 90, render: (v: string) => ({ manual: "手动", daily: "每日", weekly: "每周" })[v] ?? v },
           { title: "状态", dataIndex: "status", width: 100, render: (v: number) => <Tag color={REGION_STATUS[v]?.color}>{REGION_STATUS[v]?.label ?? v}</Tag> },
           { title: "最后下载", dataIndex: "last_download_at", width: 160, render: (v: string | null) => (v ? new Date(v).toLocaleString() : "—") },
           {
-            title: "操作", width: 260,
+            title: "操作", width: 230,
             render: (_, r) => (
               <Space size={4}>
-                {(r.status === 0 || r.status === 3) && <Button size="small" type="primary" onClick={() => act(r, "start")}>开始下载</Button>}
-                {r.status === 1 && <Button size="small" onClick={() => act(r, "pause")}>暂停</Button>}
+                {(r.status === 0 || r.status === 2) && <Button size="small" type="primary" onClick={() => act(r, "start")}>开始下载</Button>}
+                {r.status === 1 && <Button size="small" icon={<PauseOutlined />} onClick={() => act(r, "pause")}>暂停</Button>}
+                {r.status === 3 && <Button size="small" icon={<CaretRightOutlined />} onClick={() => act(r, "start")}>继续</Button>}
                 <Popconfirm title="清理区域任务与磁盘瓦片？" onConfirm={() => act(r, "clear")}>
                   <Button size="small" danger>清理</Button>
                 </Popconfirm>

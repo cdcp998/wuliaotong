@@ -587,6 +587,20 @@ def save_map_sources(sources: list[MapSourceIn], db: Session = Depends(get_db)) 
     return ok({"saved": len(sources)})
 
 
+@router.get("/map/tile-updated/{source}", dependencies=[Depends(require_permission("cable:view"))])
+def tile_source_updated(source: str, db: Session = Depends(get_db)) -> dict:
+    """图源更新时间：该源最近一次成功抓取瓦片的时间（地图右下角展示用）。"""
+    config = config_store.effective_config(db)
+    src = (config.get("map_sources") or {}).get(source)
+    if src is None:
+        raise BizError(E_NOT_FOUND, f"地图源 {source} 不存在")
+    ts = tile_cache.source_updated_at(source)
+    return ok({
+        "source": source,
+        "updated_at": datetime.fromtimestamp(ts).isoformat() if ts else None,
+    })
+
+
 @router.get("/map/tile/{source}/{z}/{x}/{y}", dependencies=[Depends(require_permission("cable:view"))])
 def tile_proxy(source: str, z: int, x: int, y: int, db: Session = Depends(get_db)) -> Response:
     """瓦片代理：缓存优先 → 在线源抓取落盘（方案 §5.4）。"""
@@ -678,8 +692,14 @@ def start_region_download(region_id: int, db: Session = Depends(get_db)) -> dict
         r.status = 3
         db.commit()
         raise BizError(E_PARAM, f"生成下载任务失败：{exc}") from exc
-    r.status = 2
-    r.last_download_at = datetime.now()
+    # 有剩余待下载任务 → 保持「下载中」，由 worker 逐轮抓取、完成后置「完成」
+    pending = db.scalar(select(func.count()).select_from(MapDownloadTask).where(
+        MapDownloadTask.region_id == r.id, MapDownloadTask.status == 0)) or 0
+    if pending == 0:
+        r.status = 2
+        r.last_download_at = datetime.now()
+    else:
+        r.status = 1
     db.commit()
     return ok({"tiles_queued": created})
 
@@ -745,17 +765,28 @@ def clear_region(region_id: int, db: Session = Depends(get_db)) -> dict:
 
 @router.get("/map/downloads", dependencies=[Depends(require_permission("map:cache"))])
 def download_progress(db: Session = Depends(get_db)) -> dict:
-    """下载进度（全局 + 分区域统计）。"""
+    """下载进度（全局 + 分区域统计：pending/done/failed/total）。"""
     global_pending = db.scalar(select(func.count()).select_from(MapDownloadTask).where(MapDownloadTask.status == 0)) or 0
     global_done = db.scalar(select(func.count()).select_from(MapDownloadTask).where(MapDownloadTask.status == 1)) or 0
     global_failed = db.scalar(select(func.count()).select_from(MapDownloadTask).where(MapDownloadTask.status == 2)) or 0
     regions = db.scalars(select(MapCacheRegion).order_by(MapCacheRegion.id.desc())).all()
+    # 一次 group by 得到各区域 (pending, done, failed) 统计
+    by_region: dict[int, dict[int, int]] = {}
+    for region_id, status, count in db.execute(
+        select(MapDownloadTask.region_id, MapDownloadTask.status, func.count())
+        .group_by(MapDownloadTask.region_id, MapDownloadTask.status)
+    ):
+        by_region.setdefault(region_id, {})[status] = count
     per_region = []
     for r in regions:
-        pending = db.scalar(select(func.count()).select_from(MapDownloadTask).where(MapDownloadTask.region_id == r.id, MapDownloadTask.status == 0)) or 0
+        stat = by_region.get(r.id, {})
+        pending = stat.get(0, 0)
+        done = stat.get(1, 0)
+        failed = stat.get(2, 0)
         per_region.append({
             "id": r.id, "name": r.name, "status": r.status, "tile_count": r.tile_count,
-            "pending": pending,
+            "pending": pending, "done": done, "failed": failed,
+            "total": pending + done + failed,
             "last_download_at": r.last_download_at.isoformat() if r.last_download_at else None,
         })
     return ok({"pending": global_pending, "done": global_done, "failed": global_failed, "regions": per_region})
