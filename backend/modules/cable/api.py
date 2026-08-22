@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
+from uuid import uuid4
 
 from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_permission
 from app.core.modules import require_module_enabled
@@ -131,6 +132,25 @@ def _cable_or_404(db: Session, cable_id: int) -> Cable:
 
 # ============================ 线缆 ============================
 
+@router.get("/cables/export", dependencies=[Depends(require_permission("cable:view"))])
+def export_cables(db: Session = Depends(get_db)) -> dict:
+    """导出全部在用/停用线缆为 GeoJSON FeatureCollection（WGS84）。"""
+    rows = db.scalars(select(Cable).where(Cable.status.in_([0, 1])).order_by(Cable.id)).all()
+    features = []
+    for c in rows:
+        geo = json.loads(c.geometry) if c.geometry else None
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "id": c.id, "code": c.code, "name": c.name, "type": c.type,
+                "status": c.status, "total_length": float(c.total_length),
+                "description": c.description,
+            },
+            "geometry": geo or {"type": "LineString", "coordinates": []},
+        })
+    return ok({"type": "FeatureCollection", "features": features})
+
+
 @router.get("/cables", dependencies=[Depends(require_permission("cable:view"))])
 def list_cables(
     keyword: str = "",
@@ -211,6 +231,43 @@ def update_cable_status(cable_id: int, req: StatusUpdate, user: SysUser = Depend
     c.updated_by = user.id
     db.commit()
     return ok(_cable_out(c))
+
+
+@router.post("/cables/import", dependencies=[Depends(require_permission("cable:manage"))])
+def import_cables(req: dict, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """导入 GeoJSON（FeatureCollection of LineString）：批量创建线缆（含路径节点与长度）。
+    每条要素：properties.code/name/type/status/description；geometry LineString [lng,lat][]。
+    """
+    feats = req.get("features") if req.get("type") == "FeatureCollection" else (req.get("features") or [])
+    if not isinstance(feats, list) or not feats:
+        raise BizError(E_PARAM, "未识别的 GeoJSON（需 FeatureCollection）")
+    created, skipped = 0, []
+    for f in feats:
+        geom = (f or {}).get("geometry") or {}
+        props = (f or {}).get("properties") or {}
+        if geom.get("type") != "LineString":
+            skipped.append(props.get("code", "?") or "?（非 LineString）")
+            continue
+        coords = geom.get("coordinates") or []
+        if len(coords) < 2:
+            skipped.append(props.get("code", "?") or "?（节点不足）")
+            continue
+        code = str(props.get("code") or "").strip() or f"IMP-{uuid4().hex[:10]}"
+        if db.scalar(select(Cable.id).where(Cable.code == code)):
+            skipped.append(code + "（编码已存在）")
+            continue
+        c = Cable(
+            code=code, name=str(props.get("name") or code)[:100],
+            type=str(props.get("type") or "wire"), status=int(props.get("status") or 1),
+            description=str(props.get("description") or "")[:500],
+            created_by=user.id, updated_by=user.id,
+        )
+        db.add(c)
+        db.flush()
+        _rebuild_points(db, c, [(float(lat), float(lng)) for lng, lat in coords])
+        created += 1
+    db.commit()
+    return ok({"created": created, "skipped": skipped})
 
 
 # ============================ 标记点 ============================

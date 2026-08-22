@@ -288,6 +288,33 @@ def test_fault_photos_link_and_list() -> None:
         db.close()
 
 
+def test_cable_import_export() -> None:
+    """GeoJSON 导入/导出：导出内容可回导入（长度/节点重建）。"""
+    _login("admin", "admin123")
+    r = client.post("/api/v1/cables/import", json={
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"code": f"T-IMP-{_TAG}", "name": "导入线缆", "type": "network", "status": 1},
+                "geometry": {"type": "LineString", "coordinates": [[120.0, 30.0], [120.01, 30.0], [120.01, 30.01]]},
+            },
+            {"type": "Feature", "properties": {"code": "T-IMP-BAD"}, "geometry": {"type": "Point", "coordinates": [1, 2]}},
+        ],
+    })
+    assert r.json()["code"] == 0, r.text
+    data = r.json()["data"]
+    assert data["created"] == 1 and len(data["skipped"]) == 1
+
+    r = client.get("/api/v1/cables/export")
+    assert r.json()["code"] == 0
+    fc = r.json()["data"]
+    assert fc["type"] == "FeatureCollection"
+    feat = next((f for f in fc["features"] if f["properties"]["code"] == f"T-IMP-{_TAG}"), None)
+    assert feat is not None and len(feat["geometry"]["coordinates"]) == 3
+    assert feat["properties"]["total_length"] > 0
+
+
 def test_map_sources_config() -> None:
     _login("admin", "admin123")
     esri_default = {
