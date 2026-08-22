@@ -323,4 +323,11 @@ button:focus-visible,
   .ant-layout-content > div {
     padding: 16px !important;
   }
+  /* 平板：表格内容/表体允许横向滚动（§4「表格横向滚动」），操作列固定右侧不截断 */
+  .ant-table-container,
+  .ant-table-content,
+  .ant-table-body {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
 }
