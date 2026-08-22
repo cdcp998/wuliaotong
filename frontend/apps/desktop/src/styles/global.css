@@ -285,6 +285,21 @@ button:focus-visible,
   white-space: nowrap;
 }
 
+/* 响应式卡片网格（设计规范 §4：桌面多列 → 平板减列 → 手机单列）。
+ * auto-fit + minmax 按容器宽度自动决定列数：≥1024 多列、768-1023 减少、<768 单列。
+ * 用在统计卡/模块卡/报表块等需要均匀排布的卡片容器上。 */
+.wlt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.wlt-grid-sm {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
 /* 表格微调：表头更轻、行悬浮更柔和（配合 ConfigProvider Table token） */
 .ant-layout-content .ant-table-wrapper .ant-table-thead > tr > th {
   font-weight: 600;

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, App, Button, Divider, Form, Input, InputNumber, Modal, Popconfirm, Select, Space } from "antd";
 import { EditOutlined, PlusOutlined, RobotOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -246,7 +246,7 @@ export function AiSuggestionsPage() {
           <Form.Item label="材料名称" required style={{ marginBottom: 16 }}>
             <Input placeholder="缺省用 AI 建议名" maxLength={100} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
           </Form.Item>
-          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
             <Form.Item label="分类" style={{ marginBottom: 0 }} extra="二级/三级分类可挂材料；下拉底部可新增 / 编辑分类">
               <Select
                 placeholder="选择分类"
