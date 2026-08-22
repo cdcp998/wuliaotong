@@ -1,4 +1,4 @@
-﻿/** 手机端：设备（方案 §7.3）——列表（定位/状态/首图）+ 新增设备（定位获取经纬度 + 图片上传可选）。 */
+/** 手机端：设备（方案 §7.3）——列表（定位/状态/首图）+ 新增设备（定位获取经纬度 + 图片上传可选）。 */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Form, Input, List, NavBar, Popup, Tag, Toast } from "antd-mobile";
@@ -88,7 +88,7 @@ export function MobileDevicesPage() {
       <NavBar onBack={() => navigate(-1)} right={
         <Button size="mini" color="primary" onClick={() => { form.resetFields(); setLat(""); setLng(""); setLocInfo(""); setPhotos([]); setOpen(true); }}>+ 添加</Button>
       }>设备</NavBar>
-      <List style={{ minHeight: "70dvh", background: "transparent" }}>
+      <List style={{ minHeight: "70dvh" }}>
         {rows.map((d) => (
           <List.Item key={d.id} description={`${d.model || "—"}　${d.location || (d.lat ? `${d.lat.toFixed(5)}, ${d.lng?.toFixed(5)}` : "未定位")}`}
             prefix={

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Badge, Tag } from "antd-mobile";
 
@@ -67,7 +67,7 @@ export function HomePage() {
         className="wlt-hero"
         style={{
           background: "#5B7FFF",
-          borderRadius: 12,
+          borderRadius: 16,
           padding: 16,
           color: "#fff",
           position: "relative",
@@ -148,8 +148,8 @@ export function HomePage() {
                 style={{
                   position: "relative",
                   background: "#fff",
-                  border: "1px solid #f0f1f3",
-                  borderRadius: 12,
+                  border: "1px solid #E4EAF6",
+                  borderRadius: 16,
                   padding: "12px 4px",
                   display: "flex",
                   flexDirection: "column",
@@ -203,8 +203,8 @@ export function HomePage() {
               style={{
                 position: "relative",
                 background: "#fff",
-                border: "1px solid #f0f1f3",
-                borderRadius: 12,
+                border: "1px solid #E4EAF6",
+                borderRadius: 16,
                 padding: "12px 4px",
                 display: "flex",
                 flexDirection: "column",
@@ -223,7 +223,7 @@ export function HomePage() {
       )}
 
       {/* 我的申请状态 */}
-      <div className="wlt-section" style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+      <div className="wlt-section" style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, overflow: "hidden", marginBottom: 12, boxShadow: "0 6px 20px rgba(30,36,51,.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", borderBottom: "1px solid #F2F5FB", fontSize: 13.5, fontWeight: 600 }}>
           <span>我的申请</span>
           <span style={{ fontSize: 11.5, color: "#5B7FFF", fontWeight: 400, cursor: "pointer" }} onClick={() => navigate("/requisitions/list")}>全部 ›</span>
@@ -246,7 +246,7 @@ export function HomePage() {
       </div>
 
       {/* 通知摘要 */}
-      <div className="wlt-section" style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, overflow: "hidden" }}>
+      <div className="wlt-section" style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, overflow: "hidden", boxShadow: "0 6px 20px rgba(30,36,51,.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", borderBottom: "1px solid #F2F5FB", fontSize: 13.5, fontWeight: 600 }}>
           <span>通知</span>
           <span style={{ fontSize: 11.5, color: "#5B7FFF", fontWeight: 400, cursor: "pointer" }} onClick={() => navigate("/notifications")}>全部 ›</span>

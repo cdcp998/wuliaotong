@@ -170,3 +170,38 @@ button:focus-visible,
 .adm-card {
   border-radius: 18px;
 }
+
+/* ---------- 7. antd-mobile 常见容器玻璃化（列表/弹层全端生效） ---------- */
+.adm-list {
+  border: 1px solid #e4eaf6;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 6px 20px rgba(30, 36, 51, 0.06);
+  overflow: hidden;
+}
+
+.adm-list .adm-list-item {
+  background: transparent;
+}
+
+.adm-list .adm-list-item-content-main {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.adm-popup,
+.adm-popup-body {
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.adm-popup-body-position-bottom {
+  border-radius: 20px 20px 0 0;
+}
+
+.adm-center-popup {
+  border-radius: 20px;
+}
+
+.adm-mask {
+  background: rgba(30, 36, 51, 0.35);
+}

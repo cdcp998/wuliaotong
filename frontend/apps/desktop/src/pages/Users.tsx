@@ -123,14 +123,17 @@ export function UsersPage() {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>用户管理</h2>
+        <div>
+          <h2 style={{ margin: 0 }}>用户管理</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>登录名 / 姓名 / 手机 / 角色；停用即登出，启用即时生效</p>
+        </div>
         <Space>
           <Input.Search
             placeholder="登录名/姓名/手机"
             allowClear
-            style={{ width: 220 }}
+            style={{ width: 240 }}
             onSearch={(v) => { setKeyword(v); setPage(1); }}
           />
           <Button type="primary" onClick={() => { setCreating(true); setEditing(null); }}>
@@ -138,7 +141,9 @@ export function UsersPage() {
           </Button>
         </Space>
       </div>
-      <DataTable rowKey="id" loading={loading} locale={{ emptyText: "暂无数据" }} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }} rowSelection onBatchDelete={async (keys) => { for (const k of keys) await adminApi.deleteUser(Number(k)); message.success(`已停用 ${keys.length} 个账号`); void load(); }} />
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <DataTable rowKey="id" loading={loading} locale={{ emptyText: "暂无数据" }} size="middle" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 个用户`, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }} rowSelection onBatchDelete={async (keys) => { for (const k of keys) await adminApi.deleteUser(Number(k)); message.success(`已停用 ${keys.length} 个账号`); void load(); }} />
+      </div>
 
       <Modal
         title={creating ? "新建用户" : `编辑用户：${editing?.username ?? ""}`}
