@@ -323,7 +323,7 @@ def list_faults(
     db: Session = Depends(get_db),
 ) -> dict:
     scope, _ids = _user_scope(db, user)
-    stmt = select(CableFault)
+    stmt = select(CableFault).where(CableFault.deleted == 0)
     if scope == "OWN":
         stmt = stmt.where(CableFault.reported_by == user.id)
     if status:
@@ -362,6 +362,23 @@ def create_fault(req: FaultCreate, user: SysUser = Depends(get_current_user), db
     db.add(f)
     db.commit()
     return ok({"id": f.id})
+
+
+@router.delete("/faults/{fault_id}", dependencies=[Depends(require_any_permission("fault:report", "fault:manage"))])
+def delete_fault(fault_id: int, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """删除错误标点（软删除，deleted=1；数据保留可追溯）。
+
+    权限：fault:manage（调度员/超管）可删任意；fault:report（维修人员）仅可删本人上报。
+    已关联任务的历史仍可查（任务保留 fault_id）。"""
+    f = db.get(CableFault, fault_id)
+    if f is None or f.deleted:
+        raise BizError(E_NOT_FOUND, "故障不存在")
+    scope, _ = _user_scope(db, user)
+    if scope != "ALL" and f.reported_by != user.id:
+        raise BizError(4005, "仅可删除本人上报的故障", http_status=403)
+    f.deleted = 1
+    db.commit()
+    return ok()
 
 
 @router.put("/faults/{fault_id}", dependencies=[Depends(require_permission("fault:manage"))])
@@ -456,7 +473,7 @@ def geo_measure(req: MeasureReq, db: Session = Depends(get_db)) -> dict:
 def geo_navigate(req: NavigateReq, db: Session = Depends(get_db)) -> dict:
     """故障导航：返回用户到目标故障沿线的投影、剩余距离与候选线缆。"""
     fault = db.get(CableFault, req.fault_id)
-    if fault is None:
+    if fault is None or fault.deleted:
         raise BizError(E_NOT_FOUND, "故障不存在")
     user_pt = (req.lat, req.lng)
     fault_pt = (float(fault.lat), float(fault.lng))
@@ -530,7 +547,7 @@ def geo_navigate(req: NavigateReq, db: Session = Depends(get_db)) -> dict:
 
 @router.get("/geo/nearby-faults", dependencies=[Depends(require_permission("cable:view"))])
 def nearby_faults(lat: float = Query(...), lng: float = Query(...), radius: float = Query(500, gt=0, le=50000), db: Session = Depends(get_db)) -> dict:
-    all_rows = db.scalars(select(CableFault).where(CableFault.status.in_([0, 1, 2]))).all()
+    all_rows = db.scalars(select(CableFault).where(CableFault.deleted == 0, CableFault.status.in_([0, 1, 2]))).all()
     items = []
     for f in all_rows:
         d = geo_math.haversine(lat, lng, float(f.lat), float(f.lng))

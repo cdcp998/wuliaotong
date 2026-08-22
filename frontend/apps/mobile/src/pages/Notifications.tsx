@@ -174,7 +174,7 @@ export function NotificationsPage() {
             <Checkbox checked={allSelected} style={{ "--icon-size": "18px" } as React.CSSProperties} />
             <span style={{ fontSize: 13, color: "#1f2329" }}>全选</span>
           </div>
-          <span style={{ fontSize: 12, color: "#646a73" }}>
+          <span style={{ fontSize: 12, color: "#646a73", display: "flex", alignItems: "center" }}>
             已选 {selected.size} 条
             <span style={{ color: "#1668dc", marginLeft: 12 }} onClick={() => void clearAll()}>
               清空全部
@@ -252,7 +252,7 @@ export function NotificationsPage() {
             zIndex: 20,
           }}
         >
-          <div style={{ flex: 1, fontSize: 13, color: "#646a73" }}>
+          <div style={{ flex: 1, fontSize: 13, color: "#646a73", textAlign: "right", marginRight: 10 }}>
             共 <b style={{ color: "#1f2329", fontSize: 15, margin: "0 2px" }}>{list.length}</b> 条
           </div>
           <Button block color="danger" loading={deleting} disabled={selected.size === 0} style={{ height: 40, fontSize: 14, borderRadius: 10, flex: 2 }} onClick={() => void deleteSelected()}>

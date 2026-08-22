@@ -28,6 +28,19 @@ def _migrate_0001(db) -> None:
         ))
 
 
+def _migrate_0002(db) -> None:
+    """0002_add_fault_deleted.sql：cable_fault.deleted 软删除列（幂等）。"""
+    from sqlalchemy import text
+
+    from app.core.migration_utils import column_exists
+
+    if not column_exists(db, "cable_fault", "deleted"):
+        db.execute(text(
+            "ALTER TABLE cable_fault ADD COLUMN deleted TINYINT NOT NULL DEFAULT 0 "
+            "COMMENT '软删除：1=已删除（错误标点，前端不再展示）' AFTER status"
+        ))
+
+
 module = ModuleDef(
     code="cable",
     name="线缆管理",
@@ -41,6 +54,6 @@ module = ModuleDef(
         "map": "地图",
     },
     install_sql=["sql/install.sql"],
-    migration_executors={"0001_add_task_source.sql": _migrate_0001},
+    migration_executors={"0001_add_task_source.sql": _migrate_0001, "0002_add_fault_deleted.sql": _migrate_0002},
     jobs=[download_worker_tick],  # 瓦片批量下载（tick 校验 ENABLED）
 )

@@ -317,6 +317,39 @@ def test_cable_import_export() -> None:
     assert feat["properties"]["total_length"] > 0
 
 
+def test_fault_soft_delete() -> None:
+    """错误标点删除：软删除（列表/导航不再出现）；维修人员仅可删本人上报。"""
+    _login("admin", "admin123")
+    uname = f"fg{_TAG}{uuid.uuid4().hex[:4]}"
+    r = client.post("/api/v1/users", json={"username": uname, "password": "pass123", "real_name": "维修工", "role_id": 6})
+    assert r.json()["code"] == 0, r.text
+
+    # 管理员上报一个故障
+    r = client.post("/api/v1/faults", json={"lat": 30.03, "lng": 120.03, "fault_type": "T-误报", "severity": 1, "description": "T-待删除"})
+    assert r.json()["code"] == 0
+    fid = r.json()["data"]["id"]
+
+    # 维修人员不能删他人上报
+    _login(uname, "pass123")
+    r = client.delete(f"/api/v1/faults/{fid}")
+    assert r.status_code == 403 and r.json()["code"] == 4005
+    # 属本人上报可删
+    r = client.post("/api/v1/faults", json={"lat": 30.04, "lng": 120.04, "fault_type": "T-自己误报", "severity": 1, "description": "T-自删"})
+    assert r.json()["code"] == 0
+    own_id = r.json()["data"]["id"]
+    r = client.delete(f"/api/v1/faults/{own_id}")
+    assert r.json()["code"] == 0
+    # 软删除后列表中不可见（仅 own_id 被删；fid 仍在）
+    _login("admin", "admin123")
+    r = client.get("/api/v1/faults", params={"page_size": 100})
+    ids = [f["id"] for f in r.json()["data"]["items"]]
+    assert own_id not in ids and fid in ids
+    # 再次删除 → 4003；导航到已删故障 → 4003
+    assert client.delete(f"/api/v1/faults/{own_id}").json()["code"] == 4003
+    r = client.post("/api/v1/geo/navigate", json={"lat": 30.04, "lng": 120.04, "fault_id": own_id})
+    assert r.json()["code"] == 4003
+
+
 def test_map_sources_config() -> None:
     _login("admin", "admin123")
     esri_default = {

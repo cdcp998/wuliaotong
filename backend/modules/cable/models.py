@@ -69,6 +69,7 @@ class CableFault(Base):
     severity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)  # 1低/2中/3高
     description: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     status: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 0待处理/1处理中/2待验证/3已修复/4已关闭
+    deleted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 软删除：1=已删除（错误标点，migration 0002）
     reported_by: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     reported_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     photos_note: Mapped[str] = mapped_column(String(255), nullable=False, default="")

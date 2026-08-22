@@ -37,6 +37,7 @@ export const cableApi = {
     const p = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
     return http.get<Page<FaultItem>>(`/faults?${p.toString()}`);
   },
+  deleteFault: (id: number) => http.delete<null>(`/faults/${id}`),
   createFault: (body: { lat: number; lng: number; fault_type?: string; severity?: number; description?: string }) =>
     http.post<{ id: number }>("/faults", body),
   addFaultPhoto: (id: number, fileId: number) => http.post<{ id: number }>(`/faults/${id}/photos`, { file_id: fileId, category: "现场" }),
