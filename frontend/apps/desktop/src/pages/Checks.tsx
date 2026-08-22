@@ -1,7 +1,8 @@
-﻿import { useCallback, useEffect, useState } from "react";
-import { App, Button, Modal, Popconfirm, Radio, Select, Space } from "antd";
+import { useCallback, useEffect, useState } from "react";
+import { App, Button, Modal, Popconfirm, Radio, Select, Space, theme } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router";
+import { ProfileOutlined, ClockCircleOutlined, CalendarOutlined, RiseOutlined, FallOutlined } from "@ant-design/icons";
 
 import { baseApi, checkApi, type CheckBill } from "@wlt/shared";
 
@@ -9,8 +10,18 @@ import { DataTable } from "../components/DataTable";
 
 const STATUS: Record<number, string> = { 0: "待盘点", 1: "盘点中", 2: "已审核" };
 
+/** 盘点统计卡数据（设计页 24：进行中/待过账/本月/盈亏）。 */
+interface CheckStats {
+  inProgress: number;
+  pending: number;
+  monthCount: number;
+  gain: number;
+  loss: number;
+}
+
 export function ChecksPage() {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const navigate = useNavigate();
   const [status, setStatus] = useState<number | undefined>();
   const [list, setList] = useState<CheckBill[]>([]);
@@ -20,6 +31,7 @@ export function ChecksPage() {
   const [open, setOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
   const [whId, setWhId] = useState<number | undefined>();
+  const [stats, setStats] = useState<CheckStats>({ inProgress: 0, pending: 0, monthCount: 0, gain: 0, loss: 0 });
 
   const load = useCallback(async () => {
     setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
@@ -31,6 +43,47 @@ export function ChecksPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 盘点统计卡：分页取全量盘点单，按明细 diff_qty 汇总盈亏
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const all: CheckBill[] = [];
+        for (let p = 1; p <= 5; p++) {
+          const d = await checkApi.list(undefined, p, 100);
+          all.push(...d.list);
+          if (all.length >= d.total || d.list.length === 0) break;
+        }
+        if (!alive) return;
+        const now = new Date();
+        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        let gain = 0;
+        let loss = 0;
+        for (const b of all) {
+          if (b.status === 2) {
+            for (const it of b.items) {
+              const d = Number(it.diff_qty) || 0;
+              if (d > 0) gain += d;
+              else if (d < 0) loss += Math.abs(d);
+            }
+          }
+        }
+        setStats({
+          inProgress: all.filter((b) => b.status === 1).length,
+          pending: all.filter((b) => b.status === 0).length,
+          monthCount: all.filter((b) => b.check_date?.startsWith(month)).length,
+          gain,
+          loss,
+        });
+      } catch {
+        /* 统计失败不影响主列表 */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [total]);
 
   useEffect(() => {
     baseApi.warehouses().then((ws) => setWarehouses(ws.filter((w) => w.status === 1).map((w) => ({ id: w.id, name: w.name }))));
@@ -72,6 +125,26 @@ export function ChecksPage() {
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ margin: "0 0 16px" }}>盘点</h2>
+
+      {/* 统计卡（设计页 24：进行中/待过账/本月/盈亏） */}
+      <div className="wlt-grid" style={{ marginBottom: 16 }}>
+        {[
+          { icon: <ClockCircleOutlined />, label: "进行中", value: stats.inProgress, color: "#3B5BDB", bg: "#EAEFFF" },
+          { icon: <ProfileOutlined />, label: "待过账", value: stats.pending, color: "#B45309", bg: "#FEF4E2" },
+          { icon: <CalendarOutlined />, label: "本月盘点", value: stats.monthCount, color: "#1E2433", bg: "#F6F8FE" },
+          { icon: <RiseOutlined />, label: "盘盈", value: stats.gain.toLocaleString("zh-CN", { maximumFractionDigits: 3 }), color: "#15803D", bg: "#E8F9EF" },
+          { icon: <FallOutlined />, label: "盘亏", value: stats.loss.toLocaleString("zh-CN", { maximumFractionDigits: 3 }), color: "#DC2626", bg: "#FDEBEC" },
+        ].map((c) => (
+          <div key={c.label} className="wlt-glass-sm" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ width: 38, height: 38, borderRadius: 12, background: c.bg, color: c.color, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>{c.icon}</span>
+            <div>
+              <div style={{ fontSize: 12, color: token.colorTextSecondary }}>{c.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: c.color, fontVariantNumeric: "tabular-nums" }}>{c.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       <Space style={{ marginBottom: 16 }} wrap>
         <Radio.Group value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} optionType="button" size="small">
           <Radio.Button value={undefined}>全部</Radio.Button>
