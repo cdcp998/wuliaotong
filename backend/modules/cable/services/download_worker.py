@@ -29,7 +29,7 @@ def download_worker_tick() -> None:
     """
     db = SessionLocal()
     try:
-        config = config_store.load_config(db)
+        config = config_store.effective_config(db)
         sources = config.get("map_sources") or {}
         default_key = next((k for k, s in sources.items() if s.get("enabled")), None)
         if default_key is None:

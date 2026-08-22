@@ -113,6 +113,17 @@ def save_config(db: Session, config: dict) -> None:
     invalidate_module_cache(MODULE_CODE)
 
 
+def effective_config(db: Session) -> dict:
+    """读取模块配置；map_sources 为空时回退默认配置（与 GET /map/sources 展示一致）。
+
+    保证「安装并启用 cable 模块后瓦片代理开箱可用」（默认 Esri WGS84），无需先手动保存源。
+    """
+    config = load_config(db)
+    if not config.get("map_sources"):
+        return default_config()
+    return config
+
+
 def mask_config(config: dict) -> dict:
     """接口脱敏视图（不修改原对象）。"""
     import copy

@@ -216,6 +216,19 @@ def test_tile_batch_download_flow() -> None:
     assert all(x["id"] != region_id or x["tile_count"] == 0 for x in r.json()["data"])
 
 
+def test_tile_config_default_fallback() -> None:
+    """空配置时瓦片代理有效配置回退默认 Esri（安装启用即开箱可用，无需先保存源）。"""
+    from app.modules.cable.services import config_store
+
+    db = SessionLocal()
+    try:
+        cfg = config_store.effective_config(db)  # 隔离库清理后 cable.config=NULL
+        assert cfg["map_sources"].get("esri"), cfg
+        assert cfg["map_sources"]["esri"]["enabled"] is True
+    finally:
+        db.close()
+
+
 def test_scheduler_module_job_registered() -> None:
     """scheduler 模块 job（knowledge/cable worker）已注册（tick 校验 ENABLED 由框架保证）。"""
     from app.scheduler import scheduler

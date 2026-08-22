@@ -546,9 +546,7 @@ def nearby_faults(lat: float = Query(...), lng: float = Query(...), radius: floa
 
 @router.get("/map/sources", dependencies=[Depends(require_permission("map:config"))])
 def map_sources(db: Session = Depends(get_db)) -> dict:
-    config = config_store.load_config(db)
-    if not config.get("map_sources"):
-        config = config_store.default_config()
+    config = config_store.effective_config(db)
     masked = config_store.mask_config(config)
     return ok({"map_sources": masked.get("map_sources", {}), "cache": masked.get("cache", {})})
 
@@ -569,7 +567,7 @@ def tile_proxy(source: str, z: int, x: int, y: int, db: Session = Depends(get_db
     """瓦片代理：缓存优先 → 在线源抓取落盘（方案 §5.4）。"""
     if not (0 <= z <= TILE_MAX_ZOOM) or x < 0 or y < 0 or x >= 2 ** z or y >= 2 ** z:
         raise BizError(E_PARAM, "瓦片坐标越界")
-    config = config_store.load_config(db)
+    config = config_store.effective_config(db)
     src = (config.get("map_sources") or {}).get(source)
     if src is None or not src.get("enabled", False):
         raise BizError(E_NOT_FOUND, f"地图源 {source} 未配置")
