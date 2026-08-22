@@ -77,3 +77,8 @@ class DeviceRequisitionReq(BaseModel):
     use_reason: str = Field(min_length=1, max_length=255)
     remark: str = Field(default="", max_length=200)
     items: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class DeviceFileIn(BaseModel):
+    file_id: int = Field(gt=0)
+    remark: str = Field(default="", max_length=255)

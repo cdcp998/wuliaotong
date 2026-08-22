@@ -217,14 +217,20 @@ def test_tile_batch_download_flow() -> None:
 
 
 def test_tile_config_default_fallback() -> None:
-    """空配置时瓦片代理有效配置回退默认 Esri（安装启用即开箱可用，无需先保存源）。"""
+    """系统自带图源写入配置库（on_enable 钩子 ensure_seeded）：config 不再是 NULL，
+    内置 Esri 为真实配置（可测试/编辑/停用），effective 兜底仅用于全删后的回退。"""
     from app.modules.cable.services import config_store
 
     db = SessionLocal()
     try:
-        cfg = config_store.effective_config(db)  # 隔离库清理后 cable.config=NULL
+        cfg = config_store.effective_config(db)  # 隔离库清理后保留 migration 记录；on_enable 已 seed
         assert cfg["map_sources"].get("esri"), cfg
         assert cfg["map_sources"]["esri"]["enabled"] is True
+        # 已持久化落库（不再仅虚拟回退）
+        from app.models import SysModule
+
+        row = db.scalar(text("SELECT config FROM sys_module WHERE code = 'cable'"))
+        assert row is not None and "esri" in row
     finally:
         db.close()
 

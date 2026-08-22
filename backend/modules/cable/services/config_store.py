@@ -114,14 +114,32 @@ def save_config(db: Session, config: dict) -> None:
 
 
 def effective_config(db: Session) -> dict:
-    """读取模块配置；map_sources 为空时回退默认配置（与 GET /map/sources 展示一致）。
+    """读取模块配置；map_sources 为空（从未保存过）时回退默认配置并**持久化写入配置库**。
 
-    保证「安装并启用 cable 模块后瓦片代理开箱可用」（默认 Esri WGS84），无需先手动保存源。
+    系统自带图源（默认 Esri）在安装/启用或首次访问时即落库（ensure_seeded），
+    成为可测试/可编辑/可停用的真实配置；仅当源被全部删除时才再次回退内置默认。
     """
     config = load_config(db)
     if not config.get("map_sources"):
-        return default_config()
+        return ensure_seeded(db)
     return config
+
+
+def ensure_seeded(db: Session) -> dict:
+    """把系统自带图源（默认 Esri + 缓存配额）写入配置数据库（幂等：config 为空才写）。
+
+    由 cable 模块 on_install/on_enable 钩子调用，保证「安装即持久化」；
+    图源管理界面的「系统自带」源从此为真实配置（可测试/编辑/停用）。
+    """
+    config = load_config(db)
+    if config.get("map_sources"):
+        return config
+    default = default_config()
+    row = db.scalar(select(SysModule).where(SysModule.code == MODULE_CODE))
+    if row is not None:
+        row.config = json.dumps(default, ensure_ascii=False)
+        db.commit()
+    return default
 
 
 def mask_config(config: dict) -> dict:

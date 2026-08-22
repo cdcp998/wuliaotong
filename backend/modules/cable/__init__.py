@@ -7,12 +7,18 @@ from __future__ import annotations
 
 __version__ = "1.0.0"
 
-from app.core.modules import ModuleDef
+from app.core.modules import ModuleDef, ModuleContext
 from app.modules.cable.api import router
+from app.modules.cable.services.config_store import ensure_seeded
 from app.modules.cable.services.download_worker import download_worker_tick
 
-# 生命周期钩子（幂等、可重入；本模块当前无额外初始化，均留空）
-# on_install / on_enable / on_disable / on_uninstall 可在此按需定义
+
+def _seed_default_sources(db, module, ctx: ModuleContext | None = None) -> None:
+    """系统自带图源写入配置库（安装/启用即持久化；幂等，图源管理可测试/编辑，不再仅虚拟回退）。"""
+    ensure_seeded(db)
+
+
+# 生命周期钩子（幂等、可重入）：安装/启用时落库系统自带图源
 
 
 def _migrate_0001(db) -> None:
@@ -55,5 +61,7 @@ module = ModuleDef(
     },
     install_sql=["sql/install.sql"],
     migration_executors={"0001_add_task_source.sql": _migrate_0001, "0002_add_fault_deleted.sql": _migrate_0002},
+    on_install=_seed_default_sources,
+    on_enable=_seed_default_sources,
     jobs=[download_worker_tick],  # 瓦片批量下载（tick 校验 ENABLED）
 )

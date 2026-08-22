@@ -59,6 +59,7 @@ export interface DeviceItem {
   lat: number | null;
   lng: number | null;
   status: number;
+  cover_file_id?: number | null;
 }
 
 export const DEVICE_STATUS: Record<number, string> = { 1: "在用", 2: "维修中", 3: "闲置", 4: "报废" };
@@ -68,4 +69,7 @@ export const deviceApi = {
     const p = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
     return http.get<Page<DeviceItem>>(`/devices?${p.toString()}`);
   },
+  create: (body: { code: string; name: string; model?: string; category?: string; location?: string; lat?: number | null; lng?: number | null; status?: number }) =>
+    http.post<{ id: number }>("/devices", body),
+  addDeviceFile: (id: number, fileId: number) => http.post<{ id: number }>(`/devices/${id}/files`, { file_id: fileId }),
 };

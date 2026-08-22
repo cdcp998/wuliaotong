@@ -15,6 +15,7 @@ export interface DeviceItem {
   purchase_date: string | null;
   warranty_end: string | null;
   remark: string;
+  cover_file_id?: number | null;
   updated_at: string | null;
 }
 
@@ -75,6 +76,9 @@ export const deviceApi = {
   create: (body: Partial<DeviceItem>) => http.post<DeviceItem>("/devices", body),
   update: (id: number, body: Partial<DeviceItem>) => http.put<DeviceItem>(`/devices/${id}`, body),
   status: (id: number, status: number) => http.put<DeviceItem>(`/devices/${id}/status`, { status }),
+  listFiles: (id: number) => http.get<{ id: number; file_id: number }[]>(`/devices/${id}/files`),
+  addFile: (id: number, fileId: number) => http.post<{ id: number }>(`/devices/${id}/files`, { file_id: fileId }),
+  deleteFile: (id: number, linkId: number) => http.delete<null>(`/devices/${id}/files/${linkId}`),
   listTasks: (params: { status?: string; page?: number; page_size?: number } = {}) => {
     const p = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => {

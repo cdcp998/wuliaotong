@@ -1,6 +1,6 @@
 /** cable 模块：地图缓存管理（/cable/cache，map:cache）+ 图源管理（map:config 编辑/新增/删除，查看脱敏）。 */
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
+import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
 import { PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
 
 import { useAuthStore } from "@wlt/shared";
@@ -61,7 +61,8 @@ export function CableCachePage() {
   const loadSources = useCallback(async () => {
     try {
       const r = await cableApi.mapSources();
-      setSources(r.map_sources);
+      // 后端每个源对象不含 key（key 为外层对象键），注入 key 供表格行内操作（测试/编辑/停用/删除）使用
+      setSources(Object.fromEntries(Object.entries(r.map_sources).map(([k, v]) => [k, { ...v, key: k }])));
     } catch {
       /* 无权限/接口异常静默 */
     }
@@ -240,43 +241,58 @@ export function CableCachePage() {
         </Typography.Paragraph>
       )}
 
-      {/* 图源管理 */}
-      <Drawer open={srcOpen} onClose={() => setSrcOpen(false)} width={720} title="图源管理">
+      {/* 图源管理（弹窗式，宽屏自适应） */}
+      <Modal
+        open={srcOpen}
+        onCancel={() => setSrcOpen(false)}
+        footer={null}
+        width={1200}
+        title="图源管理"
+        destroyOnHidden
+        styles={{ body: { maxHeight: "70vh", overflow: "auto" } }}
+      >
         <Space direction="vertical" style={{ width: "100%" }} size={12}>
-          <Space>
+          <Space align="center" style={{ width: "100%", justifyContent: "space-between" }}>
+            <Typography.Text type="secondary">
+              数据一律 WGS84 存储；仅显示层按源 coordinate_space 转换（gcj02/bd09 可配）。密钥加密存储、回读脱敏。「内置」为系统自带图源，已写入配置库，可测试/编辑/停用。
+            </Typography.Text>
             {canConfig && <Button type="primary" icon={<PlusOutlined />} onClick={() => openSrcEdit(null)}>新增图源</Button>}
-            <Typography.Text type="secondary">数据一律 WGS84 存储；仅显示层按源 coordinate_space 转换（gcj02/bd09 可配）。密钥加密存储、回读脱敏。</Typography.Text>
           </Space>
           <Table<MapSourceInfo>
             rowKey="key"
             dataSource={Object.values(sources)}
             pagination={false}
-            size="small"
+            scroll={{ x: 1120 }}
             columns={[
-              { title: "标识", dataIndex: "key", width: 110, render: (v: string) => <Typography.Text code>{v}</Typography.Text> },
-              { title: "名称", dataIndex: "name" },
-              { title: "类型", dataIndex: "type", width: 90, render: (v: string) => <Tag>{v}</Tag> },
-              { title: "坐标空间", dataIndex: "coordinate_space", width: 100 },
+              { title: "标识", dataIndex: "key", width: 170, render: (v: string) => (
+                <span style={{ whiteSpace: "nowrap" }}>
+                  <Typography.Text code>{v}</Typography.Text>
+                  {v === "esri" && <Tag color="blue" style={{ marginLeft: 6 }}>内置</Tag>}
+                </span>
+              ) },
+              { title: "名称", dataIndex: "name", width: 280, ellipsis: true },
+              { title: "类型", dataIndex: "type", width: 110, render: (v: string) => <Tag style={{ whiteSpace: "nowrap" }}>{v}</Tag> },
+              { title: "坐标空间", dataIndex: "coordinate_space", width: 120, render: (v: string) => <span style={{ whiteSpace: "nowrap" }}>{v}</span> },
               {
-                title: "状态", dataIndex: "enabled", width: 130,
+                title: "状态", dataIndex: "enabled", width: 160,
                 render: (v: boolean, s) => (
-                  <Space size={6}>
+                  <span style={{ whiteSpace: "nowrap" }}>
                     <Tag color={v ? "success" : "default"}>{v ? "启用" : "停用"}</Tag>
                     {defaultKey === s.key && <Tag color="blue">默认</Tag>}
-                  </Space>
+                  </span>
                 ),
               },
               {
-                title: "操作", width: 250,
+                title: "操作", width: 300,
                 render: (_, s) => (
-                  <Space size={4}>
+                  <Space size={4} wrap={false}>
                     <Button size="small" onClick={() => testSource(s)} loading={testingKey === s.key}>测试</Button>
                     {canConfig && <Button size="small" onClick={() => openSrcEdit(s.key)}>编辑</Button>}
                     {canConfig && (
                       <Button size="small" onClick={() => toggleSource(s)}>{s.enabled ? "停用" : "启用"}</Button>
                     )}
                     {canConfig && (
-                      <Popconfirm title={`删除图源「${s.name}」？删除后瓦片代理不再使用它。`} onConfirm={() => deleteSource(s.key)}>
+                      <Popconfirm title={s.key === "esri" ? "删除内置 Esri？之后系统会在无可用源时自动回退内置默认（可能再次出现）。" : `删除图源「${s.name}」？删除后瓦片代理不再使用它。`} onConfirm={() => deleteSource(s.key)}>
                         <Button size="small" danger>删除</Button>
                       </Popconfirm>
                     )}
@@ -287,7 +303,7 @@ export function CableCachePage() {
           />
           {!canConfig && <Typography.Text type="secondary">当前账号仅有查看权限（脱敏）；新增/编辑/停用/删除需要「地图源配置」权限（超级管理员）。</Typography.Text>}
         </Space>
-      </Drawer>
+      </Modal>
 
       <Modal open={open} onCancel={() => setOpen(false)} onOk={createRegion} confirmLoading={saving} title="新建缓存下载区域" width={520} destroyOnHidden>
         <Form form={form} layout="vertical">

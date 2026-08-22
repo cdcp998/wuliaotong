@@ -29,6 +29,7 @@ from app.modules.device.models import Device, DeviceTask, DeviceTaskRecord, Devi
 from app.modules.device.schemas import (
     AssignReq,
     DeviceCreate,
+    DeviceFileIn,
     DeviceRequisitionReq,
     DeviceRecordCreate,
     DeviceStatusReq,
@@ -72,7 +73,18 @@ def _notify(db: Session, user_id: int, title: str, content: str, link: str, biz_
     db.add(SysNotification(user_id=user_id, title=title, content=content, biz_type=biz_type, link=link))
 
 
-def _device_out(d: Device) -> dict:
+def _device_cover(db: Session, device_id: int) -> int | None:
+    """设备首图 file_id（列表缩略用；无图返回 None）。"""
+    from app.modules.device.models import DeviceFile
+
+    return db.scalar(
+        select(DeviceFile.file_id).where(DeviceFile.device_id == device_id)
+        .order_by(DeviceFile.sort_order, DeviceFile.id).limit(1)
+    )
+
+
+def _device_out(db: Session, d: Device) -> dict:
+    cover = _device_cover(db, d.id)
     return {
         "id": d.id, "code": d.code, "name": d.name, "model": d.model, "category": d.category,
         "department_id": d.department_id, "location": d.location,
@@ -82,6 +94,7 @@ def _device_out(d: Device) -> dict:
         "purchase_date": d.purchase_date.isoformat() if d.purchase_date else None,
         "warranty_end": d.warranty_end.isoformat() if d.warranty_end else None,
         "remark": d.remark,
+        "cover_file_id": cover,
         "updated_at": d.updated_at.isoformat() if d.updated_at else None,
     }
 
@@ -137,12 +150,12 @@ def list_devices(
         stmt = stmt.where(Device.category == category)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(Device.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
-    return ok({"total": total, "page": page, "page_size": page_size, "items": [_device_out(d) for d in rows]})
+    return ok({"total": total, "page": page, "page_size": page_size, "items": [_device_out(db, d) for d in rows]})
 
 
 @router.get("/devices/{device_id}", dependencies=[Depends(require_any_permission("device:manage", "device:task"))])
 def get_device(device_id: int, db: Session = Depends(get_db)) -> dict:
-    return ok(_device_out(_device_or_404(db, device_id)))
+    return ok(_device_out(db, _device_or_404(db, device_id)))
 
 
 @router.post("/devices", dependencies=[Depends(require_permission("device:manage"))])
@@ -153,7 +166,7 @@ def create_device(req: DeviceCreate, user: SysUser = Depends(get_current_user), 
     db.add(d)
     db.commit()
     db.refresh(d)
-    return ok(_device_out(d))
+    return ok(_device_out(db, d))
 
 
 @router.put("/devices/{device_id}", dependencies=[Depends(require_permission("device:manage"))])
@@ -163,7 +176,7 @@ def update_device(device_id: int, req: DeviceUpdate, user: SysUser = Depends(get
         setattr(d, k, v)
     d.updated_by = user.id
     db.commit()
-    return ok(_device_out(d))
+    return ok(_device_out(db, d))
 
 
 @router.put("/devices/{device_id}/status", dependencies=[Depends(require_permission("device:manage"))])
@@ -175,7 +188,51 @@ def update_device_status(device_id: int, req: DeviceStatusReq, user: SysUser = D
     d.status = req.status
     d.updated_by = user.id
     db.commit()
-    return ok(_device_out(d))
+    return ok(_device_out(db, d))
+
+
+# ============================ 设备图片（可选，M0001 device_file） ============================
+
+@router.get("/devices/{device_id}/files", dependencies=[Depends(require_any_permission("device:manage", "device:task"))])
+def list_device_files(device_id: int, db: Session = Depends(get_db)) -> dict:
+    """设备图片列表（前端缩略/编辑展示）。"""
+    _device_or_404(db, device_id)
+    from app.modules.device.models import DeviceFile
+
+    rows = db.scalars(
+        select(DeviceFile).where(DeviceFile.device_id == device_id).order_by(DeviceFile.sort_order, DeviceFile.id)
+    ).all()
+    return ok([
+        {"id": r.id, "file_id": r.file_id, "sort_order": r.sort_order,
+         "created_at": r.created_at.isoformat() if r.created_at else None}
+        for r in rows
+    ])
+
+
+@router.post("/devices/{device_id}/files", dependencies=[Depends(require_permission("device:manage"))])
+def add_device_file(device_id: int, req: DeviceFileIn, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """上传设备图片关联（file_id 来自 /files/upload，可选多张）。"""
+    _device_or_404(db, device_id)
+    from app.modules.device.models import DeviceFile
+
+    cnt = db.scalar(select(func.count()).select_from(DeviceFile).where(DeviceFile.device_id == device_id)) or 0
+    row = DeviceFile(device_id=device_id, file_id=req.file_id, sort_order=cnt, created_by=user.id)
+    db.add(row)
+    db.commit()
+    return ok({"id": row.id})
+
+
+@router.delete("/devices/{device_id}/files/{link_id}", dependencies=[Depends(require_permission("device:manage"))])
+def delete_device_file(device_id: int, link_id: int, db: Session = Depends(get_db)) -> dict:
+    """删除设备图片关联（不删 sys_file 本体）。"""
+    from app.modules.device.models import DeviceFile
+
+    row = db.get(DeviceFile, link_id)
+    if row is None or row.device_id != device_id:
+        raise BizError(E_NOT_FOUND, "设备图片不存在")
+    db.delete(row)
+    db.commit()
+    return ok()
 
 
 # ============================ 设备维修任务 ============================

@@ -82,3 +82,16 @@ class DeviceTaskRecordFile(Base):
     remark: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+
+class DeviceFile(Base):
+    """设备图片（可选，M0001）：多张，列表展示首图缩略。"""
+
+    __tablename__ = "device_file"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    device_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    file_id: Mapped[int] = mapped_column(BigInteger, nullable=False)  # → sys_file.id
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())

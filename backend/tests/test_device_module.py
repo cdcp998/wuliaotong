@@ -157,6 +157,48 @@ def test_device_task_full_flow_and_snapshot_rollback() -> None:
     _cleanup_file(file_id)
 
 
+def test_device_images_flow() -> None:
+    """设备图片：上传关联 → 列表 cover → 删除关联（M0001 device_file）；定位坐标协同。"""
+    _login("admin", "admin123")
+    d = _mk_device()
+    did = d["id"]
+    # 定位坐标（模拟手机端定位获取）：设备无坐标时列表返回 null，更新后带出
+    r = client.put(f"/api/v1/devices/{did}", json={"lat": 30.1234567, "lng": 120.1234567, "location": "T-机房定位"})
+    assert r.json()["code"] == 0 and r.json()["data"]["lat"] == 30.1234567
+
+    db = SessionLocal()
+    try:
+        db.execute(text(
+            "INSERT INTO sys_file (biz_type, biz_id, storage_id, original_name, file_path, file_size, md5, uploader_id) "
+            "VALUES ('device', 0, 1, 'T-dev.png', 'data/files/x.png', 10, 'x', 1)"
+        ))
+        db.commit()
+        file_id = db.execute(text("SELECT id FROM sys_file WHERE original_name = 'T-dev.png' ORDER BY id DESC LIMIT 1")).scalar()
+    finally:
+        db.close()
+
+    r = client.post(f"/api/v1/devices/{did}/files", json={"file_id": file_id})
+    assert r.json()["code"] == 0
+    link_id = r.json()["data"]["id"]
+    # 列表带 cover_file_id + files 接口
+    r = client.get("/api/v1/devices", params={"keyword": "T-"})
+    row = next((x for x in r.json()["data"]["items"] if x["id"] == did), None)
+    assert row is not None and row["cover_file_id"] == file_id
+    r = client.get(f"/api/v1/devices/{did}/files")
+    assert r.json()["code"] == 0 and len(r.json()["data"]) == 1
+    # 删除关联后 cover 消失
+    assert client.delete(f"/api/v1/devices/{did}/files/{link_id}").json()["code"] == 0
+    r = client.get(f"/api/v1/devices/{did}/files")
+    assert r.json()["data"] == []
+    # 清理文件记录
+    db = SessionLocal()
+    try:
+        db.execute(text("DELETE FROM sys_file WHERE id = :i"), {"i": file_id})
+        db.commit()
+    finally:
+        db.close()
+
+
 def test_device_task_cancel_rollback_and_scope() -> None:
     _login("admin", "admin123")
     d = _mk_device()
