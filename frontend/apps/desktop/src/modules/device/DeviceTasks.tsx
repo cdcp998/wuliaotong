@@ -1,18 +1,32 @@
-/** device 模块：设备维修任务（/device/tasks，device:task）——创建/派发/接单/完成/验收/取消 + 维修记录。 */
+/** device 模块：设备维修任务（/device/tasks，device:task）——创建/派发/接单/完成/验收/取消 + 维修记录。
+ *  v2 界面：状态胶囊 Tabs + 玻璃表格 + 状态流转说明条（与设计稿一致）。 */
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Card, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography, Upload } from "antd";
-import { CheckCircleOutlined, CheckOutlined, DeleteOutlined, FileDoneOutlined, FileImageOutlined, LockOutlined, PlusOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
+import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, theme, Tooltip, Upload } from "antd";
+import { CheckCircleOutlined, CheckOutlined, DeleteOutlined, FileDoneOutlined, FileImageOutlined, LockOutlined, PlusOutlined, ReloadOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
+import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, fileApi } from "@wlt/shared";
 
-import { DEVICE_STATUS, DTASK_STATUS, deviceApi, type DeviceItem, type DeviceTaskItem } from "./api";
+import { DEVICE_STATUS, deviceApi, type DeviceItem, type DeviceTaskItem } from "./api";
+
+const ST: Record<string, { label: string; fg: string; bg: string }> = {
+  pending: { label: "待派发", fg: "#B45309", bg: "#FEF4E2" },
+  assigned: { label: "已派发", fg: "#3B5BDB", bg: "#EAEFFF" },
+  in_progress: { label: "进行中", fg: "#0E7490", bg: "#E0F2FE" },
+  done: { label: "完成待验", fg: "#7C3AED", bg: "#F3E8FF" },
+  verified: { label: "已验证", fg: "#15803D", bg: "#E8F9EF" },
+  closed: { label: "已关闭", fg: "#64748B", bg: "#EFF3FC" },
+  cancelled: { label: "已取消", fg: "#DC2626", bg: "#FDEBEC" },
+};
+const FLOW_STEPS = ["待派发", "已派发", "进行中", "完成待验", "已验证", "已关闭"];
 
 export function DeviceTasksPage() {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [rows, setRows] = useState<DeviceTaskItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(10);
   const [filterStatus, setFilterStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -109,57 +123,89 @@ export function DeviceTasksPage() {
     }
   };
 
-  return (
-    <div>
-      <Space style={{ marginBottom: 12, width: "100%", justifyContent: "space-between" }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>设备维修任务</Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true); }}>新建任务</Button>
-      </Space>
-      <Space style={{ marginBottom: 12 }}>
-        <Select placeholder="状态" allowClear style={{ width: 150 }} value={filterStatus || undefined} onChange={(v) => { setFilterStatus(v ?? ""); setPage(1); }}
-          options={Object.entries(DTASK_STATUS).map(([k, v]) => ({ value: k, label: v.label }))} />
-      </Space>
-      <Table<DeviceTaskItem>
-        rowKey="id" loading={loading} dataSource={rows}
-        pagination={{ current: page, pageSize, total, showSizeChanger: true, onChange: (p, ps) => { setPage(p); setPageSize(ps); } }}
-        columns={[
-          { title: "单号", dataIndex: "task_no", width: 160 },
-          { title: "设备", dataIndex: "device_name", width: 140, render: (v: string, t) => `${v}（${t.device_code}）` },
-          { title: "标题", dataIndex: "title", ellipsis: true },
-          { title: "状态", dataIndex: "status", width: 100, render: (v: string) => <Tag color={DTASK_STATUS[v]?.color}>{DTASK_STATUS[v]?.label ?? v}</Tag> },
-          { title: "优先级", dataIndex: "priority", width: 90, render: (v: number) => (v === 2 ? <Tag color="red">紧急</Tag> : "普通") },
-          { title: "维修人员", dataIndex: "assignee_name", width: 110, render: (v: string) => v || "—" },
-          {
-            title: "操作", width: 220,
-            render: (_, t) => (
-              <Space size={2}>
-                <Tooltip title="维修记录"><Button size="small" icon={<FileImageOutlined />} onClick={() => openRecords(t)} /></Tooltip>
-                {t.status === "pending" && (
-                  <Tooltip title="派发"><Button size="small" type="primary" icon={<SendOutlined />} onClick={() => { setCurrent(t); setAssignee(undefined); }} /></Tooltip>
-                )}
-                {t.status === "assigned" && (
-                  <Tooltip title="接单"><Button size="small" icon={<CheckCircleOutlined />} onClick={() => act(t, "accept")} /></Tooltip>
-                )}
-                {t.status === "in_progress" && (
-                  <Tooltip title="完成"><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => act(t, "complete")} /></Tooltip>
-                )}
-                {t.status === "done" && (
-                  <Tooltip title="验收"><Button size="small" type="primary" icon={<FileDoneOutlined />} onClick={() => { setCurrent(t); setVerdict(""); }} /></Tooltip>
-                )}
-                {t.status === "verified" && (
-                  <Tooltip title="关闭"><Button size="small" icon={<LockOutlined />} onClick={() => act(t, "close")} /></Tooltip>
-                )}
-                {(t.status === "pending" || t.status === "assigned") && (
-                  <Popconfirm title="取消任务（设备状态将按快照回退）？" onConfirm={() => act(t, "cancel", { reason: "人工取消" })}>
-                    <Tooltip title="取消"><Button size="small" danger icon={<DeleteOutlined />} /></Tooltip>
-                  </Popconfirm>
-                )}
-              </Space>
-            ),
-          },
-        ]}
-      />
+  const columns: ColumnsType<DeviceTaskItem> = [
+    { title: "任务", width: 280, render: (_, t) => (
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t.title}</div>
+        <div style={{ fontSize: 11, color: token.colorTextTertiary, marginTop: 2 }}>{t.task_no} · 创建 {t.creator_name}</div>
+      </div>
+    ) },
+    { title: "设备", width: 180, render: (_, t) => (
+      <div>
+        <div style={{ fontWeight: 600, fontSize: 12.5 }}>{t.device_name}</div>
+        <div style={{ fontSize: 11, color: token.colorTextTertiary }}>{t.device_code}</div>
+      </div>
+    ) },
+    { title: "优先级", width: 90, render: (_, t) => (t.priority === 2 ? <Tag color="red" style={{ borderRadius: 999 }}>紧急</Tag> : <Tag style={{ borderRadius: 999, color: "#64748B", background: "#EFF3FC", borderColor: "transparent" }}>普通</Tag>) },
+    { title: "状态", width: 110, render: (_, t) => { const s = ST[t.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? t.status}</Tag>; } },
+    { title: "维修人员", dataIndex: "assignee_name", width: 110, render: (v: string) => v || <span style={{ color: token.colorTextTertiary }}>未派发</span> },
+    { title: "计划时间", dataIndex: "scheduled_time", width: 130, render: (v: string | null) => v ? <span style={{ fontSize: 12 }}>{v.slice(0, 16)}</span> : <span style={{ color: token.colorTextTertiary }}>—</span> },
+    {
+      title: "操作", width: 200,
+      render: (_, t) => (
+        <Space size={2}>
+          <Tooltip title="维修记录"><Button size="small" icon={<FileImageOutlined />} onClick={() => openRecords(t)} /></Tooltip>
+          {t.status === "pending" && <Tooltip title="派发"><Button size="small" type="primary" icon={<SendOutlined />} onClick={() => { setCurrent(t); setAssignee(undefined); }} /></Tooltip>}
+          {t.status === "assigned" && <Tooltip title="接单"><Button size="small" icon={<CheckCircleOutlined />} onClick={() => act(t, "accept")} /></Tooltip>}
+          {t.status === "in_progress" && <Tooltip title="完成"><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => act(t, "complete")} /></Tooltip>}
+          {t.status === "done" && <Tooltip title="验收"><Button size="small" type="primary" icon={<FileDoneOutlined />} onClick={() => { setCurrent(t); setVerdict(""); }} /></Tooltip>}
+          {t.status === "verified" && <Tooltip title="关闭"><Button size="small" icon={<LockOutlined />} onClick={() => act(t, "close")} /></Tooltip>}
+          {(t.status === "pending" || t.status === "assigned") && (
+            <Popconfirm title="取消任务（设备状态将按快照回退）？" onConfirm={() => act(t, "cancel", { reason: "人工取消" })}>
+              <Tooltip title="取消"><Button size="small" danger icon={<DeleteOutlined />} /></Tooltip>
+            </Popconfirm>
+          )}
+        </Space>
+      ),
+    },
+  ];
 
+  return (
+    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>设备维修任务</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>与线缆任务共用状态机：创建任务自动将设备置为「维修中」，完成验收后自动回退原状态</p>
+        </div>
+        <Space>
+          <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true); }}>新建设备维修</Button>
+        </Space>
+      </div>
+
+      {/* 状态 Tabs */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        {[["", "全部"], ["pending", "待派发"], ["assigned", "已派发"], ["in_progress", "进行中"], ["done", "完成待验"], ["verified", "已验证"], ["closed", "已关闭"], ["cancelled", "已取消"]].map(([st, label]) => {
+          const active = filterStatus === st;
+          return (
+            <button key={st} type="button" onClick={() => { setFilterStatus(st); setPage(1); }}
+              style={{ cursor: "pointer", border: `1px solid ${active ? "#5B7FFF" : token.colorBorder}`, background: active ? "#5B7FFF" : "#fff", color: active ? "#fff" : token.colorTextSecondary, borderRadius: 999, padding: "6px 14px", fontSize: 12.5, fontWeight: active ? 600 : 500, display: "inline-flex", gap: 6, alignItems: "center", fontFamily: "inherit", transition: "all .2s ease" }}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <Table<DeviceTaskItem>
+          rowKey="id" loading={loading} dataSource={rows} locale={{ emptyText: "暂无设备维修任务" }}
+          pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else setPage(p); } }}
+          columns={columns}
+        />
+        {/* 状态流转说明 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "12px 10px 4px", borderTop: `1px solid ${token.colorBorder}`, marginTop: 4 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: token.colorTextSecondary }}>状态流转</span>
+          {FLOW_STEPS.map((s, i) => (
+            <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 11.5, padding: "3px 10px", borderRadius: 999, background: i === 3 ? "#F3E8FF" : "#F6F8FE", color: i === 3 ? "#7C3AED" : token.colorTextSecondary, fontWeight: i === 3 ? 700 : 400 }}>{s}</span>
+              {i < FLOW_STEPS.length - 1 && <span style={{ color: token.colorTextTertiary }}>›</span>}
+            </span>
+          ))}
+          <span style={{ fontSize: 11, color: token.colorTextTertiary, marginLeft: 8 }}>任务完成 → 设备自动回退上一状态（快照前一状态）</span>
+        </div>
+      </div>
+
+      {/* 新建任务 */}
       <Modal open={open} onCancel={() => setOpen(false)} onOk={create} confirmLoading={creating} title="新建设备维修任务" width={560} destroyOnHidden>
         <Form form={form} layout="vertical">
           <Form.Item name="device_id" label="设备" rules={[{ required: true, message: "请选择设备" }]}>
@@ -177,44 +223,43 @@ export function DeviceTasksPage() {
         </Form>
       </Modal>
 
+      {/* 派发/验收/记录抽屉 */}
       <Drawer open={!!current} onClose={() => setCurrent(null)} width={560} title={current ? `设备任务：${current.title}` : ""}>
         {current && (
-          <>
-            <Space direction="vertical" style={{ width: "100%" }} size={8}>
-              {current.status === "pending" && (
-                <Space>
-                  <Select placeholder="选择维修人员" style={{ width: 220 }} value={assignee} onChange={setAssignee} options={workers.map((w) => ({ value: w.id, label: w.name }))} />
-                  <Button type="primary" disabled={!assignee} onClick={() => act(current, "assign", { assignee_id: assignee })}>确认派发</Button>
-                </Space>
-              )}
-              {current.status === "done" && (
-                <Space direction="vertical" style={{ width: "100%" }}>
-                  <Input value={verdict} onChange={(e) => setVerdict(e.target.value)} placeholder="验收结论（必填）" />
-                  <Button type="primary" disabled={!verdict.trim()} onClick={() => act(current, "verify", { verdict })}>验收通过</Button>
-                  <Popconfirm title="驳回该任务？" onConfirm={() => act(current, "reject", { verdict: "驳回重做" })}>
-                    <Button danger>驳回</Button>
-                  </Popconfirm>
-                </Space>
-              )}
-              {current.verdict && <Typography.Text type="secondary">结论：{current.verdict}（设备状态回退至 {DEVICE_STATUS[current.previous_status]?.label ?? "在用"}）</Typography.Text>}
-              {records.map((r) => (
-                <Card key={r.id} size="small">
-                  <div>{r.content || "（无文字记录）"}</div>
-                  {r.files.map((f) => <img key={f.id} src={`/api/v1/files/${f.file_id}`} width={80} height={60} style={{ objectFit: "cover", borderRadius: 4, marginTop: 4 }} alt="" />)}
-                  <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>{new Date(r.created_at).toLocaleString()}</div>
-                </Card>
-              ))}
-              {(current.status === "in_progress" || current.status === "assigned") && (
-                <>
-                  <Input.TextArea rows={3} value={recContent} onChange={(e) => setRecContent(e.target.value)} placeholder="维修内容" />
-                  <Upload beforeUpload={(f) => { setRecFile(f); return false; }} maxCount={1} accept="image/*" showUploadList={false}>
-                    <Button icon={<UploadOutlined />}>{recFile ? "已选照片（点击更换）" : "选择维修照片（完成必填）"}</Button>
-                  </Upload>
-                  <Button type="primary" loading={recSaving} onClick={addRecord}>保存记录</Button>
-                </>
-              )}
-            </Space>
-          </>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {current.status === "pending" && (
+              <Space>
+                <Select placeholder="选择维修人员" style={{ width: 240 }} value={assignee} onChange={setAssignee} options={workers.map((w) => ({ value: w.id, label: w.name }))} />
+                <Button type="primary" disabled={!assignee} onClick={() => act(current, "assign", { assignee_id: assignee })}>确认派发</Button>
+              </Space>
+            )}
+            {current.status === "done" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <Input value={verdict} onChange={(e) => setVerdict(e.target.value)} placeholder="验收结论（必填）" />
+                <Button type="primary" disabled={!verdict.trim()} onClick={() => act(current, "verify", { verdict })}>验收通过</Button>
+                <Popconfirm title="驳回该任务？" onConfirm={() => act(current, "reject", { verdict: "驳回重做" })}>
+                  <Button danger>驳回</Button>
+                </Popconfirm>
+              </div>
+            )}
+            {current.verdict && <span style={{ fontSize: 12.5, color: token.colorTextSecondary }}>结论：{current.verdict}（设备状态回退至 {DEVICE_STATUS[current.previous_status]?.label ?? "在用"}）</span>}
+            {records.map((r) => (
+              <div key={r.id} className="wlt-glass-sm" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontSize: 13 }}>{r.content || "（无文字记录）"}</div>
+                {r.files.map((f) => <img key={f.id} src={`/api/v1/files/${f.file_id}`} width={80} height={60} style={{ objectFit: "cover", borderRadius: 10, marginTop: 4 }} alt="" />)}
+                <div style={{ fontSize: 11.5, color: token.colorTextTertiary }}>{new Date(r.created_at).toLocaleString()}</div>
+              </div>
+            ))}
+            {(current.status === "in_progress" || current.status === "assigned") && (
+              <>
+                <Input.TextArea rows={3} value={recContent} onChange={(e) => setRecContent(e.target.value)} placeholder="维修内容" />
+                <Upload beforeUpload={(f) => { setRecFile(f); return false; }} maxCount={1} accept="image/*" showUploadList={false}>
+                  <Button icon={<UploadOutlined />}>{recFile ? "已选照片（点击更换）" : "选择维修照片（完成必填）"}</Button>
+                </Upload>
+                <Button type="primary" loading={recSaving} onClick={addRecord}>保存记录</Button>
+              </>
+            )}
+          </div>
         )}
       </Drawer>
     </div>

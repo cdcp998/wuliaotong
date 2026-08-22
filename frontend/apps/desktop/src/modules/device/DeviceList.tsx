@@ -1,18 +1,29 @@
-/** device 模块：设备台账（/device/list，device:manage）——CRUD + 生命周期状态流转。 */
+/** device 模块：设备台账（/device/list，device:manage）——CRUD + 生命周期状态流转。
+ *  v2 界面：统计卡 + 状态胶囊 Tabs + 玻璃表格（与设计稿一致）。 */
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography, Upload, Image } from "antd";
-import { EnvironmentOutlined, PlusOutlined } from "@ant-design/icons";
+import { App, Button, Form, Image, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, theme, Upload } from "antd";
+import { EnvironmentOutlined, PlusOutlined, ReloadOutlined, LaptopOutlined, CheckCircleOutlined, ToolOutlined, WarningOutlined } from "@ant-design/icons";
+import type { ColumnsType } from "antd/es/table";
 
 import { fileApi } from "@wlt/shared";
 
-import { DEVICE_STATUS, deviceApi, type DeviceItem } from "./api";
+import { deviceApi, type DeviceItem } from "./api";
+
+const ST: Record<number, { label: string; fg: string; bg: string }> = {
+  1: { label: "在用", fg: "#15803D", bg: "#E8F9EF" },
+  2: { label: "维修中", fg: "#B45309", bg: "#FEF4E2" },
+  3: { label: "闲置", fg: "#64748B", bg: "#EFF3FC" },
+  4: { label: "报废", fg: "#DC2626", bg: "#FDEBEC" },
+};
 
 export function DeviceListPage() {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [rows, setRows] = useState<DeviceItem[]>([]);
   const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState<Record<string, number>>({});
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(10);
   const [keyword, setKeyword] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,6 +49,14 @@ export function DeviceListPage() {
   }, [keyword, filterStatus, page, pageSize, message]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    Promise.all([["", "全部"], ["1", "在用"], ["2", "维修中"], ["3", "闲置"], ["4", "报废"]].map(async ([st]) => {
+      try {
+        const r = await deviceApi.list({ status: st, page: 1, page_size: 1 });
+        return [st, r.total] as const;
+      } catch { return [st, 0] as const; }
+    })).then((cs) => setCounts(Object.fromEntries(cs)));
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
@@ -100,7 +119,6 @@ export function DeviceListPage() {
         const created = await deviceApi.create({ code: v.code, name: v.name, model: v.model ?? "", category: v.category ?? "", location: v.location ?? "", lat: v.lat ?? null, lng: v.lng ?? null, status: v.status });
         deviceId = created.id;
       }
-      // 上传新选图片（可选）
       for (const f of newFiles) {
         try {
           const up = await fileApi.upload(f, "device");
@@ -130,48 +148,96 @@ export function DeviceListPage() {
     }
   };
 
-  return (
-    <div>
-      <Space style={{ marginBottom: 12, width: "100%", justifyContent: "space-between" }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>设备台账</Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增设备</Button>
-      </Space>
-      <Space style={{ marginBottom: 12 }}>
-        <Input.Search placeholder="编码/名称/型号" allowClear style={{ width: 240 }} onSearch={(v) => { setKeyword(v); setPage(1); }} />
-        <Select placeholder="状态" allowClear style={{ width: 140 }} value={filterStatus || undefined} onChange={(v) => { setFilterStatus(v ?? ""); setPage(1); }}
-          options={Object.entries(DEVICE_STATUS).map(([k, v]) => ({ value: Number(k), label: v.label }))} />
-      </Space>
-      <Table<DeviceItem>
-        rowKey="id" loading={loading} dataSource={rows}
-        pagination={{ current: page, pageSize, total, showSizeChanger: true, onChange: (p, ps) => { setPage(p); setPageSize(ps); } }}
-        columns={[
-          { title: "图片", dataIndex: "cover_file_id", width: 70, render: (v: number | null | undefined) => v ? <Image src={`/api/v1/files/${v}`} width={44} height={44} style={{ objectFit: "cover", borderRadius: 6 }} /> : <span style={{ color: "#ccc" }}>—</span> },
-          { title: "编码", dataIndex: "code", width: 130 },
-          { title: "名称", dataIndex: "name" },
-          { title: "型号", dataIndex: "model", width: 130, render: (v: string) => v || "—" },
-          { title: "类别", dataIndex: "category", width: 110, render: (v: string) => v || "—" },
-          { title: "位置", dataIndex: "location", width: 150, ellipsis: true, render: (v: string, d) => v || (d.lat ? `${d.lat?.toFixed(5)}, ${d.lng?.toFixed(5)}` : "—") },
-          { title: "状态", dataIndex: "status", width: 90, render: (v: number) => <Tag color={DEVICE_STATUS[v]?.color}>{DEVICE_STATUS[v]?.label ?? v}</Tag> },
-          {
-            title: "操作", width: 250,
-            render: (_, d) => (
-              <Space size={4}>
-                <Button size="small" onClick={() => openEdit(d)}>编辑</Button>
-                {d.status !== 4 && d.status !== 2 && <Button size="small" onClick={() => changeStatus(d, 2)}>送修</Button>}
-                {d.status === 2 && <Button size="small" onClick={() => changeStatus(d, 1)}>在用</Button>}
-                {d.status === 1 && <Button size="small" onClick={() => changeStatus(d, 3)}>闲置</Button>}
-                {d.status === 3 && <Button size="small" onClick={() => changeStatus(d, 1)}>启用</Button>}
-                {d.status !== 4 && d.status !== 2 && (
-                  <Popconfirm title="报废该设备？" onConfirm={() => changeStatus(d, 4)}>
-                    <Button size="small" danger>报废</Button>
-                  </Popconfirm>
-                )}
-              </Space>
-            ),
-          },
-        ]}
-      />
+  const columns: ColumnsType<DeviceItem> = [
+    { title: "设备", width: 300, render: (_, d) => (
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {d.cover_file_id ? <Image src={`/api/v1/files/${d.cover_file_id}`} width={44} height={44} style={{ objectFit: "cover", borderRadius: 10, flexShrink: 0 }} /> : (
+          <span style={{ width: 44, height: 44, borderRadius: 10, background: "#EAEFFF", color: "#3B5BDB", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><LaptopOutlined /></span>
+        )}
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13.5 }}>{d.name}</div>
+          <div style={{ fontSize: 11, color: token.colorTextTertiary, marginTop: 2 }}>{d.code}</div>
+        </div>
+      </div>
+    ) },
+    { title: "型号", dataIndex: "model", width: 130, render: (v: string) => v || <span style={{ color: token.colorTextTertiary }}>—</span> },
+    { title: "类别", dataIndex: "category", width: 110, render: (v: string) => v || <span style={{ color: token.colorTextTertiary }}>—</span> },
+    { title: "物理位置", width: 180, ellipsis: true, render: (v: string, d) => v || (d.lat ? `${d.lat?.toFixed(5)}, ${d.lng?.toFixed(5)}` : <span style={{ color: token.colorTextTertiary }}>—</span>) },
+    { title: "状态", width: 100, render: (_, d) => { const s = ST[d.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? d.status}</Tag>; } },
+    { title: "更新时间", dataIndex: "updated_at", width: 150, render: (v: string | null) => (v ? <span style={{ fontSize: 12 }}>{new Date(v).toLocaleString()}</span> : <span style={{ color: token.colorTextTertiary }}>—</span>) },
+    {
+      title: "操作", width: 240,
+      render: (_, d) => (
+        <Space size={4}>
+          <Button size="small" onClick={() => openEdit(d)}>编辑</Button>
+          {d.status !== 4 && d.status !== 2 && <Button size="small" onClick={() => changeStatus(d, 2)}>送修</Button>}
+          {d.status === 2 && <Button size="small" onClick={() => changeStatus(d, 1)}>在用</Button>}
+          {d.status === 1 && <Button size="small" onClick={() => changeStatus(d, 3)}>闲置</Button>}
+          {d.status === 3 && <Button size="small" onClick={() => changeStatus(d, 1)}>启用</Button>}
+          {d.status !== 4 && d.status !== 2 && (
+            <Popconfirm title="报废该设备？" onConfirm={() => changeStatus(d, 4)}>
+              <Button size="small" danger>报废</Button>
+            </Popconfirm>
+          )}
+        </Space>
+      ),
+    },
+  ];
 
+  return (
+    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>设备台账</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>全生命周期管理：在用 ⇄ 维修中 ⇄ 闲置 → 报废；维保到期自动提醒</p>
+        </div>
+        <Space>
+          <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增设备</Button>
+        </Space>
+      </div>
+
+      {/* 统计卡 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 14 }}>
+        {[
+          { icon: <LaptopOutlined />, label: "设备总数", value: counts[""] ?? "…", color: "#1E2433", bg: "#F6F8FE" },
+          { icon: <CheckCircleOutlined />, label: "在用", value: counts["1"] ?? "…", color: "#15803D", bg: "#E8F9EF" },
+          { icon: <ToolOutlined />, label: "维修中", value: counts["2"] ?? "…", color: "#B45309", bg: "#FEF4E2" },
+          { icon: <WarningOutlined />, label: "即将报废/到期", value: "—", color: "#B45309", bg: "#FEF4E2" },
+        ].map((c) => (
+          <div key={c.label} className="wlt-glass-sm" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ width: 38, height: 38, borderRadius: 12, background: c.bg, color: c.color, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>{c.icon}</span>
+            <div>
+              <div style={{ fontSize: 12, color: token.colorTextSecondary }}>{c.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: c.color, fontVariantNumeric: "tabular-nums" }}>{c.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 状态 Tabs + 筛选 */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
+        {[["", "全部"], ["1", "在用"], ["2", "维修中"], ["3", "闲置"], ["4", "报废"]].map(([st, label]) => {
+          const active = filterStatus === st;
+          return (
+            <button key={st} type="button" onClick={() => { setFilterStatus(st); setPage(1); }}
+              style={{ cursor: "pointer", border: `1px solid ${active ? "#5B7FFF" : token.colorBorder}`, background: active ? "#5B7FFF" : "#fff", color: active ? "#fff" : token.colorTextSecondary, borderRadius: 999, padding: "6px 14px", fontSize: 12.5, fontWeight: active ? 600 : 500, display: "inline-flex", gap: 6, alignItems: "center", fontFamily: "inherit", transition: "all .2s ease" }}>
+              {label} <span style={{ opacity: 0.75, fontWeight: 600 }}>{counts[st] ?? "…"}</span>
+            </button>
+          );
+        })}
+        <Input.Search placeholder="编码 / 名称 / 型号" allowClear style={{ width: 240, marginLeft: "auto" }} onSearch={(v) => { setKeyword(v); setPage(1); }} />
+      </div>
+
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <Table<DeviceItem>
+          rowKey="id" loading={loading} dataSource={rows} locale={{ emptyText: "暂无设备" }}
+          pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 台`, onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else setPage(p); } }}
+          columns={columns}
+        />
+      </div>
+
+      {/* 新增/编辑（保留原逻辑） */}
       <Modal open={open} onCancel={() => setOpen(false)} onOk={save} confirmLoading={saving} title={editing ? "编辑设备" : "新增设备"} width={620} destroyOnHidden>
         <Form form={form} layout="vertical">
           {!editing && (
@@ -187,7 +253,7 @@ export function DeviceListPage() {
             <Form.Item name="category" label="类别"><Input style={{ width: 180 }} maxLength={50} /></Form.Item>
             {!editing && (
               <Form.Item name="status" label="状态">
-                <Select style={{ width: 120 }} options={Object.entries(DEVICE_STATUS).map(([k, v]) => ({ value: Number(k), label: v.label }))} />
+                <Select style={{ width: 120 }} options={Object.entries(ST).map(([k, v]) => ({ value: Number(k), label: v.label }))} />
               </Form.Item>
             )}
           </Space>
@@ -201,16 +267,14 @@ export function DeviceListPage() {
             <Space wrap>
               {existingFiles.map((f) => (
                 <span key={f.id} style={{ position: "relative", display: "inline-block" }}>
-                  <Image src={`/api/v1/files/${f.file_id}`} width={72} height={72} style={{ objectFit: "cover", borderRadius: 6 }} />
-                  <span onClick={() => void removeExisting(f.id)}
-                    style={{ position: "absolute", top: -6, right: -6, background: "#ff4d4f", color: "#fff", borderRadius: 10, width: 18, height: 18, fontSize: 11, lineHeight: "18px", textAlign: "center", cursor: "pointer" }}>×</span>
+                  <Image src={`/api/v1/files/${f.file_id}`} width={72} height={72} style={{ objectFit: "cover", borderRadius: 10 }} />
+                  <span onClick={() => void removeExisting(f.id)} style={{ position: "absolute", top: -6, right: -6, background: "#EF4444", color: "#fff", borderRadius: 10, width: 18, height: 18, fontSize: 11, lineHeight: "18px", textAlign: "center", cursor: "pointer" }}>×</span>
                 </span>
               ))}
               {newFiles.map((f, i) => (
                 <span key={`n${i}`} style={{ position: "relative", display: "inline-block" }}>
-                  <Image src={URL.createObjectURL(f)} width={72} height={72} style={{ objectFit: "cover", borderRadius: 6 }} />
-                  <span onClick={() => setNewFiles((fs) => fs.filter((_, x) => x !== i))}
-                    style={{ position: "absolute", top: -6, right: -6, background: "#ff4d4f", color: "#fff", borderRadius: 10, width: 18, height: 18, fontSize: 11, lineHeight: "18px", textAlign: "center", cursor: "pointer" }}>×</span>
+                  <Image src={URL.createObjectURL(f)} width={72} height={72} style={{ objectFit: "cover", borderRadius: 10 }} />
+                  <span onClick={() => setNewFiles((fs) => fs.filter((_, x) => x !== i))} style={{ position: "absolute", top: -6, right: -6, background: "#EF4444", color: "#fff", borderRadius: 10, width: 18, height: 18, fontSize: 11, lineHeight: "18px", textAlign: "center", cursor: "pointer" }}>×</span>
                 </span>
               ))}
               {existingFiles.length + newFiles.length < 6 && (
