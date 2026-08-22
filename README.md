@@ -37,6 +37,28 @@
 - 用户/角色权限（24 权限点、按单位过滤货架）、注册审核、单位管理、操作日志、系统设置（OCR/大模型/水印/注册/找回/SMTP）、数据库备份（手动 + 每日 02:00 自动，保留 14 份）
 - 入口：电脑端 `/`、手机端 `/m/`；用户手动选择优先于设备检测；已登录直进主页
 
+## 演示界面
+
+> 以下为系统主要界面截图（存放于 `img/`，开发环境实拍，实际效果以部署版本为准）。
+
+### 电脑端主界面
+
+![电脑端主界面](img/主界面.png)
+
+登录后直达的经营主页：今日/本周/本月出入库汇总、库存预警与待办、7 日出入库趋势，以及入库 / 出库 / 领用 / 盘点等常用功能的快捷入口。
+
+### 电脑端仓库界面
+
+![电脑端仓库界面](img/仓库界面.png)
+
+库存与仓库管理核心工作台：库存查询与流水、货架 / 库位 2D 分层货架图、调拨 / 盘点 / 其他出入库，以及库存预警规则的查看与配置。
+
+### 手机端界面
+
+![手机端界面](img/手机界面.png)
+
+一线移动工作台：材料 / 地点 / 原因三步合一领用申请、提交即自动出库、完成工作拍照（GPS 定位 + 动态水印）与仓管员审核，适合维修 / 领用等现场场景。
+
 ## 技术栈
 
 - 前端：React 19 + TypeScript + Vite + Zustand + Ant Design（电脑端）/ Ant Design Mobile（手机端），npm workspaces monorepo
@@ -53,7 +75,7 @@
 │  ├─ app/{api,core,models,schemas,services}
 │  ├─ sql/init.sql     # 全量建表 + 种子数据（幂等）
 │  ├─ tests/           # pytest 接口测试
-│  ├─ ocr/             # RapidOCR 引擎资产（不入库）
+│  ├─ ocr/             # RapidOCR 引擎资产
 │  └─ data/{files,backups}
 ├─ frontend/           # npm workspaces
 │  ├─ apps/desktop     # 电脑端（Antd）
@@ -70,6 +92,7 @@
 | 数据库设计.md | 39 张表结构与设计决策 |
 | 后端API设计.md | 接口清单、权限点、错误码 |
 | 前端设计.md / UI设计方案.md | 页面/组件/视觉规范 |
+| 开发排期.md | 阶段划分与里程碑（P0-P9） |
 | 开发规范.md | **开发强制流程**（Git/目录/代码/验证门禁 L1-L5） |
 | AI赋能设计.md | P9 AI 功能设计（9 项）+ **testdata 样本数据说明** |
 | 开发进度记录.md | 阶段完成/验证/遗留（与 git 提交一一对应） |
@@ -222,3 +245,31 @@ server { listen 80; server_name 你的域名; return 301 https://$host$request_u
 
 按用途分目录存放真实样本（详见《AI开发文档/AI赋能设计.md》样本数据章节）：
 `进货单/`（送货单识别基准）、`物品标签/`（商品识别与模板训练）、`匹配导出表格/`与`匹配导入表格/`（收发存模板对照）、`手写出货单/`（手写评估样本位，待补充）、`条码测试/`（条码解码样本：EAN13/Code128/QR、无条码对照、小条码/模糊条码模拟实拍，含用户实拍照片 IMG_3055/3056，均可被服务端 zxing-cpp 解码）
+
+## 本地资源（不入库，需自行放置）
+
+- `backend/ocr/RapidOCR-json.exe` + `backend/ocr/models/`（RapidOCR 引擎资产，Windows 用；PaddleOCR 可在系统设置自动安装）
+
+## AI 代码生成提示（供 AI 编程助手参考）
+
+使用 AI 编程助手（Claude Code / Cursor / Copilot 等）在本仓库生成或修改代码前，请先阅读以下约定，避免破坏项目不变量。
+
+**架构基线**
+- 前后端分离：`frontend/`（React 19 + TypeScript + Vite + Zustand + Ant Design，npm workspaces monorepo：`apps/desktop` 电脑端 / `apps/mobile` 手机端 / `packages/shared` 共享包）、`backend/`（Python 3.13 + FastAPI + SQLAlchemy 2.x + MySQL 8.0）
+- 设计文档是开发基线（`AI开发文档/` 下《开发规范.md》《后端API设计.md》《数据库设计.md》等）：**代码改动须同步文档，反之亦然**
+- `packages/shared` 为前后端共享包，dev 走 HMR 无需重启；vite `server.https` 依赖 `backend/certs/dev` 证书（缺失时自动跳过 https，CI 纯构建可过）
+
+**必须遵守的不变量（勿改坏）**
+- 库存一切变动走 `backend/app/services/stock.py::post_stock_change()`（行锁 + 单事务），禁止绕过
+- 大模型调用遵循 **OpenAI Chat Completions 兼容协议**（`POST {Base URL}/chat/completions` + Bearer），视觉/文本/兜底三槽位可在系统设置自由配置，不绑定特定供应商
+- 版本单一事实源：`backend/app/__init__.py::__version__`；`scripts/check_version.py` 强制前后端版本一致，漂移禁止提交
+- Redis 是加速层、MySQL 是事实来源：缓存操作失败必须静默降级直查库（`app/core/cache.py`；改函数内用到的模块级变量时 `global` 声明必须齐全）
+- 事件循环异常过滤器 / Proactor accept 加固（`app/core/loop_guard.py`）：判定错误码用 `getattr(exc, "winerror", None)` 跨平台兜底，勿改回裸 `exc.winerror`（Linux 无该属性）
+- 认证：Session 登录 + 权限校验中间件；操作日志由审计中间件记录；数据库会话按请求管理
+- GitHub Actions（`.github/workflows/ci.yml`）：MySQL 8.0 服务容器**仅支持 Linux runner**；测试分层执行见 `scripts/run_tests.sh`
+
+**常用命令**
+- 分层测试：`scripts/run_tests.sh --changed="<文件...>"`（针对性）/ `--full`（全量）/ `--dry-run`（仅预览将执行的命令）
+- 后端测试：`cd backend && python -m pytest tests -q`
+- 前端：`cd frontend && npm run typecheck`，构建：`npm run build -w wlt-desktop && npm run build -w wlt-mobile`
+- 版本一致性校验：`python scripts/check_version.py`
