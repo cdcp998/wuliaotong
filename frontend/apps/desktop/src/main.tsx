@@ -11,6 +11,7 @@ import "./mobile.css";
 
 import { AppLayout } from "./components/AppLayout";
 import { RequireAuth } from "./components/RequireAuth";
+import { RequireModule } from "./components/RequireModule";
 // 页面全部按路由懒加载：首屏不再打包全部页面（此前单 chunk >1.6MB）
 const AiSuggestionsPage = lazy(() => import("./pages/AiSuggestions").then((m) => ({ default: m.AiSuggestionsPage })));
 const AiLogsPage = lazy(() => import("./pages/AiLogs").then((m) => ({ default: m.AiLogsPage })));
@@ -45,6 +46,10 @@ const TransfersPage = lazy(() => import("./pages/Transfers").then((m) => ({ defa
 const UnitsPage = lazy(() => import("./pages/Units").then((m) => ({ default: m.UnitsPage })));
 const UsersPage = lazy(() => import("./pages/Users").then((m) => ({ default: m.UsersPage })));
 const WarehousesPage = lazy(() => import("./pages/Warehouses").then((m) => ({ default: m.WarehousesPage })));
+// cable 模块页面（模块插件，方案 §2.3：apps/desktop/src/modules/{code}/）
+const CableMapPage = lazy(() => import("./modules/cable/CableMap").then((m) => ({ default: m.CableMapPage })));
+const CableListPage = lazy(() => import("./modules/cable/CableList").then((m) => ({ default: m.CableListPage })));
+const CableFaultsPage = lazy(() => import("./modules/cable/CableFaults").then((m) => ({ default: m.CableFaultsPage })));
 
 /** 路由懒加载的统一 Loading 占位。 */
 function PageLoading() {
@@ -99,6 +104,10 @@ const router = createBrowserRouter(
   { path: "/system/roles", element: withLayout(<RolesPage />) },
   { path: "/system/menus", element: withLayout(<MenusPage />) },
   { path: "/system/modules", element: withLayout(<ModulesPage />) },
+  // cable 模块（RequireModule：模块未启用时渲染占位；权限由菜单 perm_code 联动）
+  { path: "/cable/map", element: withLayout(<RequireModule code="cable"><CableMapPage /></RequireModule>) },
+  { path: "/cable/list", element: withLayout(<RequireModule code="cable"><CableListPage /></RequireModule>) },
+  { path: "/cable/faults", element: withLayout(<RequireModule code="cable"><CableFaultsPage /></RequireModule>) },
   { path: "/system/logs", element: withLayout(<LogsPage />) },
   { path: "/system/backups", element: withLayout(<BackupsPage />) },
   { path: "/system/register-applies", element: withLayout(<RegisterAppliesPage />) },

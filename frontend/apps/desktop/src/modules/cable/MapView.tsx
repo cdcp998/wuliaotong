@@ -1,0 +1,197 @@
+/** cable 模块：Leaflet 地图基础组件（方案 §5.2/§7.1 MapView）。
+ *
+ * - 底图：后端瓦片代理 /map/tile/{source}/{z}/{x}/{y}（缓存优先，未命中抓在线源）
+ * - 叠加层：线缆 GeoJSON / 故障点 / 标记点 / 路径（导航）
+ * - 坐标：数据与接口一律 WGS84，仅本组件按源 coordinate_space 做显示层转换（共享 geo.ts）
+ */
+import { useEffect, useMemo } from "react";
+import { GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { Empty } from "antd";
+
+import { fromDisplaySpace, toDisplaySpace, type LatLng } from "@wlt/shared";
+
+import { cableApi, type FaultItem, type MapSourceInfo, type MarkerItem, type CableItem } from "./api";
+
+/** 业务叠加层数据集合。 */
+export interface MapOverlayData {
+  cables: CableItem[];
+  faults: FaultItem[];
+  /** cable_id → 标记点 */
+  markersByCable: Record<number, MarkerItem[]>;
+}
+
+interface MapViewProps {
+  /** 地图源（缺省 esri）；coordinate_space 决定显示层坐标转换 */
+  sources?: Record<string, MapSourceInfo>;
+  sourceKey?: string;
+  overlays?: MapOverlayData;
+  /** 高点亮（测距结果等）[lat, lng] WGS84 */
+  highlight?: LatLng | null;
+  /** 导航路径 [lat, lng][] WGS84 */
+  navPath?: LatLng[] | null;
+  /** 地图点击回调（已转换为 WGS84 lat/lng） */
+  onPick?: (lat: number, lng: number) => void;
+  /** 初始中心 [lat, lng] 与缩放 */
+  center?: LatLng;
+  zoom?: number;
+  height?: number | string;
+  /** 选取模式（地图点击取点提示） */
+  picking?: string;
+}
+
+/** 未知图标修复：Leaflet 默认 Marker 图标在打包器下 404。 */
+const defaultIcon = L.divIcon({
+  className: "wlt-map-marker",
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:#1668dc;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+const navIcon = L.divIcon({
+  className: "wlt-map-marker",
+  html: '<div style="width:16px;height:16px;border-radius:50%;background:#fa541c;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+});
+
+function ClickCatcher({ onPick, space }: { onPick?: (lat: number, lng: number) => void; space: string }) {
+  useMapEvents({
+    click(e) {
+      if (!onPick) return;
+      const [lng, lat] = fromDisplaySpace(e.latlng.lng, e.latlng.lat, space);
+      onPick(lat, lng);
+    },
+  });
+  return null;
+}
+
+function FitCables({ cables }: { cables: CableItem[] }) {
+  const map = useMap();
+  useEffect(() => {
+    const pts: L.LatLngTuple[] = [];
+    for (const c of cables) {
+      for (const [lng, lat] of c.geometry?.coordinates ?? []) pts.push([lat, lng]);
+    }
+    if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { padding: [40, 40] });
+  }, [cables, map]);
+  return null;
+}
+
+/** 地图底图瓦片 SourcePicker：默认使用第一个启用的源。 */
+function BaseTile({ sources, sourceKey }: { sources: Record<string, MapSourceInfo>; sourceKey?: string }) {
+  const key = sourceKey && sources[sourceKey]?.enabled ? sourceKey : Object.keys(sources).find((k) => sources[k]?.enabled);
+  if (!key) return null;
+  const url = cableApi.tileUrl(key, "{z}", "{x}", "{y}");
+  return <TileLayer key={key} url={url} maxZoom={19} attribution="© 卫星影像" />;
+}
+
+export function MapView({
+  sources = {},
+  sourceKey,
+  overlays = { cables: [], faults: [], markersByCable: {} },
+  highlight = null,
+  navPath = null,
+  onPick,
+  center = [30.2741, 120.1551],
+  zoom = 12,
+  height = "100%",
+  picking,
+}: MapViewProps) {
+  const space = (sourceKey && sources[sourceKey]?.coordinate_space) || (Object.values(sources).find((s) => s.enabled)?.coordinate_space) || "wgs84";
+
+  const cableGeojson = useMemo(() => {
+    const feats = overlays.cables
+      .filter((c) => c.geometry)
+      .map((c) => ({
+        type: "Feature",
+        properties: { name: c.name, code: c.code, total_length: c.total_length },
+        geometry: c.geometry,
+      }));
+    return { type: "FeatureCollection", features: feats } as GeoJSON.FeatureCollection;
+  }, [overlays.cables]);
+
+  const faultPoints = useMemo(
+    () => overlays.faults.map((f) => ({ lat: f.lat, lng: f.lng, f })),
+    [overlays.faults],
+  );
+  const markerPoints = useMemo(
+    () =>
+      Object.entries(overlays.markersByCable).flatMap(([cableId, ms]) =>
+        ms.map((m) => ({ lat: m.lat, lng: m.lng, m, cableId })),
+      ),
+    [overlays.markersByCable],
+  );
+
+  if (!Object.keys(sources).length) {
+    return <Empty style={{ marginTop: 80 }} description="未配置地图源（系统管理 → 安装模块 → cable 模块配置）" />;
+  }
+
+  return (
+    <div style={{ height, width: "100%", position: "relative" }}>
+      {picking && (
+        <div style={{ position: "absolute", zIndex: 1000, top: 8, left: 50, background: "#fff", padding: "6px 12px", borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,.15)" }}>
+          {picking}
+        </div>
+      )}
+      <MapContainer
+        center={space === "wgs84" ? center : toDisplaySpace(center[1], center[0], space).reverse() as L.LatLngTuple}
+        zoom={zoom}
+        style={{ height: "100%", width: "100%" }}
+      >
+        <BaseTile sources={sources} sourceKey={sourceKey} />
+        <ClickCatcher onPick={onPick} space={space} />
+        <FitCables cables={overlays.cables} />
+        {cableGeojson.features.length > 0 && (
+          <GeoJSON
+            key={JSON.stringify(cableGeojson.features.map((f) => f.properties?.code))}
+            data={cableGeojson}
+            style={{ color: "#1668dc", weight: 4 }}
+          />
+        )}
+        {faultPoints.map(({ lat, lng, f }) => {
+          const [dlng, dlat] = toDisplaySpace(lng, lat, space);
+          return (
+            <Marker key={`f${f.id}`} position={[dlat, dlng]} icon={defaultIcon}>
+              <Popup>
+                <div>
+                  <b>故障 #{f.id}</b>
+                  <div>{f.fault_type || "未分类"}（{["低", "中", "高"][f.severity - 1] ?? f.severity}）</div>
+                  <div>{f.description || "—"}</div>
+                  <div>状态：{["待处理", "处理中", "待验证", "已修复", "已关闭"][f.status] ?? f.status}</div>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+        {markerPoints.map(({ lat, lng, m }) => {
+          const [dlng, dlat] = toDisplaySpace(lng, lat, space);
+          return (
+            <Marker key={`m${m.id}`} position={[dlat, dlng]} icon={defaultIcon}>
+              <Popup>
+                <div>
+                  <b>{m.label || m.marker_type || "标记点"}</b>
+                  <div>累计 {m.cumulative_distance.toFixed(1)} m</div>
+                  {m.remark && <div>{m.remark}</div>}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+        {highlight && (
+          <Marker position={toDisplaySpace(highlight[1], highlight[0], space).reverse() as L.LatLngTuple} icon={navIcon}>
+            <Popup>
+              <div>
+                定位点 {highlight[0].toFixed(6)}, {highlight[1].toFixed(6)}
+              </div>
+            </Popup>
+          </Marker>
+        )}
+        {navPath && navPath.length > 1 && (
+          <Polyline positions={navPath.map(([lat, lng]) => toDisplaySpace(lng, lat, space).reverse() as L.LatLngTuple)} pathOptions={{ color: "#fa541c", weight: 5, dashArray: "8 6" }} />
+        )}
+      </MapContainer>
+    </div>
+  );
+}

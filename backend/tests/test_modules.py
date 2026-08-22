@@ -249,6 +249,45 @@ def test_fault_data_scope_and_permission_filter() -> None:
     assert client.post("/api/v1/modules/cable/enable").json()["code"] == 0
 
 
+def test_fault_photos_link_and_list() -> None:
+    """故障照片关联：POST /faults/{id}/photos 记录 → GET /faults/{id}/photos 返回文件 URL。"""
+    _login("admin", "admin123")
+    r = client.post("/api/v1/faults", json={
+        "lat": 30.02, "lng": 120.02, "fault_type": "T-断纤", "severity": 2, "description": "T-照片测试",
+    })
+    assert r.json()["code"] == 0
+    fault_id = r.json()["data"]["id"]
+
+    from app.db import SessionLocal
+    from sqlalchemy import text
+
+    db = SessionLocal()
+    try:
+        db.execute(text(
+            "INSERT INTO sys_file (biz_type, biz_id, storage_id, original_name, file_path, file_size, md5, uploader_id) "
+            "VALUES ('fault_test', 0, 1, 'T-test.png', 'data/files/t-test.png', 10, 'x', 1)"
+        ))
+        db.commit()
+        file_id = db.execute(text("SELECT id FROM sys_file WHERE original_name = 'T-test.png' ORDER BY id DESC LIMIT 1")).scalar()
+    finally:
+        db.close()
+
+    r = client.post(f"/api/v1/faults/{fault_id}/photos", json={"file_id": file_id, "category": "现场"})
+    assert r.json()["code"] == 0
+    r = client.get(f"/api/v1/faults/{fault_id}/photos")
+    assert r.json()["code"] == 0
+    items = r.json()["data"]
+    assert len(items) == 1 and items[0]["url"] == f"/files/{file_id}"
+
+    # 清理测试文件记录（磁盘文件不存在，仅删记录）
+    db = SessionLocal()
+    try:
+        db.execute(text("DELETE FROM sys_file WHERE id = :i"), {"i": file_id})
+        db.commit()
+    finally:
+        db.close()
+
+
 def test_map_sources_config() -> None:
     _login("admin", "admin123")
     esri_default = {

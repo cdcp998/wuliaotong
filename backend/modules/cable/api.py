@@ -341,6 +341,27 @@ def add_fault_photo(fault_id: int, req: FaultPhotoIn, user: SysUser = Depends(ge
     return ok({"id": row.id})
 
 
+@router.get("/faults/{fault_id}/photos", dependencies=[Depends(require_permission("fault:report"))])
+def list_fault_photos(fault_id: int, db: Session = Depends(get_db)) -> dict:
+    """故障照片列表（fault_file → sys_file，前端按 file_id 拼文件预览 URL）。"""
+    from app.models import SysFile
+
+    rows = db.scalars(select(FaultFile).where(FaultFile.fault_id == fault_id).order_by(FaultFile.sort_order, FaultFile.id)).all()
+    file_ids = [r.file_id for r in rows]
+    files = {f.id: f for f in db.scalars(select(SysFile).where(SysFile.id.in_(file_ids))).all()} if file_ids else {}
+    return ok([
+        {
+            "id": r.id,
+            "file_id": r.file_id,
+            "category": r.category,
+            "remark": r.remark,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "url": f"/files/{r.file_id}" if r.file_id in files else "",
+        }
+        for r in rows
+    ])
+
+
 # ============================ 测距 / 导航 ============================
 
 @router.post("/geo/measure", dependencies=[Depends(require_permission("cable:view"))])

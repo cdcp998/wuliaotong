@@ -54,6 +54,10 @@ import {
   SwapOutlined,
   TableOutlined,
   UserOutlined,
+  DeploymentUnitOutlined,
+  EnvironmentOutlined,
+  AlertOutlined,
+  CloudDownloadOutlined,
 } from "@ant-design/icons";
 
 import { authApi, notificationApi, otherEndUrl, useAuthStore, type MenuNode, type NotificationItem } from "@wlt/shared";
@@ -220,6 +224,10 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   ApartmentOutlined: <ApartmentOutlined />,
   HddOutlined: <HddOutlined />,
   MenuOutlined: <MenuOutlined />,
+  DeploymentUnitOutlined: <DeploymentUnitOutlined />,
+  EnvironmentOutlined: <EnvironmentOutlined />,
+  AlertOutlined: <AlertOutlined />,
+  CloudDownloadOutlined: <CloudDownloadOutlined />,
 };
 
 /** 导航项（动态菜单 / 硬编码 MENU 统一形态）。 */
