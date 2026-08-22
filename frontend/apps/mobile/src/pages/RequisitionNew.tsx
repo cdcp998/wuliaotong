@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, Input, List, NavBar, Popup, Stepper, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
-import { PhotoUpload, PlusIcon, ProductPicker, useBackToClose, baseApi, requisitionApi, stockApi, type Location, type Product, type StockRow, type Warehouse } from "@wlt/shared";
+import { PhotoUpload, PlusIcon, ProductPicker, useBackToClose, baseApi, geoApi, requisitionApi, stockApi, type Location, type Product, type StockRow, type Warehouse } from "@wlt/shared";
 
 interface Row {
   product: Product;
@@ -19,6 +19,7 @@ export function RequisitionNewPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState<number>(0);
   const [useLocation, setUseLocation] = useState("");
+  const [locating, setLocating] = useState(false);
   const [useReason, setUseReason] = useState("");
   const [remark, setRemark] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
@@ -96,6 +97,36 @@ export function RequisitionNewPage() {
   async function pickLocation(rowIndex: number) {
     const locs = await baseApi.locations(warehouseId);
     setLocPicker({ rowIndex, locations: locs, open: true });
+  }
+
+  /** GPS 定位：读取浏览器定位 → 逆地理编码 → 填充使用地点（设计页 M9：地点 GPS 选择）。 */
+  function gpsLocate() {
+    if (!navigator.geolocation) {
+      Toast.show("当前环境不支持定位");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const d = await geoApi.reverse(String(latitude), String(longitude));
+          const addr = d.short_address || d.address || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+          setUseLocation(addr);
+          Toast.show("已获取定位地址");
+        } catch {
+          setUseLocation(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+          Toast.show("已获取坐标，可作地点");
+        } finally {
+          setLocating(false);
+        }
+      },
+      () => {
+        setLocating(false);
+        Toast.show("定位失败，请授予定位权限或手动填写");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
   }
 
   function updateRow(i: number, patch: Partial<Row>) {
@@ -221,7 +252,10 @@ export function RequisitionNewPage() {
           <div style={{ fontSize: 13, marginBottom: 8 }}>
             使用地点<span style={{ color: "#EF4444" }}>*</span>
           </div>
-          <Input placeholder="如：维修部 · 3 号线" value={useLocation} onChange={setUseLocation} />
+          <div style={{ display: "flex", gap: 6 }}>
+            <Input placeholder="如：维修部 · 3 号线" value={useLocation} onChange={setUseLocation} style={{ flex: 1 }} />
+            <Button size="small" fill="outline" color="primary" loading={locating} onClick={gpsLocate}>GPS 定位</Button>
+          </div>
         </div>
         <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 10, padding: 12, marginBottom: 8 }}>
           <div style={{ fontSize: 13, marginBottom: 8 }}>
