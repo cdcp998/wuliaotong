@@ -1,11 +1,12 @@
 /** cable 模块：地图缓存管理（/cable/cache，map:cache）+ 图源管理（map:config 编辑/新增/删除，查看脱敏）。 */
 import { useCallback, useEffect, useState } from "react";
 import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
-import { PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
+import { EnvironmentOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
 
 import { useAuthStore } from "@wlt/shared";
 
 import { cableApi, type MapSourceInfo } from "./api";
+import { MapView } from "./MapView";
 
 const REGION_STATUS: Record<number, { label: string; color: string }> = {
   0: { label: "未开始", color: "default" },
@@ -44,6 +45,29 @@ export function CableCachePage() {
   const [srcForm] = Form.useForm();
   const [form] = Form.useForm();
   const canConfig = hasPerm("map:config");
+  // 地图框选区域（新建缓存区域）
+  const [regionSources, setRegionSources] = useState<Record<string, MapSourceInfo>>({});
+  const [regionPicks, setRegionPicks] = useState<{ lat: number; lng: number }[]>([]);
+  const [regionRect, setRegionRect] = useState<[number, number][]>([]);
+  const [regionPicking, setRegionPicking] = useState(false);
+
+  const pickRegionCorner = (lat: number, lng: number) => {
+    if (!regionPicking) return;
+    const picks = [...regionPicks, { lat, lng }];
+    setRegionPicks(picks);
+    if (picks.length < 2) return;
+    const [a, b] = picks;
+    const west = Math.min(a.lng, b.lng);
+    const east = Math.max(a.lng, b.lng);
+    const south = Math.min(a.lat, b.lat);
+    const north = Math.max(a.lat, b.lat);
+    form.setFieldsValue({ west, south, east, north });
+    setRegionRect([
+      [south, west], [south, east], [north, east], [north, west], [south, west],
+    ] as [number, number][]);
+    setRegionPicks([]);
+    setRegionPicking(false);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,7 +86,9 @@ export function CableCachePage() {
     try {
       const r = await cableApi.mapSources();
       // 后端每个源对象不含 key（key 为外层对象键），注入 key 供表格行内操作（测试/编辑/停用/删除）使用
-      setSources(Object.fromEntries(Object.entries(r.map_sources).map(([k, v]) => [k, { ...v, key: k }])));
+      const withKey = Object.fromEntries(Object.entries(r.map_sources).map(([k, v]) => [k, { ...v, key: k }]));
+      setSources(withKey);
+      setRegionSources(withKey);
     } catch {
       /* 无权限/接口异常静默 */
     }
@@ -88,6 +114,9 @@ export function CableCachePage() {
       message.success("区域已创建（点击「开始下载」生成瓦片任务）");
       setOpen(false);
       form.resetFields();
+      setRegionPicks([]);
+      setRegionRect([]);
+      setRegionPicking(false);
       void load();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "创建失败");
@@ -305,11 +334,27 @@ export function CableCachePage() {
         </Space>
       </Modal>
 
-      <Modal open={open} onCancel={() => setOpen(false)} onOk={createRegion} confirmLoading={saving} title="新建缓存下载区域" width={520} destroyOnHidden>
+      <Modal open={open} onCancel={() => setOpen(false)} onOk={createRegion} confirmLoading={saving} title="新建缓存下载区域" width={720} destroyOnHidden>
         <Form form={form} layout="vertical">
           <Form.Item name="name" label="区域名称" rules={[{ required: true, message: "请输入名称" }]}>
             <Input maxLength={100} placeholder="如 城东机房片区" />
           </Form.Item>
+          {/* 地图框选区域：点两角自动填 bbox（可再手调） */}
+          <Typography.Text strong>地图选择区域（点击两角拖动另算：点两个对角点即可）</Typography.Text>
+          <div style={{ height: 240, margin: "8px 0", border: "1px solid #e5e6eb", borderRadius: 6, overflow: "hidden" }}>
+            <MapView
+              sources={regionSources}
+              overlays={{ cables: [], faults: [], markersByCable: {} }}
+              previewPath={regionRect}
+              onPick={pickRegionCorner}
+              picking={regionPicking ? "在地图上点击第「一个角」，再点对角" : undefined}
+              height="240px"
+            />
+          </div>
+          <Space style={{ marginBottom: 8 }}>
+            <Button size="small" icon={<EnvironmentOutlined />} onClick={() => { setRegionPicking(true); setRegionPicks([]); setRegionRect([]); }}>重新框选</Button>
+            {regionRect.length > 0 && <Typography.Text type="secondary">已选区域（可手动修正输入框）</Typography.Text>}
+          </Space>
           <Space>
             <Form.Item name="west" label="西经" rules={[{ required: true }]}><InputNumber style={{ width: 110 }} min={-180} max={180} /></Form.Item>
             <Form.Item name="south" label="南纬" rules={[{ required: true }]}><InputNumber style={{ width: 110 }} min={-90} max={90} /></Form.Item>
