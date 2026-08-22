@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -342,6 +343,30 @@ def cleanup_test_data() -> None:
             except OSError:
                 pass
             db.delete(f)
+        # ---- 隔离测试库（TEST_DB_URL 已设置）额外清理 ----
+        # 测试库内无真实业务数据：按 admin 上传/匹配真实商品/直接落库创建的 OCR 记录、
+        # AI 建议与上传文件无法精确归因（见上方注释），在此全量清除，保证零残留。
+        if os.getenv("TEST_DB_URL", ""):
+            all_ocr = {r.id for r in db.scalars(select(OcrRecord)).all()}
+            _match_ids(db, OcrRecord, OcrRecord.id, all_ocr - ocr_ids)
+            all_ai = {a.id for a in db.scalars(select(AiSuggestion)).all()}
+            _match_ids(db, AiSuggestion, AiSuggestion.id, all_ai)
+            leftover_files = {
+                f.id for f in db.scalars(select(SysFile)).all() if f.id not in test_file_ids
+            }
+            for f in db.scalars(select(SysFile).where(SysFile.id.in_(leftover_files))).all():
+                try:
+                    fp = Path(f.file_path)
+                    if not fp.is_absolute():
+                        from app.models.sys import SysStorage
+
+                        st = db.get(SysStorage, f.storage_id) if f.storage_id else None
+                        base = Path(st.path) if st else Path("data/files")
+                        fp = base / f.file_path
+                    fp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                db.delete(f)
         db.commit()
     finally:
         db.close()

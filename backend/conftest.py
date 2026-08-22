@@ -23,6 +23,12 @@ from app.db import SessionLocal  # noqa: E402
 from app.models.sys import SysUser  # noqa: E402
 
 if not _TEST_DB_URL:
+    if os.getenv("CI", ""):
+        # 评审 P0-1：CI 强制测试库隔离——未设置 TEST_DB_URL 直接失败，禁止直连开发/生产库跑测试
+        raise RuntimeError(
+            "CI 环境必须设置 TEST_DB_URL 指向独立测试库（如 mysql+pymysql://root:***@host/wuliaotong_test），"
+            "禁止在 CI 中直连开发/生产库运行测试。请检查 .github/workflows/ci.yml。"
+        )
     warnings.warn(
         "未设置 TEST_DB_URL：pytest 将直接使用 backend/.env 指向的数据库运行（有污染业务数据风险）。"
         "建议设置 TEST_DB_URL 指向独立测试库后重跑。",

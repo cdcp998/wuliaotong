@@ -48,7 +48,7 @@ jobs:
           COOKIE_SECURE=false
           OCR_ENGINE=rapidocr
           EOF
-      - name: 等待 MySQL 并导入 init.sql
+      - name: 等待 MySQL 并导入 init.sql（主库 + 测试库）
         shell: bash
         run: |
           cd backend
@@ -66,14 +66,21 @@ jobs:
               raise SystemExit("MySQL 未就绪")
           sql = open("sql/init.sql", encoding="utf-8").read()
           cur = conn.cursor()
-          for stmt in _split_sql(sql):
-              cur.execute(stmt)
+          # 评审 P0-1：测试必须经 TEST_DB_URL 隔离到独立测试库（wuliaotong_test），
+          # 主库与测试库都导入表结构/种子；conftest 在 CI 中未设置 TEST_DB_URL 会直接报错
+          for db_name in ("wuliaotong", "wuliaotong_test"):
+              cur.execute(f"CREATE DATABASE IF NOT EXISTS {db_name} CHARACTER SET utf8mb4")
+              cur.execute(f"USE {db_name}")
+              for stmt in _split_sql(sql):
+                  cur.execute(stmt)
           conn.commit()
           conn.close()
-          print("init.sql imported")
+          print("init.sql imported to wuliaotong + wuliaotong_test")
           EOF
       - name: 针对性测试（PR 变更相关）
         shell: bash
+        env:
+          TEST_DB_URL: mysql+pymysql://root:test123@127.0.0.1:3306/wuliaotong_test?charset=utf8mb4
         run: |
           git fetch origin main --depth=1 || true
           CHANGED="$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1 || true)"
@@ -114,7 +121,7 @@ jobs:
           COOKIE_SECURE=false
           OCR_ENGINE=rapidocr
           EOF
-      - name: 等待 MySQL 并导入 init.sql
+      - name: 等待 MySQL 并导入 init.sql（主库 + 测试库）
         shell: bash
         run: |
           cd backend
@@ -132,15 +139,22 @@ jobs:
               raise SystemExit("MySQL 未就绪")
           sql = open("sql/init.sql", encoding="utf-8").read()
           cur = conn.cursor()
-          for stmt in _split_sql(sql):
-              cur.execute(stmt)
+          # 评审 P0-1：测试必须经 TEST_DB_URL 隔离到独立测试库（wuliaotong_test），
+          # 主库与测试库都导入表结构/种子；conftest 在 CI 中未设置 TEST_DB_URL 会直接报错
+          for db_name in ("wuliaotong", "wuliaotong_test"):
+              cur.execute(f"CREATE DATABASE IF NOT EXISTS {db_name} CHARACTER SET utf8mb4")
+              cur.execute(f"USE {db_name}")
+              for stmt in _split_sql(sql):
+                  cur.execute(stmt)
           conn.commit()
           conn.close()
-          print("init.sql imported")
+          print("init.sql imported to wuliaotong + wuliaotong_test")
           EOF
       - name: 前端依赖
         shell: bash
         run: cd frontend && npm ci
       - name: 全量测试（发布/主干/手动触发）
         shell: bash
+        env:
+          TEST_DB_URL: mysql+pymysql://root:test123@127.0.0.1:3306/wuliaotong_test?charset=utf8mb4
         run: bash scripts/run_tests.sh --full
