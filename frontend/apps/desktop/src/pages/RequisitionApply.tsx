@@ -1,9 +1,9 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { App, Button, Card, Input, InputNumber, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router";
 
-import { baseApi, requisitionApi, useAuthStore, type Location, type Product, type Warehouse } from "@wlt/shared";
+import { baseApi, requisitionApi, stockApi, useAuthStore, type Location, type Product, type StockRow, type Warehouse } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
 
@@ -32,6 +32,8 @@ export function RequisitionApplyPage() {
   const [applicants, setApplicants] = useState<{ id: number; real_name: string; username?: string }[]>([]);
   const [applicantId, setApplicantId] = useState(0);
   const canDelegate = useAuthStore((s) => s.hasPerm("req:audit")) || useAuthStore((s) => s.user?.role?.code === "super_admin");
+  // 当前仓库各材料库存（设计页 26：库存不足黄标）
+  const [stockMap, setStockMap] = useState<Map<number, number>>(new Map());
 
   useEffect(() => {
     baseApi.warehouses().then((ws) => {
@@ -45,6 +47,31 @@ export function RequisitionApplyPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 切换出库仓库 → 拉取该仓库库存，用于「库存不足」标注
+  useEffect(() => {
+    if (!whId) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const all: StockRow[] = [];
+        for (let p = 1; p <= 5; p++) {
+          const d = await stockApi.query({ warehouse_id: whId, page: p, page_size: 100 });
+          all.push(...d.list);
+          if (all.length >= d.total) break;
+        }
+        if (!alive) return;
+        const m = new Map<number, number>();
+        for (const r of all) m.set(r.product_id, (m.get(r.product_id) ?? 0) + (Number(r.qty) || 0));
+        setStockMap(m);
+      } catch {
+        /* 库存获取失败不阻塞领用 */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [whId]);
 
   async function loadLocs(wh: number) {
     setLocs(await baseApi.locations(wh));
@@ -111,8 +138,11 @@ export function RequisitionApplyPage() {
             }}
           />
           {r.product && (
-            <div style={{ fontSize: 12, color: "#5B6478", marginTop: 4 }}>
-              物料编码：{r.product.material_code || "-"} ｜ 规格：{r.product.spec || "-"} ｜ 单位：{r.product.unit_name || "-"}
+            <div style={{ fontSize: 12, color: "#5B6478", marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <span>物料编码：{r.product.material_code || "-"} ｜ 规格：{r.product.spec || "-"} ｜ 单位：{r.product.unit_name || "-"}</span>
+              {stockMap.has(r.product.id) && Number(r.qty) > (stockMap.get(r.product.id) ?? 0) && (
+                <Tag color="warning" style={{ marginInlineEnd: 0 }}>库存不足（现 {stockMap.get(r.product.id)}）</Tag>
+              )}
             </div>
           )}
         </div>
