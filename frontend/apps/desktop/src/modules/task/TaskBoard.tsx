@@ -1,15 +1,30 @@
-/** task 模块：任务看板（/task/board，task:dispatch）——按状态分列 + 派发/流转快捷操作。 */
+/** task 模块：任务看板（/task/board，task:dispatch）——按状态分列 + 派发/流转快捷操作。
+ *  v2 界面：玻璃看板列 + 优先级/维修人卡片 + 看板⇄列表切换（与设计稿一致）。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { App, Button, Card, Col, Descriptions, Drawer, Input, Popconfirm, Row, Select, Space, Tag, Typography } from "antd";
+import { useNavigate } from "react-router";
+import { App, Button, Descriptions, Drawer, Input, Popconfirm, Select, Space, Tag, theme } from "antd";
+import { UnorderedListOutlined, AppstoreOutlined, PlusOutlined, ReloadOutlined, ClockCircleOutlined, UserOutlined, FlagOutlined } from "@ant-design/icons";
 
 import { adminApi } from "@wlt/shared";
 
-import { STATUS_LABEL, taskApi, type TaskItem } from "./api";
+import { taskApi, type TaskItem } from "./api";
 
 const COLUMNS = ["pending", "assigned", "in_progress", "done", "verified", "closed", "cancelled"];
 
+const ST: Record<string, { label: string; fg: string; bg: string; dot: string }> = {
+  pending: { label: "待派发", fg: "#B45309", bg: "#FEF4E2", dot: "#F59E0B" },
+  assigned: { label: "已派发", fg: "#3B5BDB", bg: "#EAEFFF", dot: "#5B7FFF" },
+  in_progress: { label: "进行中", fg: "#0E7490", bg: "#E0F2FE", dot: "#0891B2" },
+  done: { label: "完成待验", fg: "#7C3AED", bg: "#F3E8FF", dot: "#8B5CF6" },
+  verified: { label: "已验证", fg: "#15803D", bg: "#E8F9EF", dot: "#22C55E" },
+  closed: { label: "已关闭", fg: "#64748B", bg: "#EFF3FC", dot: "#94A3B8" },
+  cancelled: { label: "已取消", fg: "#DC2626", bg: "#FDEBEC", dot: "#EF4444" },
+};
+
 export function TaskBoardPage() {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [workers, setWorkers] = useState<{ id: number; name: string }[]>([]);
@@ -52,29 +67,60 @@ export function TaskBoardPage() {
   }, [tasks]);
 
   return (
-    <div>
-      <Typography.Title level={4} style={{ marginTop: 0 }}>维修任务看板</Typography.Title>
-      <Row gutter={12}>
-        {COLUMNS.map((status) => (
-          <Col key={status} span={Math.floor(24 / COLUMNS.length)}>
-            <Card size="small" title={<Space><Tag color={STATUS_LABEL[status]?.color}>{STATUS_LABEL[status]?.label ?? status}</Tag>{byStatus[status]?.length ?? 0}</Space>} loading={loading}>
-              <Space direction="vertical" style={{ width: "100%" }} size={8}>
-                {(byStatus[status] ?? []).map((t) => (
-                  <Card key={t.id} size="small" hoverable onClick={() => { setCurrent(t); setAssignee(undefined); setVerdict(""); }}>
-                    <Typography.Text strong>{t.title}</Typography.Text>
-                    <div style={{ fontSize: 12, color: "#888" }}>
-                      {t.task_no}　{t.assignee_name ? `→ ${t.assignee_name}` : "未派发"}
-                      {t.priority === 2 && <Tag color="red" style={{ marginLeft: 6 }}>紧急</Tag>}
+    <div style={{ padding: 24, maxWidth: 1560, margin: "0 auto" }}>
+      {/* 页头 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>维修任务看板</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>拖拽卡片即可流转状态（此处以操作按钮示意）；高优任务红色置顶 · 维修人员仅见被指派任务</p>
+        </div>
+        <Space>
+          <div style={{ display: "inline-flex", padding: 3, gap: 0, background: "#F6F8FE", border: `1px solid ${token.colorBorder}`, borderRadius: 10 }}>
+            <Button type="primary" size="small" icon={<AppstoreOutlined />} style={{ borderRadius: 8 }}>看板</Button>
+            <Button size="small" type="text" icon={<UnorderedListOutlined />} onClick={() => navigate("/task/list")} style={{ borderRadius: 8 }}>列表</Button>
+          </div>
+          <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/task/list")}>新建维修任务</Button>
+        </Space>
+      </div>
+
+      {/* 看板 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(140px, 1fr))", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+        {COLUMNS.map((status) => {
+          const meta = ST[status] ?? { label: status, fg: "#64748B", bg: "#EFF3FC", dot: "#94A3B8" };
+          const items = byStatus[status] ?? [];
+          return (
+            <div key={status} style={{ background: "#F6F8FE", border: `1px solid ${token.colorBorder}`, borderRadius: 14, padding: 10, display: "flex", flexDirection: "column", gap: 10, minHeight: 220 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, background: meta.dot }} />
+                <span style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{meta.label}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: meta.fg, background: meta.bg, borderRadius: 999, padding: "1px 8px" }}>{items.length}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {loading && items.length === 0 && <div style={{ color: token.colorTextTertiary, fontSize: 12, textAlign: "center", padding: 12 }}>加载中…</div>}
+                {!loading && items.length === 0 && <div style={{ color: token.colorTextTertiary, fontSize: 11.5, textAlign: "center", padding: 12, border: "1px dashed #CBD6EC", borderRadius: 10 }}>暂无任务</div>}
+                {items.map((t) => (
+                  <div key={t.id} onClick={() => { setCurrent(t); setAssignee(undefined); setVerdict(""); }}
+                    style={{ cursor: "pointer", background: "#fff", border: `1px solid ${t.priority === 2 ? "#FCA5A5" : token.colorBorder}`, borderRadius: 12, padding: 10, display: "flex", flexDirection: "column", gap: 6, boxShadow: "0 3px 10px rgba(30,36,51,.05)", transition: "box-shadow .2s ease" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      {t.priority === 2 && <Tag color="red" style={{ marginInlineEnd: 0, borderRadius: 999, padding: "0 6px", fontSize: 10.5 }}>紧急</Tag>}
+                      <span style={{ fontSize: 10.5, color: token.colorTextTertiary, flex: 1, textAlign: "right" }}>{t.task_no}</span>
                     </div>
-                    <div style={{ marginTop: 6 }}>
-                      {status === "pending" && <Button size="small" type="primary" onClick={(e) => { e.stopPropagation(); setCurrent(t); }}>派发</Button>}
+                    <div style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>{t.title}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: token.colorTextSecondary }}>
+                      <UserOutlined style={{ fontSize: 11 }} />
+                      <span style={{ flex: 1 }}>{t.assignee_name || "未派发"}</span>
+                      {t.scheduled_time && <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><ClockCircleOutlined style={{ fontSize: 10 }} />{t.scheduled_time.slice(5, 16)}</span>}
+                    </div>
+                    <div style={{ display: "flex", gap: 4, alignItems: "center", minHeight: 22 }}>
+                      {status === "pending" && <Button size="small" type="primary" icon={<FlagOutlined />} onClick={(e) => { e.stopPropagation(); setCurrent(t); }}>派发</Button>}
                       {status === "done" && (
-                        <Space size={4}>
+                        <>
                           <Button size="small" onClick={(e) => { e.stopPropagation(); setCurrent(t); setVerdict(""); }}>验收</Button>
                           <Popconfirm title="驳回该任务？" onConfirm={() => act(t, "reject", { verdict: "驳回重做" })}>
                             <Button size="small" danger onClick={(e) => e.stopPropagation()}>驳回</Button>
                           </Popconfirm>
-                        </Space>
+                        </>
                       )}
                       {status === "verified" && (
                         <Popconfirm title="关闭该任务？" onConfirm={() => act(t, "close")}>
@@ -82,20 +128,21 @@ export function TaskBoardPage() {
                         </Popconfirm>
                       )}
                     </div>
-                  </Card>
+                  </div>
                 ))}
-              </Space>
-            </Card>
-          </Col>
-        ))}
-      </Row>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
+      {/* 派发/验收抽屉 */}
       <Drawer open={!!current} onClose={() => setCurrent(null)} width={520} title={current ? `任务 ${current.task_no}` : ""}>
         {current && (
-          <>
-            <Descriptions column={1} size="small" bordered style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <Descriptions column={1} size="small" bordered style={{ marginBottom: 4 }}>
               <Descriptions.Item label="状态">
-                <Tag color={STATUS_LABEL[current.status]?.color}>{STATUS_LABEL[current.status]?.label}</Tag>
+                <Tag style={{ borderRadius: 999, background: ST[current.status]?.bg, color: ST[current.status]?.fg, borderColor: "transparent" }}>{ST[current.status]?.label ?? current.status}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="标题">{current.title}</Descriptions.Item>
               <Descriptions.Item label="描述">{current.description || "—"}</Descriptions.Item>
@@ -105,8 +152,7 @@ export function TaskBoardPage() {
             </Descriptions>
             {current.status === "pending" && (
               <Space>
-                <Select placeholder="选择维修人员" style={{ width: 220 }} value={assignee} onChange={setAssignee}
-                  options={workers.map((w) => ({ value: w.id, label: w.name }))} />
+                <Select placeholder="选择维修人员" style={{ width: 240 }} value={assignee} onChange={setAssignee} options={workers.map((w) => ({ value: w.id, label: w.name }))} />
                 <Button type="primary" disabled={!assignee} onClick={() => act(current, "assign", { assignee_id: assignee })}>确认派发</Button>
               </Space>
             )}
@@ -116,7 +162,7 @@ export function TaskBoardPage() {
                 <Button type="primary" disabled={!verdict.trim()} onClick={() => act(current, "verify", { verdict })}>验收通过</Button>
               </Space>
             )}
-          </>
+          </div>
         )}
       </Drawer>
     </div>

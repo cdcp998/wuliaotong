@@ -1,19 +1,34 @@
-/** task 模块：任务列表（/task/list，task:dispatch/process）——创建/筛选/维修记录/知识推荐。 */
+/** task 模块：任务列表（/task/list，task:dispatch/process）——创建/筛选/维修记录/知识推荐。
+ *  v2 界面：玻璃表格 + 看板⇄列表切换 + 玻璃化弹窗/抽屉。 */
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Card, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography, Upload } from "antd";
-import { PlusOutlined, UploadOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router";
+import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, theme, Upload } from "antd";
+import { PlusOutlined, UploadOutlined, UnorderedListOutlined, AppstoreOutlined, ReloadOutlined, RobotOutlined, FileTextOutlined } from "@ant-design/icons";
+import type { ColumnsType } from "antd/es/table";
 
 import { fileApi } from "@wlt/shared";
 
 import { cableApi } from "../cable/api";
-import { STATUS_LABEL, taskApi, type TaskItem } from "./api";
+import { taskApi, type TaskItem } from "./api";
+
+const ST: Record<string, { label: string; fg: string; bg: string }> = {
+  pending: { label: "待派发", fg: "#B45309", bg: "#FEF4E2" },
+  assigned: { label: "已派发", fg: "#3B5BDB", bg: "#EAEFFF" },
+  in_progress: { label: "进行中", fg: "#0E7490", bg: "#E0F2FE" },
+  done: { label: "完成待验", fg: "#7C3AED", bg: "#F3E8FF" },
+  verified: { label: "已验证", fg: "#15803D", bg: "#E8F9EF" },
+  closed: { label: "已关闭", fg: "#64748B", bg: "#EFF3FC" },
+  cancelled: { label: "已取消", fg: "#DC2626", bg: "#FDEBEC" },
+};
 
 export function TaskListPage() {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
+  const navigate = useNavigate();
   const [rows, setRows] = useState<TaskItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(10);
   const [status, setStatus] = useState("");
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -117,44 +132,65 @@ export function TaskListPage() {
     }
   };
 
-  return (
-    <div>
-      <Space style={{ marginBottom: 12, width: "100%", justifyContent: "space-between" }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>任务列表</Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>新建任务</Button>
-      </Space>
-      <Space style={{ marginBottom: 12 }}>
-        <Input.Search placeholder="单号/标题" allowClear style={{ width: 240 }} onSearch={(v) => { setKeyword(v); setPage(1); }} />
-        <Select placeholder="状态" allowClear style={{ width: 150 }} value={status || undefined} onChange={(v) => { setStatus(v ?? ""); setPage(1); }}
-          options={Object.entries(STATUS_LABEL).map(([k, v]) => ({ value: k, label: v.label }))} />
-      </Space>
-      <Table<TaskItem>
-        rowKey="id" loading={loading} dataSource={rows}
-        pagination={{ current: page, pageSize, total, showSizeChanger: true, onChange: (p, ps) => { setPage(p); setPageSize(ps); } }}
-        columns={[
-          { title: "单号", dataIndex: "task_no", width: 150 },
-          { title: "标题", dataIndex: "title" },
-          { title: "状态", dataIndex: "status", width: 100, render: (v: string) => <Tag color={STATUS_LABEL[v]?.color}>{STATUS_LABEL[v]?.label ?? v}</Tag> },
-          { title: "优先级", dataIndex: "priority", width: 90, render: (v: number) => (v === 2 ? <Tag color="red">紧急</Tag> : "普通") },
-          { title: "维修人员", dataIndex: "assignee_name", width: 110, render: (v: string) => v || "—" },
-          { title: "创建人", dataIndex: "creator_name", width: 100 },
-          { title: "创建时间", dataIndex: "created_at", width: 160, render: (v: string) => (v ? new Date(v).toLocaleString() : "—") },
-          {
-            title: "操作", width: 220,
-            render: (_, t) => (
-              <Space size={4}>
-                <Button size="small" onClick={() => openRecords(t)}>记录</Button>
-                {(t.status === "pending" || t.status === "assigned") && (
-                  <Popconfirm title="取消该任务（需填写原因）？" onConfirm={() => cancel(t)}>
-                    <Button size="small" danger>取消</Button>
-                  </Popconfirm>
-                )}
-              </Space>
-            ),
-          },
-        ]}
-      />
+  const columns: ColumnsType<TaskItem> = [
+    { title: "任务", width: 300, render: (_, t) => (
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t.title}</div>
+        <div style={{ fontSize: 11, color: token.colorTextTertiary, marginTop: 2 }}>{t.task_no} · 创建 {t.creator_name} · {t.created_at ? new Date(t.created_at).toLocaleString() : "—"}</div>
+      </div>
+    ) },
+    { title: "状态", width: 110, render: (_, t) => { const s = ST[t.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? t.status}</Tag>; } },
+    { title: "优先级", width: 90, render: (_, t) => (t.priority === 2 ? <Tag color="red" style={{ borderRadius: 999 }}>紧急</Tag> : <Tag style={{ borderRadius: 999, color: "#64748B", background: "#EFF3FC", borderColor: "transparent" }}>普通</Tag>) },
+    { title: "维修人员", dataIndex: "assignee_name", width: 120, render: (v: string) => v || <span style={{ color: token.colorTextTertiary }}>未派发</span> },
+    { title: "计划时间", dataIndex: "scheduled_time", width: 130, render: (v: string | null) => v ? <span style={{ fontSize: 12 }}>{v.slice(0, 16)}</span> : <span style={{ color: token.colorTextTertiary }}>—</span> },
+    {
+      title: "操作", width: 180,
+      render: (_, t) => (
+        <Space size={4}>
+          <Button size="small" icon={<FileTextOutlined />} onClick={() => openRecords(t)}>记录</Button>
+          {(t.status === "pending" || t.status === "assigned") && (
+            <Popconfirm title="取消该任务（需填写原因）？" onConfirm={() => cancel(t)}>
+              <Button size="small" danger>取消</Button>
+            </Popconfirm>
+          )}
+        </Space>
+      ),
+    },
+  ];
 
+  return (
+    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>任务列表</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>组合筛选：状态 / 优先级 / 维修人 / 时间范围；维修记录与知识推荐在「记录」抽屉内</p>
+        </div>
+        <Space>
+          <div style={{ display: "inline-flex", padding: 3, gap: 0, background: "#F6F8FE", border: `1px solid ${token.colorBorder}`, borderRadius: 10 }}>
+            <Button size="small" type="text" icon={<AppstoreOutlined />} onClick={() => navigate("/task/board")} style={{ borderRadius: 8 }}>看板</Button>
+            <Button type="primary" size="small" icon={<UnorderedListOutlined />} style={{ borderRadius: 8 }}>列表</Button>
+          </div>
+          <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>新建任务</Button>
+        </Space>
+      </div>
+
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 4px 10px", flexWrap: "wrap" }}>
+          <Input.Search placeholder="单号 / 标题" allowClear style={{ width: 260 }} onSearch={(v) => { setKeyword(v); setPage(1); }} />
+          <Select placeholder="全部状态" allowClear style={{ width: 160 }} value={status || undefined} onChange={(v) => { setStatus(v ?? ""); setPage(1); }}
+            options={Object.entries(ST).map(([k, v]) => ({ value: k, label: v.label }))} />
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 12, color: token.colorTextTertiary }}>共 {total} 条</span>
+        </div>
+        <Table<TaskItem>
+          rowKey="id" loading={loading} dataSource={rows} locale={{ emptyText: "暂无任务" }}
+          pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else setPage(p); } }}
+          columns={columns}
+        />
+      </div>
+
+      {/* 新建任务 */}
       <Modal open={open} onCancel={() => setOpen(false)} onOk={save} confirmLoading={saving} title="新建维修任务" width={560} destroyOnHidden>
         <Form form={form} layout="vertical">
           <Form.Item name="title" label="标题" rules={[{ required: true, message: "请输入标题" }]}>
@@ -174,38 +210,39 @@ export function TaskListPage() {
         </Form>
       </Modal>
 
+      {/* 维修记录抽屉 */}
       <Drawer open={!!current} onClose={() => setCurrent(null)} width={560} title={current ? `维修记录：${current.title}` : ""}>
         {current && (
-          <>
-            <Space direction="vertical" style={{ width: "100%" }} size={8}>
-              {records.map((r) => (
-                <Card key={r.id} size="small">
-                  <div>{r.content || "（无文字记录）"}</div>
-                  {r.files.length > 0 && (
-                    <Space wrap style={{ marginTop: 6 }}>
-                      {r.files.map((f) => <img key={f.id} src={`/api/v1/files/${f.file_id}`} width={80} height={60} style={{ objectFit: "cover", borderRadius: 4 }} alt="" />)}
-                    </Space>
-                  )}
-                  <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>{new Date(r.created_at).toLocaleString()}</div>
-                </Card>
-              ))}
-              {(current.status === "in_progress" || current.status === "assigned") && (
-                <>
-                  <Input.TextArea rows={3} value={recContent} onChange={(e) => setRecContent(e.target.value)} placeholder="维修内容" />
-                  <Upload beforeUpload={(f) => { setRecFile(f); return false; }} maxCount={1} accept="image/*" showUploadList={false}>
-                    <Button icon={<UploadOutlined />}>{recFile ? "已选照片（点击更换）" : "选择维修照片（完成必填）"}</Button>
-                  </Upload>
-                  <Button type="primary" loading={recSaving} onClick={addRecord}>保存记录</Button>
-                  <Button onClick={doRecommend}>知识推荐</Button>
-                  {recommend.length > 0 && (
-                    <Space direction="vertical" size={4}>
-                      {recommend.map((a) => <Card key={a.id} size="small">{a.title}</Card>)}
-                    </Space>
-                  )}
-                </>
-              )}
-            </Space>
-          </>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {records.map((r) => (
+              <div key={r.id} className="wlt-glass-sm" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontSize: 13 }}>{r.content || "（无文字记录）"}</div>
+                {r.files.length > 0 && (
+                  <Space wrap>
+                    {r.files.map((f) => <img key={f.id} src={`/api/v1/files/${f.file_id}`} width={80} height={60} style={{ objectFit: "cover", borderRadius: 10 }} alt="" />)}
+                  </Space>
+                )}
+                <div style={{ fontSize: 11.5, color: token.colorTextTertiary }}>{new Date(r.created_at).toLocaleString()}</div>
+              </div>
+            ))}
+            {!(current.status === "in_progress" || current.status === "assigned") && <div style={{ color: token.colorTextTertiary, textAlign: "center", padding: 12 }}>该任务当前状态不可追加维修记录</div>}
+            {(current.status === "in_progress" || current.status === "assigned") && (
+              <>
+                <Input.TextArea rows={3} value={recContent} onChange={(e) => setRecContent(e.target.value)} placeholder="维修内容" />
+                <Upload beforeUpload={(f) => { setRecFile(f); return false; }} maxCount={1} accept="image/*" showUploadList={false}>
+                  <Button icon={<UploadOutlined />}>{recFile ? "已选照片（点击更换）" : "选择维修照片（完成必填）"}</Button>
+                </Upload>
+                <Button type="primary" loading={recSaving} onClick={addRecord}>保存记录</Button>
+                <Button icon={<RobotOutlined />} onClick={doRecommend}>知识推荐</Button>
+                {recommend.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>推荐知识</span>
+                    {recommend.map((a) => <div key={a.id} className="wlt-glass-sm" style={{ padding: 10 }}>{a.title}</div>)}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         )}
       </Drawer>
     </div>
