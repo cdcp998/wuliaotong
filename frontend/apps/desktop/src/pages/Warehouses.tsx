@@ -218,7 +218,7 @@ export function WarehousesPage() {
       <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#f6ffed", border: `1px solid ${ALERT_COLOR.normal}`, borderRadius: 3, marginRight: 4 }} />正常</span>
       <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#fff1f0", border: `1px solid ${ALERT_COLOR.low}`, borderRadius: 3, marginRight: 4 }} />低于下限</span>
       <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#fffbe6", border: `1px solid ${ALERT_COLOR.high}`, borderRadius: 3, marginRight: 4 }} />高于上限</span>
-      <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#f5f5f5", border: "1px solid #d9d9d9", borderRadius: 3, marginRight: 4 }} />空/未建库位</span>
+      <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#f5f5f5", border: "1px solid #E4EAF6", borderRadius: 3, marginRight: 4 }} />空/未建库位</span>
     </Space>
   );
 
@@ -248,7 +248,7 @@ export function WarehousesPage() {
                 style={{
                   padding: "10px 12px",
                   borderRadius: 8,
-                  border: selectedWh?.id === w.id ? "1px solid #5B7FFF" : "1px solid #f0f1f3",
+                  border: selectedWh?.id === w.id ? "1px solid #5B7FFF" : "1px solid #E4EAF6",
                   background: selectedWh?.id === w.id ? "#f0f7ff" : "#fff",
                   cursor: "pointer",
                   marginBottom: 8,
@@ -301,7 +301,7 @@ export function WarehousesPage() {
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(560px, 1fr))", gap: 14 }}>
                   {shelves.map((s) => (
-                    <div key={s.id} style={{ border: "1px solid #E4EAF6", borderRadius: 10, background: "#fafbfc", padding: 10 }}>
+                    <div key={s.id} style={{ border: "1px solid #E4EAF6", borderRadius: 10, background: "#F8FAFF", padding: 10 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                         <b>{s.code}{s.name ? ` ${s.name}` : ""}</b>
                         <Space size={4}>

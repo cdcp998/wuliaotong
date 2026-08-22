@@ -871,7 +871,7 @@ export function PurchaseInPage() {
           },
         }}
       >
-        <div style={{ padding: 12, border: "1px solid #E4EAF6", borderRadius: 8, background: "#fafbfc", marginBottom: 12 }}>
+        <div style={{ padding: 12, border: "1px solid #E4EAF6", borderRadius: 8, background: "#F8FAFF", marginBottom: 12 }}>
           <Space wrap>
             <span>入库仓库</span>
             <Select style={{ width: 200 }} placeholder="选择" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={warehouseId} onChange={(v) => { setWarehouseId(v); void loadLocs(v); }} />

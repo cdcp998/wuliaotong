@@ -49,7 +49,7 @@ export function BillDetailDrawer({
       onClose={onClose}
       destroyOnHidden
     >
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", background: "#fafbfc", border: "1px solid #f0f1f3", borderRadius: 8, padding: "12px 14px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", background: "#F8FAFF", border: "1px solid #E4EAF6", borderRadius: 12, padding: "12px 14px" }}>
         {fields.map((f) => (
           <div key={f.label} style={f.span === 2 ? { gridColumn: "1/-1" } : undefined}>
             <div style={{ fontSize: 12, color: "#5B6478" }}>{f.label}</div>

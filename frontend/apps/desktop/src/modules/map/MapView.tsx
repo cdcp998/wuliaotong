@@ -177,7 +177,7 @@ export function MapView({
   return (
     <div style={{ height, width: "100%", position: "relative" }}>
       {picking && (
-        <div style={{ position: "absolute", zIndex: 1000, top: 8, left: 50, background: "#fff", padding: "6px 12px", borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,.15)" }}>
+        <div style={{ position: "absolute", zIndex: 1000, top: 8, left: 50, background: "#fff", padding: "6px 12px", borderRadius: 10, boxShadow: "0 2px 8px rgba(0,0,0,.15)" }}>
           {picking}
         </div>
       )}

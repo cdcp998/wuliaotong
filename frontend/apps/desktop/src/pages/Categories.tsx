@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   App,
@@ -396,7 +396,7 @@ export function CategoriesPage() {
             width: 300,
             flexShrink: 0,
             borderRight: `1px solid ${token.colorBorderSecondary}`,
-            background: "#fafbfc",
+            background: "#F8FAFF",
             padding: 12,
             display: "flex",
             flexDirection: "column",

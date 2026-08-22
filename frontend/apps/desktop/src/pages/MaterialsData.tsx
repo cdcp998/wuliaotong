@@ -670,7 +670,7 @@ export function MaterialsDataPage() {
             width: 300,
             flexShrink: 0,
             borderRight: `1px solid ${token.colorBorderSecondary}`,
-            background: "#fafbfc",
+            background: "#F8FAFF",
             padding: 12,
             display: "flex",
             flexDirection: "column",

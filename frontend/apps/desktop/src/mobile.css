@@ -1,4 +1,4 @@
-/* ==========================================================================
+﻿/* ==========================================================================
  * 物料通电脑端 —— 移动端适配样式（响应式）
  * 设计依据：《前端设计.md》§2.3 电脑端的移动适配
  *
@@ -290,7 +290,7 @@
   .wlt-cat-layout .wlt-cat-aside {
     width: 100% !important;
     border-right: none !important;
-    border-bottom: 1px solid #f0f1f3;
+    border-bottom: 1px solid #E4EAF6;
     max-height: 44vh;
   }
   .wlt-cat-layout .wlt-cat-aside .ant-tree {

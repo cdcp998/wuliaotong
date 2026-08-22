@@ -423,7 +423,7 @@ export function MapCachePage() {
           </Form.Item>
           {/* 地图框选区域：点两角自动填 bbox（可再手调） */}
           <Typography.Text strong>地图选择区域（点击两角拖动另算：点两个对角点即可）</Typography.Text>
-          <div style={{ height: 240, margin: "8px 0", border: "1px solid #E4EAF6", borderRadius: 6, overflow: "hidden" }}>
+          <div style={{ height: 240, margin: "8px 0", border: "1px solid #E4EAF6", borderRadius: 12, overflow: "hidden" }}>
             <MapView
               sources={regionSources}
               overlays={{ cables: [], faults: [], markersByCable: {} }}

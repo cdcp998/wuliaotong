@@ -136,7 +136,7 @@ export function CheckDetailPage() {
       <DataTable rowKey="id" locale={{ emptyText: "暂无数据" }} columns={columns} dataSource={items} pagination={false}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
 
       {!readonly && (
-        <div style={{ background: "#fafbfc", border: "1px dashed #d9dde3", borderRadius: 8, padding: 12, marginTop: 12 }}>
+        <div style={{ background: "#F8FAFF", border: "1px dashed #d9dde3", borderRadius: 8, padding: 12, marginTop: 12 }}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>当场新增账外物料（盘点发现但账面没有的实物，实盘数量即盘盈入账）</div>
           <Space wrap>
             <Select

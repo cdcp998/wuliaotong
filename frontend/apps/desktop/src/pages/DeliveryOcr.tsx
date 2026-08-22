@@ -437,7 +437,7 @@ export function DeliveryOcrPage() {
                   {lines.map((l, i) => `${String(i + 1).padStart(2, "0")}  ${l}`).join("\n")}
                 </pre>
               ) : (
-                <div style={{ color: "#c0c4cc", fontSize: 12, background: "#fafbfc", padding: "12px 16px", borderRadius: 8 }}>暂无 OCR 原文（0 行）</div>
+                <div style={{ color: "#c0c4cc", fontSize: 12, background: "#F8FAFF", padding: "12px 16px", borderRadius: 8 }}>暂无 OCR 原文（0 行）</div>
               )}
             </div>
           </div>

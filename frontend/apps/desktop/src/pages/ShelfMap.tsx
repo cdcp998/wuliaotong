@@ -94,7 +94,7 @@ export function ShelfMapPage() {
         <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#f6ffed", border: `1px solid ${ALERT_COLOR.normal}`, borderRadius: 3, marginRight: 4 }} />正常</span>
         <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#fff1f0", border: `1px solid ${ALERT_COLOR.low}`, borderRadius: 3, marginRight: 4 }} />低于下限</span>
         <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#fffbe6", border: `1px solid ${ALERT_COLOR.high}`, borderRadius: 3, marginRight: 4 }} />高于上限</span>
-        <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#f5f5f5", border: "1px solid #d9d9d9", borderRadius: 3, marginRight: 4 }} />空库位</span>
+        <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#f5f5f5", border: "1px solid #E4EAF6", borderRadius: 3, marginRight: 4 }} />空库位</span>
       </div>
 
       {layers.map(([layer, locs]) => (

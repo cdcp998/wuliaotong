@@ -138,7 +138,7 @@ export function RequisitionQueryPage() {
       <Drawer title="领用申请单详情" size={600} open={detailOpen} onClose={() => setDetailOpen(false)} destroyOnHidden>
         {detail && (
           <div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", background: "#fafbfc", border: "1px solid #f0f1f3", borderRadius: 8, padding: "12px 14px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", background: "#F8FAFF", border: "1px solid #E4EAF6", borderRadius: 12, padding: "12px 14px" }}>
               <div><div style={{ fontSize: 12, color: "#5B6478" }}>单号</div><div style={{ fontWeight: 600 }}>{detail.bill_no}</div></div>
               <div><div style={{ fontSize: 12, color: "#5B6478" }}>申请人</div><div>{detail.applicant_name}</div></div>
               <div><div style={{ fontSize: 12, color: "#5B6478" }}>出库仓库</div><div>{detail.warehouse_name}</div></div>

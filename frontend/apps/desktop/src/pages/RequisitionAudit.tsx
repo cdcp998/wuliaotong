@@ -204,7 +204,7 @@ export function RequisitionAuditPage() {
       >
         {detail && (
           <div>
-            <div style={{ border: "1px solid #E4EAF6", borderRadius: 8, padding: 12, marginBottom: 12, background: "#fafbfc" }}>
+            <div style={{ border: "1px solid #E4EAF6", borderRadius: 8, padding: 12, marginBottom: 12, background: "#F8FAFF" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <b>AI 审核摘要</b>
                 {aiLoading && <Tag>生成中…</Tag>}
@@ -229,7 +229,7 @@ export function RequisitionAuditPage() {
                 !aiLoading && <Typography.Text type="secondary">摘要不可用（大模型未配置或生成失败）</Typography.Text>
               )}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", background: "#fafbfc", border: "1px solid #f0f1f3", borderRadius: 8, padding: "12px 14px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", background: "#F8FAFF", border: "1px solid #E4EAF6", borderRadius: 12, padding: "12px 14px" }}>
               <div><div style={{ fontSize: 12, color: "#5B6478" }}>单号</div><div style={{ fontWeight: 600 }}>{detail.bill_no}</div></div>
               <div><div style={{ fontSize: 12, color: "#5B6478" }}>申请人</div><div>{detail.applicant_name}</div></div>
               <div><div style={{ fontSize: 12, color: "#5B6478" }}>出库仓库</div><div>{detail.warehouse_name}</div></div>
