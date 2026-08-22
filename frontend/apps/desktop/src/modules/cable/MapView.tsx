@@ -5,7 +5,7 @@
  * - 坐标：数据与接口一律 WGS84，仅本组件按源 coordinate_space 做显示层转换（共享 geo.ts）
  */
 import { useEffect, useMemo } from "react";
-import { GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents, ZoomControl } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Empty } from "antd";
@@ -169,8 +169,10 @@ export function MapView({
       <MapContainer
         center={space === "wgs84" ? center : toDisplaySpace(center[1], center[0], space).reverse() as L.LatLngTuple}
         zoom={zoom}
+        zoomControl={false}
         style={{ height: "100%", width: "100%" }}
       >
+        <ZoomControl position="bottomright" />
         <BaseTile sources={sources} sourceKey={sourceKey} />
         <ClickCatcher onPick={onPick} space={space} />
         <FitCables cables={overlays.cables} previewPath={previewPath} />

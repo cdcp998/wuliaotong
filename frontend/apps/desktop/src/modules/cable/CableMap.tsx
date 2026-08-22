@@ -242,7 +242,7 @@ export function CableMapPage() {
             icon={<MenuUnfoldOutlined />}
             onClick={() => setPanelCollapsed(false)}
           >
-            工具栏
+            显示工具栏
           </Button>
         )}
         <MapView
