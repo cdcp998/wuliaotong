@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button, Checkbox, Dialog, List, NavBar, SpinLoading, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -164,7 +164,7 @@ export function NotificationsPage() {
           style={{
             padding: "8px 12px",
             background: "#fff",
-            borderBottom: "1px solid #f0f1f3",
+            borderBottom: "1px solid #E4EAF6",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -217,7 +217,7 @@ export function NotificationsPage() {
                 </div>
               }
               extra={<Tag color={style.color}>{style.text}</Tag>}
-              style={manage && checked ? { background: "#f0f6ff" } : undefined}
+              style={manage && checked ? { background: "#EAEFFF" } : undefined}
             >
               <span style={{ fontWeight: n.is_read ? 400 : 600, fontSize: 13.5 }}>{n.title}</span>
             </List.Item>
@@ -245,7 +245,7 @@ export function NotificationsPage() {
             padding: "10px 12px",
             paddingBottom: "calc(10px + env(safe-area-inset-bottom))",
             background: "#fff",
-            borderTop: "1px solid #f0f1f3",
+            borderTop: "1px solid #E4EAF6",
             display: "flex",
             alignItems: "center",
             gap: 10,
