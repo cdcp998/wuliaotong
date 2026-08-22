@@ -1,8 +1,8 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, Input, List, NavBar, Popup, Stepper, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
-import { PhotoUpload, PlusIcon, ProductPicker, useBackToClose, baseApi, requisitionApi, type Location, type Product, type Warehouse } from "@wlt/shared";
+import { PhotoUpload, PlusIcon, ProductPicker, useBackToClose, baseApi, requisitionApi, stockApi, type Location, type Product, type StockRow, type Warehouse } from "@wlt/shared";
 
 interface Row {
   product: Product;
@@ -30,8 +30,35 @@ export function RequisitionNewPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [isPrivate, setIsPrivate] = useState(false); // 私用标记（隐藏触发，仅管理员可见）
+  // 当前仓库各材料可用库存（设计页 M9：库存不足标注）
+  const [stockMap, setStockMap] = useState<Map<number, number>>(new Map());
   const tapCountRef = useRef(0); // 「因何使用」连续点击计数
   const lastTapRef = useRef(0);
+
+  // 切换出库仓库 → 拉取该仓库库存，用于「库存不足」标注
+  useEffect(() => {
+    if (!warehouseId) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const all: StockRow[] = [];
+        for (let p = 1; p <= 5; p++) {
+          const d = await stockApi.query({ warehouse_id: warehouseId, page: p, page_size: 100 });
+          all.push(...d.list);
+          if (all.length >= d.total) break;
+        }
+        if (!alive) return;
+        const m = new Map<number, number>();
+        for (const r of all) m.set(r.product_id, (m.get(r.product_id) ?? 0) + (Number(r.qty) || 0));
+        setStockMap(m);
+      } catch {
+        /* 库存获取失败不阻塞领用 */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [warehouseId]);
 
   // 返回键（硬件/浏览器）关闭「选择库位」弹层
   useBackToClose(locPicker.open, () => setLocPicker((s) => ({ ...s, open: false })));
@@ -133,10 +160,18 @@ export function RequisitionNewPage() {
           <div key={i} style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 10, padding: 12, marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{r.product.name}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
+                  {r.product.name}
+                  {stockMap.has(r.product.id) && Number(r.qty) > (stockMap.get(r.product.id) ?? 0) && (
+                    <Tag color="warning" fill="outline" style={{ fontSize: 9.5, padding: "1px 5px", borderRadius: 4, flexShrink: 0 }}>
+                      库存不足
+                    </Tag>
+                  )}
+                </div>
                 <div style={{ fontSize: 11, color: "#5B6478", marginTop: 1 }}>
                   {r.product.code}
                   {r.product.spec ? ` / ${r.product.spec}` : ""} / {r.product.unit_name}
+                  {stockMap.has(r.product.id) ? ` · 库存 ${stockMap.get(r.product.id)}` : ""}
                 </div>
               </div>
               <span style={{ color: "#EF4444", fontSize: 12, cursor: "pointer" }} onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>
