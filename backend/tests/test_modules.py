@@ -350,6 +350,30 @@ def test_fault_soft_delete() -> None:
     assert r.json()["code"] == 4003
 
 
+def test_closed_fault_delete_review() -> None:
+    """已关闭故障删除走审核流：提交申请（不直接删）→ 管理员通过后软删除；未关闭故障不可申请。"""
+    _login("admin", "admin123")
+    # 未关闭故障 → 不可申请审核删除
+    r = client.post("/api/v1/faults", json={"lat": 30.05, "lng": 120.05, "fault_type": "T-审核", "severity": 1, "description": "T-审核删除"})
+    assert r.json()["code"] == 0
+    fid = r.json()["data"]["id"]
+    r = client.post("/api/v1/delete-reviews", json={"biz_type": "fault", "target_id": fid, "reason": "T-测试原因"})
+    assert r.json()["code"] != 0  # 仅已关闭故障可申请
+    # 关闭故障 → 提交删除申请
+    assert client.put(f"/api/v1/faults/{fid}/status", json={"status": 4}).json()["code"] == 0
+    r = client.post("/api/v1/delete-reviews", json={"biz_type": "fault", "target_id": fid, "reason": "T-测试原因"})
+    assert r.json()["code"] == 0, r.text
+    review_id = r.json()["data"]["id"]
+    # 申请后故障仍在（未直接删除）
+    ids = [f["id"] for f in client.get("/api/v1/faults", params={"page_size": 100}).json()["data"]["items"]]
+    assert fid in ids
+    # 管理员通过审核 → 故障软删除
+    r = client.post(f"/api/v1/delete-reviews/{review_id}/approve")
+    assert r.json()["code"] == 0, r.text
+    ids = [f["id"] for f in client.get("/api/v1/faults", params={"page_size": 100}).json()["data"]["items"]]
+    assert fid not in ids
+
+
 def test_map_sources_config() -> None:
     _login("admin", "admin123")
     esri_default = {

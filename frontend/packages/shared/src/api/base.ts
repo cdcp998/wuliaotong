@@ -24,10 +24,10 @@ export interface Product {
   stock_qty?: string;
 }
 
-/** 删除审核申请（物料数据删除审批流：提交/查询/通过/驳回）。 */
+/** 删除审核申请（物料数据/故障删除审批流：提交/查询/通过/驳回）。 */
 export interface DeleteReview {
   id: number;
-  biz_type: "product" | "category";
+  biz_type: "product" | "category" | "fault";
   target_id: number;
   target_name: string;
   target_desc: string;
@@ -157,7 +157,7 @@ export const baseApi = {
   /** 人工标记材料为重复（写 remark，不物理删除）。 */
   markDuplicate: (id: number) => http.post<null>(`/products/${id}/mark-duplicate`),
   /** 提交删除申请（材料停用 / 分类删除；管理者审核通过后才执行）。 */
-  submitDeleteReview: (body: { biz_type: "product" | "category"; target_id: number; reason: string }) => http.post<DeleteReview>("/delete-reviews", body),
+  submitDeleteReview: (body: { biz_type: "product" | "category" | "fault"; target_id: number; reason: string }) => http.post<DeleteReview>("/delete-reviews", body),
   /** 删除审核列表（status: 0 待审核 / 1 已通过 / 2 已驳回）。 */
   deleteReviews: (status = 0, page = 1, pageSize = 20) =>
     http.get<PageData<DeleteReview>>(`/delete-reviews?status=${status}&page=${page}&page_size=${pageSize}`),

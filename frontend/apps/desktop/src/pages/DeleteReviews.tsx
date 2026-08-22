@@ -90,7 +90,7 @@ export function DeleteReviewsPage() {
         title: "类型",
         dataIndex: "biz_type",
         width: 80,
-        render: (v: string) => (v === "product" ? <Tag color="blue">材料</Tag> : <Tag color="orange">分类</Tag>),
+        render: (v: string) => (v === "product" ? <Tag color="blue">材料</Tag> : v === "category" ? <Tag color="orange">分类</Tag> : <Tag color="purple">故障</Tag>),
       },
       { title: "目标", dataIndex: "target_name", width: 180, ellipsis: true, render: (v: string, r) => <span title={r.target_desc}>{v}</span> },
       { title: "删除原因", dataIndex: "reason", width: 220, ellipsis: true },
@@ -107,7 +107,7 @@ export function DeleteReviewsPage() {
                   <Space size={4}>
                     <Popconfirm
                       title={`确认通过并删除「${r.target_name}」？`}
-                      description={r.biz_type === "product" ? "材料将被停用（可再启用）" : "分类将被删除（有子分类或材料时自动驳回）"}
+                      description={r.biz_type === "product" ? "材料将被停用（可再启用）" : r.biz_type === "category" ? "分类将被删除（有子分类或材料时自动驳回）" : "故障将被软删除（地图/列表不再显示，数据保留可追溯）"}
                       okText="通过"
                       onConfirm={() => void approve(r)}
                     >
@@ -146,7 +146,7 @@ export function DeleteReviewsPage() {
         <div>
           <h2 style={{ margin: 0 }}>删除审核</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#646a73" }}>
-            物料/分类删除审批流：仓管员及以上提交删除申请，管理者及以上审核通过后才执行删除；审核结果站内通知申请人
+            物料/分类/已关闭故障删除审批流：仓管员及以上提交删除申请，管理者及以上审核通过后才执行删除；审核结果站内通知申请人
           </p>
         </div>
         <Button icon={<AuditOutlined />} onClick={() => void load()}>刷新</Button>

@@ -114,9 +114,9 @@ class ProductCategoryReq(BaseModel):
 
 
 class DeleteReviewReq(BaseModel):
-    """提交删除审核申请（物料数据管理 → 删除走审批流）：biz_type=product（停用材料）/ category（删除分类）。"""
+    """提交删除审核申请（物料数据管理 → 删除走审批流）：biz_type=product（停用材料）/ category（删除分类）/ fault（已关闭故障审核删除）。"""
 
-    biz_type: str = Field(pattern="^(product|category)$")
+    biz_type: str = Field(pattern="^(product|category|fault)$")
     target_id: int = Field(gt=0)
     reason: str = Field(min_length=1, max_length=500, description="删除原因，必填")
 

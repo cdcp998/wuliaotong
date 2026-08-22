@@ -1,9 +1,9 @@
 /** cable 模块：故障管理（/cable/faults，fault:manage / fault:report）——上报、状态流转、照片。 */
 import { useCallback, useEffect, useState } from "react";
 import { App, Button, Drawer, Form, Image, Input, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography, Upload } from "antd";
-import { CameraOutlined, CheckCircleOutlined, CheckOutlined, DeleteOutlined, LockOutlined, PlayCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
+import { AimOutlined, CameraOutlined, CheckCircleOutlined, CheckOutlined, DeleteOutlined, LockOutlined, PlayCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
 
-import { fileApi } from "@wlt/shared";
+import { baseApi, fileApi } from "@wlt/shared";
 
 import { cableApi, type CableItem, type FaultItem, type MapSourceInfo } from "./api";
 import { MapView } from "./MapView";
@@ -54,6 +54,10 @@ export function CableFaultsPage() {
   const [cables, setCables] = useState<CableItem[]>([]);
   const [detail, setDetail] = useState<FaultItem | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [locFault, setLocFault] = useState<FaultItem | null>(null);
+  const [delFault, setDelFault] = useState<FaultItem | null>(null);
+  const [delReason, setDelReason] = useState("");
+  const [delSubmitting, setDelSubmitting] = useState(false);
   const [form] = Form.useForm();
 
   const load = useCallback(async () => {
@@ -141,6 +145,25 @@ export function CableFaultsPage() {
     }
   };
 
+  const submitDelReview = async () => {
+    if (!delFault) return;
+    if (!delReason.trim()) {
+      message.warning("请填写删除原因");
+      return;
+    }
+    setDelSubmitting(true);
+    try {
+      await baseApi.submitDeleteReview({ biz_type: "fault", target_id: delFault.id, reason: delReason.trim() });
+      message.success("已提交删除申请，待管理员审核（可在「系统管理 → 删除审核」查看进度）");
+      setDelFault(null);
+      setDelReason("");
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "提交失败");
+    } finally {
+      setDelSubmitting(false);
+    }
+  };
+
   const openDetail = async (f: FaultItem) => {
     setDetail(f);
     setPhotos([]);
@@ -192,7 +215,7 @@ export function CableFaultsPage() {
           { title: "上报时间", dataIndex: "reported_at", width: 160, render: (v: string) => (v ? new Date(v).toLocaleString() : "—") },
           {
             title: "操作",
-            width: 160,
+            width: 200,
             render: (_, f) => (
               <Space size={2}>
                 {STATUS[f.status]?.next && (
@@ -200,14 +223,23 @@ export function CableFaultsPage() {
                     <Button size="small" type="primary" icon={NEXT_ICON[STATUS[f.status]!.next!.to]} onClick={() => nextStatus(f)} />
                   </Tooltip>
                 )}
+                <Tooltip title="定位到故障点">
+                  <Button size="small" icon={<AimOutlined />} onClick={() => setLocFault(f)} />
+                </Tooltip>
                 <Tooltip title="照片/详情">
                   <Button size="small" icon={<CameraOutlined />} onClick={() => openDetail(f)} />
                 </Tooltip>
-                <Popconfirm title={`确认删除故障 #${f.id}？删除后列表与地图均不再显示。`} onConfirm={() => removeFault(f)}>
-                  <Tooltip title="删除">
-                    <Button size="small" danger icon={<DeleteOutlined />} />
+                {f.status === 4 ? (
+                  <Tooltip title="删除（已关闭故障，需管理员审核）">
+                    <Button size="small" danger icon={<DeleteOutlined />} onClick={() => { setDelFault(f); setDelReason(""); }} />
                   </Tooltip>
-                </Popconfirm>
+                ) : (
+                  <Popconfirm title={`确认删除故障 #${f.id}？删除后列表与地图均不再显示。`} onConfirm={() => removeFault(f)}>
+                    <Tooltip title="删除">
+                      <Button size="small" danger icon={<DeleteOutlined />} />
+                    </Tooltip>
+                  </Popconfirm>
+                )}
               </Space>
             ),
           },
@@ -254,6 +286,42 @@ export function CableFaultsPage() {
             </Typography.Text>
           )}
         </Space>
+      </Modal>
+
+      {/* 定位到故障点（内嵌地图） */}
+      <Modal open={!!locFault} onCancel={() => setLocFault(null)} footer={null} title={locFault ? `故障 #${locFault.id} 位置` : ""} width={720} destroyOnHidden>
+        {locFault && (
+          <>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+              {locFault.fault_type || "未分类"} · 状态：{STATUS[locFault.status]?.label} · {locFault.lat.toFixed(6)}, {locFault.lng.toFixed(6)}
+            </Typography.Paragraph>
+            <div style={{ height: 420, border: "1px solid #e5e6eb", borderRadius: 6, overflow: "hidden" }}>
+              <MapView
+                sources={sources}
+                center={[locFault.lat, locFault.lng]}
+                zoom={16}
+                overlays={{ cables: [], faults: [locFault], markersByCable: {} }}
+                height="420px"
+              />
+            </div>
+          </>
+        )}
+      </Modal>
+
+      {/* 已关闭故障删除 → 提交管理员审核 */}
+      <Modal
+        open={!!delFault}
+        onCancel={() => setDelFault(null)}
+        onOk={submitDelReview}
+        confirmLoading={delSubmitting}
+        title={delFault ? `删除故障 #${delFault.id}（需管理员审核）` : ""}
+        width={520}
+        destroyOnHidden
+      >
+        <Typography.Paragraph type="secondary">
+          已关闭的故障删除需管理员审核：提交申请并通知管理者，审核通过后才会从列表与地图移除（数据保留可追溯，申请进度可在「系统管理 → 删除审核」查看）。
+        </Typography.Paragraph>
+        <Input.TextArea rows={3} maxLength={500} placeholder="请填写删除原因（必填）" value={delReason} onChange={(e) => setDelReason(e.target.value)} />
       </Modal>
 
       <Drawer

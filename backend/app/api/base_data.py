@@ -1425,9 +1425,9 @@ def _review_out(r: SysDeleteReview) -> dict:
     ).model_dump()
 
 
-@router.post("/delete-reviews", dependencies=[Depends(require_any_permission("base:product", "base:category"))])
+@router.post("/delete-reviews", dependencies=[Depends(require_any_permission("base:product", "base:category", "fault:manage", "fault:report"))])
 def create_delete_review(req: DeleteReviewReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
-    """提交删除申请（材料停用 / 分类删除）：生成待审核记录并通知管理者；不直接执行删除。"""
+    """提交删除申请（材料停用 / 分类删除 / 已关闭故障审核删除）：生成待审核记录并通知管理者；不直接执行删除。"""
     now = datetime.now()
     if req.biz_type == "product":
         p = db.get(BaseProduct, req.target_id)
@@ -1441,6 +1441,18 @@ def create_delete_review(req: DeleteReviewReq, user: SysUser = Depends(get_curre
         if c is None:
             raise BizError(E_NOT_FOUND, "分类不存在")
         name, desc = c.name, f"路径 {c.path or '/'}"
+    elif req.biz_type == "fault":
+        try:
+            from app.modules.cable.models import CableFault  # 模块插件：已安装才可用
+        except ImportError:
+            raise BizError(E_PARAM, "cable 模块未启用") from None
+        f = db.get(CableFault, req.target_id)
+        if f is None or f.deleted:
+            raise BizError(E_NOT_FOUND, "故障不存在")
+        if f.status != 4:
+            raise BizError(E_PARAM, "仅已关闭的故障需要审核删除")
+        name = f"故障 #{f.id}"
+        desc = f"{f.fault_type or '未分类'} · {float(f.lat):.6f},{float(f.lng):.6f}"
     else:
         raise BizError(E_PARAM, "未知删除类型")
     pending = db.scalar(
@@ -1460,12 +1472,13 @@ def create_delete_review(req: DeleteReviewReq, user: SysUser = Depends(get_curre
     db.add(review)
     db.commit()
     db.refresh(review)
-    _notify_managers(db, "删除申请待审核", f"{user.real_name or user.username} 申请删除{('材料：' + name) if req.biz_type == 'product' else ('分类：' + name)}：{req.reason}", exclude_user_id=user.id, link=f"/delete-reviews?review={review.id}")
+    type_label = {"product": f"材料：{name}", "category": f"分类：{name}", "fault": f"故障：{name}"}.get(req.biz_type, name)
+    _notify_managers(db, "删除申请待审核", f"{user.real_name or user.username} 申请删除{type_label}：{req.reason}", exclude_user_id=user.id, link=f"/delete-reviews?review={review.id}")
     db.commit()
     return ok(_review_out(review))
 
 
-@router.get("/delete-reviews", dependencies=[Depends(require_any_permission("base:product", "base:category"))])
+@router.get("/delete-reviews", dependencies=[Depends(require_any_permission("base:product", "base:category", "fault:manage"))])
 def list_delete_reviews(
     status: int = Query(0, ge=0, le=2, description="0 待审核 / 1 已通过 / 2 已驳回"),
     page: int = Query(1, ge=1),
@@ -1516,6 +1529,14 @@ def approve_delete_review(review_id: int, user: SysUser = Depends(get_current_us
                 return ok(_review_out(review))
             db.delete(c)
             cache_delete("dict:categories")
+    elif review.biz_type == "fault":
+        try:
+            from app.modules.cable.models import CableFault  # 模块插件：已安装才可用
+        except ImportError:
+            raise BizError(E_PARAM, "cable 模块未启用") from None
+        f = db.get(CableFault, review.target_id)
+        if f is not None and not f.deleted:
+            f.deleted = 1  # 软删除：地图/列表不再显示，数据保留可追溯
     review.status = 1
     review.handled_by = user.id
     review.handled_at = now
