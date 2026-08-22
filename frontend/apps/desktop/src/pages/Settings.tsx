@@ -1114,6 +1114,7 @@ export function SettingsPage() {
           }}
         >
           <Tabs
+            tabPosition="left"
             items={[
               { key: "base", label: "基础设置", children: baseTab, forceRender: true },
               { key: "ocr", label: "OCR 与大模型", children: ocrTab, forceRender: true },
