@@ -253,33 +253,55 @@ export function MapCachePage() {
   const defaultKey = Object.keys(sources).find((k) => sources[k]?.enabled);
 
   return (
-    <div>
-      <Space style={{ marginBottom: 12, width: "100%", justifyContent: "space-between" }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>地图缓存管理</Typography.Title>
+    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
+      {/* 页头 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>地图缓存管理</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>按区域批量下载瓦片 · 容量保护 · 支持暂停/继续/清理；密钥加密入库、回读脱敏</p>
+        </div>
         <Space>
           <Button icon={<ReloadOutlined />} onClick={() => { void load(); void loadSources(); }}>刷新</Button>
           <Button icon={<SettingOutlined />} onClick={() => setSrcOpen(true)}>图源管理</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>新建下载区域</Button>
         </Space>
-      </Space>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        <Space size={12} wrap>
-          <span>下载进度：</span>
-          <Progress
-            percent={progress.pending + progress.done + progress.failed > 0
-              ? Math.round(((progress.done + progress.failed) / (progress.pending + progress.done + progress.failed)) * 100)
-              : 0}
-            size="small" style={{ width: 220 }}
-            status={progress.failed > 0 ? "exception" : undefined}
-            format={() => `${progress.done + progress.failed} / ${progress.pending + progress.done + progress.failed}`}
-          />
-          <span>待 <Tag color="blue">{progress.pending}</Tag></span>
-          <span>成功 <Tag color="green">{progress.done}</Tag></span>
-          <span>失败 <Tag color="red">{progress.failed}</Tag></span>
-          <span>瓦片经后端代理缓存（磁盘优先命中 → 在线源抓取落盘），可离线使用。</span>
-        </Space>
-      </Typography.Paragraph>
+      </div>
 
+      {/* 统计卡 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 14 }}>
+        {[
+          { label: "缓存区域", value: regions.length, unit: "个", color: "#3B5BDB", bg: "#EAEFFF" },
+          { label: "瓦片文件", value: regions.reduce((s, r) => s + (r.tile_count || 0), 0).toLocaleString("zh-CN"), unit: "张", color: "#1E2433", bg: "#F6F8FE" },
+          { label: "下载完成", value: (progress.done + progress.failed), unit: "张", color: "#15803D", bg: "#E8F9EF" },
+          { label: "下载失败", value: progress.failed, unit: "张", color: "#DC2626", bg: "#FDEBEC" },
+        ].map((c) => (
+          <div key={c.label} style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 3px 12px rgba(30,36,51,.05)" }}>
+            <div>
+              <div style={{ fontSize: 12, color: "#5B6478" }}>{c.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: c.color, fontVariantNumeric: "tabular-nums" }}>{c.value} <span style={{ fontSize: 12, color: "#8A93A8", fontWeight: 400 }}>{c.unit}</span></div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 下载进度条 */}
+      <div className="wlt-glass-sm" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600 }}>全局下载进度</span>
+        <Progress
+          percent={progress.pending + progress.done + progress.failed > 0
+            ? Math.round(((progress.done + progress.failed) / (progress.pending + progress.done + progress.failed)) * 100)
+            : 0}
+          size="small" style={{ width: 220 }}
+          status={progress.failed > 0 ? "exception" : undefined}
+          format={() => `${progress.done + progress.failed} / ${progress.pending + progress.done + progress.failed}`}
+        />
+        <span style={{ fontSize: 12 }}>待 <Tag color="blue" style={{ borderRadius: 999 }}>{progress.pending}</Tag></span>
+        <span style={{ fontSize: 12 }}>成功 <Tag color="green" style={{ borderRadius: 999 }}>{progress.done}</Tag></span>
+        <span style={{ fontSize: 12 }}>失败 <Tag color="red" style={{ borderRadius: 999 }}>{progress.failed}</Tag></span>
+        <span style={{ fontSize: 12, color: "#8A93A8" }}>瓦片经后端代理缓存（磁盘优先命中 → 在线源抓取落盘），可离线使用。</span>
+      </div>
+
+      <div className="wlt-glass" style={{ padding: 12 }}>
       <Table<RegionRow>
         rowKey="id" loading={loading} dataSource={regions} pagination={false}
         columns={[
@@ -324,10 +346,11 @@ export function MapCachePage() {
       />
 
       {canConfig && (
-        <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
+        <p style={{ marginTop: 12, marginBottom: 0, fontSize: 12, color: "#8A93A8" }}>
           已配置地图源：{Object.values(sources).map((s) => `${s.name}(${s.coordinate_space})`).join("、") || "无（使用内置默认 Esri）"}（{Object.keys(sources).length} 个）
-        </Typography.Paragraph>
+        </p>
       )}
+      </div>
 
       {/* 图源管理（弹窗式，宽屏自适应） */}
       <Modal
