@@ -10,6 +10,8 @@ interface AuthState {
   user: UserInfo | null;
   menus: MenuNode[]; // 当前用户可见菜单树（动态导航渲染）
   modules: ModuleInfo[]; // 模块插件状态（系统管理「安装模块」页 + RequireModule 守卫）
+  /** 模块状态加载进度：idle 未开始 / loading 拉取中 / ok 已就绪 / error 拉取失败（可重试） */
+  modulesStatus: "idle" | "loading" | "ok" | "error";
   loading: boolean;
   login: (username: string, password: string, captchaId?: string, captchaCode?: string, remember?: boolean) => Promise<void>;
   logout: () => Promise<void>;
@@ -25,6 +27,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   menus: [],
   modules: [],
+  modulesStatus: "idle",
   loading: false,
 
   login: async (username: string, password: string, captchaId = "", captchaCode = "", remember = false) => {
@@ -41,7 +44,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await authApi.logout();
     } finally {
-      set({ user: null, menus: [], modules: [] });
+      set({ user: null, menus: [], modules: [], modulesStatus: "idle" });
     }
   },
 
@@ -60,11 +63,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   fetchModules: async () => {
+    set({ modulesStatus: "loading" });
     try {
       const modules = await moduleApi.list();
-      set({ modules });
+      set({ modules, modulesStatus: "ok" });
     } catch {
-      set({ modules: [] }); // 无 module:manage 权限/接口不可用时静默（不影响主流程）
+      // 拉取失败保留已有数据；状态标记 error 供守卫显示「重试」（不误报「模块未启用」）
+      set((s) => ({ modulesStatus: s.modules.length ? "ok" : "error" }));
     }
   },
 

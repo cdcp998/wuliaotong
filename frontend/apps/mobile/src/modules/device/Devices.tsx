@@ -3,13 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { List, NavBar, Tag, Toast } from "antd-mobile";
 
-import { useAuthStore } from "@wlt/shared";
-
+import { ModuleGate } from "../../components/ModuleGate";
 import { DEVICE_STATUS, deviceApi, type DeviceItem } from "../api";
 
 export function MobileDevicesPage() {
   const navigate = useNavigate();
-  const moduleEnabled = useAuthStore((s) => s.moduleEnabled);
   const [rows, setRows] = useState<DeviceItem[]>([]);
 
   const load = useCallback(async () => {
@@ -22,16 +20,8 @@ export function MobileDevicesPage() {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  if (!moduleEnabled("device")) {
-    return (
-      <div style={{ padding: 24, textAlign: "center", color: "#999" }}>
-        <NavBar onBack={() => navigate(-1)}>设备</NavBar>
-        <p>「设备管理」模块未启用。</p>
-      </div>
-    );
-  }
-
   return (
+    <ModuleGate code="device" title="设备">
     <div>
       <NavBar onBack={() => navigate(-1)}>设备</NavBar>
       <List style={{ minHeight: "80dvh" }}>
@@ -46,5 +36,6 @@ export function MobileDevicesPage() {
         {rows.length === 0 && <List.Item>暂无设备</List.Item>}
       </List>
     </div>
+    </ModuleGate>
   );
 }

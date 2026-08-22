@@ -6,8 +6,7 @@ import { MapContainer, Marker, Polyline, TileLayer, useMapEvents } from "react-l
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-import { useAuthStore } from "@wlt/shared";
-
+import { ModuleGate } from "../../components/ModuleGate";
 import { cableApi, type CableItem, type FaultItem } from "./api";
 
 interface MeasureResult {
@@ -36,7 +35,6 @@ function ClickCatcher({ onPick }: { onPick: (lat: number, lng: number) => void }
 
 export function MobileCableMapPage() {
   const navigate = useNavigate();
-  const moduleEnabled = useAuthStore((s) => s.moduleEnabled);
   const [cables, setCables] = useState<CableItem[]>([]);
   const [faults, setFaults] = useState<FaultItem[]>([]);
   const [pick, setPick] = useState<{ lat: number; lng: number } | null>(null);
@@ -140,16 +138,8 @@ export function MobileCableMapPage() {
     }
   };
 
-  if (!moduleEnabled("cable")) {
-    return (
-      <div style={{ padding: 24, textAlign: "center", color: "#999" }}>
-        <NavBar onBack={() => navigate(-1)}>地图</NavBar>
-        <p>「线缆管理」模块未启用，请先由管理员在电脑端安装并启用。</p>
-      </div>
-    );
-  }
-
   return (
+    <ModuleGate code="cable" title="地图">
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh" }}>
       <NavBar onBack={() => navigate(-1)}>地图工作台</NavBar>
       <div style={{ flex: 1, position: "relative" }}>
@@ -227,5 +217,6 @@ export function MobileCableMapPage() {
         {navStart && <div style={{ fontSize: 12, color: "#888", marginTop: 6 }}>起点 {navStart[0].toFixed(6)}, {navStart[1].toFixed(6)}</div>}
       </Card>
     </div>
+    </ModuleGate>
   );
 }

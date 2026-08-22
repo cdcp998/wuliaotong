@@ -3,13 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Card, Input, List, NavBar, Tag, Toast } from "antd-mobile";
 
-import { useAuthStore } from "@wlt/shared";
-
+import { ModuleGate } from "../../components/ModuleGate";
 import { knowledgeApi, type ArticleItem } from "../api";
 
 export function MobileKnowledgePage() {
   const navigate = useNavigate();
-  const moduleEnabled = useAuthStore((s) => s.moduleEnabled);
   const [items, setItems] = useState<ArticleItem[]>([]);
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -48,16 +46,8 @@ export function MobileKnowledgePage() {
     }
   };
 
-  if (!moduleEnabled("knowledge")) {
-    return (
-      <div style={{ padding: 24, textAlign: "center", color: "#999" }}>
-        <NavBar onBack={() => navigate(-1)}>知识</NavBar>
-        <p>「知识库」模块未启用。</p>
-      </div>
-    );
-  }
-
   return (
+    <ModuleGate code="knowledge" title="知识库">
     <div>
       <NavBar onBack={() => navigate(-1)}>知识库</NavBar>
       <div style={{ padding: 12 }}>
@@ -83,5 +73,6 @@ export function MobileKnowledgePage() {
         </Card>
       )}
     </div>
+    </ModuleGate>
   );
 }

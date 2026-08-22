@@ -324,10 +324,11 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
   const contentRef = useRef<HTMLElement | null>(null);
 
   // 登录后拉取动态菜单与模块状态（模块停用 → 菜单/权限过滤；未拉取/失败回退硬编码 MENU）
+  // 模块状态已由 RequireAuth 触发；此处仅兜底（modulesStatus=idle 时），避免重复拉取
   useEffect(() => {
     if (user) {
       if (menus.length === 0) void fetchMenus();
-      void fetchModules();
+      if (useAuthStore.getState().modulesStatus === "idle") void fetchModules();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);

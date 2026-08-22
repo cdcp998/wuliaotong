@@ -3,13 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Card, List, NavBar, Tag, TextArea, Toast } from "antd-mobile";
 
-import { useAuthStore } from "@wlt/shared";
-
+import { ModuleGate } from "../../components/ModuleGate";
 import { TASK_STATUS, taskApi, type TaskItem } from "../api";
 
 export function MyTasksPage() {
   const navigate = useNavigate();
-  const moduleEnabled = useAuthStore((s) => s.moduleEnabled);
   const [rows, setRows] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [current, setCurrent] = useState<TaskItem | null>(null);
@@ -64,16 +62,8 @@ export function MyTasksPage() {
     }
   };
 
-  if (!moduleEnabled("task")) {
-    return (
-      <div style={{ padding: 24, textAlign: "center", color: "#999" }}>
-        <NavBar onBack={() => navigate(-1)}>我的任务</NavBar>
-        <p>「维修任务」模块未启用。</p>
-      </div>
-    );
-  }
-
   return (
+    <ModuleGate code="task" title="我的任务">
     <div>
       <NavBar onBack={() => navigate(-1)}>我的任务</NavBar>
       <List style={{ minHeight: "60dvh" }}>
@@ -115,5 +105,6 @@ export function MyTasksPage() {
         </Card>
       )}
     </div>
+    </ModuleGate>
   );
 }

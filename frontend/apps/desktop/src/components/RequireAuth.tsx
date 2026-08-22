@@ -23,6 +23,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const menus = useAuthStore((s) => s.menus);
   const fetchMe = useAuthStore((s) => s.fetchMe);
+  const fetchModules = useAuthStore((s) => s.fetchModules);
   const hasPerm = useAuthStore((s) => s.hasPerm);
   const hasAnyPerm = useAuthStore((s) => s.hasAnyPerm);
   const navigate = useNavigate();
@@ -65,15 +66,21 @@ export function RequireAuth({ children }: { children: ReactNode }) {
         /* 状态接口异常不阻塞登录校验 */
       }
       if (alive && !user) {
-        fetchMe().catch(() => {
-          if (alive) navigate("/login");
-        });
+        fetchMe()
+          .then(() => {
+            if (alive) void fetchModules(); // 刷新后立即拉模块状态（RequireModule 守卫防误报）
+          })
+          .catch(() => {
+            if (alive) navigate("/login");
+          });
+      } else if (alive) {
+        void fetchModules();
       }
     })();
     return () => {
       alive = false;
     };
-  }, [user, fetchMe, navigate]);
+  }, [user, fetchMe, fetchModules, navigate]);
 
   useEffect(() => {
     if (user && requiredPerm) {
