@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, App, Button, Divider, Form, Input, InputNumber, Modal, Popconfirm, Select, Space } from "antd";
+import { Alert, App, Button, Divider, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag } from "antd";
 import { EditOutlined, PlusOutlined, RobotOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
@@ -35,6 +35,7 @@ export function AiSuggestionsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [accepting, setAccepting] = useState<AiSuggestion | null>(null);
+  const [selected, setSelected] = useState<AiSuggestion | null>(null); // 右侧详情选中的建议（设计页30：左列表+右详情）
   const [units, setUnits] = useState<{ id: number; name: string }[]>([]);
   const [catTree, setCatTree] = useState<CategoryNode[]>([]);
   const [form, setForm] = useState({ code: "", name: "", category_id: 0, unit_id: 0, purchase_price: "0" });
@@ -173,12 +174,11 @@ export function AiSuggestionsPage() {
     { title: "时间", dataIndex: "created_at", width: 160 },
     {
       title: "操作",
-      width: 150,
+      width: 200,
       render: (_, r) => (
         <Space>
-          <Button size="small" type="primary" onClick={() => openAccept(r)}>
-            确认新增
-          </Button>
+          <Button size="small" type="link" onClick={() => setSelected(r)}>详情</Button>
+          <Button size="small" type="primary" onClick={() => openAccept(r)}>确认新增</Button>
           <Popconfirm title="确认忽略该建议？" onConfirm={async () => { try { await aiApi.ignore(r.id); message.success("已忽略"); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
             <Button size="small" danger>忽略</Button>
           </Popconfirm>
@@ -212,22 +212,55 @@ export function AiSuggestionsPage() {
         </div>
       </div>
 
-      {/* 建议列表卡片：头部条 + 表格 */}
-      <div style={{ background: "#fff", border: "1px solid #e9edf2", borderRadius: 12, boxShadow: "0 1px 3px rgba(16,24,40,0.06)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #eef1f5", borderRadius: "12px 12px 0 0" }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#1f2733" }}>待处理建议</span>
-          <span style={{ fontSize: 12, color: "#8a94a6" }}>勾选可批量忽略</span>
+      {/* 左列表 + 右详情（设计页 30） */}
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 420, background: "#fff", border: "1px solid #e9edf2", borderRadius: 12, boxShadow: "0 1px 3px rgba(16,24,40,0.06)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #eef1f5", borderRadius: "12px 12px 0 0" }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "#1f2733" }}>待处理建议</span>
+            <span style={{ fontSize: 12, color: "#8a94a6" }}>勾选可批量忽略；点击「详情」看右侧</span>
+          </div>
+          <div style={{ padding: "12px 20px 4px" }}>
+          <DataTable
+            rowKey="id"
+            columns={columns}
+            dataSource={list}
+            pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
+            rowSelection
+            locale={{ emptyText: "暂无待处理建议" }}
+            onBatchDelete={async (keys) => { for (const k of keys) await aiApi.ignore(Number(k)); message.success(`已忽略 ${keys.length} 条建议`); void load(); }}
+          />
+          </div>
         </div>
-        <div style={{ padding: "12px 20px 4px" }}>
-        <DataTable
-          rowKey="id"
-          columns={columns}
-          dataSource={list}
-          pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
-          rowSelection
-          locale={{ emptyText: "暂无待处理建议" }}
-          onBatchDelete={async (keys) => { for (const k of keys) await aiApi.ignore(Number(k)); message.success(`已忽略 ${keys.length} 条建议`); void load(); }}
-        />
+
+        {/* 右侧详情面板 */}
+        <div className="wlt-glass" style={{ width: 320, padding: 16, flexShrink: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+          {!selected ? (
+            <div style={{ textAlign: "center", padding: "40px 12px", color: "#8A93A8" }}>
+              <RobotOutlined style={{ fontSize: 32, color: "#CBD6EC" }} />
+              <div style={{ fontWeight: 600, marginTop: 10 }}>建议详情</div>
+              <div style={{ fontSize: 12, lineHeight: 1.7 }}>点击左侧建议行的「详情」查看该建议的完整信息与操作</div>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <RobotOutlined style={{ color: "#5B7FFF" }} />
+                <span style={{ fontSize: 15, fontWeight: 700 }}>{selected.product_name}</span>
+                <Tag color="blue" style={{ marginInlineEnd: 0 }}>{selected.model}</Tag>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, fontSize: 12.5 }}>
+                <div><div style={{ color: "#8A93A8" }}>规格型号</div><div>{selected.suggestion?.spec || "—"}</div></div>
+                <div><div style={{ color: "#8A93A8" }}>建议分类</div><div>{selected.suggestion?.category || "—"}</div></div>
+                <div><div style={{ color: "#8A93A8" }}>建议理由</div><div>{selected.suggestion?.note || "—"}</div></div>
+                <div><div style={{ color: "#8A93A8" }}>识别时间</div><div>{selected.created_at}</div></div>
+              </div>
+              <div style={{ display: "flex", gap: 8, borderTop: `1px solid #EFF3FC`, paddingTop: 12 }}>
+                <Button size="small" type="primary" style={{ flex: 1 }} onClick={() => openAccept(selected)}>确认新增</Button>
+                <Popconfirm title="确认忽略该建议？" onConfirm={async () => { try { await aiApi.ignore(selected.id); message.success("已忽略"); setSelected(null); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
+                  <Button size="small" danger style={{ flex: 1 }}>忽略</Button>
+                </Popconfirm>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
