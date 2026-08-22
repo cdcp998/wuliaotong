@@ -1,5 +1,5 @@
-﻿import { useCallback, useEffect, useState } from "react";
-import { App, Button, Space, Tag } from "antd";
+import { useCallback, useEffect, useState } from "react";
+import { App, Button, Space, Tabs, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type RegisterApply } from "@wlt/shared";
@@ -82,16 +82,22 @@ export function RegisterAppliesPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>注册审核</h2>
-        <Space>
-          {[0, 1, 2].map((s) => (
-            <Button key={s} size="small" type={status === s ? "primary" : "default"} onClick={() => { setStatus(s); setPage(1); }}>
-              {STATUS[s].text}
-            </Button>
-          ))}
-        </Space>
       </div>
+      {/* 状态 Tabs（设计页 36：待审核/已通过/已驳回） */}
+      <Tabs
+        activeKey={String(status ?? 0)}
+        onChange={(k) => {
+          setStatus(Number(k));
+          setPage(1);
+        }}
+        items={[
+          { key: "0", label: "待审核" },
+          { key: "1", label: "已通过" },
+          { key: "2", label: "已驳回" },
+        ]}
+      />
       <p style={{ color: "#5B6478", fontSize: 12, marginBottom: 16 }}>
         审核注册模式下，新用户提交的注册申请在此处理；通过后账号即为"使用者"角色。
       </p>
