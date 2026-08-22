@@ -56,7 +56,7 @@ SEED = [
     (27, 26, "用户管理", "/system/users", "UserOutlined", "sys:user", 1, 10),
     (28, 26, "用户权限设置", "/system/roles", "SafetyCertificateOutlined", "sys:role", 1, 20),
     (29, 26, "注册审核", "/system/register-applies", "AuditOutlined", "sys:user", 1, 30),
-    (30, 26, "单位管理", "/system/departments", "ApartmentOutlined", "dept:manage", 1, 40),
+    (30, 3, "单位管理", "/system/departments", "ApartmentOutlined", "dept:manage", 1, 50),
     (31, 26, "导航管理", "/system/menus", "MenuOutlined", "sys:role", 1, 45),
     (32, 26, "操作日志", "/system/logs", "FileTextOutlined", "sys:log", 1, 50),
     (33, 26, "备份管理", "/system/backups", "HddOutlined", "sys:backup", 1, 60),

@@ -16,9 +16,10 @@
     margin: 0;
   }
 
-  /* 页面根容器限宽居中（页面根 div 均带 height/min-height:100dvh 内联样式，为 #root 直接子级） */
-  #root > div[style*="100dvh"] {
-    max-width: 720px;
+  /* 页面根容器限宽居中（统一命中所有 #root 直接子级，含无 100dvh 的模块页：
+     我的任务/知识库/设备等；登录页下方另有 480px 特例） */
+  #root > div {
+    max-width: 520px;
     margin: 0 auto;
     box-shadow: 0 2px 16px rgba(0, 0, 0, 0.07);
   }
@@ -28,14 +29,22 @@
     max-width: 480px;
   }
 
+  /* 地图页底部工具栏（fixed 定位）限宽居中，避免横贯全屏 */
+  #root > div[style*="100dvh"] > div[style*="fixed"] {
+    max-width: 520px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
   /* 底部弹层 / 全屏弹层（Popup/ActionSheet，含「修改密码」全屏弹层）限宽居中：
      antd-mobile 的 bottom body 是 width:100% + left:0，auto margin 不生效（fixed 定位），
      用 left:50% 平移居中；不动 transform，避免破坏滑入动画 */
   .adm-popup-body {
-    max-width: 720px;
+    max-width: 520px;
   }
   .adm-popup-body-position-bottom {
     left: 50%;
-    margin-left: -360px; /* 720px / 2 */
+    margin-left: -260px; /* 520px / 2 */
   }
 }
+

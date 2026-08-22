@@ -313,7 +313,9 @@ def register_modules(app: Any) -> dict[str, Any]:
                 )
                 summary["registered"] += 1
             else:
-                # 依赖声明同步（模块依赖变更时随重启生效，保证 dependents/check 使用最新声明）
+                # 依赖/名称声明同步（模块依赖变更或改名时随重启生效，保证 dependents/check 使用最新声明）
+                if row.name != d.name:
+                    row.name = d.name
                 try:
                     cur_deps = json.loads(row.depends or "[]")
                 except (TypeError, ValueError):

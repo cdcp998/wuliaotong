@@ -2,8 +2,8 @@
  * 点击按钮弹窗打开对应面板（Popup 弹层，可关闭）。依赖 cable 模块数据（线缆/故障）。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { Button, Dialog, Input, NavBar, Picker, Popup, Selector, Tag, TextArea, Toast } from "antd-mobile";
-import { MapContainer, Marker, Polyline, TileLayer, useMapEvents } from "react-leaflet";
+import { Button, Dialog, Input, NavBar, Picker, Popup, Selector, Switch, Tag, TextArea, Toast } from "antd-mobile";
+import { MapContainer, Marker, Polyline, TileLayer, useMapEvents, ZoomControl } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -37,7 +37,7 @@ function ClickCatcher({ onPick }: { onPick: (lat: number, lng: number) => void }
   return null;
 }
 
-type PanelKey = "report" | "faults" | "measure" | "nav" | null;
+type PanelKey = "report" | "faults" | "measure" | "nav" | "layers" | null;
 
 const TOOLS: { key: Exclude<PanelKey, null>; label: string; color: string }[] = [
   { key: "report", label: "上报", color: "#ff4d4f" },
@@ -51,6 +51,7 @@ export function MobileMapPage() {
   const [cables, setCables] = useState<CableItem[]>([]);
   const [faults, setFaults] = useState<FaultItem[]>([]);
   const [panel, setPanel] = useState<PanelKey>(null);
+  const [layers, setLayers] = useState({ cables: true, faults: true });
 
   const [pick, setPick] = useState<{ lat: number; lng: number } | null>(null);
   const [mode, setMode] = useState<"none" | "fault" | "navStart">("none");
@@ -84,7 +85,6 @@ export function MobileMapPage() {
     if (watchRef.current) { window.clearInterval(watchRef.current); watchRef.current = null; }
     setNavigating(false);
     setNavInfo("");
-    if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
   };
   useEffect(() => () => { stopNav(); }, []);
 
@@ -106,11 +106,6 @@ export function MobileMapPage() {
               if (r.projection) setHighlight([r.projection.lat, r.projection.lng]);
               setNavInfo(`剩余 ${r.remaining_distance.toFixed(0)}m（直线 ${r.straight_distance.toFixed(0)}m）`);
               if (r.remaining_distance < 50) {
-                if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
-                if (typeof speechSynthesis !== "undefined") {
-                  speechSynthesis.cancel();
-                  speechSynthesis.speak(new SpeechSynthesisUtterance(`已接近目标，剩余${r.remaining_distance.toFixed(0)}米`));
-                }
                 stopNav();
               }
             })
@@ -180,30 +175,45 @@ export function MobileMapPage() {
       <NavBar onBack={() => navigate(-1)}>地图工作台</NavBar>
       {/* 地图区（全屏最大化；底部工具栏常驻） */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, marginBottom: 56 }}>
-        <MapContainer center={[30.2741, 120.1551]} zoom={12} style={{ height: "100%", width: "100%" }}>
+        <MapContainer center={[30.2741, 120.1551]} zoom={12} zoomControl={false} style={{ height: "100%", width: "100%" }}>
+          <ZoomControl position="bottomright" />
           <TileLayer url={mapApi.tileUrl("esri", "{z}", "{x}", "{y}")} maxZoom={19} attribution="© 卫星影像" />
           <ClickCatcher onPick={(lat, lng) => {
             if (mode === "fault") { setPick({ lat, lng }); setMode("none"); }
             else if (mode === "navStart") { setNavStart([lat, lng]); setMode("none"); }
             else setPick({ lat, lng });
           }} />
-          {cables.filter((c) => c.geometry).map((c) => (
+          {layers.cables && cables.filter((c) => c.geometry).map((c) => (
             <Polyline key={c.id} positions={(c.geometry!.coordinates as [number, number][]).map(([lng, lat]) => [lat, lng] as [number, number])}
               pathOptions={{ color: "#1668dc", weight: 4 }} />
           ))}
-          {faults.map((f) => <Marker key={f.id} position={[f.lat, f.lng]} icon={warnIcon} />)}
+          {layers.faults && faults.map((f) => <Marker key={f.id} position={[f.lat, f.lng]} icon={warnIcon} />)}
           {highlight && <Marker position={highlight} icon={navIcon} />}
           {navPath && navPath.length > 1 && (
             <Polyline positions={navPath} pathOptions={{ color: "#fa541c", weight: 5, dashArray: "8 6" }} />
           )}
         </MapContainer>
+        {/* 图层叠加选择（右上角小图标，主流地图交互） */}
+        <div
+          onClick={() => setPanel(panel === "layers" ? null : "layers")}
+          style={{
+            position: "absolute", top: 8, right: 8, zIndex: 1000, width: 34, height: 34, borderRadius: 8,
+            background: "#fff", boxShadow: "0 1px 6px rgba(0,0,0,.18)", display: "flex", alignItems: "center",
+            justifyContent: "center", cursor: "pointer",
+          }}
+        >
+          <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke={panel === "layers" ? "#1668dc" : "#555"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l9 5-9 5-9-5 9-5z" />
+            <path d="M3 13l9 5 9-5" />
+          </svg>
+        </div>
         {mode === "fault" && <div style={{ position: "absolute", top: 8, left: 8, background: "#fff", padding: "4px 10px", borderRadius: 6, fontSize: 12, zIndex: 1000 }}>请点击地图选择故障位置</div>}
         {navInfo && <div style={{ position: "absolute", bottom: 12, left: 8, right: 8, background: "#fff", padding: 8, borderRadius: 8, fontSize: 14, zIndex: 1000, textAlign: "center" }}>{navInfo}</div>}
       </div>
 
-      {/* 底部工具栏（固定） */}
+      {/* 底部工具栏（固定；zIndex 低于 Popup，避免遮挡呼出的功能界面） */}
       <div style={{
-        position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 1100,
+        position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 900,
         display: "flex", background: "#fff", borderTop: "1px solid #f0f1f3",
         paddingBottom: "env(safe-area-inset-bottom)",
       }}>
@@ -215,6 +225,28 @@ export function MobileMapPage() {
           </div>
         ))}
       </div>
+
+      {/* 图层叠加选择（右上角小图标呼出） */}
+      <Popup visible={panel === "layers"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+        <div style={{ padding: 16, paddingBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontWeight: 600 }}>图层叠加</span>
+            <span style={{ color: "#999", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
+          </div>
+          {[
+            { key: "cables" as const, label: "线缆", color: "#1668dc" },
+            { key: "faults" as const, label: "故障点", color: "#ff4d4f" },
+          ].map((l) => (
+            <div key={l.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f5f6f8" }}>
+              <span style={{ fontSize: 14 }}>
+                <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: l.key === "cables" ? 1 : 5, background: l.color, marginRight: 8, verticalAlign: "middle" }} />
+                {l.label}
+              </span>
+              <Switch checked={layers[l.key]} onChange={(v) => setLayers((s) => ({ ...s, [l.key]: v }))} />
+            </div>
+          ))}
+        </div>
+      </Popup>
 
       {/* 弹窗式面板（Popup 底部弹层，可关闭） */}
       <Popup visible={panel === "report"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "75dvh", overflow: "auto" }}>
