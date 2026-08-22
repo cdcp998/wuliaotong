@@ -79,6 +79,15 @@ def test_health_exempt_from_limit(monkeypatch) -> None:
     assert r.json()["code"] == 0
 
 
+def test_map_prefix_exempt_from_limit(monkeypatch) -> None:
+    """地图类 API（瓦片代理/缓存/源）豁免限流：超额度后仍放行（由权限门控安全）。"""
+    monkeypatch.setattr(ratelimit, "limiter", RateLimiter(limit=2, window_seconds=60))
+    for p in ("/api/v1/map/tile/esri/0/0/0", "/api/v1/map/sources", "/api/v1/map/downloads"):
+        for _ in range(3):
+            r = client.get(p)
+            assert r.status_code != 429, p  # 已超额度仍放行（403/404/200 均为未限流）
+
+
 def test_rate_limit_disabled_passes(monkeypatch) -> None:
     monkeypatch.setattr(settings, "rate_limit_enabled", False)
     monkeypatch.setattr(ratelimit, "limiter", RateLimiter(limit=1, window_seconds=60))

@@ -139,6 +139,10 @@ export const cableApi = {
   createRegion: (body: { name: string; geometry?: unknown; min_zoom: number; max_zoom: number; update_mode: string }) =>
     http.post<{ id: number }>("/map/cache/regions", body),
   startRegionDownload: (id: number) => http.post<{ tiles_queued?: number }>(`/map/cache/regions/${id}/start`),
+  pauseRegionDownload: (id: number) => http.post<null>(`/map/cache/regions/${id}/pause`),
+  clearRegion: (id: number) => http.post<{ tiles_removed?: number }>(`/map/cache/regions/${id}/clear`),
+  downloadProgress: () =>
+    http.get<{ pending: number; done: number; failed: number; regions: { id: number; name: string; status: number; tile_count: number; pending: number; last_download_at: string | null }[] }>("/map/downloads"),
   /** 瓦片代理 URL（经后端缓存；Session Cookie 同源携带）。 */
   tileUrl: (source: string, z: number | string, x: number | string, y: number | string) =>
     `${import.meta.env?.VITE_API_BASE ?? "/api/v1"}/map/tile/${source}/${z}/${x}/${y}`,

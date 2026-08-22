@@ -23,6 +23,9 @@ logger = logging.getLogger("app.ratelimit")
 MESSAGE = "请求过于频繁，请稍后再试"
 # 运维探活豁免（外部监控通常高频轮询 /health）
 EXEMPT_PATHS = frozenset({settings.api_prefix + "/health"})
+# 地图类 API 豁免（用户反馈 2026-08-22）：瓦片代理单视图几十+个请求，按容器级限流会误伤
+# 地图浏览/下载；接口本身已按权限（cable:view/map:cache/map:config）门控，不依赖限流防刷。
+EXEMPT_PREFIXES = (settings.api_prefix + "/map",)
 # 被限客户端日志节流：同一 IP 最多每 30 秒记一条 WARNING，避免日志自身被洪泛放大
 LOG_THROTTLE_SECONDS = 30.0
 
@@ -123,7 +126,7 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
         path = scope.get("path", "")
-        if path in EXEMPT_PATHS:
+        if path in EXEMPT_PATHS or path.startswith(EXEMPT_PREFIXES):
             await self.app(scope, receive, send)
             return
         key = _client_ip(scope)
