@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { App, AutoComplete, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Tag, Tree, theme } from "antd";
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { App, AutoComplete, Button, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Tag, theme, Tree } from "antd";
+import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, MenuOutlined, CheckOutlined, CloseOutlined } from "@ant-design/icons";
 import type { DataNode } from "antd/es/tree";
 
 import { adminApi, menuApi, type MenuNode } from "@wlt/shared";
@@ -39,7 +39,7 @@ function flattenMenus(nodes: MenuNode[], depth = 0): { node: MenuNode; depth: nu
   return out;
 }
 
-/** 导航管理（电脑端，sys:role）：动态菜单树 CRUD —— 名称/图标/路由/权限码/显示隐藏/排序/多级。 */
+/** 导航管理（电脑端，sys:role）：左侧菜单树 + 右侧编辑面板（《UI设计方案.md》v2）。 */
 export function MenusPage() {
   const { message } = App.useApp();
   const { token } = theme.useToken();
@@ -92,12 +92,12 @@ export function MenusPage() {
     return nodes.map((n) => ({
       key: String(n.id),
       title: (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span>{n.name}</span>
-          {n.path && <Tag style={{ fontSize: 11, marginInlineEnd: 0, color: "#1668dc", background: "#f0f7ff", borderColor: "#bcd9ff" }}>{n.path}</Tag>}
-          {n.perm_code ? <Tag style={{ fontSize: 11, marginInlineEnd: 0 }}>{n.perm_code}</Tag> : <Tag style={{ fontSize: 11, marginInlineEnd: 0 }} color="green">公开</Tag>}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", width: "100%" }}>
+          <span style={{ fontWeight: 600 }}>{n.name}</span>
+          {n.path && <Tag style={{ fontSize: 11, marginInlineEnd: 0, color: "#3B5BDB", background: "#EAEFFF", borderColor: "transparent", borderRadius: 6 }}>{n.path}</Tag>}
+          {n.perm_code ? <Tag style={{ fontSize: 11, marginInlineEnd: 0, borderRadius: 6 }}>{n.perm_code}</Tag> : <Tag style={{ fontSize: 11, marginInlineEnd: 0, borderRadius: 6 }} color="green">公开</Tag>}
           {n.visible === 0 && <Tag color="red" style={{ fontSize: 11, marginInlineEnd: 0 }}>已隐藏</Tag>}
-          <span style={{ opacity: 0.6 }}>
+          <span style={{ marginLeft: "auto", opacity: 0.7 }}>
             <Button type="text" size="small" icon={<PlusOutlined />} title="新建子菜单" onClick={(e) => { e.stopPropagation(); openCreate(n.id); }} />
             <Button type="text" size="small" icon={<EditOutlined />} title="编辑" onClick={(e) => { e.stopPropagation(); openEdit(n); }} />
             <Popconfirm title={`删除菜单「${n.name}」？`} description="有子菜单会被系统拒绝" onConfirm={() => void remove(n)}>
@@ -163,11 +163,12 @@ export function MenusPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
+      {/* 页头 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>导航管理</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#646a73" }}>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
             动态控制左侧导航：多级菜单树 · 名称/图标/路由 · 显示隐藏 · 绑定权限码（逗号分隔=任一命中可见，空=公开）；不同角色仅见被授权菜单
           </p>
         </div>
@@ -177,68 +178,77 @@ export function MenusPage() {
         </Space>
       </div>
 
-      <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 10, padding: 16, background: token.colorBgContainer }}>
-        <Tree
-          showIcon
-          blockNode
-          defaultExpandAll
-          treeData={treeData}
-          selectable={false}
-          style={{ background: "transparent" }}
-        />
-        {!tree.length && !loading && <div style={{ color: "#646a73", textAlign: "center", padding: 32 }}>暂无菜单，点击「新建顶级分组」开始</div>}
-      </div>
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+        {/* 左：菜单树 */}
+        <div className="wlt-glass" style={{ flex: 1, minWidth: 340, padding: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <MenuOutlined style={{ color: token.colorPrimary }} />
+            <span style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>菜单树（点击行可选中）</span>
+            <Tag style={{ marginInlineEnd: 0, borderRadius: 999 }}>{flat.length} 节点</Tag>
+          </div>
+          <Tree
+            showIcon
+            blockNode
+            defaultExpandAll
+            treeData={treeData}
+            selectable={false}
+            style={{ background: "transparent" }}
+          />
+          {!tree.length && !loading && <div style={{ color: token.colorTextTertiary, textAlign: "center", padding: 32 }}>暂无菜单，点击「新建顶级分组」开始</div>}
+          <div style={{ fontSize: 11, color: token.colorTextTertiary, borderTop: `1px solid ${token.colorBorder}`, paddingTop: 10, marginTop: 10 }}>
+            提示：拖拽图标可调整同级排序（当前以「排序」数值控制）；点击行内 + / ✎ / 🗑 快捷操作
+          </div>
+        </div>
 
-      {/* 新建 / 编辑 */}
-      <Modal
-        title={editing ? `编辑菜单：${editing.name}` : parentPreset !== 0 ? "新建子菜单" : "新建顶级分组"}
-        open={open}
-        onOk={() => void save()}
-        onCancel={() => setOpen(false)}
-        confirmLoading={saving}
-        width={520}
-        destroyOnHidden
-        afterOpenChange={(o) => {
-          if (!o) return;
-          if (editing) {
-            form.setFieldsValue({ parent_id: editing.parent_id, name: editing.name, path: editing.path, icon: editing.icon, perm_code: editing.perm_code, visible: editing.visible === 1, sort: editing.sort, remark: editing.remark });
-          } else {
-            form.resetFields();
-            form.setFieldsValue({ parent_id: parentPreset, visible: true, sort: 0 });
-          }
-        }}
-      >
-        <Form form={form} layout="vertical">
-          <Form.Item name="parent_id" label="上级" rules={[{ required: true, message: "请选择上级" }]} extra="顶级分组=一级；菜单挂到分组下，可再嵌套">
-            <Select options={parentOptions} />
-          </Form.Item>
-          <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }, { max: 50, message: "不超过 50 字" }]}>
-            <Input placeholder="如 库存查询" maxLength={50} />
-          </Form.Item>
-          <Space size={12} style={{ display: "flex" }} align="start">
-            <Form.Item name="path" label="路由（分组留空）" style={{ flex: 1 }}>
-              <AutoComplete placeholder="从已注册路由选择或手输" options={ROUTE_OPTIONS} filterOption={(input, o) => (o?.value ?? "").toLowerCase().includes(input.toLowerCase())} />
-            </Form.Item>
-            <Form.Item name="icon" label="图标">
-              <Select style={{ width: 190 }} showSearch placeholder="选择图标" options={ICON_OPTIONS} optionFilterProp="label" />
-            </Form.Item>
-          </Space>
-          <Form.Item name="perm_code" label="绑定权限码（逗号分隔=任一命中可见；留空=公开）" extra="从现有权限点选择，或手输多个权限码">
-            <AutoComplete placeholder="公开 / base:product / base:product,base:category" options={permOptions} filterOption={(input, o) => (o?.value ?? "").toLowerCase().includes(input.toLowerCase())} />
-          </Form.Item>
-          <Space size={24}>
-            <Form.Item name="visible" label="显示" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            <Form.Item name="sort" label="排序（小在前）">
-              <InputNumber min={0} style={{ width: 120 }} />
-            </Form.Item>
-          </Space>
-          <Form.Item name="remark" label="备注">
-            <Input maxLength={255} />
-          </Form.Item>
-        </Form>
-      </Modal>
+        {/* 右：编辑面板 */}
+        <div className="wlt-glass" style={{ width: 400, padding: 16, display: "flex", flexDirection: "column", gap: 12, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, flex: 1 }}>{editing ? `编辑菜单：${editing.name}` : open ? (parentPreset !== 0 ? "新建子菜单" : "新建顶级分组") : "编辑菜单"}</span>
+            {editing && <Tag style={{ marginInlineEnd: 0, borderRadius: 999 }} color="blue">编辑中</Tag>}
+          </div>
+          {!open ? (
+            <div style={{ textAlign: "center", padding: "48px 12px", color: token.colorTextTertiary, display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+              <MenuOutlined style={{ fontSize: 36, color: "#CBD6EC" }} />
+              <div style={{ fontWeight: 600 }}>菜单编辑面板</div>
+              <div style={{ fontSize: 12, lineHeight: 1.6 }}>点击左侧树的编辑按钮，或「新建顶级分组 / 新建子菜单」打开表单：名称 → 路由 → 图标 → 权限码 → 显示与排序</div>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate(0)}>新建顶级分组</Button>
+            </div>
+          ) : (
+            <Form form={form} layout="vertical" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              <Form.Item name="parent_id" label="上级" rules={[{ required: true, message: "请选择上级" }]} extra="顶级分组=一级；菜单挂到分组下，可再嵌套" style={{ marginBottom: 12 }}>
+                <Select options={parentOptions} />
+              </Form.Item>
+              <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }, { max: 50, message: "不超过 50 字" }]} style={{ marginBottom: 12 }}>
+                <Input placeholder="如 库存查询" maxLength={50} />
+              </Form.Item>
+              <Form.Item name="path" label="路由（分组留空）" style={{ marginBottom: 12 }}>
+                <AutoComplete placeholder="从已注册路由选择或手输" options={ROUTE_OPTIONS} filterOption={(input, o) => (o?.value ?? "").toLowerCase().includes(input.toLowerCase())} />
+              </Form.Item>
+              <Form.Item name="icon" label="图标" style={{ marginBottom: 12 }}>
+                <Select showSearch placeholder="选择图标" options={ICON_OPTIONS} optionFilterProp="label" />
+              </Form.Item>
+              <Form.Item name="perm_code" label="绑定权限码（逗号分隔=任一命中可见；留空=公开）" extra="从现有权限点选择，或手输多个权限码" style={{ marginBottom: 12 }}>
+                <AutoComplete placeholder="公开 / base:product / base:product,base:category" options={permOptions} filterOption={(input, o) => (o?.value ?? "").toLowerCase().includes(input.toLowerCase())} />
+              </Form.Item>
+              <Space size={24}>
+                <Form.Item name="visible" label="显示" valuePropName="checked">
+                  <Switch />
+                </Form.Item>
+                <Form.Item name="sort" label="排序（小在前）">
+                  <InputNumber min={0} style={{ width: 120 }} />
+                </Form.Item>
+              </Space>
+              <Form.Item name="remark" label="备注">
+                <Input maxLength={255} />
+              </Form.Item>
+              <div style={{ display: "flex", gap: 10, borderTop: `1px solid ${token.colorBorder}`, paddingTop: 12 }}>
+                <Button icon={<CloseOutlined />} style={{ width: 120 }} onClick={() => setOpen(false)}>取消</Button>
+                <Button type="primary" icon={<CheckOutlined />} loading={saving} style={{ flex: 1 }} onClick={() => void save()}>保存菜单</Button>
+              </div>
+            </Form>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
