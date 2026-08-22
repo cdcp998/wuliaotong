@@ -1,5 +1,5 @@
-﻿import { useCallback, useEffect, useState } from "react";
-import { App, Button, Popconfirm, Space, Tag } from "antd";
+import { useCallback, useEffect, useState } from "react";
+import { App, Button, Popconfirm, Space, Tag, theme } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type BackupRecord } from "@wlt/shared";
@@ -15,12 +15,14 @@ function fmtSize(n: number): string {
 /** 备份管理（电脑端，超管 sys:backup）：手动备份 / 下载 / 删除；每日 02:00 自动备份。 */
 export function BackupsPage() {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [list, setList] = useState<BackupRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [busy, setBusy] = useState(false);
+  const [stats, setStats] = useState<{ count: number; size: number; auto: number; latest: string }>({ count: 0, size: 0, auto: 0, latest: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,6 +35,36 @@ export function BackupsPage() {
       setLoading(false);
     }
   }, [page, pageSize]);
+
+  // 统计卡（设计页 38：份数/大小/自动任务/最近）
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const all: BackupRecord[] = [];
+        for (let p = 1; p <= 5; p++) {
+          const d = await adminApi.backups(p, 100);
+          all.push(...d.list);
+          if (all.length >= d.total || d.list.length === 0) break;
+        }
+        if (!alive) return;
+        let size = 0;
+        let auto = 0;
+        let latest = "";
+        for (const b of all) {
+          size += Number(b.file_size) || 0;
+          if (b.backup_type === "auto") auto += 1;
+          if (!latest || b.created_at > latest) latest = b.created_at;
+        }
+        setStats({ count: all.length, size, auto, latest });
+      } catch {
+        /* 统计失败不影响主列表 */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [total]);
 
   useEffect(() => {
     void load().catch((e) => message.error(e instanceof Error ? e.message : "加载失败"));
@@ -88,6 +120,20 @@ export function BackupsPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}>备份管理</h2>
         <Button type="primary" loading={busy} onClick={() => void doBackup()}>立即备份</Button>
+      </div>
+      {/* 统计卡（设计页 38：份数/大小/自动任务/最近） */}
+      <div className="wlt-grid" style={{ marginBottom: 16 }}>
+        {[
+          { label: "备份份数", value: `${stats.count}`, color: "#3B5BDB", bg: "#EAEFFF" },
+          { label: "总大小", value: fmtSize(stats.size), color: "#1E2433", bg: "#F6F8FE" },
+          { label: "自动备份", value: `${stats.auto} 份`, color: "#B45309", bg: "#FEF4E2" },
+          { label: "最近备份", value: stats.latest ? stats.latest.slice(0, 16) : "—", color: "#15803D", bg: "#E8F9EF" },
+        ].map((c) => (
+          <div key={c.label} className="wlt-glass-sm" style={{ padding: "12px 16px" }}>
+            <div style={{ fontSize: 12, color: token.colorTextSecondary }}>{c.label}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: c.color, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>{c.value}</div>
+          </div>
+        ))}
       </div>
       <p style={{ color: "#5B6478", fontSize: 12, marginBottom: 16 }}>
         每日 02:00 自动备份（保留最近 14 份，更早自动清理）；备份文件为 gzip 压缩的 mysqldump 导出。
