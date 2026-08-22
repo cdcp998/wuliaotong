@@ -5,7 +5,7 @@ import { Badge, Tag } from "antd-mobile";
 import { notificationApi, requisitionApi, useAuthStore, type RequisitionBill } from "@wlt/shared";
 
 import { FUNCTIONS, loadHomeHidden, loadHomeOrder, mergeOrder, reorderVisible, saveHomeHidden, saveHomeOrder, sortByOrder } from "../functions";
-import { ReorderList } from "../components/ReorderList";
+import { ReorderGrid } from "../components/ReorderGrid";
 
 const STATUS: Record<number, { text: string; color: string }> = {
   1: { text: "待完成工作", color: "warning" },
@@ -125,9 +125,11 @@ export function HomePage() {
         </span>
       </div>
       {editMode ? (
-        /* 编辑模式：竖向列表 + 拖拽手柄调整顺序、− 隐藏 / + 恢复 */
-        <ReorderList
+        /* 编辑模式：卡片宫格直接拖拽排序、− 隐藏 / + 恢复 */
+        <ReorderGrid
           items={orderedActions}
+          cols={4}
+          gap={10}
           onChange={(next) => {
             setOrder((prev) => reorderVisible(prev, orderedActions.map((x) => x.key), next.map((x) => x.key)));
           }}
@@ -142,36 +144,52 @@ export function HomePage() {
           renderContent={(a) => {
             const isHidden = hidden.has(a.key);
             return (
-              <>
-                <span style={{ color: "#1668dc" }}>{a.icon}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{a.title}</div>
-                  <div style={{ fontSize: 10.5, color: isHidden ? "#ff4d4f" : "#c9cdd4" }}>{isHidden ? "已隐藏（点 + 恢复）" : a.sub}</div>
-                </div>
+              <div
+                style={{
+                  position: "relative",
+                  background: "#fff",
+                  border: "1px solid #f0f1f3",
+                  borderRadius: 12,
+                  padding: "12px 4px",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 7,
+                  minHeight: 76,
+                  cursor: "grab",
+                  opacity: isHidden ? 0.45 : 1,
+                }}
+              >
                 <span
                   data-nodrag
                   onClick={() => toggleHidden(a.key)}
                   style={{
-                    width: 20,
-                    height: 20,
+                    position: "absolute",
+                    top: 4,
+                    right: 4,
+                    width: 18,
+                    height: 18,
                     borderRadius: "50%",
                     background: isHidden ? "#52c41a" : "#ff4d4f",
                     color: "#fff",
-                    fontSize: 13,
-                    lineHeight: "20px",
+                    fontSize: 12,
+                    lineHeight: "18px",
                     textAlign: "center",
                     cursor: "pointer",
-                    flexShrink: 0,
+                    zIndex: 2,
                   }}
                 >
                   {isHidden ? "+" : "−"}
                 </span>
-              </>
+                <span style={{ color: "#1668dc" }}>{a.icon}</span>
+                <span style={{ fontSize: 11.5, color: "#1f2329", fontWeight: 500 }}>{a.title}</span>
+                <span style={{ fontSize: 9.5, color: "#c9cdd4" }}>{isHidden ? "已隐藏" : a.sub}</span>
+              </div>
             );
           }}
           footer={
-            <div style={{ fontSize: 11, color: "#c9cdd4", lineHeight: 1.7, padding: "2px 4px" }}>
-              按住卡片上下拖动调整功能顺序（与「功能」页同步）；点 − 从首页快捷操作隐藏，点 + 恢复。
+            <div style={{ fontSize: 11, color: "#c9cdd4", lineHeight: 1.7, padding: "8px 4px 2px" }}>
+              按住卡片拖动调整功能顺序（与「功能」页同步）；点 − 从首页快捷操作隐藏，点 + 恢复。
             </div>
           }
         />
