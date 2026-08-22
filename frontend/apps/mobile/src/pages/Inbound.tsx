@@ -1,7 +1,7 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActionSheet, Button, DatePicker, Dialog, DotLoading, Input, List, NavBar, Popup, Tag, Toast } from "antd-mobile";
 import { useNavigate, useSearchParams } from "react-router";
-import { AlbumIcon, BarcodeScanner, CameraAlbum, CameraIcon, ProductPicker, baseApi, fileApi, ocrApi, purchaseIn, resolveByBarcode, type Location, type OcrDeliveryItem, type OcrTask, type Product, type Supplier, type Unit, type Warehouse } from "@wlt/shared";
+import { AlbumIcon, BarcodeScanner, CameraAlbum, CameraIcon, ProductPicker, baseApi, fileApi, fileUrl, ocrApi, purchaseIn, resolveByBarcode, type Location, type OcrDeliveryItem, type OcrTask, type Product, type Supplier, type Unit, type Warehouse } from "@wlt/shared";
 
 interface Row {
   product: Product;
@@ -39,6 +39,21 @@ export function InboundPage() {
   const ocrTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const ocrCamRef = useRef<HTMLInputElement>(null);
   const ocrAlbRef = useRef<HTMLInputElement>(null);
+  // 送货单附件（设计页 M16：≤10 张）
+  const [deliveryFiles, setDeliveryFiles] = useState<{ fileId: number; url: string }[]>([]);
+  const deliveryFileRef = useRef<HTMLInputElement>(null);
+
+  /** 送货单附件上传（可选，最多 10 张，入库单存底可回看）。 */
+  async function uploadDeliveryFile(f: File | undefined) {
+    if (!f) return;
+    if (deliveryFiles.length >= 10) return Toast.show("送货单附件最多 10 张");
+    try {
+      const up = await fileApi.upload(f, "other");
+      setDeliveryFiles((fs) => [...fs, { fileId: up.file_id, url: up.url }]);
+    } catch (e) {
+      Toast.show(e instanceof Error ? e.message : "上传失败");
+    }
+  }
 
   useEffect(() => {
     baseApi.warehouses().then((ws) => {
@@ -298,7 +313,7 @@ export function InboundPage() {
     setSubmitting(true);
     try {
       const items = rows.map((r) => ({ product_id: r.product.id, qty: r.qty, price: r.price || "0", location_id: r.location!.id }));
-      const data = await purchaseIn(warehouseId, items, remark, supplierId, billDate ? `${billDate.getFullYear()}-${String(billDate.getMonth() + 1).padStart(2, "0")}-${String(billDate.getDate()).padStart(2, "0")}T00:00:00` : undefined);
+      const data = await purchaseIn(warehouseId, items, remark, supplierId, billDate ? `${billDate.getFullYear()}-${String(billDate.getMonth() + 1).padStart(2, "0")}-${String(billDate.getDate()).padStart(2, "0")}T00:00:00` : undefined, 0, "", 0, deliveryFiles.map((f) => f.fileId));
       Toast.show(`入库成功：${data.bill_no}`);
       navigate("/", { replace: true });
     } catch (e) {
@@ -373,12 +388,41 @@ export function InboundPage() {
         </List>
       </div>
 
+      {/* 送货单附件（设计页 M16：≤10 张，存底可回看） */}
+      <div style={{ background: "#fff", margin: "12px 12px 0", borderRadius: 10, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid #f0f1f3" }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: "#1d2129" }}>送货单附件</span>
+          <span style={{ fontSize: 12, color: "#5B6478" }}>{deliveryFiles.length}/10</span>
+        </div>
+        {deliveryFiles.length > 0 && (
+          <div style={{ display: "flex", gap: 8, padding: "12px 16px", flexWrap: "wrap" }}>
+            {deliveryFiles.map((f) => (
+              <span key={f.fileId} style={{ position: "relative", display: "inline-block" }}>
+                <img src={fileUrl(f.fileId)} alt="送货单" style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 8, border: "1px solid #E4EAF6" }} />
+                <span
+                  style={{ position: "absolute", top: -6, right: -6, background: "#EF4444", color: "#fff", borderRadius: "50%", width: 16, height: 16, lineHeight: "14px", textAlign: "center", fontSize: 11, cursor: "pointer" }}
+                  onClick={() => setDeliveryFiles((fs) => fs.filter((x) => x.fileId !== f.fileId))}
+                >
+                  ✕
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
+        {deliveryFiles.length < 10 && (
+          <div onClick={() => deliveryFileRef.current?.click()} style={{ padding: 12, textAlign: "center", color: "#5B7FFF", fontSize: 13, cursor: "pointer" }}>
+            ＋ 添加上传送货单图片
+          </div>
+        )}
+      </div>
+
       <div style={{ padding: 16 }}>
         <Button block color="primary" loading={submitting} onClick={() => void submit()}>提交入库</Button>
       </div>
 
       <input ref={ocrCamRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { void startDeliveryOcr(e.target.files?.[0]); e.target.value = ""; }} />
       <input ref={ocrAlbRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { void startDeliveryOcr(e.target.files?.[0]); e.target.value = ""; }} />
+      <input ref={deliveryFileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { Array.from(e.target.files ?? []).forEach((f) => void uploadDeliveryFile(f)); e.target.value = ""; }} />
 
       <ProductPicker visible={pickerOpen} onClose={() => setPickerOpen(false)} onPick={(p) => addRow(p)} />
       <BarcodeScanner visible={scannerOpen} onClose={() => setScannerOpen(false)} onScan={(code, product) => void scanBarcode(scanRow, code, true, product)} />
