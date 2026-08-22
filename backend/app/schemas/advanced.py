@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field, field_serializer, field_validator
 
 _DECIMAL_RE = r"^\d+(\.\d+)?$"
 
-OTHER_IO_TYPES = ("报废", "报损", "赠品入", "赠品出", "其他入", "其他出")
-IN_TYPES = ("赠品入", "其他入")  # 正方向
-OUT_TYPES = ("报废", "报损", "赠品出", "其他出")  # 负方向
+OTHER_IO_TYPES = ("报废", "报损", "赠品入", "赠品出", "借出", "归还", "其他入", "其他出")
+IN_TYPES = ("赠品入", "其他入", "归还")  # 正方向
+OUT_TYPES = ("报废", "报损", "赠品出", "借出", "其他出")  # 负方向
 
 
 class TransferItemReq(BaseModel):

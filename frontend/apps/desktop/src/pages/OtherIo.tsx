@@ -9,7 +9,8 @@ import { DataTable } from "../components/DataTable";
 
 import { BillDetailDrawer } from "../components/BillDetailDrawer";
 
-const IO_TYPES = ["报废", "报损", "赠品出", "其他出"];
+const OUT_TYPES = ["报废", "报损", "赠品出", "借出", "其他出"]; // 负方向（出库）
+const IO_TYPES = [...OUT_TYPES, "赠品入", "归还", "其他入"]; // 设计页 23：出=红/入=绿 + 借出/归还配对
 
 interface Row {
   product_id: number | undefined;
@@ -105,7 +106,7 @@ export function OtherIoPage() {
   const columns: ColumnsType<OtherIoBill> = [
     { title: "单号", dataIndex: "bill_no", render: (v: string, r) => <a onClick={() => void openDetail(r)}>{v}</a> },
     { title: "类型", dataIndex: "io_type", render: (v: string) => {
-      const isOut = ["报废", "报损", "赠品出", "其他出"].includes(v);
+      const isOut = OUT_TYPES.includes(v);
       return <span className="wlt-pill" style={{ background: isOut ? "#FDEBEC" : "#E8F9EF", color: isOut ? "#DC2626" : "#15803D" }}>{v}</span>;
     } },
     { title: "仓库", dataIndex: "warehouse_name" },
