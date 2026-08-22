@@ -1,8 +1,9 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { App, Button, InputNumber, Modal, Popconfirm, Radio, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { PictureOutlined } from "@ant-design/icons";
 
-import { baseApi, otherIoApi, type OtherIoBill, type OtherIoDetail } from "@wlt/shared";
+import { baseApi, fileApi, fileUrl, otherIoApi, type OtherIoBill, type OtherIoDetail } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
 
@@ -14,6 +15,7 @@ interface Row {
   product_id: number | undefined;
   location_id: number | undefined;
   qty: number;
+  photo_file_id?: number; // 报损/其他附照片（设计页 23「报损附照片」）
 }
 
 export function OtherIoPage() {
@@ -31,6 +33,8 @@ export function OtherIoPage() {
   const [form, setForm] = useState({ ioType: IO_TYPES[0], warehouse_id: 0, rows: [] as Row[] });
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState<OtherIoDetail | null>(null);
+  const rowFileRef = useRef<HTMLInputElement>(null); // 报损明细照片上传输入
+  const rowPhotoRef = useRef(0); // 当前上传照片的明细行下标
 
   async function openDetail(r: OtherIoBill) {
     try {
@@ -71,12 +75,12 @@ export function OtherIoPage() {
   }
 
   async function create() {
-    const items = form.rows
-      .filter((r) => r.product_id && r.location_id && r.qty > 0)
-      .map((r) => ({ product_id: r.product_id!, qty: String(r.qty), location_id: r.location_id! }));
+    const items = form.rows.filter((r) => r.product_id && r.location_id && r.qty > 0);
     if (!items.length) return message.warning("请至少添加一条有效明细");
+    if (form.ioType === "报损" && items.some((r) => !r.photo_file_id)) return message.warning("报损需为每条明细附现场照片");
+    const payload = items.map((r) => ({ product_id: r.product_id!, qty: String(r.qty), location_id: r.location_id!, photo_file_id: r.photo_file_id ?? 0 }));
     try {
-      const data = await otherIoApi.create(form.ioType, form.warehouse_id, items);
+      const data = await otherIoApi.create(form.ioType, form.warehouse_id, payload);
       message.success(`${form.ioType}成功：${data.bill_no}`);
       setOpen(false);
       setForm({ ioType: IO_TYPES[0], warehouse_id: 0, rows: [] });
@@ -86,9 +90,24 @@ export function OtherIoPage() {
     }
   }
 
+  /** 单据明细拍照上传（报损留痕）。 */
+  async function uploadRowPhoto(i: number, f: File | undefined) {
+    if (!f) return;
+    try {
+      const up = await fileApi.upload(f, "other");
+      setRow(i, { photo_file_id: up.file_id });
+      message.success("照片已上传");
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "上传失败");
+    }
+  }
+
   const columns: ColumnsType<OtherIoBill> = [
     { title: "单号", dataIndex: "bill_no", render: (v: string, r) => <a onClick={() => void openDetail(r)}>{v}</a> },
-    { title: "类型", dataIndex: "io_type" },
+    { title: "类型", dataIndex: "io_type", render: (v: string) => {
+      const isOut = ["报废", "报损", "赠品出", "其他出"].includes(v);
+      return <span className="wlt-pill" style={{ background: isOut ? "#FDEBEC" : "#E8F9EF", color: isOut ? "#DC2626" : "#15803D" }}>{v}</span>;
+    } },
     { title: "仓库", dataIndex: "warehouse_name" },
     { title: "操作人", dataIndex: "operator_name" },
     { title: "状态", dataIndex: "status", render: (s: number) => ({ 1: "已过账", "-1": "已作废" })[String(s)] ?? s },
@@ -134,6 +153,7 @@ export function OtherIoPage() {
           { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#5B6478" }}>{r.spec || "-"}</div></div> },
           { title: "库位", dataIndex: "location_code", width: 120 },
           { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
+          { title: "照片", dataIndex: "photo_file_id", width: 90, render: (v: number | undefined) => (v ? <img src={fileUrl(v)} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6, border: "1px solid #E4EAF6", cursor: "zoom-in" }} onClick={() => v && window.open(fileUrl(v), "_blank")} /> : <span style={{ color: "#c9cdd4", fontSize: 12 }}>—</span>) },
         ]}
         rows={(detail?.items ?? []).map((it) => ({ ...it, key: it.id ?? it.product_id ?? Math.random() }))}
       />
@@ -146,14 +166,25 @@ export function OtherIoPage() {
           <Select style={{ width: 180 }} placeholder="选择" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={form.warehouse_id || undefined} onChange={(v) => { setForm((f) => ({ ...f, warehouse_id: v })); void loadLocs(v); }} />
         </Space>
         {form.rows.map((r, i) => (
-          <Space key={i} style={{ marginBottom: 8 }}>
+          <Space key={i} style={{ marginBottom: 8 }} wrap>
             <Select style={{ width: 200 }} showSearch placeholder="材料" options={products} fieldNames={{ label: "name", value: "id" }} filterOption={(input, o) => String((o as { name?: string }).name ?? "").includes(input)} value={r.product_id} onChange={(v) => setRow(i, { product_id: v })} />
             <Select style={{ width: 140 }} placeholder="库位" options={locs} fieldNames={{ label: "display", value: "id" }} value={r.location_id} onChange={(v) => setRow(i, { location_id: v })} />
             <InputNumber min={0.001} placeholder="数量" value={r.qty} onChange={(v) => setRow(i, { qty: v ?? 0 })} />
+            {form.ioType === "报损" && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {r.photo_file_id ? (
+                  <img src={fileUrl(r.photo_file_id)} alt="报损照片" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6, border: "1px solid #E4EAF6" }} title="现场照片已附" />
+                ) : (
+                  <span style={{ fontSize: 12, color: "#B45309" }}>待附照片</span>
+                )}
+                <Button size="small" icon={<PictureOutlined />} title="附现场照片（报损必填）" onClick={() => { rowPhotoRef.current = i; rowFileRef.current?.click(); }}>照片</Button>
+              </span>
+            )}
             <Button size="small" danger onClick={() => setForm((f) => ({ ...f, rows: f.rows.filter((_, idx) => idx !== i) }))}>删</Button>
           </Space>
         ))}
         <Button block onClick={() => setForm((f) => ({ ...f, rows: [...f.rows, { product_id: undefined, location_id: undefined, qty: 1 }] }))}>+ 添加明细</Button>
+        <input ref={rowFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { void uploadRowPhoto(rowPhotoRef.current, e.target.files?.[0]); e.target.value = ""; }} />
       </Modal>
     </div>
   );

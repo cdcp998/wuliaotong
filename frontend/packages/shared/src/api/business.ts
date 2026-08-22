@@ -150,7 +150,7 @@ export const otherIoApi = {
       `/other-io?page=${page}&page_size=${pageSize}${ioType ? `&io_type=${encodeURIComponent(ioType)}` : ""}${status !== undefined ? `&status=${status}` : ""}`
     ),
   detail: (id: number) => http.get<OtherIoDetail>(`/other-io/${id}`),
-  create: (ioType: string, warehouseId: number, items: { product_id: number; qty: string; location_id: number }[], remark = "") =>
+  create: (ioType: string, warehouseId: number, items: { product_id: number; qty: string; location_id: number; photo_file_id?: number }[], remark = "") =>
     http.post<{ id: number; bill_no: string }>("/other-io", { io_type: ioType, warehouse_id: warehouseId, remark, items }),
   void: (id: number) => http.post<null>(`/other-io/${id}/void`),
 };
