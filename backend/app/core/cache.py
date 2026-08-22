@@ -61,7 +61,7 @@ def _get_client() -> Redis | None:
 
     退避期间调用方直接走降级路径（返回 None），不会每个请求都等待建连超时。
     """
-    global _client, _client_broken, _retry_at
+    global _client, _client_broken, _retry_at, _last_broken_log
     if _client is not None:
         return _client
     now = time.monotonic()

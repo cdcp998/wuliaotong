@@ -44,8 +44,12 @@ def _is_benign_os_error(exc: OSError) -> bool:
 
     非 WSA 的系统错误（如 ERROR_NETNAME_DELETED=64）会被映射到 POSIX errno（22 EINVAL），
     因此必须优先用 winerror 判定；WSA 错误码（10053/10054 等）与 errno 相同。
+    非 Windows 平台 OSError 无 winerror 属性（getattr 兜底为 None），回退用 errno 判定，
+    保证本模块在 Linux/macOS 上同样可安全导入与调用（不改变 Windows 行为）。
     """
-    code = exc.winerror if exc.winerror is not None else exc.errno
+    code = getattr(exc, "winerror", None)
+    if code is None:
+        code = exc.errno
     return code in _BENIGN_ERRNOS
 
 
