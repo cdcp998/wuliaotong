@@ -1,12 +1,20 @@
 /** cable 模块：故障管理（/cable/faults，fault:manage / fault:report）——上报、状态流转、照片。 */
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Drawer, Form, Image, Input, Modal, Select, Space, Table, Tag, Typography, Upload } from "antd";
-import { PlusOutlined, UploadOutlined } from "@ant-design/icons";
+import { App, Button, Drawer, Form, Image, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography, Upload } from "antd";
+import { CameraOutlined, CheckCircleOutlined, CheckOutlined, LockOutlined, PlayCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
 
 import { fileApi } from "@wlt/shared";
 
 import { cableApi, type CableItem, type FaultItem, type MapSourceInfo } from "./api";
 import { MapView } from "./MapView";
+
+/** 状态推进动作 → 图标（操作列图标化，tooltip 提示）。 */
+const NEXT_ICON: Record<number, React.ReactNode> = {
+  1: <PlayCircleOutlined />,
+  2: <CheckCircleOutlined />,
+  3: <CheckOutlined />,
+  4: <LockOutlined />,
+};
 
 const SEVERITY: Record<number, { label: string; color: string }> = {
   1: { label: "低", color: "default" },
@@ -174,13 +182,17 @@ export function CableFaultsPage() {
           { title: "上报时间", dataIndex: "reported_at", width: 160, render: (v: string) => (v ? new Date(v).toLocaleString() : "—") },
           {
             title: "操作",
-            width: 220,
+            width: 140,
             render: (_, f) => (
-              <Space size={4}>
+              <Space size={2}>
                 {STATUS[f.status]?.next && (
-                  <Button size="small" type="primary" onClick={() => nextStatus(f)}>{STATUS[f.status]!.next!.label}</Button>
+                  <Tooltip title={STATUS[f.status]!.next!.label}>
+                    <Button size="small" type="primary" icon={NEXT_ICON[STATUS[f.status]!.next!.to]} onClick={() => nextStatus(f)} />
+                  </Tooltip>
                 )}
-                <Button size="small" onClick={() => openDetail(f)}>照片/详情</Button>
+                <Tooltip title="照片/详情">
+                  <Button size="small" icon={<CameraOutlined />} onClick={() => openDetail(f)} />
+                </Tooltip>
               </Space>
             ),
           },

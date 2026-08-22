@@ -1,7 +1,8 @@
-/** cable 模块：地图工作台（/cable/map，cable:view）——底图 + 叠加层开关 + 测距定位 + 故障导航。 */
+/** cable 模块：地图工作台（/cable/map，cable:view）——底图 + 叠加层开关 + 测距定位 + 故障导航。
+ * 左侧工具栏可折叠（地图全宽/还原）。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Card, Descriptions, InputNumber, Select, Space, Switch, Typography } from "antd";
-import { AimOutlined, EnvironmentOutlined } from "@ant-design/icons";
+import { AimOutlined, DoubleLeftOutlined, EnvironmentOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 
 import type { LatLng } from "@wlt/shared";
 
@@ -28,6 +29,7 @@ export function CableMapPage() {
   const [navResult, setNavResult] = useState<NavigateResult | null>(null);
   const [measuring, setMeasuring] = useState(false);
   const [navigating, setNavigating] = useState(false);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -124,8 +126,9 @@ export function CableMapPage() {
 
   return (
     <div style={{ display: "flex", gap: 12, height: "calc(100dvh - 140px)", minHeight: 480 }}>
+      {!panelCollapsed && (
       <div style={{ width: 330, flexShrink: 0, overflow: "auto" }}>
-        <Card size="small" title="叠加层" style={{ marginBottom: 8 }}>
+        <Card size="small" title="叠加层" style={{ marginBottom: 8 }} extra={<Button size="small" type="text" icon={<DoubleLeftOutlined />} onClick={() => setPanelCollapsed(true)} />}>
           <Space direction="vertical" style={{ width: "100%" }}>
             <Space>
               <Switch checked={layers.cables} onChange={(v) => setLayers((s) => ({ ...s, cables: v }))} />
@@ -229,8 +232,19 @@ export function CableMapPage() {
           </Space>
         </Card>
       </div>
+      )}
 
-      <div style={{ flex: 1, border: "1px solid #e5e6eb", borderRadius: 8, overflow: "hidden" }}>
+      <div style={{ flex: 1, border: "1px solid #e5e6eb", borderRadius: 8, overflow: "hidden", position: "relative" }}>
+        {panelCollapsed && (
+          <Button
+            size="small"
+            style={{ position: "absolute", zIndex: 1000, top: 8, left: 8 }}
+            icon={<MenuUnfoldOutlined />}
+            onClick={() => setPanelCollapsed(false)}
+          >
+            工具栏
+          </Button>
+        )}
         <MapView
           sources={sources}
           overlays={{ ...overlays, cables: layers.cables ? overlays.cables : [] }}

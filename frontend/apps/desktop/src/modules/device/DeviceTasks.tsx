@@ -1,7 +1,7 @@
 /** device 模块：设备维修任务（/device/tasks，device:task）——创建/派发/接单/完成/验收/取消 + 维修记录。 */
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Card, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography, Upload } from "antd";
-import { PlusOutlined, UploadOutlined } from "@ant-design/icons";
+import { App, Button, Card, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography, Upload } from "antd";
+import { CheckCircleOutlined, CheckOutlined, DeleteOutlined, FileDoneOutlined, FileImageOutlined, LockOutlined, PlusOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
 
 import { adminApi, fileApi } from "@wlt/shared";
 
@@ -130,18 +130,28 @@ export function DeviceTasksPage() {
           { title: "优先级", dataIndex: "priority", width: 90, render: (v: number) => (v === 2 ? <Tag color="red">紧急</Tag> : "普通") },
           { title: "维修人员", dataIndex: "assignee_name", width: 110, render: (v: string) => v || "—" },
           {
-            title: "操作", width: 260,
+            title: "操作", width: 220,
             render: (_, t) => (
-              <Space size={4}>
-                <Button size="small" onClick={() => openRecords(t)}>记录</Button>
-                {t.status === "pending" && <Button size="small" type="primary" onClick={() => { setCurrent(t); setAssignee(undefined); }}>派发</Button>}
-                {t.status === "assigned" && <Button size="small" onClick={() => act(t, "accept")}>接单</Button>}
-                {t.status === "in_progress" && <Button size="small" type="primary" onClick={() => act(t, "complete")}>完成</Button>}
-                {t.status === "done" && <Button size="small" type="primary" onClick={() => { setCurrent(t); setVerdict(""); }}>验收</Button>}
-                {t.status === "verified" && <Button size="small" onClick={() => act(t, "close")}>关闭</Button>}
+              <Space size={2}>
+                <Tooltip title="维修记录"><Button size="small" icon={<FileImageOutlined />} onClick={() => openRecords(t)} /></Tooltip>
+                {t.status === "pending" && (
+                  <Tooltip title="派发"><Button size="small" type="primary" icon={<SendOutlined />} onClick={() => { setCurrent(t); setAssignee(undefined); }} /></Tooltip>
+                )}
+                {t.status === "assigned" && (
+                  <Tooltip title="接单"><Button size="small" icon={<CheckCircleOutlined />} onClick={() => act(t, "accept")} /></Tooltip>
+                )}
+                {t.status === "in_progress" && (
+                  <Tooltip title="完成"><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => act(t, "complete")} /></Tooltip>
+                )}
+                {t.status === "done" && (
+                  <Tooltip title="验收"><Button size="small" type="primary" icon={<FileDoneOutlined />} onClick={() => { setCurrent(t); setVerdict(""); }} /></Tooltip>
+                )}
+                {t.status === "verified" && (
+                  <Tooltip title="关闭"><Button size="small" icon={<LockOutlined />} onClick={() => act(t, "close")} /></Tooltip>
+                )}
                 {(t.status === "pending" || t.status === "assigned") && (
                   <Popconfirm title="取消任务（设备状态将按快照回退）？" onConfirm={() => act(t, "cancel", { reason: "人工取消" })}>
-                    <Button size="small" danger>取消</Button>
+                    <Tooltip title="取消"><Button size="small" danger icon={<DeleteOutlined />} /></Tooltip>
                   </Popconfirm>
                 )}
               </Space>
