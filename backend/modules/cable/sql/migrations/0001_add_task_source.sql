@@ -1,0 +1,3 @@
+-- 0001：map_download_task 增加 source 列（记录下载任务所属地图源；done via migration_executors 幂等判断）
+-- 说明：本文件由 back..app/core/migration_runner 的 ModuleDef.migration_executors["0001_add_task_source.sql"]
+-- 调用 Python 函数执行（先 column_exists 判断），文件本身仅作契约占位（约定：migration 文件只含一条 DDL）。

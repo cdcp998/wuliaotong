@@ -194,8 +194,24 @@ def test_tile_batch_download_flow() -> None:
     assert client.post(f"/api/v1/map/cache/regions/{region_id}/pause").json()["code"] == 0
     r = client.post(f"/api/v1/map/cache/regions/{region_id}/start")
     assert r.json()["code"] == 0
+
+    # source 记录 + 磁盘瓦片精确清理
+    db = SessionLocal()
+    try:
+        t = db.execute(text("SELECT source, z, x, y FROM map_download_task WHERE region_id = :r LIMIT 1"), {"r": region_id}).fetchone()
+        assert t is not None and t[0] == "esri"
+        from app.modules.cable.services import tile_cache
+
+        png = tile_cache._tile_path("esri", int(t[1]), int(t[2]), int(t[3]))
+        png.parent.mkdir(parents=True, exist_ok=True)
+        png.write_bytes(b"fake-tile")
+        assert png.exists()
+    finally:
+        db.close()
+
     # 清理
     assert client.post(f"/api/v1/map/cache/regions/{region_id}/clear").json()["code"] == 0
+    assert not png.exists()  # 磁盘瓦片已删除
     r = client.get("/api/v1/map/cache/regions")
     assert all(x["id"] != region_id or x["tile_count"] == 0 for x in r.json()["data"])
 

@@ -23,15 +23,17 @@ _MAX_RETRY = 2
 
 
 def download_worker_tick() -> None:
-    """批量下载一轮（每轮 ≤20 个任务；异常隔离：单任务失败仅标失败/重试）。"""
+    """批量下载一轮（每轮 ≤20 个任务；异常隔离：单任务失败仅标失败/重试）。
+
+    源：优先任务记录的 source（migration 0001）；无记录/未配置回退当前首个启用源。
+    """
     db = SessionLocal()
     try:
         config = config_store.load_config(db)
         sources = config.get("map_sources") or {}
-        source_key = next((k for k, s in sources.items() if s.get("enabled")), None)
-        if source_key is None:
+        default_key = next((k for k, s in sources.items() if s.get("enabled")), None)
+        if default_key is None:
             return
-        src = sources[source_key]
         rows = db.execute(
             select(MapDownloadTask, MapCacheRegion)
             .join(MapCacheRegion, MapCacheRegion.id == MapDownloadTask.region_id)
@@ -42,6 +44,12 @@ def download_worker_tick() -> None:
         affected: set[int] = set()
         for task, region in rows:
             affected.add(region.id)
+            source_key = (task.source or "") if (task.source or "") in sources else default_key
+            src = sources.get(source_key)
+            if src is None:
+                task.status = 2
+                task.retry_count += 1
+                continue
             try:
                 data = tile_cache.get_tile(src, source_key, task.z, task.x, task.y)
                 if not data:

@@ -629,12 +629,13 @@ def start_region_download(region_id: int, db: Session = Depends(get_db)) -> dict
     if r.status == 1:
         return ok({"message": "下载已在进行中"})
     config = config_store.load_config(db)
-    if not config.get("map_sources") or not any(s.get("enabled") for s in config["map_sources"].values()):
+    source_key = next((k for k, s in config.get("map_sources", {}).items() if s.get("enabled")), None)
+    if source_key is None:
         raise BizError(E_PARAM, "未配置启用的地图源")
     r.status = 1
     db.commit()
     try:
-        created = _download_region_tiles(db, r)
+        created = _download_region_tiles(db, r, source_key)
     except Exception as exc:  # noqa: BLE001
         r.status = 3
         db.commit()
@@ -676,19 +677,32 @@ def pause_region_download(region_id: int, db: Session = Depends(get_db)) -> dict
 
 @router.post("/map/cache/regions/{region_id}/clear", dependencies=[Depends(require_permission("map:cache"))])
 def clear_region(region_id: int, db: Session = Depends(get_db)) -> dict:
-    """清理区域缓存：删除下载任务 + 重置统计（磁盘瓦片保留在前端可继续命中的公共缓存，统一入口见 tile_cache）。"""
+    """清理区域缓存：删除该区域下载任务 + 按 source/z/x/y 精确删除磁盘瓦片（统一入口 tile_cache）
+    + 重置统计（与下载 worker 共用进程锁；正在写的瓦片删除后幂等重抓）。"""
+    from sqlalchemy import delete
+
     r = db.get(MapCacheRegion, region_id)
     if r is None:
         raise BizError(E_NOT_FOUND, "缓存区域不存在")
-    from sqlalchemy import delete
-
+    tasks = db.execute(
+        select(MapDownloadTask.source, MapDownloadTask.z, MapDownloadTask.x, MapDownloadTask.y)
+        .where(MapDownloadTask.region_id == region_id)
+    ).all()
+    by_source: dict[str, list[tuple[int, int, int]]] = {}
+    for source, z, x, y in tasks:
+        by_source.setdefault(source or "", []).append((int(z), int(x), int(y)))
+    for source, pieces in by_source.items():
+        if source:
+            tile_cache.clear_tiles_for(source, pieces)
+        else:
+            tile_cache.clear_tiles()  # 无 source 记录的历史任务：全量清理兜底
     db.execute(delete(MapDownloadTask).where(MapDownloadTask.region_id == region_id))
     r.tile_count = 0
     r.cache_size = 0
     r.status = 0
     r.last_download_at = None
     db.commit()
-    return ok()
+    return ok({"tiles_removed": sum(len(v) for v in by_source.values())})
 
 
 @router.get("/map/downloads", dependencies=[Depends(require_permission("map:cache"))])
@@ -709,8 +723,8 @@ def download_progress(db: Session = Depends(get_db)) -> dict:
     return ok({"pending": global_pending, "done": global_done, "failed": global_failed, "regions": per_region})
 
 
-def _download_region_tiles(db: Session, region: MapCacheRegion) -> int:
-    """生成区域瓦片下载任务（uk(region_id,z,x,y) 幂等；P6 起由 Redis 队列 + worker 消费）。"""
+def _download_region_tiles(db: Session, region: MapCacheRegion, source_key: str) -> int:
+    """生成区域瓦片下载任务（uk(region_id,z,x,y) 幂等；记录 source 供 worker/清理使用）。"""
     if not region.geometry:
         raise BizError(E_PARAM, "区域缺少 geometry（需含 bbox）")
     try:
@@ -733,7 +747,7 @@ def _download_region_tiles(db: Session, region: MapCacheRegion) -> int:
                 )
                 if exists:
                     continue
-                db.add(MapDownloadTask(region_id=region.id, z=z, x=x, y=y))
+                db.add(MapDownloadTask(region_id=region.id, source=source_key, z=z, x=x, y=y))
                 created += 1
     db.commit()
     return created

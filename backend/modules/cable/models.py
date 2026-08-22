@@ -115,6 +115,7 @@ class MapDownloadTask(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     region_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    source: Mapped[str] = mapped_column(String(50), nullable=False, default="")  # 地图源 key（migration 0001）
     z: Mapped[int] = mapped_column(Integer, nullable=False)
     x: Mapped[int] = mapped_column(Integer, nullable=False)
     y: Mapped[int] = mapped_column(Integer, nullable=False)

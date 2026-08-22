@@ -116,6 +116,23 @@ def clear_tiles(source: str | None = None, before_ts: float | None = None) -> di
     return {"removed": removed, "freed_bytes": freed}
 
 
+def clear_tiles_for(source: str, pieces: list[tuple[int, int, int]]) -> dict:
+    """按源精确清理指定瓦片（区域清理用；与 clear_tiles 共用进程锁，正在写的瓦片删除后幂等重抓）。"""
+    removed = 0
+    freed = 0
+    with _lock:
+        for z, x, y in pieces:
+            for p in (_tile_path(source, z, x, y), _meta_path(source, z, x, y)):
+                try:
+                    if p.exists():
+                        freed += p.stat().st_size
+                        p.unlink()
+                        removed += 1
+                except OSError as exc:
+                    logger.warning("清理瓦片失败 %s：%s", p, exc)
+    return {"removed": removed, "freed_bytes": freed}
+
+
 def tile_md5(source: str, z: int, x: int, y: int) -> str:
     """瓦片内容 md5（缓存管理展示用）。"""
     path = _tile_path(source, z, x, y)
