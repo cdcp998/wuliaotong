@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { App, AutoComplete, Button, DatePicker, Divider, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag } from "antd";
 import { CameraOutlined, PictureOutlined, PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
@@ -10,6 +10,8 @@ import { baseApi, fileApi, fileUrl, ocrApi, purchaseApi, purchaseIn, purchasePla
 import { DataTable } from "../components/DataTable";
 
 import { BillDetailDrawer } from "../components/BillDetailDrawer";
+
+import { DeliveryOcrModal, type OcrConfirmResult } from "../components/DeliveryOcrModal";
 
 import { CategorySelect } from "../components/CategorySelect";
 
@@ -51,6 +53,7 @@ export function PurchaseInPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [open, setOpen] = useState(false);
+  const [ocrOpen, setOcrOpen] = useState(false); // 送货单 OCR 弹窗（设计页 20：材料入库页上的弹窗）
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState<PurchaseInDetail | null>(null);
   const [warehouses, setWarehouses] = useState<{ id: number; name: string }[]>([]);
@@ -564,6 +567,50 @@ export function PurchaseInPage() {
     }
   }
 
+  /** 送货单 OCR 弹窗确认：把识别结果映射为入库明细行，并打开新建入库表单（设计页 19-20）。 */
+  async function handleOcrConfirmed(result: OcrConfirmResult) {
+    setSupplierId(result.supplierId);
+    setPrefillSupplierName(result.supplierName);
+    setOcrRecordId(result.ocrRecordId);
+    setOcrBillNo(result.billNo);
+    const rs: Row[] = [];
+    for (const it of result.items) {
+      let p: Product | undefined;
+      try {
+        if (it.product_id) {
+          p = await baseApi.product(it.product_id);
+        } else if (it.material_code) {
+          const data = await baseApi.products(it.material_code);
+          p = data.list.find((x) => x.material_code === it.material_code) ?? undefined;
+        }
+        if (!p) {
+          const found = await baseApi.products(it.product_name);
+          p = found.list.find((x) => x.name === it.product_name) ?? found.list[0];
+        }
+      } catch {
+        p = undefined;
+      }
+      rs.push({
+        key: nextKey + rs.length,
+        product: p ?? null,
+        material_code: p?.material_code ?? it.material_code ?? "",
+        spec: it.spec || p?.spec || "",
+        unit: it.unit || p?.unit_name || "",
+        barcode: p?.barcode ?? "",
+        category_id: it.category_id ?? (p?.category_id || undefined),
+        category_name: it.category_name || p?.category_name || "",
+        location_id: undefined,
+        qty: Number(it.qty ?? 1),
+        price: Number(it.price ?? 0),
+      });
+    }
+    setRows(rs);
+    setNextKey((k) => k + rs.length);
+    setOcrOpen(false);
+    setOpen(true);
+    if (rs.some((r) => !r.product)) message.warning("部分材料未匹配到系统资料，可当场新增或手动选择");
+  }
+
   const billColumns: ColumnsType<PurchaseInBill> = [
     {
       title: "单号",
@@ -800,7 +847,7 @@ export function PurchaseInPage() {
       <h2 style={{ margin: "0 0 16px" }}>材料入库</h2>
       <Space style={{ marginBottom: 16 }} wrap>
         <Button type="primary" onClick={() => { setRows([]); setSupplierId(0); setOcrRecordId(0); setOcrBillNo(""); setBillDate(""); setRemark(""); setPlanId(0); setPlanBillNo(""); setDeliveryFiles([]); setSubmitTried(false); setOpen(true); }}>新建入库</Button>
-        <Button onClick={() => navigate("/ocr/delivery")}>送货单识别入库</Button>
+        <Button onClick={() => setOcrOpen(true)}>送货单识别入库</Button>
       </Space>
       <DataTable
         rowKey="id"
@@ -1026,6 +1073,13 @@ export function PurchaseInPage() {
           dataSource={histRows}
         />
       </Drawer>
+
+      {/* 送货单 OCR 弹窗（设计页 20：材料入库页上的弹窗，确认后直接带入入库单） */}
+      <DeliveryOcrModal
+        open={ocrOpen}
+        onClose={() => setOcrOpen(false)}
+        onConfirmed={(result) => void handleOcrConfirmed(result)}
+      />
     </div>
   );
 }
