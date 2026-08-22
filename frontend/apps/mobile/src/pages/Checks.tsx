@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Button, List, Modal, NavBar, Selector, Tabs, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -81,18 +81,36 @@ export function ChecksPage() {
         ))}
       </Tabs>
       <List>
-        {list.map((c) => (
-          <List.Item
-            key={c.id}
-            onClick={() => navigate(`/checks/${c.id}`)}
-            description={`${c.warehouse_name} · ${c.check_date.slice(0, 16)} · ${c.items.length} 项`}
-            extra={
-              <Tag color={STATUS_TEXT[c.status]?.color}>{STATUS_TEXT[c.status]?.text ?? c.status}</Tag>
-            }
-          >
-            <Badge content={c.status === 1 ? "进行中" : undefined}>{c.bill_no}</Badge>
-          </List.Item>
-        ))}
+        {list.map((c) => {
+          const total = c.items.length || 1;
+          const done = c.items.filter((it) => it.real_qty != null).length;
+          const pct = Math.round((done / total) * 100);
+          return (
+            <List.Item
+              key={c.id}
+              onClick={() => navigate(`/checks/${c.id}`)}
+              description={
+                <div>
+                  <div style={{ fontSize: 11.5, color: "#5B6478", marginTop: 2 }}>
+                    {c.warehouse_name} · {c.check_date.slice(0, 16)} · {c.items.length} 项
+                  </div>
+                  {/* 盘点进度（设计页 M18：进度条） */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                    <div style={{ flex: 1, height: 6, borderRadius: 999, background: "#EFF3FC", overflow: "hidden" }}>
+                      <div style={{ width: `${pct}%`, height: "100%", background: c.status === 2 ? "#22C55E" : "#5B7FFF", borderRadius: 999, transition: "width .3s" }} />
+                    </div>
+                    <span style={{ fontSize: 10.5, color: "#8A93A8", whiteSpace: "nowrap" }}>{done}/{total}</span>
+                  </div>
+                </div>
+              }
+              extra={
+                <Tag color={STATUS_TEXT[c.status]?.color}>{STATUS_TEXT[c.status]?.text ?? c.status}</Tag>
+              }
+            >
+              <Badge content={c.status === 1 ? "进行中" : undefined}>{c.bill_no}</Badge>
+            </List.Item>
+          );
+        })}
         {!loading && !list.length && <List.Item>暂无盘点单</List.Item>}
       </List>
 
