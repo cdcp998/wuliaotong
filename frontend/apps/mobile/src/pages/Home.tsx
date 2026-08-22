@@ -194,7 +194,7 @@ export function HomePage() {
           }
         />
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))", gap: 10, marginBottom: 12 }}>
           {gridActions.map((a) => (
             <div
               key={a.key}

@@ -1,4 +1,4 @@
-﻿/** 手机端：我的任务（方案 §7.3）——被指派任务处理（接单/完成+记录照片/知识推荐）。 */
+/** 手机端：我的任务（方案 §7.3）——被指派任务处理（接单/完成+记录照片/知识推荐）。 */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Card, List, NavBar, Tag, TextArea, Toast } from "antd-mobile";
@@ -85,7 +85,7 @@ export function MyTasksPage() {
       </List>
 
       {current && (
-        <Card style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000, borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "70dvh", overflow: "auto" }}>
+        <Card className="wlt-mobile-sheet" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000, borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "70dvh", overflow: "auto" }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>{current.title}</div>
           <TextArea placeholder="维修内容（完成必填）" value={content} onChange={setContent} rows={3} />
           <input type="file" accept="image/*" id="task-photo" style={{ display: "none" }} onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />

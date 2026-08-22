@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
  * 物料通电脑端 —— 全局基础样式（《UI设计方案.md》§2 设计系统）
  *
  * 1. 只放「设计系统级」规则：字体栈、标题层级、焦点环、数字排版、微交互；
@@ -247,6 +247,17 @@ button:focus-visible,
 /* ---------- 9. 浅色玻璃 / 大圆角（设计规范 v2 通用工具类） ----------
  * 与 OpenPencil 设计稿一致：白色玻璃卡片 = #FFF + 1px #E4EAF6 描边 + 柔和投影；
  * 页面级容器用 `.wlt-glass` 替代手工 border+shadow，保持全局统一。 */
+/* 内容区作为应用工作区：纵向 flex，页面可声明 .wlt-fill 占满剩余高度 */
+.ant-layout-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.wlt-fill {
+  flex: 1;
+  min-height: 0;
+}
+
 .wlt-glass {
   background: #ffffff;
   border: 1px solid #e4eaf6;
@@ -283,4 +294,18 @@ button:focus-visible,
 /* 页面卡片间距统一呼吸感：桌面内容区默认 24px 内边距不变，卡片内 16~20 */
 .ant-layout-content .ant-card {
   border: 1px solid #e4eaf6;
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(30, 36, 51, 0.06);
+}
+
+.ant-layout-content .ant-card .ant-card-head {
+  border-bottom: 1px solid #eff3fc;
+}
+
+/* ---------- 10. 三档响应式补充（平板 769-1199px） ----------
+ * 桌面端在平板宽度下收紧内容留白；≤768px 的适配由 mobile.css 承担。 */
+@media (max-width: 1199px) and (min-width: 769px) {
+  .ant-layout-content > div {
+    padding: 16px !important;
+  }
 }

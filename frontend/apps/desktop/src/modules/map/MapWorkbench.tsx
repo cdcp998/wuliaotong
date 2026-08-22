@@ -136,7 +136,7 @@ export function MapWorkbenchPage() {
   ];
 
   return (
-    <div style={{ padding: 24, maxWidth: 1600, margin: "0 auto" }}>
+    <div className="wlt-fill" style={{ padding: 24, maxWidth: 1600, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column" }}>
       {/* 页头 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
@@ -156,7 +156,7 @@ export function MapWorkbenchPage() {
         </Space>
       </div>
 
-      <div style={{ display: "flex", gap: 16, height: "calc(100dvh - 210px)", minHeight: 480 }}>
+      <div style={{ display: "flex", gap: 16, flex: 1, minHeight: 480 }}>
         {/* 左侧玻璃面板 */}
         {!panelCollapsed && (
           <div style={{ width: 320, flexShrink: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: 12 }}>

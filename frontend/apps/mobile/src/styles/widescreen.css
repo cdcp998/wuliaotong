@@ -36,6 +36,14 @@
     transform: translateX(-50%);
   }
 
+  /* 页面内 fixed 底部弹窗卡片（我的任务/知识详情 .wlt-mobile-sheet）限宽居中 */
+  #root .wlt-mobile-sheet {
+    max-width: 600px;
+    left: 50%;
+    transform: translateX(-50%);
+    box-shadow: 0 -6px 24px rgba(30, 36, 51, 0.1);
+  }
+
   /* 底部弹层 / 全屏弹层（Popup/ActionSheet，含「修改密码」全屏弹层）限宽居中：
      antd-mobile 的 bottom body 是 width:100% + left:0，auto margin 不生效（fixed 定位），
      用 left:50% 平移居中；不动 transform，避免破坏滑入动画 */
@@ -54,6 +62,9 @@
     max-width: 720px;
   }
   #root > div[style*="100dvh"] > div[style*="fixed"] {
+    max-width: 720px;
+  }
+  #root .wlt-mobile-sheet {
     max-width: 720px;
   }
   .adm-popup-body {

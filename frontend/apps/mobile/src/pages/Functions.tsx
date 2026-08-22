@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { NavBar } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -88,8 +88,8 @@ export function FunctionsPage() {
                   style={{
                     position: "relative",
                     background: "#fff",
-                    border: "1px solid #f0f1f3",
-                    borderRadius: 12,
+                    border: "1px solid #E4EAF6",
+                    borderRadius: 14,
                     padding: "12px 4px",
                     display: "flex",
                     flexDirection: "column",
@@ -127,7 +127,7 @@ export function FunctionsPage() {
           />
         ) : (
           /* 普通模式：宫格卡片 + ★ 加入/移出首页 */
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))", gap: 10 }}>
             {ordered.map((a) => {
               const pinned = !hidden.has(a.key);
               return (
@@ -138,8 +138,8 @@ export function FunctionsPage() {
                   style={{
                     position: "relative",
                     background: "#fff",
-                    border: "1px solid #f0f1f3",
-                    borderRadius: 12,
+                    border: "1px solid #E4EAF6",
+                    borderRadius: 14,
                     padding: "12px 4px",
                     display: "flex",
                     flexDirection: "column",

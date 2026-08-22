@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { Button, Dialog, Form, Input, List, NavBar, Popup, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -49,7 +49,7 @@ export function MinePage() {
   return (
     <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate("/")}>我的</NavBar>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, padding: 16, margin: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, padding: 16, margin: 12, boxShadow: "0 6px 20px rgba(30,36,51,.06)" }}>
         <div
           style={{
             width: 48,
@@ -73,7 +73,7 @@ export function MinePage() {
         </div>
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, margin: "0 12px 12px", overflow: "hidden" }}>
+      <div style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, margin: "0 12px 12px", overflow: "hidden", boxShadow: "0 6px 20px rgba(30,36,51,.06)" }}>
         <List style={{ "--border-top": "0" } as React.CSSProperties}>
           <List.Item onClick={() => setPwdVisible(true)}>
             修改密码

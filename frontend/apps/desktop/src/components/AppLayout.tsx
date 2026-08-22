@@ -560,7 +560,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
 
   return (
     <>
-      <Layout style={{ minHeight: "100dvh" }}>
+      <Layout style={{ height: "100dvh", overflow: "hidden" }}>
       <Sider
         collapsible
         collapsed={collapsed}
@@ -568,7 +568,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
         width={216}
         collapsedWidth={64}
         theme="light"
-        style={{ borderRight: `1px solid ${token.colorBorder}`, boxShadow: "0 1px 2px rgba(30,36,51,.04)" }}
+        style={{ height: "100dvh", overflow: "hidden", borderRight: `1px solid ${token.colorBorder}`, boxShadow: "0 1px 2px rgba(30,36,51,.04)" }}
       >
         <div style={{ height: 60, display: "flex", alignItems: "center", gap: 10, padding: "0 16px" }}>
           <div
@@ -637,10 +637,11 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
           style={{ borderInlineEnd: "none", padding: "8px 0" }}
         />
       </Sider>
-      <Layout>
+      <Layout style={{ height: "100dvh", overflow: "hidden" }}>
         <Header
           style={{
             height: 60,
+            flexShrink: 0,
             padding: "0 20px",
             background: "rgba(255,255,255,0.92)",
             backdropFilter: "blur(8px)",
@@ -701,7 +702,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
             </div>
           </Dropdown>
         </Header>
-        <Content ref={contentRef} style={{ background: token.colorBgLayout, overflow: "auto" }}>
+        <Content ref={contentRef} style={{ background: token.colorBgLayout, overflow: "auto", flex: 1, minHeight: 0 }}>
           {children}
         </Content>
       </Layout>

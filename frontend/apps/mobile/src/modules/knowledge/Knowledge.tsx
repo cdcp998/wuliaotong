@@ -1,4 +1,4 @@
-﻿/** 手机端：知识（方案 §7.3）——已发布知识检索与浏览。 */
+/** 手机端：知识（方案 §7.3）——已发布知识检索与浏览。 */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Card, Input, List, NavBar, Tag, Toast } from "antd-mobile";
@@ -63,7 +63,7 @@ export function MobileKnowledgePage() {
         {!loading && items.length === 0 && <List.Item>暂无已发布知识</List.Item>}
       </List>
       {detail && (
-        <Card style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000, maxHeight: "75dvh", overflow: "auto", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+        <Card className="wlt-mobile-sheet" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000, maxHeight: "75dvh", overflow: "auto", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <Tag color="primary">{detail.category || "未分类"}</Tag>
             <span onClick={() => setDetail(null)} style={{ color: "#999" }}>关闭 ×</span>
