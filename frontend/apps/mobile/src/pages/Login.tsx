@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Checkbox, Form, Input, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -106,15 +106,15 @@ export function LoginPage() {
   }
 
   return (
-    <div className="wlt-login" style={{ minHeight: "100dvh", background: "#fff", display: "flex", flexDirection: "column" }}>
-      {/* 品牌区 */}
+    <div className="wlt-login" style={{ minHeight: "100dvh", background: "linear-gradient(180deg,#F2F5FB 0%, #fff 46%)", display: "flex", flexDirection: "column" }}>
+      {/* 品牌区（渐变头部，设计页 M20） */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "44px 0 8px" }}>
         <div
           style={{
             width: 58,
             height: 58,
             borderRadius: 15,
-            background: "#5B7FFF",
+            background: "linear-gradient(135deg,#5B7FFF 0%,#7C93FF 100%)",
             color: "#fff",
             display: "flex",
             alignItems: "center",
@@ -133,13 +133,14 @@ export function LoginPage() {
       </div>
 
       {/* 表单区 */}
-      <div style={{ padding: "20px 24px", flex: 1 }}>
+      <div style={{ padding: "20px 20px 24px", flex: 1 }}>
         {mode === "login" && (
-          <Form layout="vertical" onFinish={(v) => void onSubmit(v as { username: string; password: string; captcha?: string })} footer={
-            <Button block type="submit" color="primary" size="large" loading={loading} style={{ height: 44, fontSize: 15, borderRadius: 10 }}>
-              登 录
-            </Button>
-          }>
+          <div className="wlt-glass-card" style={{ padding: "8px 6px 16px" }}>
+            <Form layout="vertical" onFinish={(v) => void onSubmit(v as { username: string; password: string; captcha?: string })} footer={
+              <Button block type="submit" color="primary" size="large" loading={loading} style={{ height: 44, fontSize: 15, borderRadius: 10 }}>
+                登 录
+              </Button>
+            }>
             <Form.Item name="username" rules={[{ required: true, message: "请输入账号" }]}>
               <Input placeholder="账号 / 用户名" clearable autoFocus />
             </Form.Item>
@@ -164,6 +165,7 @@ export function LoginPage() {
               </span>
             </div>
           </Form>
+          </div>
         )}
 
         {mode === "forgot" && (
