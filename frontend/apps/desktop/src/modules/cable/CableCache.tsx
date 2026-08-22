@@ -1,7 +1,7 @@
-/** cable 模块：地图缓存管理（/cable/cache，map:cache；地图源配置 map:config）——区域批量下载 + 源配置。 */
+/** cable 模块：地图缓存管理（/cable/cache，map:cache）+ 图源管理（map:config 编辑/新增/删除，查看脱敏）。 */
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
-import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { App, Button, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
+import { PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
 
 import { useAuthStore } from "@wlt/shared";
 
@@ -37,7 +37,10 @@ export function CableCachePage() {
   const [saving, setSaving] = useState(false);
   const [sources, setSources] = useState<Record<string, MapSourceInfo>>({});
   const [srcOpen, setSrcOpen] = useState(false);
+  const [srcModalOpen, setSrcModalOpen] = useState(false);
   const [srcSaving, setSrcSaving] = useState(false);
+  const [srcEditKey, setSrcEditKey] = useState<string | null>(null);
+  const [testingKey, setTestingKey] = useState<string | null>(null);
   const [srcForm] = Form.useForm();
   const [form] = Form.useForm();
   const canConfig = hasPerm("map:config");
@@ -56,14 +59,13 @@ export function CableCachePage() {
   }, [message]);
 
   const loadSources = useCallback(async () => {
-    if (!canConfig) return;
     try {
       const r = await cableApi.mapSources();
       setSources(r.map_sources);
     } catch {
-      /* 无 map:config 权限静默 */
+      /* 无权限/接口异常静默 */
     }
-  }, [canConfig]);
+  }, []);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void loadSources(); }, [loadSources]);
@@ -113,22 +115,35 @@ export function CableCachePage() {
     }
   };
 
-  const openSrcEdit = (key: string) => {
-    const s = sources[key];
-    if (s) srcForm.setFieldsValue({ key: s.key, name: s.name, type: s.type, coordinate_space: s.coordinate_space, url_template: s.url_template, api_key: s.api_key, api_secret: s.api_secret, enabled: s.enabled });
-    else srcForm.resetFields();
-    setSrcOpen(true);
+  const openSrcEdit = (key: string | null) => {
+    if (!canConfig) return;
+    setSrcEditKey(key);
+    const s = key ? sources[key] : undefined;
+    if (s) {
+      srcForm.setFieldsValue({
+        key: s.key, name: s.name, type: s.type, coordinate_space: s.coordinate_space,
+        url_template: s.url_template ?? "", api_key: s.api_key ?? "", api_secret: s.api_secret ?? "", enabled: s.enabled,
+      });
+    } else {
+      srcForm.resetFields();
+      srcForm.setFieldsValue({ type: "xyz", coordinate_space: "wgs84", enabled: true });
+    }
+    setSrcModalOpen(true);
   };
 
   const saveSources = async () => {
     const v = await srcForm.validateFields();
+    if (srcEditKey && v.key !== srcEditKey) {
+      message.warning("源标识创建后不可修改（如需重命名请新建源）");
+      return;
+    }
     setSrcSaving(true);
     try {
       await cableApi.saveMapSources([{
         key: v.key, name: v.name, type: v.type ?? "xyz", coordinate_space: v.coordinate_space ?? "wgs84",
         url_template: v.url_template, api_key: v.api_key ?? "", api_secret: v.api_secret ?? "", enabled: v.enabled ?? true,
       }]);
-      message.success("地图源已保存（秘钥加密入库，回读脱敏）");
+      message.success("地图源已保存（密钥加密入库，回读脱敏；「******」表示保持不变）");
       setSrcOpen(false);
       void loadSources();
     } catch (e) {
@@ -138,13 +153,55 @@ export function CableCachePage() {
     }
   };
 
+  const toggleSource = async (s: MapSourceInfo) => {
+    if (!canConfig) return;
+    try {
+      await cableApi.saveMapSources([{ ...s, enabled: !s.enabled }]);
+      message.success(s.enabled ? "已停用" : "已启用");
+      void loadSources();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "操作失败");
+    }
+  };
+
+  const deleteSource = async (key: string) => {
+    if (!canConfig) return;
+    try {
+      await cableApi.deleteMapSource(key);
+      message.success("已删除（若删除后无可用源，瓦片代理将回退内置默认 Esri）");
+      void loadSources();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "删除失败");
+    }
+  };
+
+  const testSource = async (s: MapSourceInfo) => {
+    setTestingKey(s.key);
+    try {
+      const url = cableApi.tileUrl(s.key, 2, 1, 1);
+      const resp = await fetch(url, { credentials: "include" });
+      if (resp.ok) {
+        message.success(`「${s.name}」连接正常（瓦片 ${resp.status}）`);
+      } else {
+        const body = await resp.json().catch(() => null);
+        message.error(`「${s.name}」连接失败：${body?.message ?? `HTTP ${resp.status}`}`);
+      }
+    } catch (e) {
+      message.error(`「${s.name}」连接失败：${e instanceof Error ? e.message : "网络异常"}`);
+    } finally {
+      setTestingKey(null);
+    }
+  };
+
+  const defaultKey = Object.keys(sources).find((k) => sources[k]?.enabled);
+
   return (
     <div>
       <Space style={{ marginBottom: 12, width: "100%", justifyContent: "space-between" }}>
         <Typography.Title level={4} style={{ margin: 0 }}>地图缓存管理</Typography.Title>
         <Space>
           <Button icon={<ReloadOutlined />} onClick={() => { void load(); void loadSources(); }}>刷新</Button>
-          {canConfig && <Button onClick={() => openSrcEdit(Object.keys(sources)[0] ?? "")}>地图源配置</Button>}
+          <Button icon={<SettingOutlined />} onClick={() => setSrcOpen(true)}>图源管理</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>新建下载区域</Button>
         </Space>
       </Space>
@@ -179,9 +236,58 @@ export function CableCachePage() {
 
       {canConfig && (
         <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
-          已配置地图源：{Object.values(sources).map((s) => `${s.name}(${s.coordinate_space})`).join("、") || "无"}（{Object.keys(sources).length} 个）
+          已配置地图源：{Object.values(sources).map((s) => `${s.name}(${s.coordinate_space})`).join("、") || "无（使用内置默认 Esri）"}（{Object.keys(sources).length} 个）
         </Typography.Paragraph>
       )}
+
+      {/* 图源管理 */}
+      <Drawer open={srcOpen} onClose={() => setSrcOpen(false)} width={720} title="图源管理">
+        <Space direction="vertical" style={{ width: "100%" }} size={12}>
+          <Space>
+            {canConfig && <Button type="primary" icon={<PlusOutlined />} onClick={() => openSrcEdit(null)}>新增图源</Button>}
+            <Typography.Text type="secondary">数据一律 WGS84 存储；仅显示层按源 coordinate_space 转换（gcj02/bd09 可配）。密钥加密存储、回读脱敏。</Typography.Text>
+          </Space>
+          <Table<MapSourceInfo>
+            rowKey="key"
+            dataSource={Object.values(sources)}
+            pagination={false}
+            size="small"
+            columns={[
+              { title: "标识", dataIndex: "key", width: 110, render: (v: string) => <Typography.Text code>{v}</Typography.Text> },
+              { title: "名称", dataIndex: "name" },
+              { title: "类型", dataIndex: "type", width: 90, render: (v: string) => <Tag>{v}</Tag> },
+              { title: "坐标空间", dataIndex: "coordinate_space", width: 100 },
+              {
+                title: "状态", dataIndex: "enabled", width: 130,
+                render: (v: boolean, s) => (
+                  <Space size={6}>
+                    <Tag color={v ? "success" : "default"}>{v ? "启用" : "停用"}</Tag>
+                    {defaultKey === s.key && <Tag color="blue">默认</Tag>}
+                  </Space>
+                ),
+              },
+              {
+                title: "操作", width: 250,
+                render: (_, s) => (
+                  <Space size={4}>
+                    <Button size="small" onClick={() => testSource(s)} loading={testingKey === s.key}>测试</Button>
+                    {canConfig && <Button size="small" onClick={() => openSrcEdit(s.key)}>编辑</Button>}
+                    {canConfig && (
+                      <Button size="small" onClick={() => toggleSource(s)}>{s.enabled ? "停用" : "启用"}</Button>
+                    )}
+                    {canConfig && (
+                      <Popconfirm title={`删除图源「${s.name}」？删除后瓦片代理不再使用它。`} onConfirm={() => deleteSource(s.key)}>
+                        <Button size="small" danger>删除</Button>
+                      </Popconfirm>
+                    )}
+                  </Space>
+                ),
+              },
+            ]}
+          />
+          {!canConfig && <Typography.Text type="secondary">当前账号仅有查看权限（脱敏）；新增/编辑/停用/删除需要「地图源配置」权限（超级管理员）。</Typography.Text>}
+        </Space>
+      </Drawer>
 
       <Modal open={open} onCancel={() => setOpen(false)} onOk={createRegion} confirmLoading={saving} title="新建缓存下载区域" width={520} destroyOnHidden>
         <Form form={form} layout="vertical">
@@ -205,10 +311,12 @@ export function CableCachePage() {
         </Form>
       </Modal>
 
-      <Modal open={srcOpen} onCancel={() => setSrcOpen(false)} onOk={saveSources} confirmLoading={srcSaving} title="地图源配置（保存后加密入库，回读脱敏）" width={560} destroyOnHidden>
+      <Modal open={srcModalOpen} onCancel={() => setSrcModalOpen(false)} onOk={saveSources} confirmLoading={srcSaving} title={srcEditKey ? `编辑图源：${srcEditKey}` : "新增图源（密钥加密入库，回读脱敏）"} width={560} destroyOnHidden>
         <Form form={srcForm} layout="vertical">
           <Space>
-            <Form.Item name="key" label="源标识" rules={[{ required: true }]}><Input style={{ width: 160 }} /></Form.Item>
+            <Form.Item name="key" label="源标识" rules={[{ required: true }]}>
+              <Input style={{ width: 160 }} disabled={!!srcEditKey} placeholder="如 amap" />
+            </Form.Item>
             <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input style={{ width: 200 }} /></Form.Item>
           </Space>
           <Space>
@@ -229,6 +337,7 @@ export function CableCachePage() {
             <Form.Item name="api_key" label="API Key（可选，加密存储）"><Input style={{ width: 240 }} /></Form.Item>
             <Form.Item name="api_secret" label="API Secret（可选，加密存储）"><Input style={{ width: 240 }} /></Form.Item>
           </Space>
+          <Typography.Text type="secondary">回显为「******」表示已存密钥；保持原值重存不会覆盖（留空则清除）。</Typography.Text>
         </Form>
       </Modal>
     </div>

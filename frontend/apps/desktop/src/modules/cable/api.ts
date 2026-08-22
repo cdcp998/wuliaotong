@@ -132,6 +132,7 @@ export const cableApi = {
   // ---- 地图源/缓存区域 ----
   mapSources: () => http.get<{ map_sources: Record<string, MapSourceInfo> }>("/map/sources"),
   saveMapSources: (sources: MapSourceInfo[]) => http.put<{ saved: number }>("/map/sources", sources),
+  deleteMapSource: (key: string) => http.delete<{ removed: string; remaining: number }>(`/map/sources/${key}`),
   listRegions: () =>
     http.get<
       { id: number; name: string; geometry: unknown; min_zoom: number; max_zoom: number; tile_count: number; cache_size: number; last_download_at: string | null; update_mode: string; status: number }[]

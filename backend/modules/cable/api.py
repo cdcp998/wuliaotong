@@ -16,7 +16,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 from uuid import uuid4
 
-from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_permission
+from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_any_permission, require_permission
 from app.core.modules import require_module_enabled
 from app.core.response import BizError, E_NOT_FOUND, E_PARAM, ok
 from app.db import get_db
@@ -544,7 +544,7 @@ def nearby_faults(lat: float = Query(...), lng: float = Query(...), radius: floa
 
 # ============================ 地图源 & 瓦片代理 ============================
 
-@router.get("/map/sources", dependencies=[Depends(require_permission("map:config"))])
+@router.get("/map/sources", dependencies=[Depends(require_any_permission("map:config", "map:cache"))])
 def map_sources(db: Session = Depends(get_db)) -> dict:
     config = config_store.effective_config(db)
     masked = config_store.mask_config(config)
@@ -553,11 +553,19 @@ def map_sources(db: Session = Depends(get_db)) -> dict:
 
 @router.put("/map/sources", dependencies=[Depends(require_permission("map:config"))])
 def save_map_sources(sources: list[MapSourceIn], db: Session = Depends(get_db)) -> dict:
-    """保存地图源配置（按 key 合并；敏感字段加密入库，接口回读一律脱敏）。"""
-    config = config_store.load_config(db)
-    if not config.get("map_sources"):
-        config = config_store.default_config()
-    config["map_sources"].update({s.key: s.model_dump() for s in sources})
+    """保存地图源配置（按 key 合并；敏感字段加密入库，接口回读一律脱敏）。
+
+    「******」哨兵值（脱敏视图回填表单）表示保持不变——不覆盖已存密钥。
+    """
+    config = config_store.effective_config(db)
+    current = config.get("map_sources") or {}
+    for s in sources:
+        data = s.model_dump()
+        prev = current.get(s.key) or {}
+        for k in ("api_key", "api_secret"):
+            if data.get(k) == "******":
+                data[k] = prev.get(k, "")
+        config["map_sources"][s.key] = data
     config_store.save_config(db, config)
     return ok({"saved": len(sources)})
 
@@ -577,6 +585,21 @@ def tile_proxy(source: str, z: int, x: int, y: int, db: Session = Depends(get_db
         logger.warning("瓦片抓取失败 %s/%d/%d/%d：%s", source, z, x, y, exc)
         raise BizError(E_PARAM, "瓦片获取失败，请检查地图源配置或网络") from exc
     return Response(content=data, media_type="image/png")
+
+
+@router.delete("/map/sources/{source_key}", dependencies=[Depends(require_permission("map:config"))])
+def delete_map_source(source_key: str, db: Session = Depends(get_db)) -> dict:
+    """删除自定义地图源（内置默认 esri 不可删除——空配置时有效配置会自动回退重建）。
+
+    删除后若剩余源均未启用，瓦片代理将不可用（提示先启用其他源）。
+    """
+    config = config_store.load_config(db)
+    sources = config.get("map_sources") or {}
+    if source_key not in sources:
+        raise BizError(E_NOT_FOUND, f"地图源 {source_key} 不存在")
+    config["map_sources"].pop(source_key, None)
+    config_store.save_config(db, config)
+    return ok({"removed": source_key, "remaining": len(config["map_sources"])})
 
 
 @router.put("/map/config", dependencies=[Depends(require_permission("map:config"))])

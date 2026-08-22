@@ -346,3 +346,28 @@ def test_map_sources_config() -> None:
     # 恢复默认（仅 esri）
     r = client.put("/api/v1/map/sources", json=[esri_default])
     assert r.json()["code"] == 0
+
+    # 删除自定义源（test-src）
+    r = client.delete("/api/v1/map/sources/test-src")
+    assert r.json()["code"] == 0 and r.json()["data"]["removed"] == "test-src"
+    r = client.get("/api/v1/map/sources")
+    assert "test-src" not in r.json()["data"]["map_sources"]
+    # 删除不存在的源 → 4003
+    r = client.delete("/api/v1/map/sources/no-such")
+    assert r.json()["code"] == 4003
+    # 「******」哨兵：回填表单重存不覆盖已存密钥（先存一个带密钥的源，再以 ****** 重存，密钥保持）
+    r = client.put("/api/v1/map/sources", json=[{
+        "key": "test-src2", "name": "密钥测试", "type": "xyz", "coordinate_space": "wgs84",
+        "url_template": "https://example.com/{z}/{x}/{y}.png", "api_secret": "SECRET-KEEP", "enabled": True,
+    }])
+    assert r.json()["code"] == 0
+    r = client.put("/api/v1/map/sources", json=[{
+        "key": "test-src2", "name": "密钥测试改名", "type": "xyz", "coordinate_space": "wgs84",
+        "url_template": "https://example.com/{z}/{x}/{y}.png", "api_secret": "******", "enabled": True,
+    }])
+    assert r.json()["code"] == 0
+    r = client.get("/api/v1/map/sources")
+    assert r.json()["data"]["map_sources"]["test-src2"]["api_secret"] == "******"
+    # 清理
+    client.delete("/api/v1/map/sources/test-src2")
+    assert "test-src2" not in client.get("/api/v1/map/sources").json()["data"]["map_sources"]
