@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Tag, Tooltip, theme } from "antd";
-import { SafetyCertificateOutlined, UserOutlined, KeyOutlined, PlusOutlined, SearchOutlined, CheckOutlined, CloseOutlined, ReloadOutlined, DeleteOutlined } from "@ant-design/icons";
+import { SafetyCertificateOutlined, UserOutlined, KeyOutlined, PlusOutlined, SearchOutlined, CheckOutlined, CloseOutlined, ReloadOutlined, DeleteOutlined, CopyOutlined } from "@ant-design/icons";
 
 import { adminApi, type Department, type SysPermission, type SysRole } from "@wlt/shared";
 
@@ -43,6 +43,8 @@ export function RolesPage() {
   const [kw, setKw] = useState("");
   const [roleKw, setRoleKw] = useState("");
   const [creating, setCreating] = useState(false);
+  const [copyTarget, setCopyTarget] = useState<SysRole | null>(null); // 复制为新角色（设计页 40）
+  const [copyForm] = Form.useForm();
   const [form] = Form.useForm();
 
   const load = useCallback(async () => {
@@ -75,6 +77,21 @@ export function RolesPage() {
       void load();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "创建失败");
+    }
+  }
+
+  /** 复制为新角色（设计页 40）：新建角色并把源角色的权限一并复制。 */
+  async function doCopyRole() {
+    if (!copyTarget) return;
+    const v = await copyForm.validateFields();
+    try {
+      const r = await adminApi.createRole({ code: "role" + Date.now(), name: v.name.trim(), description: v.description ?? "" });
+      await adminApi.updateRolePermissions(r.id, copyTarget.permission_ids);
+      message.success(`已复制为新角色：${v.name.trim()}`);
+      setCopyTarget(null);
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "复制失败");
     }
   }
 
@@ -205,6 +222,7 @@ export function RolesPage() {
                     <span style={{ fontWeight: 700, fontSize: 13.5, color: active ? "#3B5BDB" : token.colorText, flex: 1 }}>{r.name}</span>
                     {r.is_builtin === 1 && <Tag style={{ marginInlineEnd: 0 }}>内置</Tag>}
                     {active && <CheckOutlined style={{ color: "#5B7FFF" }} />}
+                      <Button type="text" size="small" icon={<CopyOutlined />} title="复制为新角色" onClick={(e) => { e.stopPropagation(); setCopyTarget(r); copyForm.setFieldsValue({ name: `${r.name}（副本）`, description: r.description ?? "" }); }} />
                     {r.is_builtin !== 1 && (
                       <Popconfirm
                         title={`删除角色「${r.name}」？`}
@@ -339,6 +357,26 @@ export function RolesPage() {
               allowClear
               options={departments.map((d) => ({ label: d.name, value: d.id }))}
             />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 复制为新角色 */}
+      <Modal
+        title={`复制为新角色：${copyTarget?.name ?? ""}`}
+        open={Boolean(copyTarget)}
+        onOk={() => void doCopyRole()}
+        okText="复制"
+        onCancel={() => setCopyTarget(null)}
+        destroyOnHidden
+      >
+        <p style={{ color: "#5B6478", fontSize: 12, marginTop: 0 }}>新角色将复制「{copyTarget?.name}」的全部权限（{copyTarget?.permission_ids.length ?? 0} 项）。</p>
+        <Form form={copyForm} layout="vertical">
+          <Form.Item name="name" label="新角色名称" rules={[{ required: true, message: "请输入名称" }]}>
+            <Input placeholder="如：审计员（副本）" maxLength={50} />
+          </Form.Item>
+          <Form.Item name="description" label="说明">
+            <Input maxLength={255} />
           </Form.Item>
         </Form>
       </Modal>
