@@ -202,7 +202,7 @@ const TITLES: Record<string, string> = {
 };
 
 /** 图标注册表：导航菜单 icon 字段（字符串名）→ 组件；未注册的显示占位。 */
-const ICON_MAP: Record<string, React.ReactNode> = {
+export const ICON_MAP: Record<string, React.ReactNode> = {
   DashboardOutlined: <DashboardOutlined />,
   ShopOutlined: <ShopOutlined />,
   AppstoreOutlined: <AppstoreOutlined />,
