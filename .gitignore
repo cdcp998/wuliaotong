@@ -1,4 +1,4 @@
-# Python
+﻿# Python
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -60,4 +60,5 @@ dsh-usage/
 backend/app/modules/
 
 # 本地草稿（AI 开发阶段临时文件）
+AI开发文档/**/New *.txt
 AI开发文档/New *.txt
