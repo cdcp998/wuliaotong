@@ -20,8 +20,8 @@
 - 私用隐藏触发（连点 15 次锁定私用，非管理员仅见掩护值）、GPS 逆地理编码（OpenStreetMap）、仓管员代申请、审核辅助摘要（规则风险等级 + 原因）
 
 ### OCR / 大模型（AI 赋能）
-- 本地 OCR：PaddleOCR（默认，可自动安装）/ RapidOCR-json 可切换；OCR 文本 **DeepSeek 纠错归一**后入匹配链路
-- 送货单识别入库：视觉模型（SiliconFlow `nex-agi/Nex-N2-Pro`）结构化（名称/物料编码/规格/单位/数量/单价/金额）+ DeepSeek 材料分类 → 人工确认 → 供应商落库（**本地别名归一**：简称/全称互相包含或前缀一致）→ 物料自动匹配/新增 → 带入入库
+- 本地 OCR：PaddleOCR（默认，可自动安装）/ RapidOCR-json 可切换；OCR 文本 **文本模型 纠错归一**后入匹配链路
+- 送货单识别入库：多模态大模型）结构化（名称/物料编码/规格/单位/数量/单价/金额）+ 文本模型 材料分类 → 人工确认 → 供应商落库（**本地别名归一**：简称/全称互相包含或前缀一致）→ 物料自动匹配/新增 → 带入入库
 - 商品拍照识别：本地 OCR → **本地模板匹配** → 视觉模型结构化（品牌/名称/规格）→ 未匹配 AI 分析建议；**模板自动学习**（同一商品识别命中 3 次自动生成模板）
 - 材料分类自动识别（`/ocr/classify`，名称+规格 → 系统分类，入库明细「分类」列可编辑）
 - 材料查重（本地相似规则分组 + 人工标记）、供应商名称归一（本地包含规则）+人工合并、领用审核辅助摘要（规则风险等级）、预警 AI 通知、报表 AI 月报摘要（P9）
@@ -42,7 +42,7 @@
 - 前端：React 19 + TypeScript + Vite + Zustand + Ant Design（电脑端）/ Ant Design Mobile（手机端），npm workspaces monorepo
 - 后端：Python 3.13 + FastAPI + SQLAlchemy 2.x + MySQL 8.0
 - OCR：PaddleOCR（默认）/ RapidOCR-json（可切换，`OCRClient` 抽象）
-- 大模型：SiliconFlow 视觉（送货单/商品识别）、DeepSeek 文本（纠错/分类/摘要/查重/别名）、豆包视觉（兜底）
+- 大模型：视觉（送货单/商品识别）、文本（纠错/分类/摘要/查重/别名）、豆包视觉（兜底）
 
 ## 目录结构
 
@@ -210,7 +210,7 @@ server {
 server { listen 80; server_name 你的域名; return 301 https://$host$request_uri; }
 ```
 
-5. **大模型配置**：登录后进入 系统设置 → OCR 与大模型，填入 SiliconFlow（视觉，模型如 `nex-agi/Nex-N2-Pro`）与 DeepSeek（文本）API Key，保存后「获取模型列表」选择模型
+5. **大模型配置**：登录后进入 系统设置 → OCR 与大模型，填入 视觉（视觉，模型如 `nex-agi/Nex-N2-Pro`）与 文本 API Key，保存后「获取模型列表」选择模型
 6. **验证**：`GET https://域名/api/v1/health` 返回 ok；登录联调；`AI 调用日志`页确认大模型链路正常
 7. **备份**：每日 02:00 自动 mysqldump → gzip（保留 14 份）；也可系统管理手动备份/下载
 
