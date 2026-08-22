@@ -58,6 +58,11 @@ import {
   EnvironmentOutlined,
   AlertOutlined,
   CloudDownloadOutlined,
+  ToolOutlined,
+  ProjectOutlined,
+  UnorderedListOutlined,
+  ReadOutlined,
+  DesktopOutlined,
 } from "@ant-design/icons";
 
 import { authApi, notificationApi, otherEndUrl, useAuthStore, type MenuNode, type NotificationItem } from "@wlt/shared";
@@ -228,6 +233,11 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   EnvironmentOutlined: <EnvironmentOutlined />,
   AlertOutlined: <AlertOutlined />,
   CloudDownloadOutlined: <CloudDownloadOutlined />,
+  ToolOutlined: <ToolOutlined />,
+  ProjectOutlined: <ProjectOutlined />,
+  UnorderedListOutlined: <UnorderedListOutlined />,
+  ReadOutlined: <ReadOutlined />,
+  DesktopOutlined: <DesktopOutlined />,
 };
 
 /** 导航项（动态菜单 / 硬编码 MENU 统一形态）。 */

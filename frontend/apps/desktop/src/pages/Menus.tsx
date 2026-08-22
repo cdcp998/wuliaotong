@@ -14,6 +14,7 @@ const ICON_OPTIONS = [
   "SettingOutlined", "UserOutlined", "SafetyCertificateOutlined", "ApartmentOutlined",
   "HddOutlined", "MenuOutlined",
   "DeploymentUnitOutlined", "EnvironmentOutlined", "AlertOutlined", "CloudDownloadOutlined",
+  "ToolOutlined", "ProjectOutlined", "UnorderedListOutlined", "ReadOutlined", "DesktopOutlined",
 ].map((v) => ({ value: v, label: v }));
 
 /** 已注册的路由（main.tsx 中存在的页面路径；菜单 path 必须指向其一才能导航）。 */
@@ -25,6 +26,7 @@ const ROUTE_OPTIONS = [
   "/requisitions/apply", "/requisitions/query", "/requisitions",
   "/purchase-in", "/purchase-plans", "/stock", "/ocr/delivery", "/ai-suggestions", "/llm-logs",
   "/system/modules", "/cable/map", "/cable/list", "/cable/faults",
+  "/task/board", "/task/list", "/knowledge", "/knowledge/write", "/device/list", "/device/tasks",
 ].map((v) => ({ value: v, label: v }));
 
 /** 拍平菜单树（父级下拉 / 树渲染）。 */

@@ -50,6 +50,15 @@ const WarehousesPage = lazy(() => import("./pages/Warehouses").then((m) => ({ de
 const CableMapPage = lazy(() => import("./modules/cable/CableMap").then((m) => ({ default: m.CableMapPage })));
 const CableListPage = lazy(() => import("./modules/cable/CableList").then((m) => ({ default: m.CableListPage })));
 const CableFaultsPage = lazy(() => import("./modules/cable/CableFaults").then((m) => ({ default: m.CableFaultsPage })));
+// task 模块页面
+const TaskBoardPage = lazy(() => import("./modules/task/TaskBoard").then((m) => ({ default: m.TaskBoardPage })));
+const TaskListPage = lazy(() => import("./modules/task/TaskList").then((m) => ({ default: m.TaskListPage })));
+// knowledge 模块页面
+const KnowledgePage = lazy(() => import("./modules/knowledge/Knowledge").then((m) => ({ default: m.KnowledgePage })));
+const KnowledgeWritePage = lazy(() => import("./modules/knowledge/KnowledgeWrite").then((m) => ({ default: m.KnowledgeWritePage })));
+// device 模块页面
+const DeviceListPage = lazy(() => import("./modules/device/DeviceList").then((m) => ({ default: m.DeviceListPage })));
+const DeviceTasksPage = lazy(() => import("./modules/device/DeviceTasks").then((m) => ({ default: m.DeviceTasksPage })));
 
 /** 路由懒加载的统一 Loading 占位。 */
 function PageLoading() {
@@ -108,6 +117,15 @@ const router = createBrowserRouter(
   { path: "/cable/map", element: withLayout(<RequireModule code="cable"><CableMapPage /></RequireModule>) },
   { path: "/cable/list", element: withLayout(<RequireModule code="cable"><CableListPage /></RequireModule>) },
   { path: "/cable/faults", element: withLayout(<RequireModule code="cable"><CableFaultsPage /></RequireModule>) },
+  // task 模块
+  { path: "/task/board", element: withLayout(<RequireModule code="task"><TaskBoardPage /></RequireModule>) },
+  { path: "/task/list", element: withLayout(<RequireModule code="task"><TaskListPage /></RequireModule>) },
+  // knowledge 模块
+  { path: "/knowledge", element: withLayout(<RequireModule code="knowledge"><KnowledgePage /></RequireModule>) },
+  { path: "/knowledge/write", element: withLayout(<RequireModule code="knowledge"><KnowledgeWritePage /></RequireModule>) },
+  // device 模块
+  { path: "/device/list", element: withLayout(<RequireModule code="device"><DeviceListPage /></RequireModule>) },
+  { path: "/device/tasks", element: withLayout(<RequireModule code="device"><DeviceTasksPage /></RequireModule>) },
   { path: "/system/logs", element: withLayout(<LogsPage />) },
   { path: "/system/backups", element: withLayout(<BackupsPage />) },
   { path: "/system/register-applies", element: withLayout(<RegisterAppliesPage />) },
