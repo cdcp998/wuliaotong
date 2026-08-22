@@ -73,6 +73,22 @@ export function MinePage() {
         </div>
       </div>
 
+      {/* 快捷入口（设计页 M6：我的申请/通知/设置） */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, margin: "0 12px 12px", padding: 10, boxShadow: "0 6px 20px rgba(30,36,51,.06)" }}>
+        <div onClick={() => navigate("/requisitions/list")} style={{ textAlign: "center", padding: "8px 0", cursor: "pointer" }}>
+          <div style={{ fontSize: 20 }}>📋</div>
+          <div style={{ fontSize: 11.5, color: "#1E2433", marginTop: 4 }}>我的申请</div>
+        </div>
+        <div onClick={() => navigate("/notifications")} style={{ textAlign: "center", padding: "8px 0", cursor: "pointer" }}>
+          <div style={{ fontSize: 20 }}>🔔</div>
+          <div style={{ fontSize: 11.5, color: "#1E2433", marginTop: 4 }}>通知</div>
+        </div>
+        <div onClick={() => setPwdVisible(true)} style={{ textAlign: "center", padding: "8px 0", cursor: "pointer" }}>
+          <div style={{ fontSize: 20 }}>⚙️</div>
+          <div style={{ fontSize: 11.5, color: "#1E2433", marginTop: 4 }}>设置</div>
+        </div>
+      </div>
+
       <div style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, margin: "0 12px 12px", overflow: "hidden", boxShadow: "0 6px 20px rgba(30,36,51,.06)" }}>
         <List style={{ "--border-top": "0" } as React.CSSProperties}>
           <List.Item onClick={() => setPwdVisible(true)}>
