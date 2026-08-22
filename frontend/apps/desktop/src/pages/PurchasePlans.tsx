@@ -1,6 +1,6 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dayjs from "dayjs";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { App, Button, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
 import { InboxOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -122,6 +122,25 @@ export function PurchasePlansPage() {
     setRows((rs) => [...rs, { key: nextKey, product_id: undefined, product_name: "", planned_qty: 1, unit_name: "", remark: "" }]);
     setNextKey((k) => k + 1);
   }
+
+  // AI 建议「一键转采购计划」带入：?product_id=xxx 自动加一条明细行（设计页 30 转计划闭环）
+  const [params] = useSearchParams();
+  useEffect(() => {
+    const pid = Number(params.get("product_id"));
+    if (!pid) return;
+    let alive = true;
+    baseApi
+      .product(pid)
+      .then((p) => {
+        if (!alive) return;
+        setRows((rs) => (rs.some((r) => r.product_id === p.id) ? rs : [...rs, { key: Date.now(), product_id: p.id, product_name: p.name, planned_qty: 1, unit_name: p.unit_name || "", remark: "" }]));
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   function setRow(key: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));

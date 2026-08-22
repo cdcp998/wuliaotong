@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import { Alert, App, Button, Divider, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag } from "antd";
 import { EditOutlined, PlusOutlined, RobotOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -30,6 +31,7 @@ function catOptions(nodes: CategoryNode[]): { value: number; label: string }[] {
 /** AI 建议处理（电脑端）：未匹配商品 → 视觉识别建议 → 人工确认新增/忽略。 */
 export function AiSuggestionsPage() {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const [list, setList] = useState<AiSuggestion[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -123,6 +125,17 @@ export function AiSuggestionsPage() {
       void load();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "新增失败");
+    }
+  }
+
+  /** 一键转采购计划（设计页 30）：先用建议数据确认新增商品，再跳转采购计划页带入该商品。 */
+  async function toPlan(sug: AiSuggestion) {
+    try {
+      const res = await aiApi.accept(sug.id, { name: sug.product_name });
+      message.success("已新增商品，请在采购计划中确认数量/供应商");
+      navigate(`/purchase-plans?product_id=${res.product_id}`);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "转计划失败");
     }
   }
 
@@ -255,6 +268,7 @@ export function AiSuggestionsPage() {
               </div>
               <div style={{ display: "flex", gap: 8, borderTop: `1px solid #EFF3FC`, paddingTop: 12 }}>
                 <Button size="small" type="primary" style={{ flex: 1 }} onClick={() => openAccept(selected)}>确认新增</Button>
+                <Button size="small" style={{ flex: 1 }} onClick={() => void toPlan(selected)}>一键转采购计划</Button>
                 <Popconfirm title="确认忽略该建议？" onConfirm={async () => { try { await aiApi.ignore(selected.id); message.success("已忽略"); setSelected(null); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
                   <Button size="small" danger style={{ flex: 1 }}>忽略</Button>
                 </Popconfirm>
