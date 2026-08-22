@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Input, List, NavBar, Popup, Selector, Tag, Toast } from "antd-mobile";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -60,6 +60,8 @@ export function OutboundPage() {
       if (!r.location) return Toast.show(`请选择 ${r.product.name} 的库位`);
       if (!r.qty || Number(r.qty) <= 0) return Toast.show(`请填写 ${r.product.name} 的数量`);
     }
+    // 报损需为每条明细附现场照片（设计页 M17）
+    if (ioType === "报损" && rows.some((r) => !r.photoFileId)) return Toast.show("报损需为每条材料附现场照片");
     setSubmitting(true);
     try {
       const items = rows.map((r) => ({
