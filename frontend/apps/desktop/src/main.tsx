@@ -192,7 +192,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             rowHoverBg: "#F6F8FE",
             cellPaddingBlock: 10,
           },
-          Modal: { borderRadiusLG: 16 },
+          Modal: { borderRadiusLG: 20 },
           Drawer: { colorBgElevated: "#FFFFFF" },
           Menu: {
             itemBorderRadius: 10,

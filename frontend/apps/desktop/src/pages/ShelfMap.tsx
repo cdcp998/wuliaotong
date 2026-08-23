@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Button, Modal, Select, Tag } from "antd";
 
@@ -158,5 +158,5 @@ export function ShelfMapPage() {
   );
 }
 
-const thStyle: React.CSSProperties = { padding: "6px 8px", textAlign: "left", borderBottom: "1px solid #f0f0f0" };
-const tdStyle: React.CSSProperties = { padding: "6px 8px", borderBottom: "1px solid #fafafa" };
+const thStyle: React.CSSProperties = { padding: "6px 8px", textAlign: "left", borderBottom: "1px solid #EFF3FC", background: "#F6F8FE" };
+const tdStyle: React.CSSProperties = { padding: "6px 8px", borderBottom: "1px solid #EFF3FC" };

@@ -420,7 +420,7 @@ export function PurchasePlansPage() {
               },
             ]}
           />
-          <div style={{ padding: "6px 12px", borderTop: "1px solid #f0f0f0", display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ padding: "6px 12px", borderTop: "1px solid #EFF3FC", display: "flex", alignItems: "center", gap: 8 }}>
             <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addRow}>添加明细</Button>
             <span style={{ fontSize: 12, color: "#5B6478" }}>实收数量在入库时按实际填写，可分批多次入库</span>
           </div>

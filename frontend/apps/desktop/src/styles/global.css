@@ -372,3 +372,107 @@ button:focus-visible,
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* ==========================================================================
+ * 11. 全组件强制统一层（重做：消灭 antd 默认旧样式，全站统一浅色玻璃/大圆角）
+ * 策略：所有 antd 组件在此统一改写为设计规范外观；页面内联样式只做布局，
+ * 不再出现「部分新部分旧」的混排。仅在覆盖第三方默认样式时使用 !important。
+ * ========================================================================== */
+
+/* --- 标签：全部统一胶囊（999px + 12px/600），颜色由语义色决定 --- */
+.ant-layout .ant-tag {
+  border-radius: 999px !important;
+  padding-inline: 9px;
+  font-weight: 600;
+  line-height: 20px;
+  border-color: transparent;
+}
+
+/* --- 弹窗：20px 圆角 + 深阴影 + 标题行 --- */
+.ant-modal .ant-modal-content {
+  border-radius: 20px !important;
+  box-shadow: 0 16px 48px rgba(30, 36, 51, 0.18) !important;
+  padding: 20px 24px !important;
+}
+
+/* --- 抽屉：大圆角 --- */
+.ant-drawer .ant-drawer-content {
+  border-radius: 16px 0 0 16px;
+}
+
+/* --- Tabs：胶囊激活（浅底品牌） --- */
+.ant-tabs .ant-tabs-tab {
+  border-radius: 999px !important;
+  padding: 5px 14px !important;
+  margin-inline: 2px !important;
+}
+.ant-tabs .ant-tabs-tab-active {
+  background: #eaefff !important;
+}
+.ant-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #3b5bdb !important;
+}
+.ant-tabs .ant-tabs-ink-bar {
+  display: none;
+}
+
+/* --- 分页：圆角 --- */
+.ant-pagination .ant-pagination-item,
+.ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+.ant-pagination .ant-pagination-next .ant-pagination-item-link {
+  border-radius: 8px !important;
+}
+
+/* --- 表格容器：圆角 + 描边 --- */
+.ant-layout-content .ant-table-wrapper {
+  border-radius: 12px;
+}
+.ant-layout-content .ant-table-wrapper .ant-table {
+  border-radius: 12px;
+}
+
+/* --- 卡片头：浅底品牌细描边，随卡片圆角 --- */
+.ant-layout-content .ant-card .ant-card-head {
+  border-radius: 16px 16px 0 0;
+  background: #f6f8fe;
+}
+
+/* --- 输入/选择/数字输入：统一 10px 圆角与浅描边 --- */
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select-selector,
+.ant-picker {
+  border-radius: 10px !important;
+  border-color: #e4eaf6 !important;
+}
+.ant-input:focus,
+.ant-input-affix-wrapper-focused,
+.ant-input-number-focused,
+.ant-picker-focused {
+  border-color: #5b7fff !important;
+  box-shadow: 0 0 0 3px rgba(91, 127, 255, 0.12) !important;
+}
+
+/* --- 按钮：统一 10px 圆角（主按钮品牌渐隐，无直角） --- */
+.ant-btn {
+  border-radius: 10px !important;
+}
+.ant-btn-primary {
+  background: linear-gradient(135deg, #5b7fff 0%, #4f6df5 100%) !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 12px rgba(91, 127, 255, 0.3) !important;
+}
+
+/* --- 空状态 / 描述 / 分段 --- */
+.ant-empty .ant-empty-description {
+  color: #8a93a8;
+}
+.ant-segmented {
+  border-radius: 10px !important;
+}
+
+/* --- 弹窗内表单：字段间距统一 --- */
+.ant-modal .ant-form-item {
+  margin-bottom: 14px;
+}

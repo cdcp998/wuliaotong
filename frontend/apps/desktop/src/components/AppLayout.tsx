@@ -541,10 +541,15 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
   });
 
   useEffect(() => {
+    // 折叠态（图标栏）：清空展开组，避免当前分组子菜单以浮层弹出盖住内容
+    if (collapsed) {
+      setOpenKeys([]);
+      return;
+    }
     if (window.innerWidth <= 992 && currentGroupKey) {
       setOpenKeys((prev) => (prev.includes(currentGroupKey) ? prev : [...prev, currentGroupKey]));
     }
-  }, [currentGroupKey]);
+  }, [currentGroupKey, collapsed]);
 
   /** 平板/窄窗（≤992px）：跳转后自动收起侧栏，避免展开态遮住目标页面。 */
   function collapseOnMobile() {
