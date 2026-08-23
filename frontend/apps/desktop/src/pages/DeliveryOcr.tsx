@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { App, Alert, Button, Drawer, Input, InputNumber, Modal, Space, Spin, Tag, Upload } from "antd";
 import { CameraOutlined, CheckCircleFilled, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -411,7 +411,7 @@ export function DeliveryOcrPage() {
 
       {/* 原始单据参考：图片（带可用标记，点击放大）+ OCR 原文（整理） */}
       {(uploadUrl || lines.length > 0) && (
-        <div style={{ margin: "16px 0 12px", maxWidth: 780, border: "1px solid #E4EAF6", borderRadius: 8, padding: 12, background: "#fff" }}>
+        <div style={{ margin: "16px 0 12px", maxWidth: 780, border: "1px solid #E4EAF6", borderRadius: 12, padding: 12, background: "#fff" }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>原始单据参考</div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <div>

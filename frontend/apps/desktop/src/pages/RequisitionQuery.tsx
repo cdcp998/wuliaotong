@@ -168,7 +168,7 @@ export function RequisitionQueryPage() {
             </div>
 
             {detail.is_private === 1 && (
-              <div style={{ background: "#fff1f0", border: "1px solid #ffccc7", borderRadius: 8, padding: "10px 12px", marginTop: 10, fontSize: 13 }}>
+              <div style={{ background: "#fff1f0", border: "1px solid #ffccc7", borderRadius: 12, padding: "10px 12px", marginTop: 10, fontSize: 13 }}>
                 <b style={{ color: "#cf1322", display: "inline-flex", alignItems: "center", gap: 4 }}>
                   <ExclamationCircleFilled /> 私用申请
                 </b>

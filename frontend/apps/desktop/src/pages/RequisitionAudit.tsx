@@ -213,7 +213,7 @@ export function RequisitionAuditPage() {
       >
         {detail && (
           <div>
-            <div style={{ border: "1px solid #E4EAF6", borderRadius: 8, padding: 12, marginBottom: 12, background: "#F8FAFF" }}>
+            <div style={{ border: "1px solid #E4EAF6", borderRadius: 12, padding: 12, marginBottom: 12, background: "#F8FAFF" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <b>AI 审核摘要</b>
                 {aiLoading && <Tag>生成中…</Tag>}
