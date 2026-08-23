@@ -936,7 +936,7 @@ INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 -- 导航菜单种子（id 固定；perm_code 逗号分隔=任一命中可见；后续可在「系统管理 → 导航管理」动态调整）
 INSERT INTO sys_menu (id, parent_id, name, path, icon, perm_code, visible, sort) VALUES
   (1, 0, '工作台',   '', 'DashboardOutlined', '', 1, 10),
-  (2, 1, '统计面板', '/dashboard', 'DashboardOutlined', 'report:view', 1, 10),
+  (2, 1, '经营看板', '/dashboard', 'DashboardOutlined', 'report:view', 1, 10),
   (3, 0, '基础资料', '', 'ShopOutlined', '', 1, 20),
   (4, 3, '物料数据管理', '/materials-data', 'AppstoreOutlined', 'base:product,base:category', 1, 10),
   (5, 3, '删除审核', '/delete-reviews', 'AuditOutlined', 'base:product,base:category', 1, 20),

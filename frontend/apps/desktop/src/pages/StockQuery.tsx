@@ -192,7 +192,7 @@ export function StockQueryPage() {
   );
 
   return (
-    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
+    <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 18 }}>
         <div>
           <h2 style={{ margin: 0 }}>库存查询</h2>

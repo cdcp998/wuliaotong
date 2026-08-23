@@ -13,6 +13,7 @@ html {
 }
 
 body {
+  margin: 0;
   font-family:
     -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei",
     "Helvetica Neue", Arial, sans-serif;
@@ -212,9 +213,19 @@ button:focus-visible,
 
 /* ---------- 6. 页面进场动画（路由切换）：内容区淡入 + 轻微上移 ----------
  * .wlt-page 包裹 AppLayout 内容区（key=location.pathname，路由切换即重挂载），
- * 覆盖全部桌面业务页；backwards fill 保证进入瞬间从透明开始，不与页内过渡冲突。 */
+ * 覆盖全部桌面业务页；backwards fill 保证进入瞬间从透明开始，不与页内过渡冲突。
+ * 同时作为内容区弹性列：页面可声明 .wlt-fill 占满剩余高度（地图全工作区等）。 */
 .wlt-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   animation: wlt-page-in 0.34s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+.wlt-page > .wlt-fill {
+  flex: 1;
+  min-height: 0;
 }
 
 @keyframes wlt-page-in {
@@ -330,10 +341,20 @@ button:focus-visible,
   box-shadow: 0 6px 24px rgba(30, 36, 51, 0.06);
 }
 
-/* 侧边导航（设计规范 §3.1 玻璃侧栏 + §2.3 圆角菜单项）：圆角项 + 品牌浅底选中 + 柔和悬浮 */
+/* 侧边导航（设计规范 §3.1 白底侧栏 + 分组标题 + 圆角菜单项）：分组标题 11px 弱文本、
+ * 圆角项 + 品牌浅底选中 + 柔和悬浮；菜单区独立滚动（分组多时可上下拖动）。
+ * Sider 内部包装层改为弹性列，Menu flex:1 才能在超长时滚动而不是被裁切。 */
+.ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 .ant-layout-sider .ant-menu-light.ant-menu-inline {
   border-inline-end: none;
   padding: 4px 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-item,
 .ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-submenu-title {
@@ -341,6 +362,15 @@ button:focus-visible,
   margin-inline: 8px;
   border-radius: 10px;
   transition: background 0.2s ease, color 0.2s ease;
+}
+.ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-submenu-title {
+  color: #8a93a8;
+  font-size: 11px;
+  font-weight: 600;
+}
+.ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-item {
+  font-size: 12.5px;
+  font-weight: 500;
 }
 .ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-item-selected {
   background: #eaefff;
@@ -352,6 +382,19 @@ button:focus-visible,
 }
 .ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-submenu-selected > .ant-menu-submenu-title {
   color: #3b5bdb;
+}
+
+/* 导航管理页菜单树（设计页 52）：节点行浅底圆角 */
+.wlt-menu-tree .ant-tree-node-content-wrapper {
+  background: #f6f8fe;
+  border-radius: 10px;
+  padding: 8px 12px !important;
+}
+.wlt-menu-tree .ant-tree-node-content-wrapper:hover {
+  background: #eaefff;
+}
+.wlt-menu-tree .ant-tree-treenode {
+  padding-bottom: 6px;
 }
 
 .ant-layout-content .ant-card .ant-card-head {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, AutoComplete, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Tag, theme, Tree } from "antd";
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, MenuOutlined, CheckOutlined, CloseOutlined, AppstoreOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, PlusOutlined, MenuOutlined, CheckOutlined, CloseOutlined, AppstoreOutlined } from "@ant-design/icons";
 import type { DataNode } from "antd/es/tree";
 
 import { adminApi, menuApi, useAuthStore, type MenuNode } from "@wlt/shared";
@@ -111,12 +111,14 @@ export function MenusPage() {
       title: (
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", width: "100%" }}>
           <span style={{ fontWeight: 600 }}>{n.name}</span>
-          {n.path && <Tag style={{ fontSize: 11, marginInlineEnd: 0, color: "#3B5BDB", background: "#EAEFFF", borderColor: "transparent", borderRadius: 6 }}>{n.path}</Tag>}
-          {n.perm_code ? <Tag style={{ fontSize: 11, marginInlineEnd: 0, borderRadius: 6 }}>{n.perm_code}</Tag> : <Tag style={{ fontSize: 11, marginInlineEnd: 0, borderRadius: 6 }} color="green">公开</Tag>}
-          {n.visible === 0 && <Tag color="red" style={{ fontSize: 11, marginInlineEnd: 0 }}>已隐藏</Tag>}
+          {n.path && <Tag style={{ fontSize: 11, marginInlineEnd: 0, color: "#3B5BDB", background: "#EAEFFF", borderColor: "transparent", borderRadius: 999 }}>{n.path}</Tag>}
+          {n.perm_code
+            ? <Tag style={{ fontSize: 11, marginInlineEnd: 0, color: "#5B6478", background: "#EFF3FC", borderColor: "transparent", borderRadius: 999 }}>{n.perm_code}</Tag>
+            : <Tag style={{ fontSize: 11, marginInlineEnd: 0, color: "#15803D", background: "#E8F9EF", borderColor: "transparent", borderRadius: 999 }}>公开</Tag>}
+          {n.visible === 0 && <Tag style={{ fontSize: 11, marginInlineEnd: 0, color: "#DC2626", background: "#FDEBEC", borderColor: "transparent", borderRadius: 999 }}>已隐藏</Tag>}
           <span style={{ marginLeft: "auto", opacity: 0.7 }}>
-            <Button type="text" size="small" icon={<PlusOutlined />} title="新建子菜单" onClick={(e) => { e.stopPropagation(); openCreate(n.id); }} />
-            <Button type="text" size="small" icon={<EditOutlined />} title="编辑" onClick={(e) => { e.stopPropagation(); openEdit(n); }} />
+            <Button type="text" size="small" icon={<PlusOutlined style={{ color: "#5B7FFF" }} />} title="新建子菜单" onClick={(e) => { e.stopPropagation(); openCreate(n.id); }} />
+            <Button type="text" size="small" icon={<EditOutlined style={{ color: "#5B7FFF" }} />} title="编辑" onClick={(e) => { e.stopPropagation(); openEdit(n); }} />
             <Popconfirm title={`删除菜单「${n.name}」？`} description="有子菜单会被系统拒绝" onConfirm={() => void remove(n)}>
               <Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={(e) => e.stopPropagation()} />
             </Popconfirm>
@@ -231,30 +233,30 @@ export function MenusPage() {
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
+    <div style={{ padding: 24 }}>
       {/* 页头 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>导航管理</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
-            动态控制左侧导航：多级菜单树 · 名称/图标/路由 · 显示隐藏 · 绑定权限码（逗号分隔=任一命中可见，空=公开）；中栏实时预览当前账号可见导航（无权限/已隐藏项灰化）
+            左侧菜单树 · 右侧侧边栏预览 · 编辑以弹窗打开（新建/编辑/删除均弹窗确认）
           </p>
         </div>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate(0)}>新建顶级分组</Button>
         </Space>
       </div>
 
       <div style={{ display: "flex", gap: 16, alignItems: "stretch", flexWrap: "wrap" }}>
         {/* 左：菜单树 */}
-        <div className="wlt-glass" style={{ flex: 1, minWidth: 340, padding: 16 }}>
+        <div className="wlt-glass" style={{ flex: 1, minWidth: 360, padding: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
             <MenuOutlined style={{ color: token.colorPrimary }} />
-            <span style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>菜单树（点击行可选中）</span>
-            <Tag style={{ marginInlineEnd: 0, borderRadius: 999 }}>{flat.length} 节点</Tag>
+            <span style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>菜单树（{flat.length} 节点）</span>
           </div>
           <Tree
+            key={String(tree.length)}
+            className="wlt-menu-tree"
             showIcon
             blockNode
             showLine
@@ -265,27 +267,26 @@ export function MenusPage() {
           />
           {!tree.length && !loading && <div style={{ color: token.colorTextTertiary, textAlign: "center", padding: 32 }}>暂无菜单，点击「新建顶级分组」开始</div>}
           <div style={{ fontSize: 11, color: token.colorTextTertiary, borderTop: `1px solid ${token.colorBorder}`, paddingTop: 10, marginTop: 10 }}>
-            提示：点击行内 + / ✎ / 🗑 快捷操作；同级排序以「排序」数值控制
+            提示：行内 ＋ / ✎ / 🗑 快捷操作；同级排序以「排序」数值控制
           </div>
         </div>
 
-        {/* 中：侧边栏实时预览 */}
-        <div className="wlt-glass" style={{ width: 268, padding: 16, flexShrink: 0, display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>侧边栏实时预览</span>
-            <Tag color="blue" style={{ marginInlineEnd: 0, borderRadius: 999 }}>{isSuper ? "管理员" : "当前账号"}</Tag>
+        {/* 右：侧边栏实时预览（设计页 52：250px） */}
+        <div className="wlt-glass" style={{ width: 250, padding: 14, flexShrink: 0, display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>侧边栏预览</span>
           </div>
           <div
             style={{
               flex: 1,
-              background: "#F8FAFF",
+              background: "#F6F8FE",
               border: `1px solid #E4EAF6`,
               borderRadius: 12,
-              padding: "8px 10px",
+              padding: 10,
               overflow: "auto",
               display: "flex",
               flexDirection: "column",
-              gap: 4,
+              gap: 2,
               minHeight: 380,
             }}
           >
@@ -295,30 +296,9 @@ export function MenusPage() {
             </div>
             {tree.length ? renderPreview(tree) : <div style={{ textAlign: "center", color: token.colorTextTertiary, padding: 32, fontSize: 12 }}>暂无菜单</div>}
           </div>
-          <div style={{ fontSize: 11, color: token.colorTextTertiary, marginTop: 10, lineHeight: 1.6 }}>
-            预览按当前账号权限实时渲染；灰色=无对应权限 或 已隐藏，保存后真实侧栏与此一致
+          <div style={{ fontSize: 10, color: token.colorTextTertiary, marginTop: 8, lineHeight: 1.6 }}>
+            灰色 = 无权限 或 已隐藏（按角色过滤后不显示），保存后真实侧栏与此一致
           </div>
-        </div>
-
-        {/* 右：提示卡（编辑改为弹窗） */}
-        <div className="wlt-glass" style={{ width: 260, padding: 16, flexShrink: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <EditOutlined style={{ color: token.colorPrimary }} />
-            <span style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>编辑菜单</span>
-          </div>
-          {!open ? (
-            <div style={{ textAlign: "center", padding: "32px 12px", color: token.colorTextTertiary, display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
-              <MenuOutlined style={{ fontSize: 34, color: "#CBD6EC" }} />
-              <div style={{ fontWeight: 600 }}>点「+ / ✎」或下方按钮打开编辑弹窗</div>
-              <div style={{ fontSize: 12, lineHeight: 1.6 }}>表单字段：上级 → 名称 → 路由 → 图标 → 权限码 → 显示与排序 → 备注</div>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate(0)}>新建顶级分组</Button>
-            </div>
-          ) : (
-            <div style={{ fontSize: 12.5, color: token.colorTextSecondary, lineHeight: 1.7 }}>
-              正在编辑：<b style={{ color: token.colorText }}>{editing?.name ?? (parentPreset !== 0 ? "新建子菜单" : "新建顶级分组")}</b>
-              <br />请在弹窗中完成字段后保存。
-            </div>
-          )}
         </div>
       </div>
 
@@ -332,7 +312,7 @@ export function MenusPage() {
         onCancel={() => setOpen(false)}
         okButtonProps={{ icon: <CheckOutlined /> }}
         cancelButtonProps={{ icon: <CloseOutlined /> }}
-        width={520}
+        width={440}
         destroyOnHidden
       >
         <Form form={form} layout="vertical" style={{ marginTop: 4 }}>

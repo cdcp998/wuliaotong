@@ -1,11 +1,11 @@
-﻿/** map 模块：Leaflet 地图基础组件（方案 §5.2/§7.1 MapView；cable 模块复用）。
+/** map 模块：Leaflet 地图基础组件（方案 §5.2/§7.1 MapView；cable 模块复用）。
  *
  * - 底图：后端瓦片代理 /map/tile/{source}/{z}/{x}/{y}（缓存优先，未命中抓在线源）
  * - 叠加层：线缆 GeoJSON / 故障点 / 标记点 / 路径（导航）
  * - 坐标：数据与接口一律 WGS84，仅本组件按源 coordinate_space 做显示层转换（共享 geo.ts）
  */
 import { useEffect, useMemo } from "react";
-import { GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents, ZoomControl } from "react-leaflet";
+import { GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Empty } from "antd";
@@ -44,6 +44,8 @@ interface MapViewProps {
   height?: number | string;
   /** 选取模式（地图点击取点提示） */
   picking?: string;
+  /** 地图实例就绪回调（父组件渲染自定义浮层控件：缩放/指北等）；卸载时回调 null */
+  onMapReady?: (map: L.Map | null) => void;
 }
 
 /** 未知图标修复：Leaflet 默认 Marker 图标在打包器下 404。 */
@@ -93,6 +95,16 @@ function ClickCatcher({ onPick, space }: { onPick?: (lat: number, lng: number) =
   return null;
 }
 
+/** 把 Leaflet map 实例回传给父组件（自定义浮层缩放/指北控件用）。 */
+function MapHandle({ onMapReady }: { onMapReady?: (map: L.Map | null) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    onMapReady?.(map);
+    return () => onMapReady?.(null);
+  }, [map, onMapReady]);
+  return null;
+}
+
 function FitCables({ cables, previewPath }: { cables: CableItem[]; previewPath?: LatLng[] | null }) {
   const map = useMap();
   useEffect(() => {
@@ -114,17 +126,6 @@ function BaseTile({ sources, sourceKey }: { sources: Record<string, MapSourceInf
   return <TileLayer key={key} url={url} maxZoom={19} attribution="© 卫星影像" />;
 }
 
-/** 右下角信息条：当前图源名称（attribution 上方）。 */
-function SourceInfoBadge({ sourceName }: { sourceName: string }) {
-  return (
-    <div style={{ position: "absolute", right: 50, bottom: 16, zIndex: 1000, pointerEvents: "none" }}>
-      <span style={{ background: "rgba(255,255,255,.85)", padding: "2px 8px", borderRadius: 4, fontSize: 11, color: "#555", boxShadow: "0 1px 4px rgba(0,0,0,.12)" }}>
-        图源：{sourceName}
-      </span>
-    </div>
-  );
-}
-
 export function MapView({
   sources = {},
   sourceKey,
@@ -137,11 +138,9 @@ export function MapView({
   zoom = 12,
   height = "100%",
   picking,
+  onMapReady,
 }: MapViewProps) {
   const space = (sourceKey && sources[sourceKey]?.coordinate_space) || (Object.values(sources).find((s) => s.enabled)?.coordinate_space) || "wgs84";
-  // 当前底图源（与 BaseTile 选择逻辑一致）：源名显示在右下角 attribution 上方
-  const activeKey = sourceKey && sources[sourceKey]?.enabled ? sourceKey : Object.keys(sources).find((k) => sources[k]?.enabled);
-  const sourceName = activeKey ? (sources[activeKey]?.name ?? activeKey) : "卫星影像";
 
   const cableGeojson = useMemo(() => {
     const feats = overlays.cables
@@ -187,11 +186,10 @@ export function MapView({
         zoomControl={false}
         style={{ height: "100%", width: "100%" }}
       >
-        <ZoomControl position="bottomright" />
+        <MapHandle onMapReady={onMapReady} />
         <BaseTile sources={sources} sourceKey={sourceKey} />
         <ClickCatcher onPick={onPick} space={space} />
         <FitCables cables={overlays.cables} previewPath={previewPath} />
-        <SourceInfoBadge sourceName={sourceName} />
         {cableGeojson.features.length > 0 && (
           <GeoJSON
             key={JSON.stringify(cableGeojson.features.map((f) => f.properties?.code))}

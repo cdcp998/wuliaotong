@@ -1,4 +1,4 @@
-﻿/** map 模块：地图缓存管理（/cable/cache，map:cache）+ 图源管理（map:config 编辑/新增/删除，查看脱敏）。 */
+/** map 模块：地图缓存管理（/cable/cache，map:cache）+ 图源管理（map:config 编辑/新增/删除，查看脱敏）。 */
 import { useCallback, useEffect, useState } from "react";
 import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Progress, Select, Space, Table, Tag, Typography } from "antd";
 import { CaretRightOutlined, EnvironmentOutlined, PauseOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
@@ -253,7 +253,7 @@ export function MapCachePage() {
   const defaultKey = Object.keys(sources).find((k) => sources[k]?.enabled);
 
   return (
-    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
+    <div style={{ padding: 24 }}>
       {/* 页头 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>

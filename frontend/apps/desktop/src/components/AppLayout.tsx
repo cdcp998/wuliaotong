@@ -549,7 +549,17 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
     if (window.innerWidth <= 992 && currentGroupKey) {
       setOpenKeys((prev) => (prev.includes(currentGroupKey) ? prev : [...prev, currentGroupKey]));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentGroupKey, collapsed]);
+
+  // 宽屏：动态菜单加载完成后补全新分组 key（默认全部展开，与设计稿「分组标题+扁平项」一致）；
+  // 用户手动点「全部收缩」后不再强制展开
+  useEffect(() => {
+    if (window.innerWidth > 992 && !collapsed) {
+      setOpenKeys(menuItems.map((i) => String(i?.key)).filter(Boolean));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuItems]);
 
   /** 平板/窄窗（≤992px）：跳转后自动收起侧栏，避免展开态遮住目标页面。 */
   function collapseOnMobile() {
@@ -573,9 +583,9 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
         width={232}
         collapsedWidth={64}
         theme="light"
-        style={{ height: "100dvh", overflow: "hidden", borderRight: `1px solid #E4EAF6`, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", boxShadow: "2px 0 12px rgba(30,36,51,.04)" }}
+        style={{ height: "100dvh", overflow: "hidden", borderRight: `1px solid #E4EAF6`, background: "#FFFFFF", display: "flex", flexDirection: "column" }}
       >
-        <div style={{ height: 60, display: "flex", alignItems: "center", gap: 10, padding: "0 16px" }}>
+        <div style={{ height: 60, display: "flex", alignItems: "center", gap: 10, padding: "0 14px" }}>
           <div
             style={{
               width: 34,
@@ -602,7 +612,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
           )}
         </div>
         {!collapsed && (
-          <div style={{ padding: "4px 12px 8px" }}>
+          <div style={{ padding: "0 12px 6px", flexShrink: 0 }}>
             <AutoComplete
               style={{ width: "100%" }}
               value={navKw}
@@ -619,8 +629,9 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
             <Button
               type="text"
               block
+              size="small"
               icon={allExpanded ? <MenuFoldOutlined /> : <MenuUnfoldOutlined />}
-              style={{ marginTop: 8, justifyContent: "flex-start", paddingLeft: 12, color: token.colorTextSecondary }}
+              style={{ marginTop: 6, justifyContent: "flex-start", paddingLeft: 12, color: token.colorTextSecondary }}
               onClick={toggleAllGroups}
             >
               {allExpanded ? "全部收缩" : "全部展开"}
@@ -639,7 +650,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
             // 点击侧边导航：无论是否同一页面都回到顶端
             scrollContentTop();
           }}
-          style={{ borderInlineEnd: "none", padding: "8px 0" }}
+          style={{ borderInlineEnd: "none", padding: "8px 0", flex: 1, minHeight: 0, overflowY: "auto" }}
         />
       </Sider>
       <Layout style={{ height: "100dvh", overflow: "hidden" }}>
@@ -647,24 +658,27 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
           style={{
             height: 60,
             flexShrink: 0,
-            padding: "0 20px",
-            background: "rgba(255,255,255,0.92)",
-            backdropFilter: "blur(8px)",
-            borderBottom: `1px solid ${token.colorBorder}`,
+            padding: "0 24px",
+            background: "#FFFFFF",
+            borderBottom: `1px solid #E4EAF6`,
             display: "flex",
             alignItems: "center",
-            gap: 16,
+            gap: 12,
             position: "sticky",
             top: 0,
             zIndex: 10,
           }}
         >
-          <Button type="text" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed(!collapsed)} />
+          <Button
+            style={{ width: 34, height: 34, padding: 0, background: "#FFFFFF", border: `1px solid #E4EAF6`, borderRadius: 10, color: token.colorTextSecondary }}
+            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setCollapsed(!collapsed)}
+          />
           {/* 顶栏面包屑：当前页面名（页面内 h2 为视觉主标题，避免两处大标题重复） */}
-          <div style={{ fontSize: 14, whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: 13, whiteSpace: "nowrap" }}>
             <span style={{ color: token.colorTextTertiary }}>物料通</span>
-            <span style={{ margin: "0 8px", color: token.colorTextQuaternary }}>/</span>
-            <span style={{ color: token.colorText, fontWeight: 500 }}>{navLeaves.find((l) => l.path === selectedKey)?.label ?? TITLES[selectedKey] ?? "工作台"}</span>
+            <span style={{ margin: "0 8px", color: "#CBD6EC" }}>/</span>
+            <span style={{ color: "#1E2433", fontWeight: 600 }}>{navLeaves.find((l) => l.path === selectedKey)?.label ?? TITLES[selectedKey] ?? "工作台"}</span>
           </div>
           <Input.Search
             placeholder="搜索材料 / 单号 / 条码…"
@@ -675,11 +689,15 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
               navigate(`/stock?keyword=${encodeURIComponent(v)}`);
               collapseOnMobile();
             }}
-            style={{ width: 260, marginLeft: 8 }}
+            style={{ width: 260, marginLeft: 8, background: "#FFFFFF", borderColor: "#CBD6EC" }}
           />
           <div style={{ flex: 1 }} />
           <Badge count={unread} size="small">
-            <Button type="text" icon={<BellOutlined style={{ fontSize: 17 }} />} onClick={() => setNoticeOpen(true)} />
+            <Button
+              style={{ width: 34, height: 34, padding: 0, background: "#FFFFFF", border: `1px solid #E4EAF6`, borderRadius: 10, color: token.colorTextSecondary }}
+              icon={<BellOutlined style={{ fontSize: 16 }} />}
+              onClick={() => setNoticeOpen(true)}
+            />
           </Badge>
           <Dropdown
             menu={{
@@ -696,18 +714,18 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
               },
             }}
           >
-            <div className="wlt-user-chip" style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer", padding: "4px 10px", borderRadius: 999, border: `1px solid ${token.colorBorder}`, background: token.colorBgContainer }}>
-              <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,#5B7FFF,#7C93FF)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600 }}>
+            <div className="wlt-user-chip" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "5px 10px", borderRadius: 999, background: "#F6F8FE" }}>
+              <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#EAEFFF", color: "#3B5BDB", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>
                 {(user?.real_name ?? "用")[0]}
               </div>
               <div style={{ lineHeight: 1.15 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{user?.real_name}</div>
-                <div style={{ fontSize: 11, color: token.colorTextTertiary }}>{user?.role?.name ?? ""}</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{user?.real_name}</div>
+                <div style={{ fontSize: 10.5, color: token.colorTextTertiary }}>{user?.role?.name ?? ""}</div>
               </div>
             </div>
           </Dropdown>
         </Header>
-        <Content ref={contentRef} style={{ background: token.colorBgLayout, overflow: "auto", flex: 1, minHeight: 0 }}>
+        <Content ref={contentRef} style={{ background: token.colorBgLayout, overflow: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           {children}
         </Content>
       </Layout>

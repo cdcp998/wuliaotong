@@ -228,7 +228,7 @@ export function CableFaultsPage() {
   );
 
   return (
-    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
+    <div style={{ padding: 24 }}>
       {/* 页头 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>

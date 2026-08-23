@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Alert, Button, Card, Col, Empty, Row, Skeleton, Tag, Tooltip, theme } from "antd";
-import { AppstoreOutlined, DatabaseOutlined, ExportOutlined, InboxOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Empty, Skeleton, theme } from "antd";
+import { BarChartOutlined, CheckSquareOutlined, CodeSandboxOutlined, ExportOutlined, FileTextOutlined, ReloadOutlined } from "@ant-design/icons";
 
 import { reportApi, useAuthStore, type DashboardData } from "@wlt/shared";
 
 const BAR_H = 140;
 
-/** 近 7 日出入库趋势（双柱：入库蓝 / 出库绿，《UI设计方案.md》§4.2）。 */
+/** 千分位数字（设计页 13：统计数值 22/700 等宽）。 */
+function fmt(n: number): string {
+  return Number(n).toLocaleString("en-US");
+}
+
+/** 近 7 日出入库趋势（双柱：入库品牌蓝 / 出库浅青，设计页 13）。 */
 function TrendChart({ trend }: { trend: DashboardData["trend_7d"] }) {
   const { token } = theme.useToken();
   if (trend.length === 0) {
@@ -16,62 +21,41 @@ function TrendChart({ trend }: { trend: DashboardData["trend_7d"] }) {
   const max = Math.max(1, ...trend.map((t) => Math.max(Number(t.in_qty), Number(t.out_qty))));
   return (
     <div>
-      <div style={{ display: "flex", gap: 16, marginBottom: 14, fontSize: 12, color: token.colorTextSecondary }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: token.colorPrimary }} />
+      {/* 图例胶囊：入库 #EAEFFF / 出库 #E0F2FE */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 999, background: "#EAEFFF", fontSize: 11, fontWeight: 600, color: "#3B5BDB" }}>
+          <span style={{ width: 6, height: 6, borderRadius: 3, background: "#5B7FFF" }} />
           入库
         </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: token.colorSuccess }} />
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 999, background: "#E0F2FE", fontSize: 11, fontWeight: 600, color: "#0E7490" }}>
+          <span style={{ width: 6, height: 6, borderRadius: 3, background: "#7CC4E8" }} />
           出库
         </span>
-        <span style={{ marginLeft: "auto", color: token.colorTextTertiary }}>单位：件</span>
       </div>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 12 }}>
         {trend.map((t) => {
           const inH = Math.round((Number(t.in_qty) / max) * BAR_H);
           const outH = Math.round((Number(t.out_qty) / max) * BAR_H);
+          const wd = ["日", "一", "二", "三", "四", "五", "六"][new Date(t.date).getDay()];
           return (
             <div key={t.date} style={{ flex: 1, minWidth: 0, textAlign: "center" }}>
-              <Tooltip title={`${t.date} 入库 ${t.in_qty} 件 / 出库 ${t.out_qty} 件`}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "flex-end",
-                    gap: 4,
-                    height: BAR_H + 12,
-                    paddingTop: 12,
-                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
-                    cursor: "default",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 16,
-                      height: inH,
-                      minHeight: inH > 0 ? 2 : 0,
-                      background: token.colorPrimary,
-                      borderRadius: "4px 4px 0 0",
-                      transition: "height 0.3s ease",
-                    }}
-                  />
-                  <div
-                    style={{
-                      width: 16,
-                      height: outH,
-                      minHeight: outH > 0 ? 2 : 0,
-                      background: token.colorSuccess,
-                      borderRadius: "4px 4px 0 0",
-                      transition: "height 0.3s ease",
-                    }}
-                  />
-                </div>
-              </Tooltip>
-              <div style={{ fontSize: 11, color: token.colorTextSecondary, marginTop: 6 }}>{t.date.slice(5)}</div>
-              <div style={{ fontSize: 11, color: token.colorTextTertiary, fontVariantNumeric: "tabular-nums" }}>
-                {Number(t.in_qty)} / {Number(t.out_qty)}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "flex-end",
+                  gap: 4,
+                  height: BAR_H + 12,
+                  paddingTop: 12,
+                  borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                  cursor: "default",
+                }}
+                title={`${t.date} 入库 ${t.in_qty} 件 / 出库 ${t.out_qty} 件`}
+              >
+                <div style={{ width: 24, height: inH, minHeight: inH > 0 ? 2 : 0, background: "#5B7FFF", borderRadius: 6, transition: "height 0.3s ease" }} />
+                <div style={{ width: 24, height: outH, minHeight: outH > 0 ? 2 : 0, background: "#7CC4E8", borderRadius: 6, transition: "height 0.3s ease" }} />
               </div>
+              <div style={{ fontSize: 10, color: token.colorTextTertiary, marginTop: 6 }}>{wd}</div>
             </div>
           );
         })}
@@ -80,16 +64,7 @@ function TrendChart({ trend }: { trend: DashboardData["trend_7d"] }) {
   );
 }
 
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 6) return "夜深了";
-  if (h < 11) return "早上好";
-  if (h < 13) return "中午好";
-  if (h < 18) return "下午好";
-  return "晚上好";
-}
-
-/** 经营看板（电脑端，管理者）：欢迎条 + 4 统计卡 + 近 7 日趋势 + 待办与预警（《UI设计方案.md》§4.2）。 */
+/** 经营看板（电脑端，管理者）：页头快捷按钮 + 4 统计卡 + 近 7 日趋势 + 待办清单 + 快捷入口（《UI设计交付文档.md》设计页 13）。 */
 export function DashboardPage() {
   const { token } = theme.useToken();
   const navigate = useNavigate();
@@ -114,18 +89,32 @@ export function DashboardPage() {
     void load();
   }, [load]);
 
+  /** 页头动作按钮（设计页 13：白底灰描边 + 品牌图标 + 深色文字）。 */
+  const headBtn = { borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" };
+
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>统计面板</h2>
-        <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
+    <div style={{ padding: 24, width: "100%" }}>
+      {/* 页头：标题 + 副题 + 快捷动作（设计页 13 幽灵按钮） */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>经营看板</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+            今日 / 本周 / 本月出入库汇总、库存预警与待办事项一览
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {can("pch:in") && <Button style={headBtn} icon={<FileTextOutlined style={{ color: "#5B7FFF" }} />} onClick={() => navigate("/purchase-in")}>新建采购入库</Button>}
+          {can("req:audit") && <Button style={headBtn} icon={<CheckSquareOutlined style={{ color: "#5B7FFF" }} />} onClick={() => navigate("/requisitions")}>领用审计</Button>}
+          {can("stk:check") && <Button style={headBtn} icon={<CodeSandboxOutlined style={{ color: "#5B7FFF" }} />} onClick={() => navigate("/checks")}>新建盘点</Button>}
+          <Button style={headBtn} icon={<ReloadOutlined style={{ color: "#5B6478" }} />} onClick={() => void load()} aria-label="刷新" />
+        </div>
       </div>
 
       {err && (
         <Alert
           type="error"
           showIcon
-          message="看板数据加载失败"
+          title="看板数据加载失败"
           description={err}
           action={<Button size="small" danger onClick={() => void load()}>重试</Button>}
           style={{ marginBottom: 16 }}
@@ -133,143 +122,88 @@ export function DashboardPage() {
       )}
 
       {!data && !err && (
-        <Card size="small" style={{ marginBottom: 16 }}>
+        <div className="wlt-glass" style={{ marginBottom: 16, padding: 16 }}>
           <Skeleton active paragraph={{ rows: 2 }} />
-        </Card>
+        </div>
       )}
 
       {data && (
         <>
-          {/* 欢迎条 + 今日快捷入口（按权限显示） */}
-          <Card style={{ marginBottom: 16 }} styles={{ body: { padding: "16px 20px" } }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 600 }}>
-                  {greeting()}，{user?.real_name ?? "同事"}
-                </div>
-                <div style={{ fontSize: 12.5, color: token.colorTextSecondary, marginTop: 4 }}>
-                  {user?.role?.name ? `${user.role.name} · ` : ""}今日出入库与待办概览
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {can("pch:in") && <Button onClick={() => navigate("/purchase-in")}>新建采购入库</Button>}
-                {can("req:audit") && <Button onClick={() => navigate("/requisitions")}>领用审计</Button>}
-                {can("stk:check") && <Button onClick={() => navigate("/checks")}>新建盘点</Button>}
-              </div>
-            </div>
-          </Card>
-
-          {/* 4 张统计卡（设计 §2.3：数值 20-24px/700 + 标签 12.5px，玻璃卡可点击直达） */}
+          {/* 4 张统计卡（设计页 13：数值 22/700 彩色 + 标签 12.5，点击直达） */}
           <div className="wlt-grid" style={{ marginBottom: 16 }}>
             {[
-              { title: "SKU 数（有库存）", value: String(data.sku_count), suffix: "", icon: <AppstoreOutlined />, path: "/stock", color: "#3B5BDB", bg: "#EAEFFF" },
-              { title: "库存总件数", value: String(Number(data.total_qty)), suffix: "件", icon: <DatabaseOutlined />, path: "/stock", color: "#1E2433", bg: "#F6F8FE" },
-              { title: "今日入库件数", value: String(Number(data.today.in_qty)), suffix: "件", icon: <InboxOutlined />, path: "/purchase-in", color: "#15803D", bg: "#E8F9EF" },
-              { title: "今日出库件数", value: String(Number(data.today.out_qty)), suffix: "件", icon: <ExportOutlined />, path: "/stock", color: "#B45309", bg: "#FEF4E2" },
+              { value: fmt(Number(data.today.in_qty)), label: "今日入库（件）", path: "/purchase-in", color: "#5B7FFF" },
+              { value: fmt(Number(data.today.out_qty)), label: "今日出库（件）", path: "/stock", color: "#0E7490" },
+              { value: fmt(data.alert_count), label: "库存预警", path: "/stock", color: "#DC2626" },
+              { value: fmt(data.todos.pending_requisitions), label: "待审计领用单", path: "/requisitions", color: "#B45309" },
             ].map((c) => (
-              <div key={c.title} className="wlt-glass-sm" onClick={() => navigate(c.path)} style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
-                <div style={{ width: 42, height: 42, borderRadius: 12, background: c.bg, color: c.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{c.icon}</div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, color: token.colorTextSecondary }}>{c.title}</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.3, color: c.color, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                    {c.value}
-                    {c.suffix && <span style={{ fontSize: 12, fontWeight: 500, marginLeft: 4, color: token.colorTextSecondary }}>{c.suffix}</span>}
-                  </div>
-                </div>
+              <div key={c.label} className="wlt-glass" onClick={() => navigate(c.path)} style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 6, cursor: "pointer" }}>
+                <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.5, color: c.color, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{c.value}</div>
+                <div style={{ fontSize: 12.5, fontWeight: 500, color: token.colorTextSecondary }}>{c.label}</div>
               </div>
             ))}
           </div>
 
-          {/* 近 7 日趋势（16）+ 待办与预警（8） */}
-          <Row gutter={[16, 16]}>
-            <Col xs={24} lg={15}>
-              <Card size="small" title="近 7 日出入库趋势">
-                <TrendChart trend={data.trend_7d} />
-              </Card>
-            </Col>
-            <Col xs={24} lg={9}>
-              <Card size="small" title="待办与预警">
-                {/* 预警 / 待审计小卡（点击直达） */}
-                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {/* 近 7 日趋势 + 待办清单（设计页 13：Trend 自适应 + Todo 330） */}
+          <div style={{ display: "flex", gap: 16, alignItems: "stretch", flexWrap: "wrap", marginBottom: 16 }}>
+            <div className="wlt-glass" style={{ flex: 1, minWidth: 340, padding: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#1E2433", marginBottom: 10 }}>近 7 日出入库趋势</div>
+              <TrendChart trend={data.trend_7d} />
+            </div>
+            <div className="wlt-glass" style={{ width: 330, flexShrink: 0, padding: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#1E2433" }}>待办清单</span>
+                <span style={{ padding: "3px 10px", borderRadius: 999, background: "#EFF3FC", fontSize: 11, fontWeight: 600, color: "#5B6478" }}>
+                  {data.todos.pending_requisitions + data.todos.pending_transfers + data.todos.pending_checks}
+                </span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {[
+                  { label: "待审计领用单", count: data.todos.pending_requisitions, path: "/requisitions", dot: "#DC2626" },
+                  { label: "待审核调拨单", count: data.todos.pending_transfers, path: "/transfers", dot: "#B45309" },
+                  { label: "盘点进行中", count: data.todos.pending_checks, path: "/checks", dot: "#5B7FFF" },
+                ].map((item) => (
                   <div
-                    onClick={() => navigate("/stock")}
+                    key={item.path}
+                    onClick={() => navigate(item.path)}
                     style={{
-                      flex: 1,
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      border: `1px solid ${data.alert_count > 0 ? token.colorErrorBorder : token.colorBorderSecondary}`,
-                      background: data.alert_count > 0 ? token.colorErrorBg : token.colorBgContainer,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      background: "#F6F8FE",
                       cursor: "pointer",
                     }}
                   >
-                    <div style={{ fontSize: 12, color: token.colorTextSecondary }}>库存预警</div>
-                    <div
-                      style={{
-                        fontSize: 22,
-                        fontWeight: 600,
-                        lineHeight: 1.3,
-                        fontVariantNumeric: "tabular-nums",
-                        color: data.alert_count > 0 ? token.colorError : token.colorText,
-                      }}
-                    >
-                      {data.alert_count}
-                    </div>
+                    <span style={{ width: 7, height: 7, borderRadius: 4, background: item.dot, flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontSize: 12.5, color: "#1E2433" }}>{item.label}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: item.count > 0 ? item.dot : token.colorTextTertiary }}>{item.count}</span>
                   </div>
-                  <div
-                    onClick={() => navigate("/requisitions")}
-                    style={{
-                      flex: 1,
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      border: `1px solid ${data.todos.pending_requisitions > 0 ? token.colorWarningBorder : token.colorBorderSecondary}`,
-                      background: data.todos.pending_requisitions > 0 ? token.colorWarningBg : token.colorBgContainer,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: token.colorTextSecondary }}>待审计领用单</div>
-                    <div
-                      style={{
-                        fontSize: 22,
-                        fontWeight: 600,
-                        lineHeight: 1.3,
-                        fontVariantNumeric: "tabular-nums",
-                        color: data.todos.pending_requisitions > 0 ? token.colorWarningText : token.colorText,
-                      }}
-                    >
-                      {data.todos.pending_requisitions}
-                    </div>
-                  </div>
-                </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
-                {/* 待办清单 */}
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  {[
-                    { label: "待审计领用单", count: data.todos.pending_requisitions, path: "/requisitions", color: "red" as const },
-                    { label: "待审核调拨单", count: data.todos.pending_transfers, path: "/transfers", color: "orange" as const },
-                    { label: "盘点进行中", count: data.todos.pending_checks, path: "/checks", color: "blue" as const },
-                  ].map((item) => (
-                    <a
-                      key={item.path}
-                      onClick={() => navigate(item.path)}
-                      className="wlt-todo-row"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "9px 8px",
-                        borderRadius: 8,
-                        cursor: "pointer",
-                        color: token.colorText,
-                      }}
-                    >
-                      <span>{item.label}</span>
-                      <Tag color={item.count > 0 ? item.color : "default"} style={{ marginInlineEnd: 0 }}>{item.count}</Tag>
-                    </a>
-                  ))}
+          {/* 快捷入口（设计页 13：图标玻璃卡 ×5，按权限过滤）—— 严格一行 5 张 */}
+          <div className="wlt-grid" style={{ display: "flex", gap: 12 }}>
+            {(
+              [
+                { label: "材料入库", icon: <FileTextOutlined />, color: "#5B7FFF", path: "/purchase-in", perm: "pch:in" },
+                { label: "其他出库", icon: <ExportOutlined />, color: "#0E7490", path: "/other-io", perm: "stk:other" },
+                { label: "领用申请", icon: <CheckSquareOutlined />, color: "#3B5BDB", path: "/requisitions/apply", perm: "req:apply" },
+                { label: "盘点", icon: <CodeSandboxOutlined />, color: "#7C3AED", path: "/checks", perm: "stk:check" },
+                { label: "报表中心", icon: <BarChartOutlined />, color: "#16A34A", path: "/reports", perm: "report:view" },
+              ] as { label: string; icon: React.ReactNode; color: string; path: string; perm: string }[]
+            )
+              .filter((q) => can(q.perm))
+              .map((q) => (
+                <div key={q.path} className="wlt-glass" onClick={() => navigate(q.path)} style={{ flex: "1 1 150px", minWidth: 0, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 11, background: "#F6F8FE", color: q.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>{q.icon}</div>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "#1E2433" }}>{q.label}</span>
                 </div>
-              </Card>
-            </Col>
-          </Row>
+              ))}
+          </div>
         </>
       )}
     </div>

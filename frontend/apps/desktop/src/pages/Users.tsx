@@ -141,7 +141,7 @@ export function UsersPage() {
   ];
 
   return (
-    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto" }}>
+    <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>用户管理</h2>
