@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { App, Button, InputNumber, Modal, Popconfirm, Radio, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
@@ -134,12 +134,14 @@ export function TransfersPage() {
         </Radio.Group>
         <Button type="primary" onClick={() => setOpen(true)}>新建调拨</Button>
       </Space>
+      <div style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, boxShadow: "0 6px 24px rgba(30,36,51,.06)", padding: "12px 16px" }}>
       <DataTable rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection
         batchActions={[
           { label: "批量通过", onClick: async (keys) => { for (const k of keys) await transferApi.audit(Number(k)); message.success(`已通过 ${keys.length} 张调拨单`); void load(); } },
           { label: "批量拒绝", danger: true, confirm: "确定驳回选中的调拨单吗？", onClick: async (keys) => { for (const k of keys) await transferApi.reject(Number(k)); message.success(`已驳回 ${keys.length} 张调拨单`); void load(); } },
           { label: "批量删除", danger: true, confirm: "确定作废选中的调拨单吗？（已审核单将反向冲销库存）", onClick: async (keys) => { for (const k of keys) await transferApi.void(Number(k)); message.success(`已作废 ${keys.length} 张调拨单`); void load(); } },
         ]} />
+      </div>
 
       <BillDetailDrawer
         open={detailOpen}

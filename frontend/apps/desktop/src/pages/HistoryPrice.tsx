@@ -118,6 +118,7 @@ export function HistoryPricePage() {
         <Button onClick={() => { setKeyword(""); setSupplierId(0); setPage(1); }}>重置</Button>
         <span style={{ color: "#5B6478", fontSize: 12 }}>共 {total} 条历史采购记录（按入库日期倒序）</span>
       </Space>
+      <div style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, boxShadow: "0 6px 24px rgba(30,36,51,.06)", padding: "12px 16px" }}>
       <DataTable
         rowKey={(r) => `${r.bill_no}-${r.product_id}`}
         loading={loading}
@@ -126,6 +127,7 @@ export function HistoryPricePage() {
         locale={{ emptyText: "暂无历史价格记录，完成入库后自动生成" }}
         pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
        rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
+      </div>
     </div>
   );
 }

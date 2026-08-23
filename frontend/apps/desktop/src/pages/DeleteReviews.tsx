@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Input, Modal, Popconfirm, Space, Table, Tabs, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { AuditOutlined, CheckOutlined, CloseOutlined } from "@ant-design/icons";
@@ -168,6 +168,7 @@ export function DeleteReviewsPage() {
         ]}
       />
 
+      <div style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, boxShadow: "0 6px 24px rgba(30,36,51,.06)", padding: "12px 16px" }}>
       <Table<DeleteReview>
         rowKey="id"
         size="small"
@@ -184,6 +185,7 @@ export function DeleteReviewsPage() {
           onChange: (p) => setPage(p),
         }}
       />
+      </div>
 
       {/* 驳回弹窗 */}
       <Modal
