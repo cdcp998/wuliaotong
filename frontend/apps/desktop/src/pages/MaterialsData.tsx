@@ -1007,7 +1007,7 @@ export function MaterialsDataPage() {
       <Drawer title="材料查重建议（仅供参考）" open={dedupeOpen} onClose={() => setDedupeOpen(false)} size={680}>
         {dedupeGroups.length === 0 && !dedupeLoading && <Typography.Text type="secondary">未发现疑似重复材料</Typography.Text>}
         {dedupeGroups.map((g, gi) => (
-          <div key={gi} style={{ border: "1px solid #E4EAF6", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+          <div key={gi} style={{ border: "1px solid #E4EAF6", borderRadius: 12, padding: 12, marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <Tag color={g.confidence === "high" ? "red" : "orange"}>{g.confidence === "high" ? "高置信" : "相似"}</Tag>
               <Typography.Text>{g.reason}</Typography.Text>

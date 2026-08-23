@@ -171,7 +171,7 @@ export function ModulesPage() {
               </div>
 
               {/* 元信息 */}
-              <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 11.5, color: token.colorTextSecondary, padding: "8px 10px", background: "#F8FAFF", borderRadius: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 11.5, color: token.colorTextSecondary, padding: "8px 10px", background: "#F8FAFF", borderRadius: 12 }}>
                 <span>菜单 {m.menu_count}</span>
                 <span>权限点 {m.perm_count}</span>
                 <span>SQL v{m.schema_version}</span>

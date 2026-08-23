@@ -451,7 +451,7 @@ export function SettingsPage() {
         const snap = quota[p];
         const enabled = providerEnabled[p];
         return (
-          <div key={p} style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: "10px 14px" }}>
+          <div key={p} style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 12, padding: "10px 14px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <Typography.Text strong>{meta.label}</Typography.Text>
               {enabled === "0" ? <Tag>未启用</Tag> : <Tag color="green">已启用</Tag>}
@@ -1058,7 +1058,7 @@ export function SettingsPage() {
       >
         <Space orientation="vertical" style={{ width: "100%" }} size={6}>
           {scenes.map((m) => (
-            <div key={m.name} style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: "8px 12px", background: token.colorBgContainer }}>
+            <div key={m.name} style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 12, padding: "8px 12px", background: token.colorBgContainer }}>
               <Space wrap>
                 <Typography.Text strong>{m.label}</Typography.Text>
                 {m.enabled ? <Tag color="green">已启用</Tag> : <Tag>未启用</Tag>}

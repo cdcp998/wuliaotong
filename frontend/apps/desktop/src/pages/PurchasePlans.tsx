@@ -342,7 +342,7 @@ export function PurchasePlansPage() {
         styles={{ body: { maxHeight: "calc(100dvh - 260px)", overflow: "auto" } }}
       >
         {/* 基本信息卡片 */}
-        <div style={{ padding: 12, border: "1px solid #E4EAF6", borderRadius: 8, background: "#F8FAFF", marginBottom: 12 }}>
+        <div style={{ padding: 12, border: "1px solid #E4EAF6", borderRadius: 12, background: "#F8FAFF", marginBottom: 12 }}>
           <Form form={form} layout="vertical">
             <Space size={16} wrap>
               <Form.Item name="warehouse_id" label="入库仓库" rules={[{ required: true, message: "请选择仓库" }]} style={{ width: 220, marginBottom: 0 }}>
