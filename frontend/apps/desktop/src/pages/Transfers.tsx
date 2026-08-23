@@ -9,6 +9,12 @@ import { DataTable } from "../components/DataTable";
 import { BillDetailDrawer } from "../components/BillDetailDrawer";
 
 const STATUS: Record<string, string> = { 0: "草稿", 1: "已审核", "-1": "已作废", "-2": "已驳回" };
+const STATUS_META: Record<string, { fg: string; bg: string }> = {
+  "0": { fg: "#64748B", bg: "#EFF3FC" },
+  "1": { fg: "#15803D", bg: "#E8F9EF" },
+  "-1": { fg: "#64748B", bg: "#F3F4F6" },
+  "-2": { fg: "#B91C1C", bg: "#FEE2E2" },
+};
 
 interface Row {
   product_id: number | undefined;
@@ -95,7 +101,14 @@ export function TransfersPage() {
     { title: "单号", dataIndex: "bill_no", render: (v: string, r) => <a onClick={() => void openDetail(r)}>{v}</a> },
     { title: "调出仓库", dataIndex: "from_warehouse_name" },
     { title: "调入仓库", dataIndex: "to_warehouse_name" },
-    { title: "状态", dataIndex: "status", render: (s: number) => STATUS[String(s)] ?? s },
+    {
+      title: "状态",
+      dataIndex: "status",
+      render: (s: number) => {
+        const meta = STATUS_META[String(s)] ?? { fg: "#64748B", bg: "#EFF3FC" };
+        return <span className="wlt-pill" style={{ background: meta.bg, color: meta.fg }}>{STATUS[String(s)] ?? s}</span>;
+      },
+    },
     { title: "审计人", dataIndex: "audit_name" },
     {
       title: "操作",

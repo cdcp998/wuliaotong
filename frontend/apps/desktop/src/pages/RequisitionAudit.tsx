@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Drawer, Input, Modal, Popconfirm, Select, Space, Tag, Typography } from "antd";
+import { App, Button, Drawer, Input, Modal, Popconfirm, Space, Tabs, Tag, Typography } from "antd";
 import { ExclamationCircleFilled } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
@@ -99,6 +99,17 @@ export function RequisitionAuditPage() {
     }
   }
 
+  /** 行内通过（设计页 28：行内通过/驳回）；驳回需填原因 → 打开详情抽屉走审计备注。 */
+  async function approveRow(r: RequisitionBill) {
+    try {
+      await requisitionApi.audit(r.id, "approve", "");
+      message.success("已通过：库存已扣减并通知申请人");
+      await load(status, keyword, page);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "操作失败");
+    }
+  }
+
   const columns: ColumnsType<RequisitionBill> = [
     { title: "单号", dataIndex: "bill_no", width: 150, render: (v, r) => <a onClick={() => void openDetail(r)}><b>{v}</b></a> },
     { title: "申请人", dataIndex: "applicant_name", width: 90 },
@@ -136,11 +147,17 @@ export function RequisitionAuditPage() {
     },
     {
       title: "操作",
-      width: 100,
+      width: 150,
       render: (_, r) => (
-        <Button type="link" size="small" onClick={() => void openDetail(r)}>
-          查看详情
-        </Button>
+        <Space size={4}>
+          <Button type="link" size="small" onClick={() => void openDetail(r)}>详情</Button>
+          {r.status === 2 && (
+            <>
+              <Button type="link" size="small" style={{ color: "#15803D", padding: 0 }} onClick={() => void approveRow(r)}>通过</Button>
+              <Button type="link" size="small" danger style={{ padding: 0 }} onClick={() => void openDetail(r)}>驳回</Button>
+            </>
+          )}
+        </Space>
       ),
     },
   ];
@@ -148,22 +165,22 @@ export function RequisitionAuditPage() {
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ margin: "0 0 16px" }}>领用审计</h2>
+      {/* 状态 Tabs（设计页 28） */}
+      <Tabs
+        activeKey={String(status)}
+        onChange={(k) => {
+          setStatus(Number(k));
+          setPage(1);
+        }}
+        items={[
+          { key: "0", label: "全部" },
+          { key: "1", label: "待完成工作" },
+          { key: "2", label: "待审计" },
+          { key: "3", label: "已完成" },
+          { key: "4", label: "已驳回" },
+        ]}
+      />
       <Space wrap style={{ marginBottom: 16 }}>
-        <Select
-          value={status}
-          onChange={(v) => {
-            setStatus(v);
-            setPage(1);
-          }}
-          style={{ width: 130 }}
-          options={[
-            { value: 0, label: "全部状态" },
-            { value: 1, label: "待完成工作" },
-            { value: 2, label: "待审计" },
-            { value: 3, label: "已完成" },
-            { value: 4, label: "已驳回" },
-          ]}
-        />
         <Input.Search
           placeholder="单号 / 使用地点"
           allowClear
