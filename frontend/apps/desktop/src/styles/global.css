@@ -313,6 +313,30 @@ button:focus-visible,
   box-shadow: 0 6px 24px rgba(30, 36, 51, 0.06);
 }
 
+/* 侧边导航（设计规范 §3.1 玻璃侧栏 + §2.3 圆角菜单项）：圆角项 + 品牌浅底选中 + 柔和悬浮 */
+.ant-layout-sider .ant-menu-light.ant-menu-inline {
+  border-inline-end: none;
+  padding: 4px 0;
+}
+.ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-item,
+.ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-submenu-title {
+  width: auto;
+  margin-inline: 8px;
+  border-radius: 10px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-item-selected {
+  background: #eaefff;
+  color: #3b5bdb;
+  font-weight: 600;
+}
+.ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-item-selected::after {
+  display: none;
+}
+.ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-submenu-selected > .ant-menu-submenu-title {
+  color: #3b5bdb;
+}
+
 .ant-layout-content .ant-card .ant-card-head {
   border-bottom: 1px solid #eff3fc;
 }

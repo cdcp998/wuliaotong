@@ -565,10 +565,10 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
         collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
-        width={216}
+        width={232}
         collapsedWidth={64}
         theme="light"
-        style={{ height: "100dvh", overflow: "hidden", borderRight: `1px solid ${token.colorBorder}`, boxShadow: "0 1px 2px rgba(30,36,51,.04)" }}
+        style={{ height: "100dvh", overflow: "hidden", borderRight: `1px solid #E4EAF6`, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", boxShadow: "2px 0 12px rgba(30,36,51,.04)" }}
       >
         <div style={{ height: 60, display: "flex", alignItems: "center", gap: 10, padding: "0 16px" }}>
           <div
