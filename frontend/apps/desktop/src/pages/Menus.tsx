@@ -279,8 +279,8 @@ export function MenusPage() {
             style={{
               flex: 1,
               background: "#F8FAFF",
-              border: `1px solid ${token.colorBorderSecondary}`,
-              borderRadius: 10,
+              border: `1px solid #E4EAF6`,
+              borderRadius: 12,
               padding: "8px 10px",
               overflow: "auto",
               display: "flex",

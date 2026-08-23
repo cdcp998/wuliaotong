@@ -657,8 +657,9 @@ export function MaterialsDataPage() {
         style={{
           display: "flex",
           background: token.colorBgContainer,
-          border: `1px solid ${token.colorBorderSecondary}`,
-          borderRadius: 10,
+          border: `1px solid #E4EAF6`,
+          borderRadius: 16,
+          boxShadow: "0 6px 24px rgba(30,36,51,.06)",
           minHeight: 520,
           overflow: "hidden",
         }}
@@ -715,7 +716,7 @@ export function MaterialsDataPage() {
         <main style={{ flex: 1, minWidth: 0, padding: 16, display: "flex", flexDirection: "column" }}>
           {/* 选中分类信息 + 分类操作（仅选中真实分类时展示） */}
           {selCat && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8, padding: "8px 12px", background: "#F2F5FB", borderRadius: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8, padding: "8px 12px", background: "#F6F8FE", borderRadius: 12 }}>
               <Space size={8} wrap>
                 <span style={{ fontWeight: 600 }}>{selectionTitle}</span>
                 {selCat.parent_id === 0 ? <Tag color="blue">顶级分类（仅分组，聚合子树材料）</Tag> : <Tag color="blue">{selCat.product_count ?? 0} 种材料</Tag>}

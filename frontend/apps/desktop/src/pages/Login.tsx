@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { App, Alert, Button, Checkbox, Form, Input, Modal, theme } from "antd";
 
@@ -200,7 +200,7 @@ export function LoginPage() {
                     alt="验证码"
                     title="点击刷新"
                     onClick={() => void refreshCaptcha()}
-                    style={{ height: 40, borderRadius: 6, cursor: "pointer", border: `1px solid ${token.colorBorder}` }}
+                    style={{ height: 40, borderRadius: 8, cursor: "pointer", border: `1px solid ${token.colorBorder}` }}
                   />
                 </div>
               </Form.Item>

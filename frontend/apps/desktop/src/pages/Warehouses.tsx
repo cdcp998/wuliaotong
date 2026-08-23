@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { App, Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Space, Spin, Tag } from "antd";
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 
@@ -301,7 +301,7 @@ export function WarehousesPage() {
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(560px, 1fr))", gap: 14 }}>
                   {shelves.map((s) => (
-                    <div key={s.id} style={{ border: "1px solid #E4EAF6", borderRadius: 10, background: "#F8FAFF", padding: 10 }}>
+                    <div key={s.id} style={{ border: "1px solid #E4EAF6", borderRadius: 12, background: "#F8FAFF", padding: 10 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                         <b>{s.code}{s.name ? ` ${s.name}` : ""}</b>
                         <Space size={4}>

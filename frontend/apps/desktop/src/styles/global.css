@@ -304,6 +304,15 @@ button:focus-visible,
 .ant-layout-content .ant-table-wrapper .ant-table-thead > tr > th {
   font-weight: 600;
   letter-spacing: 0.01em;
+  background: #f6f8fe;
+  color: #5b6478;
+  border-bottom: 1px solid #eff3fc;
+}
+.ant-layout-content .ant-table-wrapper .ant-table-tbody > tr > td {
+  border-bottom: 1px solid #eff3fc;
+}
+.ant-layout-content .ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: #f8faff;
 }
 
 /* 页面卡片间距统一呼吸感：桌面内容区默认 24px 内边距不变，卡片内 16~20 */

@@ -1108,8 +1108,9 @@ export function SettingsPage() {
           onValuesChange={handleValuesChange}
           style={{
             background: token.colorBgContainer,
-            border: `1px solid ${token.colorBorderSecondary}`,
-            borderRadius: 8,
+            border: `1px solid #E4EAF6`,
+            borderRadius: 16,
+            boxShadow: "0 6px 24px rgba(30,36,51,.06)",
             padding: "8px 24px 16px",
           }}
         >

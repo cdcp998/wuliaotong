@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { App, Button, DatePicker, Select, Space, Tabs, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
@@ -185,13 +185,13 @@ function FlowExportTab() {
           placeholder="单据号（模糊）"
           value={billNo}
           onChange={(e) => setBillNo(e.target.value)}
-          style={{ padding: "4px 8px", border: "1px solid #E4EAF6", borderRadius: 6 }}
+          style={{ padding: "4px 8px", border: "1px solid #E4EAF6", borderRadius: 10 }}
         />
         <input
           placeholder="变动类型（如：入库）"
           value={changeType}
           onChange={(e) => setChangeType(e.target.value)}
-          style={{ padding: "4px 8px", border: "1px solid #E4EAF6", borderRadius: 6 }}
+          style={{ padding: "4px 8px", border: "1px solid #E4EAF6", borderRadius: 10 }}
         />
         <DatePicker.RangePicker value={range} onChange={(v) => setRange(v as [Dayjs | null, Dayjs | null] | null)} />
         <Button
@@ -249,7 +249,7 @@ function AiSummaryTab() {
         <Button type="primary" loading={loading} onClick={() => void generate()}>生成 AI 月报摘要</Button>
       </Space>
       {summary && (
-        <div style={{ border: "1px solid #E4EAF6", borderRadius: 8, padding: 16, background: "#F8FAFF", whiteSpace: "pre-wrap", lineHeight: 1.8 }}>
+        <div style={{ border: "1px solid #E4EAF6", borderRadius: 12, padding: 16, background: "#F8FAFF", whiteSpace: "pre-wrap", lineHeight: 1.8 }}>
           <Typography.Paragraph>{summary}</Typography.Paragraph>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {ai ? "AI 生成，仅供参考" : "规则版摘要（文本模型未配置或生成失败）"} · {range?.[0]?.format("YYYY-MM-DD")} ~ {range?.[1]?.format("YYYY-MM-DD")}

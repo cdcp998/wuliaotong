@@ -167,8 +167,8 @@ export function TaskListPage() {
         </div>
         <Space>
           <div style={{ display: "inline-flex", padding: 3, gap: 0, background: "#F6F8FE", border: `1px solid ${token.colorBorder}`, borderRadius: 10 }}>
-            <Button size="small" type="text" icon={<AppstoreOutlined />} onClick={() => navigate("/task/board")} style={{ borderRadius: 8 }}>看板</Button>
-            <Button type="primary" size="small" icon={<UnorderedListOutlined />} style={{ borderRadius: 8 }}>列表</Button>
+            <Button size="small" type="text" icon={<AppstoreOutlined />} onClick={() => navigate("/task/board")} style={{ borderRadius: 10 }}>看板</Button>
+            <Button type="primary" size="small" icon={<UnorderedListOutlined />} style={{ borderRadius: 10 }}>列表</Button>
           </div>
           <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>新建任务</Button>

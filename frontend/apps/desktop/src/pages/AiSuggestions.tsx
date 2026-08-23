@@ -217,20 +217,20 @@ export function AiSuggestionsPage() {
             </p>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", borderRadius: 999, background: "#eef4ff", border: "1px solid #D9E3FF", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", borderRadius: 999, background: "#EAEFFF", border: "1px solid #D9E3FF", flexShrink: 0 }}>
           <RobotOutlined style={{ color: "#5B7FFF", fontSize: 15 }} />
-          <span style={{ fontSize: 13, color: "#3d5a8f", fontWeight: 500 }}>待确认</span>
-          <strong style={{ fontSize: 18, color: "#0958d9", lineHeight: 1 }}>{total}</strong>
-          <span style={{ fontSize: 13, color: "#3d5a8f" }}>条</span>
+          <span style={{ fontSize: 13, color: "#3B5BDB", fontWeight: 500 }}>待确认</span>
+          <strong style={{ fontSize: 18, color: "#3B5BDB", lineHeight: 1 }}>{total}</strong>
+          <span style={{ fontSize: 13, color: "#3B5BDB" }}>条</span>
         </div>
       </div>
 
       {/* 左列表 + 右详情（设计页 30） */}
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 420, background: "#fff", border: "1px solid #e9edf2", borderRadius: 12, boxShadow: "0 1px 3px rgba(16,24,40,0.06)" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #eef1f5", borderRadius: "12px 12px 0 0" }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#1f2733" }}>待处理建议</span>
-            <span style={{ fontSize: 12, color: "#8a94a6" }}>勾选可批量忽略；点击「详情」看右侧</span>
+        <div style={{ flex: 1, minWidth: 420, background: "#fff", border: "1px solid #E4EAF6", borderRadius: 12, boxShadow: "0 6px 24px rgba(30,36,51,.06)", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 20px", background: "#F6F8FE", borderBottom: "1px solid #EFF3FC" }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "#1E2433" }}>待处理建议</span>
+            <span style={{ fontSize: 12, color: "#8A93A8" }}>勾选可批量忽略；点击「详情」看右侧</span>
           </div>
           <div style={{ padding: "12px 20px 4px" }}>
           <DataTable

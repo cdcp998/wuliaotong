@@ -362,7 +362,7 @@ export function PurchasePlansPage() {
         <div style={{ fontWeight: 600, marginBottom: 8 }}>
           计划明细{rows.length ? ` · ${rows.length} 种材料 · 计划数量合计 ${totalQty}` : ""}
         </div>
-        <div style={{ border: "1px solid #f0f0f0", borderRadius: 8 }}>
+        <div style={{ border: "1px solid #E4EAF6", borderRadius: 12 }}>
           <Table<Row>
             rowKey="key"
             size="small"
