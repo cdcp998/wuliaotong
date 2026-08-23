@@ -315,6 +315,14 @@ button:focus-visible,
   background: #f8faff;
 }
 
+/* §2.1 状态胶囊：antd 默认蓝标签统一为品牌蓝浅底（去 #1677ff 漂移） */
+.ant-tag-blue,
+.ant-tag-processing {
+  color: #3b5bdb !important;
+  background: #eaefff !important;
+  border-color: transparent !important;
+}
+
 /* 页面卡片间距统一呼吸感：桌面内容区默认 24px 内边距不变，卡片内 16~20 */
 .ant-layout-content .ant-card {
   border: 1px solid #e4eaf6;
