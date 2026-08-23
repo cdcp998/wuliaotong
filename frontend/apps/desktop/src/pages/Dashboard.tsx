@@ -199,7 +199,7 @@ export function DashboardPage() {
                     style={{
                       flex: 1,
                       padding: "10px 12px",
-                      borderRadius: 8,
+                      borderRadius: 12,
                       border: `1px solid ${data.alert_count > 0 ? token.colorErrorBorder : token.colorBorderSecondary}`,
                       background: data.alert_count > 0 ? token.colorErrorBg : token.colorBgContainer,
                       cursor: "pointer",
@@ -223,7 +223,7 @@ export function DashboardPage() {
                     style={{
                       flex: 1,
                       padding: "10px 12px",
-                      borderRadius: 8,
+                      borderRadius: 12,
                       border: `1px solid ${data.todos.pending_requisitions > 0 ? token.colorWarningBorder : token.colorBorderSecondary}`,
                       background: data.todos.pending_requisitions > 0 ? token.colorWarningBg : token.colorBgContainer,
                       cursor: "pointer",
@@ -260,7 +260,7 @@ export function DashboardPage() {
                         alignItems: "center",
                         justifyContent: "space-between",
                         padding: "9px 8px",
-                        borderRadius: 6,
+                        borderRadius: 8,
                         cursor: "pointer",
                         color: token.colorText,
                       }}
