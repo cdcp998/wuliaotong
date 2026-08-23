@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Alert, Button, Card, Col, Empty, Row, Skeleton, Statistic, Tag, Tooltip, theme } from "antd";
-import { ReloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Col, Empty, Row, Skeleton, Tag, Tooltip, theme } from "antd";
+import { AppstoreOutlined, DatabaseOutlined, ExportOutlined, InboxOutlined, ReloadOutlined } from "@ant-design/icons";
 
 import { reportApi, useAuthStore, type DashboardData } from "@wlt/shared";
 
@@ -159,29 +159,26 @@ export function DashboardPage() {
             </div>
           </Card>
 
-          {/* 4 张统计卡（可点击直达对应页面） */}
-          <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-            <Col xs={12} md={6}>
-              <Card size="small" hoverable onClick={() => navigate("/stock")}>
-                <Statistic title="SKU 数（有库存）" value={data.sku_count} />
-              </Card>
-            </Col>
-            <Col xs={12} md={6}>
-              <Card size="small" hoverable onClick={() => navigate("/stock")}>
-                <Statistic title="库存总件数" value={Number(data.total_qty)} suffix="件" />
-              </Card>
-            </Col>
-            <Col xs={12} md={6}>
-              <Card size="small" hoverable onClick={() => navigate("/purchase-in")}>
-                <Statistic title="今日入库件数" value={Number(data.today.in_qty)} suffix="件" />
-              </Card>
-            </Col>
-            <Col xs={12} md={6}>
-              <Card size="small" hoverable onClick={() => navigate("/stock")}>
-                <Statistic title="今日出库件数" value={Number(data.today.out_qty)} suffix="件" />
-              </Card>
-            </Col>
-          </Row>
+          {/* 4 张统计卡（设计 §2.3：数值 20-24px/700 + 标签 12.5px，玻璃卡可点击直达） */}
+          <div className="wlt-grid" style={{ marginBottom: 16 }}>
+            {[
+              { title: "SKU 数（有库存）", value: String(data.sku_count), suffix: "", icon: <AppstoreOutlined />, path: "/stock", color: "#3B5BDB", bg: "#EAEFFF" },
+              { title: "库存总件数", value: String(Number(data.total_qty)), suffix: "件", icon: <DatabaseOutlined />, path: "/stock", color: "#1E2433", bg: "#F6F8FE" },
+              { title: "今日入库件数", value: String(Number(data.today.in_qty)), suffix: "件", icon: <InboxOutlined />, path: "/purchase-in", color: "#15803D", bg: "#E8F9EF" },
+              { title: "今日出库件数", value: String(Number(data.today.out_qty)), suffix: "件", icon: <ExportOutlined />, path: "/stock", color: "#B45309", bg: "#FEF4E2" },
+            ].map((c) => (
+              <div key={c.title} className="wlt-glass-sm" onClick={() => navigate(c.path)} style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+                <div style={{ width: 42, height: 42, borderRadius: 12, background: c.bg, color: c.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{c.icon}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, color: token.colorTextSecondary }}>{c.title}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.3, color: c.color, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                    {c.value}
+                    {c.suffix && <span style={{ fontSize: 12, fontWeight: 500, marginLeft: 4, color: token.colorTextSecondary }}>{c.suffix}</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
 
           {/* 近 7 日趋势（16）+ 待办与预警（8） */}
           <Row gutter={[16, 16]}>
