@@ -5,7 +5,7 @@ import { useNavigate } from "react-router";
 import { App, Button, Descriptions, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Tag, theme } from "antd";
 import { UnorderedListOutlined, PlusOutlined, FlagOutlined } from "@ant-design/icons";
 
-import { adminApi } from "@wlt/shared";
+import { adminApi, useAuthStore } from "@wlt/shared";
 
 import { cableApi } from "../cable/api";
 import { taskApi, type TaskItem } from "./api";
@@ -26,6 +26,9 @@ export function TaskBoardPage() {
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const navigate = useNavigate();
+  // cable 模块未启用时隐藏「关联故障」（任务可不关联故障独立运行）
+  const moduleEnabled = useAuthStore((s) => s.moduleEnabled);
+  const cableEnabled = moduleEnabled("cable");
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [workers, setWorkers] = useState<{ id: number; name: string }[]>([]);
@@ -41,7 +44,8 @@ export function TaskBoardPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await taskApi.list({ page_size: 200 });
+      // page_size 上限为后端 le=100（此前 200 会被 422 拒绝导致看板空白）
+      const r = await taskApi.list({ page_size: 100 });
       setTasks(r.items);
     } finally {
       setLoading(false);
@@ -49,13 +53,15 @@ export function TaskBoardPage() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    adminApi.users({ role_id: 6, status: 1, page_size: 200 })
+    adminApi.users({ role_id: 6, status: 1, page_size: 100 })
       .then((r) => setWorkers(r.list.map((u) => ({ id: u.id, name: u.real_name || u.username }))))
       .catch(() => undefined);
-    cableApi.listFaults({ page_size: 100 }).then((r) => {
-      setFaults(r.items.map((f) => ({ id: f.id, label: `#${f.id} ${f.fault_type || "故障"}（${["待处理", "处理中", "待验证", "已修复", "已关闭"][f.status] ?? f.status}）` })));
-    }).catch(() => undefined);
-  }, []);
+    if (cableEnabled) {
+      cableApi.listFaults({ page_size: 100 }).then((r) => {
+        setFaults(r.items.map((f) => ({ id: f.id, label: `#${f.id} ${f.fault_type || "故障"}（${["待处理", "处理中", "待验证", "已修复", "已关闭"][f.status] ?? f.status}）` })));
+      }).catch(() => undefined);
+    }
+  }, [cableEnabled]);
 
   /** 看板页直接新建任务（与列表页同字段）。 */
   const createTask = async () => {
@@ -211,9 +217,11 @@ export function TaskBoardPage() {
             <Form.Item name="priority" label="优先级" initialValue={1}>
               <Select style={{ width: 140 }} options={[{ value: 1, label: "普通" }, { value: 2, label: "紧急" }]} />
             </Form.Item>
-            <Form.Item name="fault_id" label="关联故障（可选）">
-              <Select style={{ width: 280 }} allowClear options={faults} showSearch optionFilterProp="label" />
-            </Form.Item>
+            {cableEnabled && (
+              <Form.Item name="fault_id" label="关联故障（可选）">
+                <Select style={{ width: 280 }} allowClear options={faults} showSearch optionFilterProp="label" />
+              </Form.Item>
+            )}
           </Space>
         </Form>
       </Modal>

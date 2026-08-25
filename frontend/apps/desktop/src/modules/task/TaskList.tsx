@@ -6,7 +6,7 @@ import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Tab
 import { PlusOutlined, UploadOutlined, AppstoreOutlined, RobotOutlined, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
-import { fileApi } from "@wlt/shared";
+import { fileApi, useAuthStore } from "@wlt/shared";
 
 import { cableApi } from "../cable/api";
 import { taskApi, type TaskItem } from "./api";
@@ -57,11 +57,15 @@ export function TaskListPage() {
   }, [status, keyword, page, pageSize, message]);
 
   useEffect(() => { void load(); }, [load]);
+  // cable 未启用时「关联故障」字段隐藏，无需拉取故障下拉
+  const moduleEnabled = useAuthStore((s) => s.moduleEnabled);
+  const cableEnabled = moduleEnabled("cable");
   useEffect(() => {
+    if (!cableEnabled) return;
     cableApi.listFaults({ page_size: 100 }).then((r) => {
       setFaults(r.items.map((f) => ({ id: f.id, label: `#${f.id} ${f.fault_type || "故障"}（${["待处理", "处理中", "待验证", "已修复", "已关闭"][f.status] ?? f.status}）` })));
     }).catch(() => undefined);
-  }, []);
+  }, [cableEnabled]);
 
   const save = async () => {
     const v = await form.validateFields();
@@ -241,9 +245,11 @@ export function TaskListPage() {
             <Form.Item name="priority" label="优先级" initialValue={1}>
               <Select style={{ width: 140 }} options={[{ value: 1, label: "普通" }, { value: 2, label: "紧急" }]} />
             </Form.Item>
-            <Form.Item name="fault_id" label="关联故障（可选）">
-              <Select style={{ width: 280 }} allowClear options={faults} showSearch optionFilterProp="label" />
-            </Form.Item>
+            {cableEnabled && (
+              <Form.Item name="fault_id" label="关联故障（可选）">
+                <Select style={{ width: 280 }} allowClear options={faults} showSearch optionFilterProp="label" />
+              </Form.Item>
+            )}
           </Space>
         </Form>
       </Modal>
