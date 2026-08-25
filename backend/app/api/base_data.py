@@ -348,6 +348,26 @@ def list_suppliers(
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> dict:
+    # 最近供货时间（采购入库单最大日期；设计页 15「最近供货」列）
+    def _last_supply(rows: list[BaseSupplier]) -> dict[int, str]:
+        if not rows:
+            return {}
+        pairs = db.execute(
+            select(PchPurchaseIn.supplier_id, func.max(PchPurchaseIn.created_at))
+            .where(PchPurchaseIn.supplier_id.in_([s.id for s in rows]))
+            .group_by(PchPurchaseIn.supplier_id)
+        ).all()
+        return {sid: (dt.isoformat() if dt else "") for sid, dt in pairs}
+
+    def _serialize(rows: list[BaseSupplier]) -> list[dict]:
+        last = _last_supply(rows)
+        out = []
+        for s in rows:
+            d = SupplierOut.model_validate(s, from_attributes=True).model_dump()
+            d["last_supply_at"] = last.get(s.id, "")
+            out.append(d)
+        return out
+
     # 下拉场景（无关键词，取前 100 条）走缓存；带关键词的搜索不缓存（低频率、参数多变）
     if not keyword and page == 1:
         key = f"dict:suppliers:{status or 'all'}:{page_size}"
@@ -359,7 +379,7 @@ def list_suppliers(
             total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
             rows = db.scalars(stmt.order_by(BaseSupplier.id.desc()).limit(page_size)).all()
             return PageData(
-                list=[SupplierOut.model_validate(s, from_attributes=True).model_dump() for s in rows],
+                list=_serialize(rows),
                 total=total, page=page, page_size=page_size,
             ).model_dump()
 
@@ -373,8 +393,7 @@ def list_suppliers(
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(BaseSupplier.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
     return ok(PageData(
-        list=[SupplierOut.model_validate(s, from_attributes=True).model_dump() for s in rows],
-        total=total, page=page, page_size=page_size,
+        list=_serialize(rows), total=total, page=page, page_size=page_size,
     ).model_dump())
 
 

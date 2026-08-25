@@ -557,8 +557,8 @@ export function MaterialsDataPage() {
         title: (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }} title={n.name}>
             <span style={{ display: "inline-block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 170, verticalAlign: "middle" }}>{n.name}</span>
-            {n.children?.length ? <Tag style={{ fontSize: 11, lineHeight: "16px", marginInlineEnd: 0 }}>{n.children.length} 子类</Tag> : null}
-            {agg > 0 ? <Tag color="blue" style={{ fontSize: 11, lineHeight: "16px", marginInlineEnd: 0 }}>{agg} 种</Tag> : null}
+            {n.children?.length ? <Tag style={{ fontSize: 11, lineHeight: "16px", marginInlineEnd: 0, borderRadius: 999, background: "#EFF3FC", color: "#5B6478", borderColor: "transparent" }}>{n.children.length} 子类</Tag> : null}
+            {agg > 0 ? <Tag style={{ fontSize: 11, lineHeight: "16px", marginInlineEnd: 0, borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent" }}>{agg} 种</Tag> : null}
           </span>
         ),
         children: n.children?.length ? buildTreeItems(n.children, level + 1) : undefined,
@@ -574,7 +574,7 @@ export function MaterialsDataPage() {
         title: (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
             <span>全部材料</span>
-            {allTotal > 0 ? <Tag color="blue" style={{ fontSize: 11, lineHeight: "16px", marginInlineEnd: 0 }}>{allTotal} 种</Tag> : null}
+            {allTotal > 0 ? <Tag style={{ fontSize: 11, lineHeight: "16px", marginInlineEnd: 0, borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent" }}>{allTotal} 种</Tag> : null}
           </span>
         ),
       },
@@ -584,7 +584,7 @@ export function MaterialsDataPage() {
         title: (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
             <span>未分类</span>
-            {uncatTotal > 0 ? <Tag style={{ fontSize: 11, lineHeight: "16px", marginInlineEnd: 0 }}>{uncatTotal} 种</Tag> : null}
+            {uncatTotal > 0 ? <Tag style={{ fontSize: 11, lineHeight: "16px", marginInlineEnd: 0, borderRadius: 999, background: "#EFF3FC", color: "#5B6478", borderColor: "transparent" }}>{uncatTotal} 种</Tag> : null}
           </span>
         ),
       },
@@ -606,7 +606,9 @@ export function MaterialsDataPage() {
     { title: "价格", dataIndex: "purchase_price", width: 80, align: "right" as const },
     { title: "下限", dataIndex: "min_stock", width: 70, align: "right" as const },
     { title: "上限", dataIndex: "max_stock", width: 70, align: "right" as const },
-    { title: "状态", dataIndex: "status", width: 70, render: (v: number) => (v === 1 ? <Tag color="green">启用</Tag> : <Tag>停用</Tag>) },
+    { title: "状态", dataIndex: "status", width: 70, render: (v: number) => (v === 1
+      ? <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>启用</Tag>
+      : <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#64748B", borderColor: "transparent", marginInlineEnd: 0 }}>停用</Tag>) },
   ];
 
   // 当前选中的展示标题（右侧表格上方）
@@ -629,15 +631,15 @@ export function MaterialsDataPage() {
       {/* 页头 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0 }}>物料数据管理</h2>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1E2433", letterSpacing: "-0.01em" }}>物料数据管理</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
             左侧分类树导航并维护分类（三级）；右侧管理材料。删除材料/分类需提交删除申请，由管理者及以上审核
           </p>
         </div>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={() => { void load(); void loadTree(); }}>刷新</Button>
+          <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<ReloadOutlined style={{ color: "#5B7FFF" }} />} onClick={() => { void load(); void loadTree(); }}>刷新</Button>
           {canCategories && (
-            <Button icon={<PlusOutlined />} onClick={() => openCatCreate(0)}>新建顶级分类</Button>
+            <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<PlusOutlined style={{ color: "#5B7FFF" }} />} onClick={() => openCatCreate(0)}>新建顶级分类</Button>
           )}
           {canProducts && (
             <Button type="primary" icon={<PlusOutlined />} onClick={openMatCreate}>新建材料</Button>
@@ -719,8 +721,8 @@ export function MaterialsDataPage() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8, padding: "8px 12px", background: "#F6F8FE", borderRadius: 12 }}>
               <Space size={8} wrap>
                 <span style={{ fontWeight: 600 }}>{selectionTitle}</span>
-                {selCat.parent_id === 0 ? <Tag color="blue">顶级分类（仅分组，聚合子树材料）</Tag> : <Tag color="blue">{selCat.product_count ?? 0} 种材料</Tag>}
-                {selDepth >= 3 ? <Tag>三级分类</Tag> : selDepth === 2 ? <Tag>二级分类</Tag> : null}
+                {selCat.parent_id === 0 ? <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>顶级分类（仅分组，聚合子树材料）</Tag> : <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>{selCat.product_count ?? 0} 种材料</Tag>}
+                {selDepth >= 3 ? <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#5B6478", borderColor: "transparent", marginInlineEnd: 0 }}>三级分类</Tag> : selDepth === 2 ? <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#5B6478", borderColor: "transparent", marginInlineEnd: 0 }}>二级分类</Tag> : null}
               </Space>
               {canCategories && (
                 <Space size={4}>
@@ -741,23 +743,23 @@ export function MaterialsDataPage() {
             <Input.Search
               placeholder="材料名称 / 编码 / 物料编码 / 规格"
               allowClear
-              style={{ width: 240 }}
+              style={{ width: 280 }}
               onSearch={(v) => { setKeyword(v.trim()); }}
             />
             <Input
               placeholder="条码精确查询"
               allowClear
-              style={{ width: 160 }}
+              style={{ width: 160, background: "#F6F8FE" }}
               value={barcode}
               onChange={(e) => setBarcode(e.target.value.trim())}
               onPressEnter={() => setPage(1)}
             />
-            {aiKeywords.length > 0 && <Tag color="blue" style={{ alignSelf: "center" }}>已扩展搜索词：{aiKeywords.join(" / ")}</Tag>}
+            {aiKeywords.length > 0 && <Tag style={{ alignSelf: "center", borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>已扩展搜索词：{aiKeywords.join(" / ")}</Tag>}
             {canProducts && (
-              <Button loading={dedupeLoading} onClick={() => void runDedupe()}>查重</Button>
+              <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} loading={dedupeLoading} onClick={() => void runDedupe()}>查重</Button>
             )}
             <span style={{ flex: 1 }} />
-            <Typography.Text type="secondary" style={{ alignSelf: "center" }}>{selectionTitle} · 共 {total} 种</Typography.Text>
+            <span style={{ alignSelf: "center", fontSize: 12, color: "#8A93A8" }}>{selectionTitle} · 共 {total} 种</span>
           </div>
 
           <DataTable
@@ -1010,7 +1012,7 @@ export function MaterialsDataPage() {
         {dedupeGroups.map((g, gi) => (
           <div key={gi} style={{ border: "1px solid #E4EAF6", borderRadius: 12, padding: 12, marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <Tag color={g.confidence === "high" ? "red" : "orange"}>{g.confidence === "high" ? "高置信" : "相似"}</Tag>
+              <Tag style={{ borderRadius: 999, background: g.confidence === "high" ? "#FDEBEC" : "#FEF4E2", color: g.confidence === "high" ? "#DC2626" : "#B45309", borderColor: "transparent", marginInlineEnd: 0 }}>{g.confidence === "high" ? "高置信" : "相似"}</Tag>
               <Typography.Text>{g.reason}</Typography.Text>
             </div>
             {g.group.map((m) => (

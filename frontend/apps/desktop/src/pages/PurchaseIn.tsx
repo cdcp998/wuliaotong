@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { App, AutoComplete, Button, DatePicker, Divider, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag } from "antd";
-import { CameraOutlined, PictureOutlined, PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { CameraOutlined, FileSearchOutlined, PictureOutlined, PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -844,12 +844,35 @@ export function PurchaseInPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: "0 0 16px" }}>材料入库</h2>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Button type="primary" onClick={() => { setRows([]); setSupplierId(0); setOcrRecordId(0); setOcrBillNo(""); setBillDate(""); setRemark(""); setPlanId(0); setPlanBillNo(""); setDeliveryFiles([]); setSubmitTried(false); setOpen(true); }}>新建入库</Button>
-        <Button onClick={() => setOcrOpen(true)}>送货单识别入库</Button>
-      </Space>
-      <DataTable
+      {/* 页头（设计页 19）：标题 + 副题 + 右侧 送货单OCR识别 / 新增单据 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>材料入库</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
+            采购入库单：表头（供应商/日期/备注）+ 明细（扫码/OCR 预填、移动加权成本、历史采购价提示）
+          </p>
+        </div>
+        <Space>
+          <Button
+            style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }}
+            icon={<FileSearchOutlined style={{ color: "#5B7FFF" }} />}
+            onClick={() => setOcrOpen(true)}
+          >
+            送货单 OCR 识别
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => { setRows([]); setSupplierId(0); setOcrRecordId(0); setOcrBillNo(""); setBillDate(""); setRemark(""); setPlanId(0); setPlanBillNo(""); setDeliveryFiles([]); setSubmitTried(false); setOpen(true); }}
+          >
+            新增单据
+          </Button>
+        </Space>
+      </div>
+
+      {/* 入库单列表 */}
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <DataTable
         rowKey="id"
         loading={loading}
         columns={billColumns}
@@ -862,6 +885,7 @@ export function PurchaseInPage() {
           void load();
         }}
       />
+      </div>
 
       <BillDetailDrawer
         open={detailOpen}
@@ -918,21 +942,53 @@ export function PurchaseInPage() {
           },
         }}
       >
-        <div style={{ padding: 12, border: "1px solid #E4EAF6", borderRadius: 12, background: "#F8FAFF", marginBottom: 12 }}>
-          <Space wrap>
-            <span>入库仓库</span>
-            <Select style={{ width: 200 }} placeholder="选择" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={warehouseId} onChange={(v) => { setWarehouseId(v); void loadLocs(v); }} />
-            <span>供应商</span>
-            <Select style={{ width: 200 }} placeholder="可选" allowClear options={supplierOptions} value={supplierId || undefined} onChange={(v) => setSupplierId(v ?? 0)} />
-            <span>入库日期</span>
-            <DatePicker value={billDate ? dayjs(billDate) : undefined} onChange={(d) => setBillDate(d ? d.format("YYYY-MM-DDTHH:mm:ss") : "")} placeholder="默认今天" />
-            <span>备注</span>
-            <Input style={{ width: 180 }} placeholder="可选" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={255} />
-            <span>送货单号</span>
-            <Input style={{ width: 200 }} placeholder="OCR 带入 / 可编辑" value={ocrBillNo} onChange={(e) => setOcrBillNo(e.target.value)} maxLength={60} />
-            {planId > 0 && <Tag color="blue">采购计划：{planBillNo}</Tag>}
-          </Space>
-          <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ padding: "14px 18px", border: "1px solid #E4EAF6", borderRadius: 16, background: "#FFFFFF", marginBottom: 12 }}>
+          {/* 表头字段（设计页 19：Field/Value） */}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {[
+              {
+                label: "入库仓库",
+                node: (
+                  <Select style={{ width: "100%" }} placeholder="选择仓库" options={warehouses} fieldNames={{ label: "name", value: "id" }} value={warehouseId} onChange={(v) => { setWarehouseId(v); void loadLocs(v); }} />
+                ),
+              },
+              {
+                label: "供应商",
+                node: (
+                  <Select style={{ width: "100%" }} placeholder="可选" allowClear options={supplierOptions} value={supplierId || undefined} onChange={(v) => setSupplierId(v ?? 0)} />
+                ),
+              },
+              {
+                label: "入库日期",
+                node: (
+                  <DatePicker style={{ width: "100%" }} value={billDate ? dayjs(billDate) : undefined} onChange={(d) => setBillDate(d ? d.format("YYYY-MM-DDTHH:mm:ss") : "")} placeholder="默认今天" />
+                ),
+              },
+              {
+                label: "送货单号",
+                node: (
+                  <Input style={{ width: "100%" }} placeholder="OCR 带入 / 可编辑" value={ocrBillNo} onChange={(e) => setOcrBillNo(e.target.value)} maxLength={60} />
+                ),
+              },
+              {
+                label: "备注",
+                node: (
+                  <Input style={{ width: "100%" }} placeholder="可选，如 送货单 #SD-2088" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={255} />
+                ),
+              },
+              ...(planId > 0 ? [{
+                label: "关联采购计划",
+                node: <span style={{ display: "inline-flex", alignItems: "center", height: 34, padding: "0 12px", borderRadius: 10, background: "#EAEFFF", color: "#3B5BDB", fontSize: 12.5, fontWeight: 600 }}>{planBillNo}</span>,
+              }] : []),
+            ].map((f) => (
+              <div key={f.label} style={{ display: "flex", flexDirection: "column", gap: 4, width: 200 }}>
+                <span style={{ fontSize: 11, fontWeight: 500, color: "#8A93A8" }}>{f.label}</span>
+                {f.node}
+              </div>
+            ))}
+          </div>
+          {/* 送货单图片（可选，存底，最多 10 张） */}
+          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ color: "#5B6478", fontSize: 12 }}>送货单图片（可选，存底）：</span>
             {deliveryFiles.map((f, i) => (
               <span key={f.fileId} style={{ position: "relative", display: "inline-block" }}>

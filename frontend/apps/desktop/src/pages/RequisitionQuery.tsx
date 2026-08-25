@@ -9,12 +9,12 @@ import { DataTable } from "../components/DataTable";
 
 import { GeoAddressPanel } from "../components/GeoAddressPanel";
 
-const STATUS: Record<number, { text: string; color: string }> = {
-  1: { text: "待完成工作", color: "gold" },
-  2: { text: "待审计", color: "blue" },
-  3: { text: "已完成", color: "green" },
-  4: { text: "已驳回", color: "red" },
-  5: { text: "已取消", color: "default" },
+const STATUS: Record<number, { text: string; bg: string; color: string }> = {
+  1: { text: "待完成工作", bg: "#FEF4E2", color: "#B45309" },
+  2: { text: "待审计", bg: "#FEF4E2", color: "#B45309" },
+  3: { text: "已完成", bg: "#E8F9EF", color: "#15803D" },
+  4: { text: "已驳回", bg: "#FDEBEC", color: "#DC2626" },
+  5: { text: "已取消", bg: "#EFF3FC", color: "#64748B" },
 };
 
 /** 领用申请单查询（电脑端）：全部领用单多状态查询 + 详情（含完成工作照片/水印下载/私用标注）。 */
@@ -59,7 +59,7 @@ export function RequisitionQueryPage() {
   }
 
   const columns: ColumnsType<RequisitionBill> = [
-    { title: "单号", dataIndex: "bill_no", width: 150, render: (v: string, r) => <a onClick={() => void openDetail(r)}><b>{v}</b></a> },
+    { title: "单号", dataIndex: "bill_no", width: 150, render: (v: string, r) => <a onClick={() => void openDetail(r)}><b style={{ color: "#3B5BDB" }}>{v}</b></a> },
     { title: "申请人", dataIndex: "applicant_name", width: 100 },
     { title: "仓库", dataIndex: "warehouse_name", width: 120 },
     { title: "使用地点", dataIndex: "use_location", width: 150, render: (v?: string) => v || "-" },
@@ -70,7 +70,7 @@ export function RequisitionQueryPage() {
       render: (v: string, r) =>
         r.is_private === 1 ? (
           <Space size={4}>
-            <Tag color="red" style={{ marginRight: 0 }}>私用</Tag>
+            <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginRight: 0 }}>私用</Tag>
             <span title={v}>{v}</span>
           </Space>
         ) : (
@@ -81,9 +81,9 @@ export function RequisitionQueryPage() {
     {
       title: "完成拍照",
       width: 90,
-      render: (_, r) => (r.work_photo_file_id > 0 ? <Tag color="green">已留痕</Tag> : <span style={{ color: "#c9cdd4" }}>未拍</span>),
+      render: (_, r) => (r.work_photo_file_id > 0 ? <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>已留痕</Tag> : <span style={{ color: "#c9cdd4" }}>未拍</span>),
     },
-    { title: "状态", width: 100, render: (_, r) => <Tag color={STATUS[r.status]?.color}>{STATUS[r.status]?.text ?? r.status}</Tag> },
+    { title: "状态", width: 100, render: (_, r) => <Tag style={{ borderRadius: 999, background: STATUS[r.status]?.bg, color: STATUS[r.status]?.color, borderColor: "transparent", marginInlineEnd: 0 }}>{STATUS[r.status]?.text ?? r.status}</Tag> },
     { title: "申请时间", dataIndex: "created_at", width: 150, render: (v?: string) => (v ? v.slice(0, 16) : "-") },
     {
       title: "操作",
@@ -96,7 +96,14 @@ export function RequisitionQueryPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: "0 0 16px" }}>领用申请单查询</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1E2433", letterSpacing: "-0.01em" }}>领用申请单查询</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
+            全部领用单多状态查询：状态跟踪（待完成工作 / 待审计 / 已完成 / 已驳回 / 已取消）+ 详情（含完成工作照片 / 水印下载 / 私用标注）
+          </p>
+        </div>
+      </div>
       {/* 状态 Tabs（设计页 27） */}
       <Tabs
         activeKey={String(status ?? "all")}
@@ -113,7 +120,7 @@ export function RequisitionQueryPage() {
           { key: "5", label: "已取消" },
         ]}
       />
-      <Space wrap style={{ marginBottom: 16 }}>
+      <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
         <Input.Search
           placeholder="单号 / 使用地点 / 因何使用"
           allowClear
@@ -121,19 +128,22 @@ export function RequisitionQueryPage() {
             setKeyword(v);
             setPage(1);
           }}
-          style={{ width: 260 }}
+          style={{ width: 300 }}
         />
-        <span style={{ color: "#5B6478", fontSize: 12 }}>流程：领用申请 → 完成工作拍照（含定位水印）→ 审计 → 完成</span>
-      </Space>
-      <DataTable
-        rowKey="id"
-        columns={columns}
-        dataSource={list}
-        loading={loading}
-        size="middle"
-        locale={{ emptyText: "暂无领用单" }}
-        pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } }, showTotal: (t) => `共 ${t} 条` }}
-       rowSelection onBatchDelete={async (keys) => { for (const k of keys) await requisitionApi.cancel(Number(k)); message.success(`已取消 ${keys.length} 张申请`); void load(status, keyword, page); }} />
+        <span style={{ marginLeft: "auto", color: "#8A93A8", fontSize: 12 }}>流程：领用申请 → 完成工作拍照（含定位水印）→ 审计 → 完成</span>
+      </div>
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <DataTable
+          rowKey="id"
+          columns={columns}
+          dataSource={list}
+          loading={loading}
+          size="middle"
+          locale={{ emptyText: "暂无领用单" }}
+          pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } }, showTotal: (t) => `共 ${t} 条` }}
+          rowSelection onBatchDelete={async (keys) => { for (const k of keys) await requisitionApi.cancel(Number(k)); message.success(`已取消 ${keys.length} 张申请`); void load(status, keyword, page); }}
+        />
+      </div>
 
       <Drawer title="领用申请单详情" size={600} open={detailOpen} onClose={() => setDetailOpen(false)} destroyOnHidden>
         {detail && (
@@ -142,7 +152,7 @@ export function RequisitionQueryPage() {
               <div><div style={{ fontSize: 12, color: "#5B6478" }}>单号</div><div style={{ fontWeight: 600 }}>{detail.bill_no}</div></div>
               <div><div style={{ fontSize: 12, color: "#5B6478" }}>申请人</div><div>{detail.applicant_name}</div></div>
               <div><div style={{ fontSize: 12, color: "#5B6478" }}>出库仓库</div><div>{detail.warehouse_name}</div></div>
-              <div><div style={{ fontSize: 12, color: "#5B6478" }}>状态</div><div><Tag color={STATUS[detail.status]?.color}>{STATUS[detail.status]?.text ?? detail.status}</Tag></div></div>
+              <div><div style={{ fontSize: 12, color: "#5B6478" }}>状态</div><div><Tag style={{ borderRadius: 999, background: STATUS[detail.status]?.bg, color: STATUS[detail.status]?.color, borderColor: "transparent", marginInlineEnd: 0 }}>{STATUS[detail.status]?.text ?? detail.status}</Tag></div></div>
               <div><div style={{ fontSize: 12, color: "#5B6478" }}>申请时间</div><div>{detail.created_at?.slice(0, 16) ?? "-"}</div></div>
               <div><div style={{ fontSize: 12, color: "#5B6478" }}>总数量</div><div>{detail.total_qty}</div></div>
               <div style={{ gridColumn: "1/-1" }}>
@@ -162,7 +172,7 @@ export function RequisitionQueryPage() {
                 <div style={{ fontSize: 12, color: "#5B6478" }}>因何使用</div>
                 <div style={{ fontWeight: 500 }}>
                   {detail.use_reason}
-                  {detail.is_private === 1 && <Tag color="red" style={{ marginLeft: 8 }}>私用</Tag>}
+                  {detail.is_private === 1 && <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginLeft: 8 }}>私用</Tag>}
                 </div>
               </div>
             </div>

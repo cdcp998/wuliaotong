@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { App, Button, Card, Input, InputNumber, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { PlusOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router";
 
 import { baseApi, requisitionApi, stockApi, useAuthStore, type Location, type Product, type StockRow, type Warehouse } from "@wlt/shared";
@@ -141,7 +142,7 @@ export function RequisitionApplyPage() {
             <div style={{ fontSize: 12, color: "#5B6478", marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <span>物料编码：{r.product.material_code || "-"} ｜ 规格：{r.product.spec || "-"} ｜ 单位：{r.product.unit_name || "-"}</span>
               {stockMap.has(r.product.id) && Number(r.qty) > (stockMap.get(r.product.id) ?? 0) && (
-                <Tag color="warning" style={{ marginInlineEnd: 0 }}>库存不足（现 {stockMap.get(r.product.id)}）</Tag>
+                <Tag style={{ borderRadius: 999, background: "#FEF4E2", color: "#B45309", borderColor: "transparent", marginInlineEnd: 0 }}>库存不足（现 {stockMap.get(r.product.id)}）</Tag>
               )}
             </div>
           )}
@@ -173,9 +174,16 @@ export function RequisitionApplyPage() {
 
   return (
     <div style={{ padding: 24, maxWidth: 980 }}>
-      <h2 style={{ margin: "0 0 16px" }}>领用申请</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1E2433", letterSpacing: "-0.01em" }}>领用申请</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
+            材料 / 地点 / 原因三步合一：提交即自动出库，随后需在使用者手机端完成工作拍照进入审计
+          </p>
+        </div>
+      </div>
       <Space style={{ marginBottom: 16 }} align="center">
-        <Tag color="blue">提交即自动出库；随后需在使用者手机端「完成工作拍照」进入审计</Tag>
+        <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent" }}>提交即自动出库；随后需在使用者手机端「完成工作拍照」进入审计</Tag>
       </Space>
 
       <Card title="申请信息" size="small" style={{ marginBottom: 16 }}>
@@ -211,7 +219,7 @@ export function RequisitionApplyPage() {
         title={`材料明细（${rows.length}）`}
         size="small"
         style={{ marginBottom: 16 }}
-        extra={<Button size="small" onClick={addRow}>+ 添加材料</Button>}
+        extra={<Button type="primary" size="small" icon={<PlusOutlined />} onClick={addRow}>添加材料</Button>}
       >
         <DataTable rowKey="key" size="middle" columns={columns} dataSource={rows} pagination={false} locale={{ emptyText: "暂无明细，点击右上角「添加材料」" }}  rowSelection onBatchDelete={async (keys) => { setRows((rs) => rs.filter((r) => !keys.includes(r.key))); }} />
       </Card>
@@ -237,7 +245,7 @@ export function RequisitionApplyPage() {
         <Button type="primary" size="large" loading={submitting} onClick={() => void submit()} style={{ minWidth: 180 }}>
           提交申请
         </Button>
-        <span style={{ color: "#5B6478", fontSize: 12 }}>
+        <span style={{ color: "#8A93A8", fontSize: 12 }}>
           已填 {validCount}/{rows.length} 项材料，合计数量 {totalQty}
         </span>
       </Space>

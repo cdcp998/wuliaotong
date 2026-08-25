@@ -1,5 +1,5 @@
 /** 基础资料接口（商品/仓库/库位，出入库表单用）。 */
-import { http, type PageData } from "./client";
+import { apiBase, BizError, http, type ApiResponse, type PageData } from "./client";
 
 export interface Product {
   id: number;
@@ -175,6 +175,15 @@ export const baseApi = {
   createSupplier: (body: SupplierInput) => http.post<Supplier>("/suppliers", body),
   updateSupplier: (id: number, body: SupplierInput) => http.put<null>(`/suppliers/${id}`, body),
   deleteSupplier: (id: number) => http.delete<null>(`/suppliers/${id}`),
+  /** Excel 导入供应商（xlsx：表头 编码/名称/联系人/电话/地址）。 */
+  supplierImport: async (file: File): Promise<{ success_count: number; fail_rows: { row: number; reason: string }[] }> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`${apiBase()}/suppliers/import`, { method: "POST", credentials: "include", body: fd });
+    const j = (await res.json()) as ApiResponse<{ success_count: number; fail_rows: { row: number; reason: string }[] }>;
+    if (!res.ok || j.code !== 0) throw new BizError(j.code, j.message);
+    return j.data;
+  },
 };
 
 /** 新建/编辑供应商入参（与后端 SupplierReq 对应）。 */
@@ -197,6 +206,7 @@ export interface Supplier {
   address: string;
   remark: string;
   status: number;
+  last_supply_at?: string;
 }
 
 /** 逆地理编码：GPS 坐标 → 地址（OpenStreetMap，需外网）。 */

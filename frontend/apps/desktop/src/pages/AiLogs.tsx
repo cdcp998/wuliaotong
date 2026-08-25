@@ -36,7 +36,7 @@ function LogDetailDrawer({ record, onClose }: { record: LlmLogRow | null; onClos
             <Descriptions.Item label="场景">{record.scene || "-"}</Descriptions.Item>
             <Descriptions.Item label="模型">{record.model || "-"}</Descriptions.Item>
             <Descriptions.Item label="状态">
-              <Tag color={record.status === "ok" ? "green" : "red"}>{record.status === "ok" ? "成功" : "失败"}</Tag>
+              <Tag style={{ borderRadius: 999, background: record.status === "ok" ? "#E8F9EF" : "#FDEBEC", color: record.status === "ok" ? "#15803D" : "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>{record.status === "ok" ? "成功" : "失败"}</Tag>
             </Descriptions.Item>
             <Descriptions.Item label="耗时">{record.duration_ms} ms</Descriptions.Item>
           </Descriptions>
@@ -116,12 +116,14 @@ export function AiLogsPage() {
     { title: "时间", dataIndex: "created_at", width: 150 },
     {
       title: "场景", dataIndex: "scene", width: 140,
-      render: (v: string) => (v ? <Tag>{v}</Tag> : "-"),
+      render: (v: string) => (v
+        ? <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>{v}</Tag>
+        : "-"),
     },
     { title: "模型", dataIndex: "model", width: 100 },
     {
       title: "状态", dataIndex: "status", width: 80,
-      render: (v: string) => <Tag color={v === "ok" ? "green" : "red"}>{v === "ok" ? "成功" : "失败"}</Tag>,
+      render: (v: string) => <Tag style={{ borderRadius: 999, background: v === "ok" ? "#E8F9EF" : "#FDEBEC", color: v === "ok" ? "#15803D" : "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>{v === "ok" ? "成功" : "失败"}</Tag>,
     },
     { title: "耗时(ms)", dataIndex: "duration_ms", width: 90 },
     {
@@ -152,9 +154,15 @@ export function AiLogsPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: "0 0 8px" }}>AI 调用日志</h2>
-      <Typography.Text type="secondary">大模型调用输入/输出/耗时/成败全部记录，供后期调整提示词与学习；点击行「详情」可查看完整输入/输出内容。</Typography.Text>
-      <Space style={{ margin: "12px 0" }} wrap>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1E2433", letterSpacing: "-0.01em" }}>AI 调用日志</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
+            大模型调用输入 / 输出 / 耗时 / 成败全部记录，供后期调整提示词与学习；点击行「详情」可查看完整输入 / 输出内容
+          </p>
+        </div>
+      </div>
+      <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
         <Select
           style={{ width: 200 }}
           placeholder="场景"
@@ -171,28 +179,31 @@ export function AiLogsPage() {
           value={status || undefined}
           onChange={(v) => { setStatus(v ?? ""); setPage(1); }}
         />
-      </Space>
-      <DataTable
-        rowKey="id"
-        loading={loading}
-        columns={columns}
-        dataSource={list}
-        scroll={{ x: 1400 }}
-        rowSelection
-        batchDeleteConfirm="确定删除选中的日志吗？删除后不可恢复。"
-        onBatchDelete={async (keys) => {
-          await systemApi.deleteLlmLogs(keys.map(Number));
-          message.success(`已删除 ${keys.length} 条日志`);
-          void load();
-        }}
-        actions={(r) => (
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => setDetail(r)}>
-            详情
-          </Button>
-        )}
-        actionsWidth={80}
-        pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
-      />
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 条</span>
+      </div>
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <DataTable
+          rowKey="id"
+          loading={loading}
+          columns={columns}
+          dataSource={list}
+          scroll={{ x: 1400 }}
+          rowSelection
+          batchDeleteConfirm="确定删除选中的日志吗？删除后不可恢复。"
+          onBatchDelete={async (keys) => {
+            await systemApi.deleteLlmLogs(keys.map(Number));
+            message.success(`已删除 ${keys.length} 条日志`);
+            void load();
+          }}
+          actions={(r) => (
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => setDetail(r)}>
+              详情
+            </Button>
+          )}
+          actionsWidth={80}
+          pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
+        />
+      </div>
       <LogDetailDrawer record={detail} onClose={() => setDetail(null)} />
     </div>
   );

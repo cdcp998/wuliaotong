@@ -98,12 +98,18 @@ export interface TransferBill {
   status: number;
   audit_name: string;
   created_at: string;
+  items?: { id: number; product_id: number; product_name: string; code: string; qty: string }[];
 }
 
 export const transferApi = {
-  list: (status?: number, page = 1, pageSize = 20) =>
+  list: (status?: number, page = 1, pageSize = 20, keyword = "") =>
     http.get<PageData<TransferBill>>(
-      `/transfers${status !== undefined ? `?status=${status}` : ""}${status !== undefined ? "&" : "?"}page=${page}&page_size=${pageSize}`
+      `/transfers?${new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+        ...(status !== undefined ? { status: String(status) } : {}),
+        ...(keyword ? { keyword } : {}),
+      }).toString()}`
     ),
   detail: (id: number) => http.get<TransferDetail>(`/transfers/${id}`),
   create: (from: number, to: number, items: { product_id: number; qty: string; from_location_id: number; to_location_id: number }[], remark = "") =>
@@ -142,12 +148,20 @@ export interface OtherIoBill {
   status: number;
   operator_name: string;
   created_at: string;
+  remark?: string;
+  items?: { id: number; product_id: number; product_name: string; code: string; qty: string }[];
 }
 
 export const otherIoApi = {
-  list: (ioType?: string, status?: number, page = 1, pageSize = 20) =>
+  list: (ioType?: string, status?: number, page = 1, pageSize = 20, keyword = "") =>
     http.get<PageData<OtherIoBill>>(
-      `/other-io?page=${page}&page_size=${pageSize}${ioType ? `&io_type=${encodeURIComponent(ioType)}` : ""}${status !== undefined ? `&status=${status}` : ""}`
+      `/other-io?${new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+        ...(ioType ? { io_type: ioType } : {}),
+        ...(status !== undefined ? { status: String(status) } : {}),
+        ...(keyword ? { keyword } : {}),
+      }).toString()}`
     ),
   detail: (id: number) => http.get<OtherIoDetail>(`/other-io/${id}`),
   create: (ioType: string, warehouseId: number, items: { product_id: number; qty: string; location_id: number; photo_file_id?: number }[], remark = "") =>
@@ -520,7 +534,7 @@ export const purchaseApi = {
   list: (page = 1, pageSize = 20) => http.get<PageData<PurchaseInBill>>(`/purchase-in?page=${page}&page_size=${pageSize}`),
   detail: (id: number) => http.get<PurchaseInDetail>(`/purchase-in/${id}`),
   void: (id: number) => http.post<null>(`/purchase-in/${id}/void`),
-  historyPrice: (params: { productId?: number; supplierId?: number; keyword?: string; page?: number; pageSize?: number } = {}) => {
+  historyPrice: (params: { productId?: number; supplierId?: number; keyword?: string; start?: string; page?: number; pageSize?: number } = {}) => {
     const p = new URLSearchParams({
       product_id: String(params.productId ?? 0),
       supplier_id: String(params.supplierId ?? 0),
@@ -528,6 +542,7 @@ export const purchaseApi = {
       page_size: String(params.pageSize ?? 20),
     });
     if (params.keyword) p.set("keyword", params.keyword);
+    if (params.start) p.set("start", params.start);
     return http.get<PageData<HistoryPriceRow>>(`/purchase-in/history-price?${p.toString()}`);
   },
 };

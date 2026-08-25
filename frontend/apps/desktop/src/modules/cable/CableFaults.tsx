@@ -1,8 +1,8 @@
 /** cable 模块：故障管理（/cable/faults，fault:manage / fault:report）——上报、状态流转、照片、删除审核。
- *  v2 界面：状态角标 Tabs + 玻璃表格 + 右侧「故障上报」玻璃面板（与设计稿一致）。 */
+ *  v3 界面：状态角标 Tabs + 玻璃表格（满宽）+「故障上报」弹窗（原右侧面板移入 Modal）。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Drawer, Form, Image, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Tooltip, theme, Upload } from "antd";
-import { AimOutlined, CameraOutlined, CheckCircleOutlined, CheckOutlined, DeleteOutlined, LockOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, UploadOutlined, WarningOutlined } from "@ant-design/icons";
+import { AimOutlined, CameraOutlined, CheckCircleOutlined, CheckOutlined, DeleteOutlined, LockOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, fileApi } from "@wlt/shared";
@@ -257,9 +257,8 @@ export function CableFaultsPage() {
           options={Object.entries(SEVERITY).map(([k, v]) => ({ value: Number(k), label: v.label }))} />
       </div>
 
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-        {/* 左：表格 */}
-        <div className="wlt-glass" style={{ flex: 1, minWidth: 320, padding: 12 }}>
+      {/* 表格 */}
+      <div className="wlt-glass" style={{ padding: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 4px 10px" }}>
             <span style={{ fontSize: 12, color: token.colorTextTertiary }}>共 {total} 条故障记录</span>
             <span style={{ flex: 1 }} />
@@ -275,60 +274,53 @@ export function CableFaultsPage() {
           />
         </div>
 
-        {/* 右：故障上报面板 */}
-        <div className="wlt-glass" style={{ width: 396, padding: 16, display: "flex", flexDirection: "column", gap: 12, flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, flex: 1 }}>故障上报</span>
-            <Tag style={{ marginInlineEnd: 0, borderRadius: 999 }} color="blue">新报</Tag>
+      {/* 故障上报弹窗（原右侧常驻面板 → Modal） */}
+      <Modal
+        open={open}
+        onCancel={() => setOpen(false)}
+        title="故障上报"
+        width={640}
+        destroyOnHidden
+        footer={null}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
+          <Form.Item name="cable_id" label="关联线缆（可选）" style={{ marginBottom: 12 }}>
+            <Select allowClear showSearch optionFilterProp="label"
+              options={cables.filter((c) => c.status === 1).map((c) => ({ value: c.id, label: `${c.name}（${c.code}）` }))} />
+          </Form.Item>
+          <Form.Item name="fault_type" label="故障类型" style={{ marginBottom: 12 }}>
+            <Input maxLength={30} placeholder="如 断芯 / 接头进水 / 外破" />
+          </Form.Item>
+          <Form.Item name="severity" label="严重度" rules={[{ required: true }]} style={{ marginBottom: 12 }}>
+            <Radio.Group optionType="button" buttonStyle="solid" style={{ display: "flex" }}>
+              {Object.entries(SEVERITY).map(([k, v]) => <Radio.Button key={k} value={Number(k)} style={{ flex: 1, textAlign: "center", borderRadius: 10 }}>{v.label}</Radio.Button>)}
+            </Radio.Group>
+          </Form.Item>
+          <Form.Item name="description" label="描述" style={{ marginBottom: 12 }}>
+            <Input.TextArea rows={3} maxLength={500} placeholder="故障现象、影响范围、现场情况…" />
+          </Form.Item>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: token.colorTextSecondary, marginBottom: 6 }}>故障位置（点击地图选点）</div>
+          <div style={{ height: 220, borderRadius: 12, overflow: "hidden", border: `1px solid ${token.colorBorder}`, marginBottom: 8 }}>
+            <MapView sources={sources} overlays={{ cables: [], faults: [], markersByCable: {} }}
+              onPick={(lat, lng) => { setPicked({ lat, lng }); setPicking(false); }}
+              picking={picking ? "点击地图选择故障位置（自动转换为 WGS84）" : undefined} height="220px" />
           </div>
-          {!open ? (
-            <div style={{ textAlign: "center", padding: "40px 12px", color: token.colorTextTertiary, display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
-              <WarningOutlined style={{ fontSize: 36, color: "#CBD6EC" }} />
-              <div style={{ fontWeight: 600 }}>上报新故障</div>
-              <div style={{ fontSize: 12, lineHeight: 1.6 }}>选择线缆 → 地图点选位置 → 填严重度与描述 → 提交后通知调度员；中高严重度同步推送短信</div>
-              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>故障上报</Button>
-            </div>
-          ) : (
-            <Form form={form} layout="vertical" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              <Form.Item name="cable_id" label="关联线缆（可选）" style={{ marginBottom: 12 }}>
-                <Select allowClear showSearch optionFilterProp="label"
-                  options={cables.filter((c) => c.status === 1).map((c) => ({ value: c.id, label: `${c.name}（${c.code}）` }))} />
-              </Form.Item>
-              <Form.Item name="fault_type" label="故障类型" style={{ marginBottom: 12 }}>
-                <Input maxLength={30} placeholder="如 断芯 / 接头进水 / 外破" />
-              </Form.Item>
-              <Form.Item name="severity" label="严重度" rules={[{ required: true }]} style={{ marginBottom: 12 }}>
-                <Radio.Group optionType="button" buttonStyle="solid" style={{ display: "flex" }}>
-                  {Object.entries(SEVERITY).map(([k, v]) => <Radio.Button key={k} value={Number(k)} style={{ flex: 1, textAlign: "center", borderRadius: 10 }}>{v.label}</Radio.Button>)}
-                </Radio.Group>
-              </Form.Item>
-              <Form.Item name="description" label="描述" style={{ marginBottom: 12 }}>
-                <Input.TextArea rows={3} maxLength={500} placeholder="故障现象、影响范围、现场情况…" />
-              </Form.Item>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: token.colorTextSecondary, marginBottom: 6 }}>故障位置（点击地图选点）</div>
-              <div style={{ height: 200, borderRadius: 12, overflow: "hidden", border: `1px solid ${token.colorBorder}`, marginBottom: 8 }}>
-                <MapView sources={sources} overlays={{ cables: [], faults: [], markersByCable: {} }}
-                  onPick={(lat, lng) => { setPicked({ lat, lng }); setPicking(false); }}
-                  picking={picking ? "点击地图选择故障位置（自动转换为 WGS84）" : undefined} height="200px" />
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <Button size="small" icon={<AimOutlined />} onClick={() => setPicking(true)}>地图选点</Button>
-                {picked && <span style={{ fontSize: 11.5, color: token.colorTextSecondary, fontVariantNumeric: "tabular-nums" }}>已选：{picked.lat.toFixed(6)}, {picked.lng.toFixed(6)}</span>}
-                {!picked && <span style={{ fontSize: 11.5, color: token.colorTextTertiary }}>尚未选择位置</span>}
-              </div>
-              <Form.Item name="photoFile" label="现场照片（可选）" valuePropName="file" getValueFromEvent={(e) => e?.fileList?.[0]?.originFileObj} style={{ marginBottom: 0 }}>
-                <Upload beforeUpload={() => false} maxCount={1} accept="image/*">
-                  <Button icon={<UploadOutlined />} block>选择照片</Button>
-                </Upload>
-              </Form.Item>
-              <div style={{ display: "flex", gap: 10, marginTop: 14, borderTop: `1px solid ${token.colorBorder}`, paddingTop: 12 }}>
-                <Button style={{ width: 120 }} onClick={() => setOpen(false)}>取消</Button>
-                <Button type="primary" loading={saving} style={{ flex: 1 }} onClick={() => void save()}>提交上报</Button>
-              </div>
-            </Form>
-          )}
-        </div>
-      </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <Button size="small" icon={<AimOutlined />} onClick={() => setPicking(true)}>地图选点</Button>
+            {picked && <span style={{ fontSize: 11.5, color: token.colorTextSecondary, fontVariantNumeric: "tabular-nums" }}>已选：{picked.lat.toFixed(6)}, {picked.lng.toFixed(6)}</span>}
+            {!picked && <span style={{ fontSize: 11.5, color: token.colorTextTertiary }}>尚未选择位置</span>}
+          </div>
+          <Form.Item name="photoFile" label="现场照片（可选）" valuePropName="file" getValueFromEvent={(e) => e?.fileList?.[0]?.originFileObj} style={{ marginBottom: 0 }}>
+            <Upload beforeUpload={() => false} maxCount={1} accept="image/*">
+              <Button icon={<UploadOutlined />} block>选择照片</Button>
+            </Upload>
+          </Form.Item>
+          <div style={{ display: "flex", gap: 10, marginTop: 14, borderTop: `1px solid ${token.colorBorder}`, paddingTop: 12 }}>
+            <Button style={{ width: 120 }} onClick={() => setOpen(false)}>取消</Button>
+            <Button type="primary" loading={saving} style={{ flex: 1 }} onClick={() => void save()}>提交上报</Button>
+          </div>
+        </Form>
+      </Modal>
 
       {/* 定位到故障点（内嵌地图） */}
       <Modal open={!!locFault} onCancel={() => setLocFault(null)} footer={null} title={locFault ? `故障 #${locFault.id} 位置` : ""} width={720} destroyOnHidden>

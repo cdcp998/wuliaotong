@@ -49242,24 +49242,6 @@
                             },
                             {
                               "type": "text",
-                              "id": "n2653",
-                              "width": 150.0,
-                              "height": "fit_content",
-                              "content": "负责人",
-                              "fontFamily": "仿宋",
-                              "fontSize": 12.0,
-                              "fontWeight": 600,
-                              "lineHeight": 1.5,
-                              "textGrowth": "fixed-width",
-                              "fill": [
-                                {
-                                  "type": "solid",
-                                  "color": "#5B6478"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "text",
                               "id": "n2654",
                               "width": 100.0,
                               "height": "fit_content",
@@ -49405,24 +49387,6 @@
                                       "color": "#8A93A8"
                                     }
                                   ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "text",
-                              "id": "n2662",
-                              "width": 150.0,
-                              "height": "fit_content",
-                              "content": "张队",
-                              "fontFamily": "仿宋",
-                              "fontSize": 12.5,
-                              "fontWeight": 500,
-                              "lineHeight": 1.5,
-                              "textGrowth": "fixed-width",
-                              "fill": [
-                                {
-                                  "type": "solid",
-                                  "color": "#5B6478"
                                 }
                               ]
                             },
@@ -49630,24 +49594,6 @@
                             },
                             {
                               "type": "text",
-                              "id": "n2674",
-                              "width": 150.0,
-                              "height": "fit_content",
-                              "content": "周敏",
-                              "fontFamily": "仿宋",
-                              "fontSize": 12.5,
-                              "fontWeight": 500,
-                              "lineHeight": 1.5,
-                              "textGrowth": "fixed-width",
-                              "fill": [
-                                {
-                                  "type": "solid",
-                                  "color": "#5B6478"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "text",
                               "id": "n2675",
                               "width": 100.0,
                               "height": "fit_content",
@@ -49850,24 +49796,6 @@
                             },
                             {
                               "type": "text",
-                              "id": "n2686",
-                              "width": 150.0,
-                              "height": "fit_content",
-                              "content": "李主任",
-                              "fontFamily": "仿宋",
-                              "fontSize": 12.5,
-                              "fontWeight": 500,
-                              "lineHeight": 1.5,
-                              "textGrowth": "fixed-width",
-                              "fill": [
-                                {
-                                  "type": "solid",
-                                  "color": "#5B6478"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "text",
                               "id": "n2687",
                               "width": 100.0,
                               "height": "fit_content",
@@ -50065,24 +49993,6 @@
                                       "color": "#8A93A8"
                                     }
                                   ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "text",
-                              "id": "n2698",
-                              "width": 150.0,
-                              "height": "fit_content",
-                              "content": "何静",
-                              "fontFamily": "仿宋",
-                              "fontSize": 12.5,
-                              "fontWeight": 500,
-                              "lineHeight": 1.5,
-                              "textGrowth": "fixed-width",
-                              "fill": [
-                                {
-                                  "type": "solid",
-                                  "color": "#5B6478"
                                 }
                               ]
                             },
@@ -119601,7 +119511,7 @@
   "children": [],
   "formatVersion": "1.2",
   "editorMeta": {
-    "activePageIndex": 61,
+    "activePageIndex": 10,
     "preserveAuthoredGeometry": false
   }
 }

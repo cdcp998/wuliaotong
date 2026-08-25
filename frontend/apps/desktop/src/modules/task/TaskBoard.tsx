@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { App, Button, Descriptions, Drawer, Input, Popconfirm, Select, Space, Tag, theme } from "antd";
-import { UnorderedListOutlined, AppstoreOutlined, PlusOutlined, ReloadOutlined, ClockCircleOutlined, UserOutlined, FlagOutlined } from "@ant-design/icons";
+import { UnorderedListOutlined, PlusOutlined, FlagOutlined } from "@ant-design/icons";
 
 import { adminApi } from "@wlt/shared";
 
@@ -68,19 +68,17 @@ export function TaskBoardPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      {/* 页头 */}
+      {/* 页头（设计页 44） */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>维修任务看板</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>拖拽卡片即可流转状态（此处以操作按钮示意）；高优任务红色置顶 · 维修人员仅见被指派任务</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+            7 状态列拖拽流转；卡片：优先/单号/负责人/时间；看板 ⇄ 列表视图切换
+          </p>
         </div>
         <Space>
-          <div style={{ display: "inline-flex", padding: 3, gap: 0, background: "#F6F8FE", border: `1px solid ${token.colorBorder}`, borderRadius: 10 }}>
-            <Button type="primary" size="small" icon={<AppstoreOutlined />} style={{ borderRadius: 10 }}>看板</Button>
-            <Button size="small" type="text" icon={<UnorderedListOutlined />} onClick={() => navigate("/task/list")} style={{ borderRadius: 10 }}>列表</Button>
-          </div>
-          <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/task/list")}>新建维修任务</Button>
+          <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<UnorderedListOutlined style={{ color: "#5B7FFF" }} />} onClick={() => navigate("/task/list")}>切换列表视图</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/task/list")}>新建任务</Button>
         </Space>
       </div>
 
@@ -90,29 +88,32 @@ export function TaskBoardPage() {
           const meta = ST[status] ?? { label: status, fg: "#64748B", bg: "#EFF3FC", dot: "#94A3B8" };
           const items = byStatus[status] ?? [];
           return (
-            <div key={status} style={{ background: "#F6F8FE", border: `1px solid ${token.colorBorder}`, borderRadius: 14, padding: 10, display: "flex", flexDirection: "column", gap: 10, minHeight: 220 }}>
+            <div key={status} style={{ background: "#FFFFFF", border: `1px solid #E4EAF6`, borderRadius: 14, padding: 10, display: "flex", flexDirection: "column", gap: 8, minHeight: 220 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 4, background: meta.dot }} />
-                <span style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{meta.label}</span>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: meta.fg, background: meta.bg, borderRadius: 999, padding: "1px 8px" }}>{items.length}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>{meta.label}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#8A93A8" }}>{items.length}</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {loading && items.length === 0 && <div style={{ color: token.colorTextTertiary, fontSize: 12, textAlign: "center", padding: 12 }}>加载中…</div>}
                 {!loading && items.length === 0 && <div style={{ color: token.colorTextTertiary, fontSize: 11.5, textAlign: "center", padding: 12, border: "1px dashed #CBD6EC", borderRadius: 10 }}>暂无任务</div>}
                 {items.map((t) => (
                   <div key={t.id} onClick={() => { setCurrent(t); setAssignee(undefined); setVerdict(""); }}
-                    style={{ cursor: "pointer", background: "#fff", border: `1px solid ${t.priority === 2 ? "#FCA5A5" : token.colorBorder}`, borderRadius: 12, padding: 10, display: "flex", flexDirection: "column", gap: 6, boxShadow: "0 3px 10px rgba(30,36,51,.05)", transition: "box-shadow .2s ease" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      {t.priority === 2 && <Tag color="red" style={{ marginInlineEnd: 0, borderRadius: 999, padding: "0 6px", fontSize: 10.5 }}>紧急</Tag>}
-                      <span style={{ fontSize: 10.5, color: token.colorTextTertiary, flex: 1, textAlign: "right" }}>{t.task_no}</span>
+                    style={{ cursor: "pointer", background: "#F6F8FE", border: `1px solid ${t.priority === 2 ? "#FCA5A5" : "#E4EAF6"}`, borderRadius: 12, padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {t.priority === 2
+                        ? <span style={{ fontSize: 10.5, fontWeight: 600, color: "#EF4444" }}>紧急</span>
+                        : t.priority === 1
+                          ? <span style={{ fontSize: 10.5, fontWeight: 600, color: "#F59E0B" }}>高优</span>
+                          : <span style={{ fontSize: 10.5, fontWeight: 600, color: "#8A93A8" }}>普通</span>}
+                      <span style={{ fontSize: 11.5, fontWeight: 600, color: "#1E2433", flex: 1 }}>{t.title}</span>
                     </div>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>{t.title}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: token.colorTextSecondary }}>
-                      <UserOutlined style={{ fontSize: 11 }} />
-                      <span style={{ flex: 1 }}>{t.assignee_name || "未派发"}</span>
-                      {t.scheduled_time && <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><ClockCircleOutlined style={{ fontSize: 10 }} />{t.scheduled_time.slice(5, 16)}</span>}
+                    <div style={{ fontSize: 10.5, color: "#8A93A8" }}>{t.description || `${t.task_no} · 待派发`}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#5B6478" }}>
+                      <span style={{ flex: 1 }}>{t.assignee_name ? `${t.assignee_name} · ${t.scheduled_time ? t.scheduled_time.slice(5, 16) : ""}` : `${t.task_no} · ${t.scheduled_time ? t.scheduled_time.slice(5, 16) : ""}`}</span>
                     </div>
-                    <div style={{ display: "flex", gap: 4, alignItems: "center", minHeight: 22 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, minHeight: 22 }}>
+                      <Tag style={{ borderRadius: 999, background: meta.bg, color: meta.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{meta.label}</Tag>
                       {status === "pending" && <Button size="small" type="primary" icon={<FlagOutlined />} onClick={(e) => { e.stopPropagation(); setCurrent(t); }}>派发</Button>}
                       {status === "done" && (
                         <>

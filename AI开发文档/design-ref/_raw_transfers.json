@@ -1,0 +1,53 @@
+{
+  "id": "b11a5441-61cc-4cbc-9dbb-8c9ae219c3df",
+  "model": "deepseek-v4-flash-vision-exp",
+  "object": "chat.completion",
+  "created": 1787661499,
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "【符合】\n- 页头：标题「库存调拨」、副题「仓库/库位间移动库存：同仓即时生效；跨仓需审核（统一库存事务防超调）」、右侧「+ 新建调拨」主按钮均存在，文字与位置基本一致。\n- 筛选条：搜索框（占位符「单号 / 材料 / 仓库」）和「全部状态」下拉框均存在，位置正确。\n- 表格列：表头包含单号/材料/数量/调出/调入/状态/审计人/日期，列名与图1一致（但图2额外多出「操作」列）。\n- 导航侧边栏：可见「库存调拨」菜单项。\n\n【不符合】\n1. **筛选条「共 N 条」数值不符（屏幕区域：筛选条右侧）**  \n   图1显示「共 26 条」，图2显示「共 0 条」。\n2. **表格数据为空（屏幕区域：表格主体区域）**  \n   图1有4条库存调拨记录（含单号、材料、数量、调出/调入仓库、状态胶囊、审计人、日期），图2表格内仅有「暂无调拨单」空状态提示，无任何数据行。\n3. **状态胶囊缺失（屏幕区域：表格「状态」列）**  \n   图1中每条记录均有带颜色的状态胶囊（待审核橙/已完成绿/已驳回红），图2因无数据，状态列完全为空。\n4. **表格多出多余列「操作」（屏幕区域：表格最右侧）**  \n   图1表格没有「操作」列，图2在「日期」右侧多了一列「操作」，且列宽占用空间，与基准图不符。\n5. **底部提示语位置/内容不完全一致（屏幕区域：表格下方）**  \n   图1有提示「提示：调拨单明细须冻结库存，跨仓调拨审核通过后自动扣/增并回写库位」；图2也有类似提示，但位于空状态下方，且文字结尾略有差异（图2为「…自动扣/增并回写库位」vs 图1为「…自动扣/增并回写库位」——实际内容一致，但位置因空表格而偏移，且图2提示语上方无数据行，整体视觉密度不符）。\n\n【建议】\n1. **优先修复数据展示**：在表格中补齐图1中的4条调拨记录（或真实数据），确保「共 N 条」与表格行数一致，并恢复各列数据值（单号、材料、数量、调出/调入、审计人、日期）。\n2. **恢复状态胶囊样式**：为每行「状态」列添加带背景色的胶囊标签（待审核橙/已完成绿/已驳回红），保持与图1一致的视觉权重。\n3. **移除「操作」列**：删除表格最右侧的「操作」列，使列结构与图1完全一致。\n4. **调整空状态提示样式**：若存在无数据场景，可保留「暂无调拨单」作为空态；但若与基准图内容一致，应优先展示真实列表数据，并将底部提示语置于表格数据下方。\n5. **核对筛选条计数逻辑**：确保「共 N 条」实时反映筛选结果，当前显示0条与图1基准不符。",
+        "reasoning_content": "{\"need_to_compare\":true,\"reasoning_summary\":\"图2与图1存在显著可见差异：图2主体内容区为空表格，缺少图1中的4条库存调拨记录；筛选条显示「共0条」而图1为「共26条」；图2表格多出「操作」列且无状态胶囊；搜索框和状态下拉样式与图1基本一致但值不同；页头标题、副题、按钮均存在且文字一致。侧边栏菜单结构不同，但不在检查点范围内。按检查点逐项列出差异和修复建议。\"}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1019,
+    "completion_tokens": 863,
+    "total_tokens": 1882,
+    "usage_semantic": "openai",
+    "usage_source": "anthropic",
+    "billing_usage": {
+      "source": "claude_messages",
+      "semantic": "anthropic",
+      "claude_usage": {
+        "input_tokens": 1019,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "output_tokens": 863,
+        "claude_cache_creation_5_m_tokens": 0,
+        "claude_cache_creation_1_h_tokens": 0
+      }
+    },
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "text_tokens": 0,
+      "audio_tokens": 0,
+      "image_tokens": 0
+    },
+    "completion_tokens_details": {
+      "text_tokens": 0,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "reasoning_tokens": 0
+    },
+    "input_tokens": 1019,
+    "output_tokens": 0,
+    "input_tokens_details": null,
+    "claude_cache_creation_5_m_tokens": 0,
+    "claude_cache_creation_1_h_tokens": 0
+  }
+}

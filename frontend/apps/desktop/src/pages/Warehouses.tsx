@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Space, Spin, Tag } from "antd";
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
 
 import { baseApi, reportApi, type LocationStock, type Shelf, type Warehouse } from "@wlt/shared";
 
@@ -97,6 +97,24 @@ export function WarehousesPage() {
   const [locForm] = Form.useForm();
   // 单元格明细
   const [detail, setDetail] = useState<LocationStock | null>(null);
+  // 货架搜索（设计页 17 筛选条：搜索库位/材料）
+  const [shelfKw, setShelfKw] = useState("");
+  /** 按搜索词过滤货架（匹配货架编号/名称/库位码/材料名）。 */
+  const visibleShelves = useMemo(() => {
+    const kw = shelfKw.trim().toLowerCase();
+    if (!kw) return shelves;
+    return shelves.filter((s) => {
+      if (`${s.code}${s.name ?? ""}`.toLowerCase().includes(kw)) return true;
+      for (const v of cellMap.values()) {
+        if (!String(v.layer_no)) continue;
+        const key = `${s.id}-${v.layer_no}-${v.row_no}-${v.col_no}`;
+        if (cellMap.get(key) !== v) continue;
+        if (v.location_code.toLowerCase().includes(kw)) return true;
+        if (v.items.some((it) => it.name.toLowerCase().includes(kw))) return true;
+      }
+      return false;
+    });
+  }, [shelves, shelfKw, cellMap]);
 
   const loadWhs = useCallback(async (keepSelectedId?: number) => {
     setWhLoading(true);
@@ -224,48 +242,59 @@ export function WarehousesPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+      {/* 页头（设计页 17） */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>仓库与货架</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
-            点击仓库直接查看其 2.5D 货架视图（层 × 行 × 列 → 隔）；新建货架时按层行列批量生成库位；删除有保护
+            仓库 / 货架 / 库位三级管理：库位编码自动生成、2D 分层货架图、按单位过滤
           </p>
         </div>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={() => void loadWhs()}>刷新</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setWhModal({ open: true, editing: null })}>新建仓库</Button>
+          <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<PlusOutlined style={{ color: "#5B7FFF" }} />}
+            onClick={() => { if (!selectedWh) { message.warning("请先在左侧选择仓库，再新增货架"); return; } setShelfModal({ open: true, editing: null }); }}>
+            新增货架
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setWhModal({ open: true, editing: null })}>新增仓库</Button>
         </Space>
       </div>
 
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-        {/* 左：仓库列表（含汇总） */}
-        <div style={{ flex: "0 0 250px", maxHeight: "calc(100dvh - 200px)", overflow: "auto" }}>
-          <Spin spinning={whLoading}>
-            {whs.map((w) => (
-              <div
-                key={w.id}
-                onClick={() => setSelectedWh(w)}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  border: selectedWh?.id === w.id ? "1px solid #5B7FFF" : "1px solid #E4EAF6",
-                  background: selectedWh?.id === w.id ? "#f0f7ff" : "#fff",
-                  cursor: "pointer",
-                  marginBottom: 8,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <b>{w.name}</b>
-                  {w.status === 1 ? <Tag color="green" style={{ marginInlineEnd: 0 }}>启用</Tag> : <Tag style={{ marginInlineEnd: 0 }}>停用</Tag>}
-                </div>
-                <div style={{ fontSize: 12, color: "#5B6478", marginTop: 2 }}>
-                  {w.shelf_count ?? 0} 货架 · {w.location_count ?? 0} 库位 · {w.product_kind_count ?? 0} 种材料
-                </div>
-                {w.address && <div style={{ fontSize: 12, color: "#c0c4cc" }}>{w.address}</div>}
-              </div>
-            ))}
-            {!whs.length && !whLoading && <Empty description="暂无仓库" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
-          </Spin>
+        {/* 左：仓库列表卡（设计页 17：300px 白卡） */}
+        <div style={{ flex: "0 0 300px", maxHeight: "calc(100dvh - 200px)", overflow: "auto" }}>
+          <div style={{ border: "1px solid #E4EAF6", borderRadius: 16, background: "#FFFFFF", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: "#1E2433" }}>仓库列表</div>
+            <Spin spinning={whLoading}>
+              {whs.map((w) => {
+                const active = selectedWh?.id === w.id;
+                return (
+                  <div
+                    key={w.id}
+                    onClick={() => setSelectedWh(w)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      background: active ? "#EAEFFF" : "#F6F8FE",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: active ? 700 : 500, color: active ? "#3B5BDB" : "#1E2433" }}>{w.name}</div>
+                      <div style={{ fontSize: 10.5, color: "#8A93A8", marginTop: 2 }}>
+                        {w.code} · {w.shelf_count ?? 0} 货架 · {w.location_count ?? 0} 库位{w.status === 1 ? "" : " · 停用"}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 12, color: active ? "#3B5BDB" : "#8A93A8" }}>▸</span>
+                  </div>
+                );
+              })}
+              {!whs.length && !whLoading && <Empty description="暂无仓库" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
+            </Spin>
+            <div style={{ fontSize: 10.5, color: "#8A93A8" }}>选择仓库后右侧显示分层货架图</div>
+          </div>
         </div>
 
         {/* 右：选中仓库的 2.5D 货架视图（内嵌，无独立页） */}
@@ -294,13 +323,30 @@ export function WarehousesPage() {
                 <Button size="small" type="primary" ghost icon={<PlusOutlined />} onClick={() => setShelfModal({ open: true, editing: null })}>新建货架</Button>
               </Space>
 
+              {/* 筛选条（设计页 17）：搜索库位/材料 + 汇总胶囊 */}
+              <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+                <Input
+                  prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+                  placeholder="搜索库位 / 材料"
+                  allowClear
+                  style={{ width: 260, background: "#F6F8FE" }}
+                  value={shelfKw}
+                  onChange={(e) => setShelfKw(e.target.value)}
+                />
+                <span style={{ marginLeft: "auto" }}>
+                  <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#5B7FFF", borderColor: "transparent", marginInlineEnd: 0 }}>
+                    {visibleShelves.length} 货架 · {visibleShelves.reduce((s, x) => s + (x.layers ?? 1) * (x.rows ?? 1) * (x.cols ?? 1), 0)} 库位
+                  </Tag>
+                </span>
+              </div>
+
               {legend}
 
-              {shelves.length === 0 ? (
-                <Empty description="暂无货架，点击「新建货架」（按层×行×列批量生成库位）" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              {visibleShelves.length === 0 ? (
+                <Empty description={shelves.length ? "无匹配货架" : "暂无货架，点击「新增货架」（按层×行×列批量生成库位）"} image={Empty.PRESENTED_IMAGE_SIMPLE} />
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(560px, 1fr))", gap: 14 }}>
-                  {shelves.map((s) => (
+                  {visibleShelves.map((s) => (
                     <div key={s.id} style={{ border: "1px solid #E4EAF6", borderRadius: 12, background: "#F8FAFF", padding: 10 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                         <b>{s.code}{s.name ? ` ${s.name}` : ""}</b>

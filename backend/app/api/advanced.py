@@ -16,7 +16,7 @@ from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, Side
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -146,6 +146,7 @@ def _transfer_out(db: Session, b: StkTransfer) -> dict:
 @router.get("/transfers")
 def list_transfers(
     status: int | None = Query(None),
+    keyword: str = Query("", max_length=100, description="单号/材料/仓库 模糊查询"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -153,6 +154,22 @@ def list_transfers(
     stmt = select(StkTransfer)
     if status is not None:
         stmt = stmt.where(StkTransfer.status == status)
+    if keyword.strip():
+        like = f"%{keyword.strip()}%"
+        from_wh = select(BaseWarehouse.name).where(BaseWarehouse.id == StkTransfer.from_warehouse_id).scalar_subquery()
+        to_wh = select(BaseWarehouse.name).where(BaseWarehouse.id == StkTransfer.to_warehouse_id).scalar_subquery()
+        stmt = stmt.where(or_(
+            StkTransfer.bill_no.like(like),
+            from_wh.like(like),
+            to_wh.like(like),
+            exists(
+                select(StkTransferItem.id).where(
+                    StkTransferItem.transfer_id == StkTransfer.id,
+                    StkTransferItem.product_id == BaseProduct.id,
+                    or_(BaseProduct.name.like(like), BaseProduct.code.like(like), BaseProduct.material_code.like(like)),
+                )
+            ),
+        ))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(StkTransfer.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
     return ok(PageData(list=[_transfer_out(db, b) for b in rows], total=total, page=page, page_size=page_size).model_dump())
@@ -665,6 +682,7 @@ def _other_out(db: Session, b: StkOtherIo) -> dict:
 def list_other_io(
     io_type: str = Query("", max_length=20),
     status: int | None = Query(None),
+    keyword: str = Query("", max_length=100, description="单号/材料/原因 模糊查询"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -674,6 +692,19 @@ def list_other_io(
         stmt = stmt.where(StkOtherIo.io_type == io_type)
     if status is not None:
         stmt = stmt.where(StkOtherIo.status == status)
+    if keyword.strip():
+        like = f"%{keyword.strip()}%"
+        stmt = stmt.where(or_(
+            StkOtherIo.bill_no.like(like),
+            StkOtherIo.remark.like(like),
+            exists(
+                select(StkOtherIoItem.id).where(
+                    StkOtherIoItem.bill_id == StkOtherIo.id,
+                    StkOtherIoItem.product_id == BaseProduct.id,
+                    or_(BaseProduct.name.like(like), BaseProduct.code.like(like), BaseProduct.material_code.like(like)),
+                )
+            ),
+        ))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(StkOtherIo.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
     return ok(PageData(list=[_other_out(db, b) for b in rows], total=total, page=page, page_size=page_size).model_dump())

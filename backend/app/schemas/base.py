@@ -58,6 +58,7 @@ class SupplierOut(BaseModel):
     address: str
     remark: str
     status: int
+    last_supply_at: str = ""  # 最近供货时间（采购入库单最大日期，ISO；无记录为空串）
 
 
 class ProductUnitItem(BaseModel):

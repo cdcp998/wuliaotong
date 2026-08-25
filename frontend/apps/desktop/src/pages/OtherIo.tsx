@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { App, Button, InputNumber, Modal, Popconfirm, Radio, Select, Space, Tag } from "antd";
+import { App, Button, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { PictureOutlined } from "@ant-design/icons";
+import { ArrowDownOutlined, ArrowUpOutlined, PictureOutlined, SearchOutlined } from "@ant-design/icons";
 
 import { baseApi, fileApi, fileUrl, otherIoApi, type OtherIoBill, type OtherIoDetail } from "@wlt/shared";
-
-import { DataTable } from "../components/DataTable";
 
 import { BillDetailDrawer } from "../components/BillDetailDrawer";
 
 const OUT_TYPES = ["报废", "报损", "赠品出", "借出", "其他出"]; // 负方向（出库）
-const IO_TYPES = [...OUT_TYPES, "赠品入", "归还", "其他入"]; // 设计页 23：出=红/入=绿 + 借出/归还配对
+const IN_TYPES = ["赠品入", "归还", "其他入"]; // 正方向（入库）
+const IO_TYPES = [...OUT_TYPES, ...IN_TYPES]; // 设计页 23：出=红/入=绿 + 借出/归还配对
+
+/** 状态胶囊（设计页 23：已入账/已作废）。 */
+const STATUS_META: Record<string, { label: string; fg: string; bg: string }> = {
+  "1": { label: "已入账", fg: "#15803D", bg: "#E8F9EF" },
+  "-1": { label: "已作废", fg: "#DC2626", bg: "#FDEBEC" },
+};
 
 interface Row {
   product_id: number | undefined;
@@ -22,6 +27,8 @@ interface Row {
 export function OtherIoPage() {
   const { message } = App.useApp();
   const [ioType, setIoType] = useState<string | undefined>();
+  const [status, setStatus] = useState<number | undefined>();
+  const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [list, setList] = useState<OtherIoBill[]>([]);
   const [total, setTotal] = useState(0);
@@ -51,13 +58,13 @@ export function OtherIoPage() {
     setLoading(true);
     setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
     try {
-    const data = await otherIoApi.list(ioType, undefined, page, pageSize);
-    setList(data.list);
-    setTotal(data.total);
+      const data = await otherIoApi.list(ioType, status, page, pageSize, keyword);
+      setList(data.list);
+      setTotal(data.total);
     } finally {
       setLoading(false);
     }
-  }, [ioType, page, pageSize]);
+  }, [ioType, status, keyword, page, pageSize]);
 
   useEffect(() => {
     void load();
@@ -85,6 +92,12 @@ export function OtherIoPage() {
 
   function setRow(i: number, patch: Partial<Row>) {
     setForm((f) => ({ ...f, rows: f.rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) }));
+  }
+
+  /** 打开新建弹窗（type 预选：出/入），重置表单。 */
+  function openCreate(type?: string) {
+    setForm({ ioType: type && IO_TYPES.includes(type) ? type : IO_TYPES[0], warehouse_id: 0, remark: "", rows: [] });
+    setOpen(true);
   }
 
   async function create() {
@@ -115,45 +128,119 @@ export function OtherIoPage() {
     }
   }
 
+  const linkBtn = (color: string) => ({ type: "link" as const, size: "small" as const, style: { padding: 0, fontSize: 12.5, color } });
+
   const columns: ColumnsType<OtherIoBill> = [
-    { title: "单号", dataIndex: "bill_no", render: (v: string, r) => <a onClick={() => void openDetail(r)}>{v}</a> },
-    { title: "类型", dataIndex: "io_type", render: (v: string) => {
-      const isOut = OUT_TYPES.includes(v);
-      return <span className="wlt-pill" style={{ background: isOut ? "#FDEBEC" : "#E8F9EF", color: isOut ? "#DC2626" : "#15803D" }}>{v}</span>;
-    } },
-    { title: "仓库", dataIndex: "warehouse_name" },
-    { title: "操作人", dataIndex: "operator_name" },
-    { title: "状态", dataIndex: "status", render: (s: number) => ({ 1: "已过账", "-1": "已作废" })[String(s)] ?? s },
+    { title: "单号", dataIndex: "bill_no", width: 160, render: (v: string) => <span style={{ fontSize: 12.5, fontWeight: 600, color: "#3B5BDB" }}>{v}</span> },
     {
-      title: "操作",
-      render: (_, r) =>
-        r.status === 1 ? (
-          <Popconfirm title="确认作废（反向冲销库存）？" onConfirm={async () => { try { await otherIoApi.void(r.id); message.success("已作废"); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
-            <Button size="small" danger>作废</Button>
-          </Popconfirm>
-        ) : null,
+      title: "类型", dataIndex: "io_type", width: 110,
+      render: (v: string) => {
+        const isOut = OUT_TYPES.includes(v);
+        return <Tag style={{ borderRadius: 999, background: isOut ? "#FDEBEC" : "#E8F9EF", color: isOut ? "#DC2626" : "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>{v}</Tag>;
+      },
+    },
+    {
+      title: "材料", key: "mat", width: 260,
+      render: (_, r) => {
+        const items = r.items ?? [];
+        const first = items[0];
+        if (!first) return <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span>;
+        return (
+          <span style={{ fontSize: 12.5, color: "#1E2433" }}>
+            {first.product_name}
+            {items.length > 1 && <span style={{ color: "#8A93A8", fontSize: 11 }}> 等 {items.length} 种</span>}
+          </span>
+        );
+      },
+    },
+    { title: "数量", key: "qty", width: 90, render: (_, r) => <span style={{ fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{(r.items ?? []).reduce((s, it) => s + Number(it.qty || 0), 0).toLocaleString("zh-CN")}</span> },
+    { title: "原因/备注", dataIndex: "remark", render: (v?: string) => <span style={{ fontSize: 12, color: "#5B6478" }}>{v || "—"}</span> },
+    {
+      title: "状态", dataIndex: "status", width: 100,
+      render: (s: number) => { const m = STATUS_META[String(s)] ?? { label: String(s), fg: "#5B6478", bg: "#EFF3FC" }; return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>; },
+    },
+    { title: "经办人", dataIndex: "operator_name", width: 100, render: (v: string) => <span style={{ fontSize: 12, color: "#5B6478" }}>{v || "—"}</span> },
+    { title: "日期", dataIndex: "created_at", width: 130, render: (v: string) => <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v ? v.slice(5, 16) : "—"}</span> },
+    {
+      title: "操作", key: "op", width: 110,
+      render: (_, r) => (
+        <Space size={10} style={{ padding: "0 10px" }}>
+          <Button {...linkBtn("#5B6478")} onClick={() => void openDetail(r)}>详情</Button>
+          {r.status === 1 && (
+            <Popconfirm title="确认作废（反向冲销库存）？" onConfirm={async () => { try { await otherIoApi.void(r.id); message.success("已作废"); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
+              <Button {...linkBtn("#DC2626")}>作废</Button>
+            </Popconfirm>
+          )}
+        </Space>
+      ),
     },
   ];
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: "0 0 16px" }}>其他出入库</h2>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Radio.Group value={ioType} onChange={(e) => { setIoType(e.target.value); setPage(1); }} optionType="button" size="small">
-          <Radio.Button value={undefined}>全部</Radio.Button>
-          {IO_TYPES.map((t) => (
-            <Radio.Button key={t} value={t}>{t}</Radio.Button>
-          ))}
-        </Radio.Group>
-        <Button type="primary" onClick={() => setOpen(true)}>新建</Button>
-      </Space>
-      <DataTable rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async (keys) => { for (const k of keys) await otherIoApi.void(Number(k)); message.success(`已作废 ${keys.length} 张单据`); void load(); }} />
+      {/* 页头（设计页 23）：新增出库（描边）/ 新增入库（主） */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>其他出入库</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
+            非采购入库/非领用出库的库存变动（报损/调拨外借/借出归还/工程退料等）
+          </p>
+        </div>
+        <Space>
+          <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<ArrowDownOutlined style={{ color: "#5B7FFF" }} />} onClick={() => openCreate(OUT_TYPES[0])}>新增出库</Button>
+          <Button type="primary" icon={<ArrowUpOutlined />} onClick={() => openCreate(IN_TYPES[0])}>新增入库</Button>
+        </Space>
+      </div>
+
+      {/* 筛选条（设计页 23：搜索 + 类型 + 状态 + 统计） */}
+      <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <Input
+          prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+          placeholder="单号 / 材料 / 原因"
+          allowClear
+          style={{ width: 300, background: "#F6F8FE" }}
+          onChange={(e) => { if (!e.target.value) { setKeyword(""); setPage(1); } }}
+          onPressEnter={(e) => { setKeyword((e.target as HTMLInputElement).value.trim()); setPage(1); }}
+        />
+        <Select
+          placeholder="全部类型"
+          allowClear
+          style={{ width: 170 }}
+          value={ioType}
+          onChange={(v) => { setIoType(v); setPage(1); }}
+          options={IO_TYPES.map((t) => ({ label: t, value: t }))}
+        />
+        <Select
+          placeholder="全部状态"
+          allowClear
+          style={{ width: 170 }}
+          value={status}
+          onChange={(v) => { setStatus(v); setPage(1); }}
+          options={[{ value: 1, label: "已入账" }, { value: -1, label: "已作废" }]}
+        />
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 条</span>
+      </div>
+
+      {/* 表格（设计列：单号/类型/材料/数量/原因备注/状态/经办人/日期） */}
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <Table<OtherIoBill>
+          rowKey="id"
+          loading={loading}
+          columns={columns}
+          dataSource={list}
+          locale={{ emptyText: "暂无其他出入库单" }}
+          pagination={{ current: page, pageSize, total, showTotal: (t) => `共 ${t} 条`, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
+        />
+        <p style={{ margin: "8px 0 0", fontSize: 11, color: "#8A93A8" }}>
+          提示：出库默认负数冲减并锁定库存；借出/归还对应台账自动配对，报损需附照片
+        </p>
+      </div>
 
       <BillDetailDrawer
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         title="其他出入库详情"
-        statusTag={detail ? <Tag color={detail.status === 1 ? "green" : "default"}>{detail.status === 1 ? "已过账" : "已作废"}</Tag> : undefined}
+        statusTag={detail ? <Tag style={{ borderRadius: 999, background: STATUS_META[String(detail.status)]?.bg, color: STATUS_META[String(detail.status)]?.fg, borderColor: "transparent" }}>{STATUS_META[String(detail.status)]?.label}</Tag> : undefined}
         fields={[
           { label: "单号", value: detail?.bill_no },
           { label: "类型", value: detail?.io_type },

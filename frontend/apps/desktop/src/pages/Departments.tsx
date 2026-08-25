@@ -1,6 +1,7 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { PlusOutlined } from "@ant-design/icons";
 
 import { adminApi, baseApi, type Department, type Shelf } from "@wlt/shared";
 
@@ -59,55 +60,61 @@ export function DepartmentsPage() {
   const columns: ColumnsType<Department> = [
     { title: "单位名称", dataIndex: "name" },
     { title: "备注", dataIndex: "remark" },
-    { title: "状态", width: 90, render: (_, r) => (r.status === 1 ? <Tag color="green">启用</Tag> : <Tag color="default">停用</Tag>) },
-    { title: "可用货架", width: 90, render: (_, r) => <Tag>{r.shelf_ids.length} 个</Tag> },
+    { title: "状态", width: 90, render: (_, r) => (r.status === 1
+      ? <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>启用</Tag>
+      : <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#64748B", borderColor: "transparent", marginInlineEnd: 0 }}>停用</Tag>) },
+    { title: "可用货架", width: 90, render: (_, r) => <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#5B6478", borderColor: "transparent", marginInlineEnd: 0 }}>{r.shelf_ids.length} 个</Tag> },
   ];
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>单位管理</h2>
-        <Button type="primary" onClick={() => setCreating(true)}>新建单位</Button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1E2433", letterSpacing: "-0.01em" }}>单位管理</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
+            角色可归属单位；单位关联的仓库货架仅该单位角色（非超管/管理者）可见，用于 2D 货架图与库位选择。单位编码由系统自动生成（数字编码，对外隐藏）。
+          </p>
+        </div>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>新建单位</Button>
       </div>
-      <p style={{ color: "#5B6478", fontSize: 12, marginBottom: 16 }}>
-        角色可归属单位；单位关联的仓库货架仅该单位角色（非超管/管理者）可见，用于 2D 货架图与库位选择。单位编码由系统自动生成（数字编码，对外隐藏）。
-      </p>
-      <DataTable
-        rowKey="id"
-        loading={loading}
-        size="small"
-        columns={columns}
-        dataSource={list}
-        pagination={false}
-        rowSelection
-        onBatchDelete={async (keys) => {
-          for (const k of keys) await adminApi.deleteDepartment(Number(k));
-          message.success(`已删除 ${keys.length} 个单位`);
-          void load();
-        }}
-        actionsWidth={220}
-        actions={(r) => (
-          <Space>
-            <Button size="small" type="primary" ghost onClick={() => { setShelfTarget(r); setShelfChecked(r.shelf_ids); }}>
-              配置货架
-            </Button>
-            <Popconfirm
-              title="删除该单位？"
-              onConfirm={async () => {
-                try {
-                  await adminApi.deleteDepartment(r.id);
-                  message.success("已删除");
-                  void load();
-                } catch (e) {
-                  message.error(e instanceof Error ? e.message : "删除失败");
-                }
-              }}
-            >
-              <Button size="small" danger>删除</Button>
-            </Popconfirm>
-          </Space>
-        )}
-      />
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <DataTable
+          rowKey="id"
+          loading={loading}
+          size="small"
+          columns={columns}
+          dataSource={list}
+          pagination={false}
+          rowSelection
+          onBatchDelete={async (keys) => {
+            for (const k of keys) await adminApi.deleteDepartment(Number(k));
+            message.success(`已删除 ${keys.length} 个单位`);
+            void load();
+          }}
+          actionsWidth={220}
+          actions={(r) => (
+            <Space>
+              <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B7FFF" }} onClick={() => { setShelfTarget(r); setShelfChecked(r.shelf_ids); }}>
+                配置货架
+              </Button>
+              <Popconfirm
+                title="删除该单位？"
+                onConfirm={async () => {
+                  try {
+                    await adminApi.deleteDepartment(r.id);
+                    message.success("已删除");
+                    void load();
+                  } catch (e) {
+                    message.error(e instanceof Error ? e.message : "删除失败");
+                  }
+                }}
+              >
+                <Button type="link" size="small" danger style={{ padding: 0, fontSize: 12.5 }}>删除</Button>
+              </Popconfirm>
+            </Space>
+          )}
+        />
+      </div>
 
       <Modal
         title="新建单位"

@@ -16,7 +16,7 @@ function arg(name, def) {
 const PORT = Number(arg("--port", "9223"));
 const BASE = arg("--base", "https://localhost:5174");
 const OUT = arg("--out", "G:/wuliaotong_dev/AI开发文档/screenshots");
-const PAGES = ["/dashboard", "/system/menus", "/cable/map", "/system/users"];
+const PAGES = ["/dashboard", "/system/menus", "/cable/map", "/system/users", "/suppliers", "/purchase-plans", "/purchase-in", "/warehouses", "/history-price", "/transfers", "/other-io", "/task/board", "/task/list", "/cable/cache", "/system/logs", "/cable/faults", "/system/departments", "/delete-reviews", "/materials-data", "/requisitions/apply", "/requisitions/query", "/llm-logs"];
 const CHROME = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

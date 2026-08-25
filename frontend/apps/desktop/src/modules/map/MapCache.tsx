@@ -1,18 +1,18 @@
 /** map 模块：地图缓存管理（/cable/cache，map:cache）+ 图源管理（map:config 编辑/新增/删除，查看脱敏）。 */
 import { useCallback, useEffect, useState } from "react";
 import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Progress, Select, Space, Table, Tag, Typography } from "antd";
-import { CaretRightOutlined, EnvironmentOutlined, PauseOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
+import { EnvironmentOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
 
 import { useAuthStore } from "@wlt/shared";
 
 import { mapApi, type MapSourceInfo } from "./api";
 import { MapView } from "./MapView";
 
-const REGION_STATUS: Record<number, { label: string; color: string }> = {
-  0: { label: "未开始", color: "default" },
-  1: { label: "下载中", color: "processing" },
-  2: { label: "完成", color: "success" },
-  3: { label: "已暂停", color: "warning" },
+const REGION_STATUS: Record<number, { label: string; bg: string; fg: string }> = {
+  0: { label: "未开始", bg: "#EFF3FC", fg: "#5B6478" },
+  1: { label: "生成中", bg: "#EAEFFF", fg: "#5B7FFF" },
+  2: { label: "已完成", bg: "#E8F9EF", fg: "#15803D" },
+  3: { label: "已暂停", bg: "#FEF4E2", fg: "#B45309" },
 };
 
 interface RegionRow {
@@ -29,6 +29,23 @@ interface RegionRow {
   done?: number;
   failed?: number;
   total?: number;
+}
+
+/** 字节 → 可读大小（磁盘列）。 */
+function fmtSize(n: number): string {
+  if (!n || n <= 0) return "0 B";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+/** 状态胶囊（设计页 47：已完成/生成中/失败×N/已暂停/未开始）。 */
+function statusCapsule(r: RegionRow) {
+  if (r.status === 1) return <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#5B7FFF", borderColor: "transparent", marginInlineEnd: 0 }}>生成中</Tag>;
+  if ((r.failed ?? 0) > 0) return <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>失败 ×{r.failed}</Tag>;
+  const m = REGION_STATUS[r.status] ?? { label: String(r.status), bg: "#EFF3FC", fg: "#5B6478" };
+  return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>;
 }
 
 export function MapCachePage() {
@@ -251,6 +268,9 @@ export function MapCachePage() {
   };
 
   const defaultKey = Object.keys(sources).find((k) => sources[k]?.enabled);
+  const totalTiles = progress.pending + progress.done + progress.failed;
+  const globalPercent = totalTiles > 0 ? Math.round(((progress.done + progress.failed) / totalTiles) * 100) : 0;
+  const runningCount = regions.filter((r) => r.status === 1).length;
 
   return (
     <div style={{ padding: 24 }}>
@@ -258,22 +278,22 @@ export function MapCachePage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>地图缓存管理</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>按区域批量下载瓦片 · 容量保护 · 支持暂停/继续/清理；密钥加密入库、回读脱敏</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>按地图源/区域管理瓦片缓存：生成/下载任务、磁盘占用、按 source+z/x/y 精准清理</p>
         </div>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={() => { void load(); void loadSources(); }}>刷新</Button>
-          <Button icon={<SettingOutlined />} onClick={() => setSrcOpen(true)}>图源管理</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>新建下载区域</Button>
+          <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<ReloadOutlined style={{ color: "#5B7FFF" }} />} onClick={() => { void load(); void loadSources(); }}>刷新</Button>
+          <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<SettingOutlined style={{ color: "#5B7FFF" }} />} onClick={() => setSrcOpen(true)}>图源管理</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>生成缓存</Button>
         </Space>
       </div>
 
       {/* 统计卡 */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 14 }}>
         {[
-          { label: "缓存区域", value: regions.length, unit: "个", color: "#3B5BDB", bg: "#EAEFFF" },
-          { label: "瓦片文件", value: regions.reduce((s, r) => s + (r.tile_count || 0), 0).toLocaleString("zh-CN"), unit: "张", color: "#1E2433", bg: "#F6F8FE" },
-          { label: "下载完成", value: (progress.done + progress.failed), unit: "张", color: "#15803D", bg: "#E8F9EF" },
-          { label: "下载失败", value: progress.failed, unit: "张", color: "#DC2626", bg: "#FDEBEC" },
+          { label: "区域", value: regions.length, unit: "个", color: "#3B5BDB", bg: "#EAEFFF" },
+          { label: "瓦片", value: regions.reduce((s, r) => s + (r.tile_count || 0), 0).toLocaleString("zh-CN"), unit: "张", color: "#1E2433", bg: "#F6F8FE" },
+          { label: "成功+失败", value: (progress.done + progress.failed).toLocaleString("zh-CN"), unit: "张", color: "#15803D", bg: "#E8F9EF" },
+          { label: "失败", value: progress.failed.toLocaleString("zh-CN"), unit: "张", color: "#DC2626", bg: "#FDEBEC" },
         ].map((c) => (
           <div key={c.label} style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 3px 12px rgba(30,36,51,.05)" }}>
             <div>
@@ -286,18 +306,17 @@ export function MapCachePage() {
 
       {/* 下载进度条 */}
       <div className="wlt-glass-sm" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 600 }}>全局下载进度</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#1E2433" }}>全局生成进度</span>
         <Progress
-          percent={progress.pending + progress.done + progress.failed > 0
-            ? Math.round(((progress.done + progress.failed) / (progress.pending + progress.done + progress.failed)) * 100)
-            : 0}
+          percent={globalPercent}
           size="small" style={{ width: 220 }}
           status={progress.failed > 0 ? "exception" : undefined}
           format={() => `${progress.done + progress.failed} / ${progress.pending + progress.done + progress.failed}`}
         />
-        <span style={{ fontSize: 12 }}>待 <Tag color="blue" style={{ borderRadius: 999 }}>{progress.pending}</Tag></span>
-        <span style={{ fontSize: 12 }}>成功 <Tag color="green" style={{ borderRadius: 999 }}>{progress.done}</Tag></span>
-        <span style={{ fontSize: 12 }}>失败 <Tag color="red" style={{ borderRadius: 999 }}>{progress.failed}</Tag></span>
+        <span style={{ fontSize: 12, color: "#8A93A8" }}>{globalPercent}% · {runningCount} 个任务运行中</span>
+        <span style={{ fontSize: 12 }}>待 <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#5B6478", borderColor: "transparent" }}>{progress.pending}</Tag></span>
+        <span style={{ fontSize: 12 }}>成功 <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent" }}>{progress.done}</Tag></span>
+        <span style={{ fontSize: 12 }}>失败 <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent" }}>{progress.failed}</Tag></span>
         <span style={{ fontSize: 12, color: "#8A93A8" }}>瓦片经后端代理缓存（磁盘优先命中 → 在线源抓取落盘），可离线使用。</span>
       </div>
 
@@ -305,10 +324,24 @@ export function MapCachePage() {
       <Table<RegionRow>
         rowKey="id" loading={loading} dataSource={regions} pagination={false}
         columns={[
-          { title: "区域", dataIndex: "name" },
-          { title: "缩放", key: "zoom", width: 110, render: (_, r) => `z${r.min_zoom}–${r.max_zoom}` },
           {
-            title: "下载进度", key: "progress", width: 230,
+            title: "区域", dataIndex: "name",
+            render: (_, r) => (
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13.5, color: "#1E2433" }}>{r.name}</div>
+                <div style={{ fontSize: 12, color: "#8A93A8", marginTop: 2 }}>
+                  最后下载：{r.last_download_at ? new Date(r.last_download_at).toLocaleString() : "—"}
+                </div>
+              </div>
+            ),
+          },
+          { title: "模式", dataIndex: "update_mode", width: 80, render: (v: string) => <span style={{ fontSize: 12, color: "#5B6478" }}>{({ manual: "手动", daily: "每日", weekly: "每周" })[v] ?? v}</span> },
+          { title: "级别", key: "zoom", width: 80, render: (_, r) => <span style={{ fontSize: 12, color: "#5B6478", fontVariantNumeric: "tabular-nums" }}>{r.min_zoom}-{r.max_zoom}</span> },
+          { title: "瓦片", dataIndex: "tile_count", width: 90, render: (v: number) => <span style={{ fontSize: 12, color: "#5B6478", fontVariantNumeric: "tabular-nums" }}>{(v ?? 0).toLocaleString("zh-CN")}</span> },
+          { title: "磁盘", dataIndex: "cache_size", width: 90, render: (v: number) => <span style={{ fontSize: 12, color: "#5B6478", fontVariantNumeric: "tabular-nums" }}>{fmtSize(v)}</span> },
+          { title: "状态", dataIndex: "status", width: 110, render: (_: number, r) => statusCapsule(r) },
+          {
+            title: "进度", key: "progress", width: 200,
             render: (_, r) => {
               const total = r.total ?? 0;
               const done = r.done ?? 0;
@@ -316,28 +349,29 @@ export function MapCachePage() {
               if (!total) return <Typography.Text type="secondary">—</Typography.Text>;
               const percent = Math.round(((done + failed) / total) * 100);
               return (
-                <div style={{ minWidth: 190 }}>
+                <div style={{ minWidth: 170 }}>
                   <Progress percent={percent} size="small" status={failed > 0 ? "exception" : undefined} format={() => `${done} / ${total}`} />
-                  <div style={{ fontSize: 12, color: "#86909c", marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: "#8A93A8", marginTop: 2 }}>
                     待 {r.pending ?? 0} · 成功 {done}
-                    {failed > 0 && <span style={{ color: "#cf1322" }}> · 失败 {failed}</span>}
+                    {failed > 0 && <span style={{ color: "#DC2626" }}> · 失败 {failed}</span>}
                   </div>
                 </div>
               );
             },
           },
-          { title: "模式", dataIndex: "update_mode", width: 90, render: (v: string) => ({ manual: "手动", daily: "每日", weekly: "每周" })[v] ?? v },
-          { title: "状态", dataIndex: "status", width: 100, render: (v: number) => <Tag color={REGION_STATUS[v]?.color}>{REGION_STATUS[v]?.label ?? v}</Tag> },
-          { title: "最后下载", dataIndex: "last_download_at", width: 160, render: (v: string | null) => (v ? new Date(v).toLocaleString() : "—") },
           {
-            title: "操作", width: 230,
+            title: "操作", width: 170,
             render: (_, r) => (
-              <Space size={4}>
-                {(r.status === 0 || r.status === 2) && <Button size="small" type="primary" onClick={() => act(r, "start")}>开始下载</Button>}
-                {r.status === 1 && <Button size="small" icon={<PauseOutlined />} onClick={() => act(r, "pause")}>暂停</Button>}
-                {r.status === 3 && <Button size="small" icon={<CaretRightOutlined />} onClick={() => act(r, "start")}>继续</Button>}
+              <Space size={10}>
+                {(r.status === 0 || r.status === 2) && (
+                  <Button type="link" size="small" style={{ padding: 0, color: "#5B7FFF" }} onClick={() => act(r, "start")}>
+                    {r.status === 2 ? "重试" : "开始下载"}
+                  </Button>
+                )}
+                {r.status === 1 && <Button type="link" size="small" style={{ padding: 0 }} onClick={() => act(r, "pause")}>暂停</Button>}
+                {r.status === 3 && <Button type="link" size="small" style={{ padding: 0, color: "#5B7FFF" }} onClick={() => act(r, "start")}>继续</Button>}
                 <Popconfirm title="清理区域任务与磁盘瓦片？" onConfirm={() => act(r, "clear")}>
-                  <Button size="small" danger>清理</Button>
+                  <Button type="link" size="small" danger style={{ padding: 0, color: "#DC2626" }}>清理</Button>
                 </Popconfirm>
               </Space>
             ),

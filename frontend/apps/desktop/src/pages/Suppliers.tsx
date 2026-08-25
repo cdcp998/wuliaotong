@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Space, Tag } from "antd";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, theme } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { ExportOutlined, ImportOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
 
 import { baseApi, type Product, type Supplier, type SupplierInput } from "@wlt/shared";
-
-import { DataTable } from "../components/DataTable";
 
 /** 简称归一（设计页 15「简称归一 / 待合并」）：剥离常见公司后缀并去空白、转小写，得到归一简称。 */
 function normShort(name: string): string {
@@ -14,36 +13,49 @@ function normShort(name: string): string {
     .toLowerCase();
 }
 
-/** 供应商管理（电脑端，base:supplier）：新建/编辑/删除（软删）/查看关联材料；简称归一标注「待合并」。 */
+/** 时间 → YYYY-MM-DD（最近供货列）。 */
+function fmtDate(v?: string): string {
+  if (!v) return "—";
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
+}
+
+/** 供应商管理（设计页 15，电脑端，base:supplier）：新建/编辑/停用、Excel 导入/导出、简称归一标注「待合并」、查看关联材料。 */
 export function SuppliersPage() {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [list, setList] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState("");
+  const [status, setStatus] = useState<number | undefined>(undefined);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [enabledTotal, setEnabledTotal] = useState(0);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [form] = Form.useForm();
+  const fileRef = useRef<HTMLInputElement | null>(null);
   // 查看详情：供应商信息 + 关联材料
   const [detail, setDetail] = useState<Supplier | null>(null);
   const [detailProducts, setDetailProducts] = useState<Product[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
-  // 简称归一「待合并」：归一简称冲突的供应商集合 + 各供应商的归一简称
+  // 简称归一「待合并」：归一简称冲突的供应商集合
   const [dupIds, setDupIds] = useState<Set<number>>(new Set());
-  const [shortNames, setShortNames] = useState<Map<number, string>>(new Map());
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       // 服务端搜索 + 分页（全库匹配），避免此前只加载前 100 条再本地过滤导致搜不到较旧供应商
-      const data = await baseApi.suppliers(undefined, keyword.trim(), page, 20);
+      const data = await baseApi.suppliers(status, keyword.trim(), page, 20);
       setList(data.list);
       setTotal(data.total);
+      // 启用数（筛选卡右侧「启用 N」，设计页 15）
+      const en = await baseApi.suppliers(1, "", 1, 1);
+      setEnabledTotal(en.total);
     } finally {
       setLoading(false);
     }
-  }, [keyword, page]);
+  }, [keyword, status, page]);
 
   useEffect(() => {
     void load().catch((e) => message.error(e instanceof Error ? e.message : "加载失败"));
@@ -62,17 +74,14 @@ export function SuppliersPage() {
         }
         if (!alive) return;
         const groups = new Map<string, number[]>();
-        const short = new Map<number, string>();
         for (const s of all) {
           const k = normShort(s.name);
-          short.set(s.id, k);
           if (!groups.has(k)) groups.set(k, []);
           groups.get(k)!.push(s.id);
         }
         const dup = new Set<number>();
         for (const ids of groups.values()) if (ids.length > 1) ids.forEach((id) => dup.add(id));
         setDupIds(dup);
-        setShortNames(short);
       } catch {
         /* 简称归一失败不影响主列表 */
       }
@@ -151,75 +160,138 @@ export function SuppliersPage() {
     }
   }
 
+  /** Excel 导入（xlsx：表头 编码/名称/联系人/电话/地址）。 */
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = ""; // 允许重复选择同一文件
+    if (!f) return;
+    try {
+      const r = await baseApi.supplierImport(f);
+      const fail = r.fail_rows.length
+        ? `，失败 ${r.fail_rows.length} 行（${r.fail_rows.slice(0, 3).map((x) => `第${x.row}行 ${x.reason}`).join("；")}${r.fail_rows.length > 3 ? "…" : ""}）`
+        : "";
+      message.success(`已导入 ${r.success_count} 个供应商${fail}`);
+      void load();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "导入失败");
+    }
+  }
+
+  /** 导出当前筛选结果（编码/名称/联系人/电话/地址/状态）。 */
+  async function onExport() {
+    try {
+      const all: Supplier[] = [];
+      for (let p = 1; p <= 10; p++) {
+        const d = await baseApi.suppliers(status, keyword.trim(), p, 100);
+        all.push(...d.list);
+        if (all.length >= d.total) break;
+      }
+      const esc = (s: string) => `"${(s ?? "").replace(/"/g, '""')}"`;
+      const csv = [
+        ["编码", "名称", "联系人", "电话", "地址", "状态"].join(","),
+        ...all.map((s) => [s.code, s.name, s.contact, s.phone, s.address, s.status === 1 ? "启用" : "停用"].map(esc).join(",")),
+      ].join("\n");
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `供应商_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "导出失败");
+    }
+  }
+
   const columns: ColumnsType<Supplier> = [
-    { title: "名称", dataIndex: "name", width: 180 },
     {
-      title: "简称归一",
-      key: "shortname",
-      width: 180,
-      render: (_, s) => {
-        const short = shortNames.get(s.id) ?? normShort(s.name);
-        return (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 12, color: "#5B6478" }}>{short || "—"}</span>
-            {dupIds.has(s.id) && (
-              <span className="wlt-pill" style={{ background: "#FEF4E2", color: "#B45309" }} title="多个供应商简称归一后相同，建议合并">待合并</span>
-            )}
-          </span>
-        );
-      },
+      title: "供应商", key: "name", width: 320,
+      render: (_, s) => (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 600, fontSize: 13.5, color: "#1E2433" }}>{s.name}</span>
+          {dupIds.has(s.id) && (
+            <span className="wlt-pill" style={{ background: "#FEF4E2", color: "#B45309" }} title="多个供应商简称归一后相同，建议合并">待合并</span>
+          )}
+        </span>
+      ),
     },
-    { title: "联系人", dataIndex: "contact", width: 100, render: (v: string) => v || "-" },
-    { title: "电话", dataIndex: "phone", width: 130, render: (v: string) => v || "-" },
-    { title: "地址", dataIndex: "address", render: (v: string) => v || "-" },
+    { title: "编码", dataIndex: "code", width: 120, render: (v: string) => <span style={{ fontSize: 12, color: "#5B6478", fontVariantNumeric: "tabular-nums" }}>{v}</span> },
+    { title: "联系人", dataIndex: "contact", width: 120, render: (v: string) => v || "—" },
+    { title: "电话", dataIndex: "phone", width: 150, render: (v: string) => v || "—" },
+    { title: "最近供货", dataIndex: "last_supply_at", width: 150, render: (v?: string) => <span style={{ fontSize: 12, fontVariantNumeric: "tabular-nums", color: v ? token.colorTextSecondary : token.colorTextTertiary }}>{fmtDate(v)}</span> },
     {
-      title: "状态",
-      dataIndex: "status",
-      width: 80,
-      render: (v: number) => (v === 1 ? <Tag color="green">启用</Tag> : <Tag>停用</Tag>),
+      title: "状态", dataIndex: "status", width: 100,
+      render: (v: number) => (v === 1
+        ? <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>启用</Tag>
+        : <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#5B6478", borderColor: "transparent", marginInlineEnd: 0 }}>停用</Tag>),
+    },
+    {
+      title: "操作", key: "op", width: 170,
+      render: (_, s) => (
+        <Space size={10}>
+          <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B6478" }} onClick={() => void openDetail(s)}>查看材料</Button>
+          <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B6478" }} onClick={() => openEdit(s)}>编辑</Button>
+          {s.status === 1 ? (
+            <Popconfirm title="确认停用该供应商？停用前需先解除其关联的启用材料。" onConfirm={() => void remove(s)}>
+              <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#DC2626" }}>停用</Button>
+            </Popconfirm>
+          ) : (
+            <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B7FFF" }} onClick={() => void toggleStatus(s)}>启用</Button>
+          )}
+        </Space>
+      ),
     },
   ];
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: "0 0 16px" }}>供应商管理</h2>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Input.Search
-          placeholder="名称 / 联系人 / 电话"
+      {/* 页头（设计页 15）：标题 + 副题 + 右侧 导入/导出/新增 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>供应商管理</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+            供应商档案：编码自动生成、简称归一（自动合并重复供应商）、采购价关联
+          </p>
+        </div>
+        <Space>
+          <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<ImportOutlined style={{ color: "#5B7FFF" }} />} onClick={() => fileRef.current?.click()}>Excel 导入</Button>
+          <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<ExportOutlined style={{ color: "#5B7FFF" }} />} onClick={() => void onExport()}>导出</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增供应商</Button>
+        </Space>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={(e) => void onImportFile(e)} />
+      </div>
+
+      {/* 筛选条（设计页 15：搜索 + 状态 + 统计） */}
+      <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <Input
+          prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+          placeholder="供应商名称 / 编码 / 联系人"
           allowClear
-          style={{ width: 260 }}
-          onSearch={(v) => { setKeyword(v.trim()); setPage(1); }}
+          style={{ width: 300, background: "#F6F8FE" }}
+          onChange={(e) => { if (!e.target.value) { setKeyword(""); setPage(1); } }}
+          onPressEnter={(e) => { setKeyword((e.target as HTMLInputElement).value.trim()); setPage(1); }}
         />
-        <Button type="primary" onClick={openCreate}>新建供应商</Button>
-      </Space>
-      <DataTable
-        rowKey="id"
-        loading={loading}
-        columns={columns}
-        dataSource={list}
-        locale={{ emptyText: "暂无供应商" }}
-        pagination={{ current: page, pageSize: 20, total, showSizeChanger: false, onChange: (p) => setPage(p) }}
-        rowSelection
-        onBatchDelete={async (keys) => {
-          for (const k of keys) await baseApi.deleteSupplier(Number(k));
-          message.success(`已停用 ${keys.length} 个供应商`);
-          void load();
-        }}
-        actionsWidth={200}
-        actions={(r) => (
-          <Space>
-            <Button size="small" onClick={() => void openDetail(r)}>查看材料</Button>
-            <Button size="small" onClick={() => openEdit(r)}>编辑</Button>
-            {r.status === 1 ? (
-              <Popconfirm title="确认停用该供应商？停用前需先解除其关联的启用材料。" onConfirm={() => void remove(r)}>
-                <Button size="small" danger>停用</Button>
-              </Popconfirm>
-            ) : (
-              <Button size="small" onClick={() => void toggleStatus(r)}>启用</Button>
-            )}
-          </Space>
-        )}
-      />
+        <Select
+          placeholder="全部状态"
+          allowClear
+          style={{ width: 160 }}
+          value={status}
+          onChange={(v) => { setStatus(v); setPage(1); }}
+          options={[{ value: 1, label: "启用" }, { value: 0, label: "停用" }]}
+        />
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 家 · 启用 {enabledTotal}</span>
+      </div>
+
+      {/* 表格（设计列：供应商/编码/联系人/电话/最近供货/状态/操作） */}
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <Table<Supplier>
+          rowKey="id"
+          loading={loading}
+          columns={columns}
+          dataSource={list}
+          locale={{ emptyText: "暂无供应商" }}
+          pagination={{ current: page, pageSize: 20, total, showSizeChanger: false, showTotal: (t) => `共 ${t} 条`, onChange: (p) => setPage(p) }}
+        />
+      </div>
 
       <Modal
         title={editing ? `编辑供应商：${editing.name}` : "新建供应商"}
@@ -261,14 +333,14 @@ export function SuppliersPage() {
       >
         {detail && (
           <>
-            <Space orientation="vertical" style={{ marginBottom: 16 }} size={4}>
-              <div>联系人：{detail.contact || "-"}　电话：{detail.phone || "-"}</div>
+            <Space style={{ marginBottom: 16 }} size={4} direction="vertical">
+              <div>编码：{detail.code}　联系人：{detail.contact || "-"}　电话：{detail.phone || "-"}</div>
               <div>地址：{detail.address || "-"}</div>
               <div>备注：{detail.remark || "-"}</div>
-              <Tag color={detail.status === 1 ? "green" : "default"}>{detail.status === 1 ? "启用" : "停用"}</Tag>
+              <Tag style={{ borderRadius: 999, background: detail.status === 1 ? "#E8F9EF" : "#EFF3FC", color: detail.status === 1 ? "#15803D" : "#5B6478", borderColor: "transparent" }}>{detail.status === 1 ? "启用" : "停用"}</Tag>
             </Space>
             <h4 style={{ margin: "0 0 8px" }}>关联材料（{detailProducts.length}）</h4>
-            <DataTable
+            <Table<Product>
               rowKey="id"
               size="small"
               loading={detailLoading}
@@ -281,10 +353,10 @@ export function SuppliersPage() {
                 { title: "型号规格", dataIndex: "spec", render: (v: string) => v || "-" },
                 { title: "单位", dataIndex: "unit_name", width: 70 },
                 {
-                  title: "状态",
-                  dataIndex: "status",
-                  width: 70,
-                  render: (v: number) => (v === 1 ? <Tag color="green">启用</Tag> : <Tag>停用</Tag>),
+                  title: "状态", dataIndex: "status", width: 70,
+                  render: (v: number) => (v === 1
+                    ? <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>启用</Tag>
+                    : <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#5B6478", borderColor: "transparent", marginInlineEnd: 0 }}>停用</Tag>),
                 },
               ]}
               dataSource={detailProducts}

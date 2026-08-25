@@ -2,18 +2,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { useNavigate, useSearchParams } from "react-router";
 import { App, Button, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
-import { InboxOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, purchasePlanApi, type PurchasePlanBill } from "@wlt/shared";
 
-const STATUS_META: Record<number, { label: string; color: string }> = {
-  0: { label: "草稿", color: "default" },
-  1: { label: "已提交", color: "blue" },
-  2: { label: "部分入库", color: "orange" },
-  3: { label: "已完成", color: "green" },
-  "-1": { label: "已作废", color: "red" },
+const STATUS_META: Record<number, { label: string; bg: string; fg: string }> = {
+  0: { label: "草稿", bg: "#EFF3FC", fg: "#5B6478" },
+  1: { label: "已提交", bg: "#FEF4E2", fg: "#B45309" },
+  2: { label: "部分入库", bg: "#EAEFFF", fg: "#5B7FFF" },
+  3: { label: "已完成", bg: "#E8F9EF", fg: "#15803D" },
+  [-1]: { label: "已作废", bg: "#EFF3FC", fg: "#64748B" },
 };
+
+/** 数量（含单位，设计页 18 单元格：100m）。 */
+function qtyText(v: string | number, unit?: string): string {
+  const n = Number(v || 0);
+  const base = n.toLocaleString("zh-CN", { maximumFractionDigits: 3 });
+  return unit ? `${base}${unit}` : base;
+}
 
 interface Row {
   key: number;
@@ -24,7 +31,7 @@ interface Row {
   remark: string;
 }
 
-/** 采购计划单（电脑端，pch:in）：事物流前置环节 —— 计划 → 材料入库（送货单图片可选存底）→ 库存落账。 */
+/** 采购计划单（设计页 18，电脑端，pch:in）：事物流前置环节 —— 计划 → 材料入库（送货单图片可选存底）→ 库存落账。 */
 export function PurchasePlansPage() {
   const { message } = App.useApp();
   const navigate = useNavigate();
@@ -194,41 +201,52 @@ export function PurchasePlansPage() {
     }
   }
 
+  const linkBtn = (color: string) => ({ type: "link" as const, size: "small" as const, style: { padding: 0, fontSize: 12.5, color } });
+
   const columns: ColumnsType<PurchasePlanBill> = [
-    { title: "计划单号", dataIndex: "bill_no", width: 150 },
-    { title: "仓库", dataIndex: "warehouse_name", width: 130 },
-    { title: "计划数量", dataIndex: "total_qty", width: 100, align: "right" as const },
-    { title: "明细", dataIndex: "items", width: 80, align: "center" as const, render: (_: unknown, r) => r.items?.length ?? 0 },
-    { title: "计划日期", dataIndex: "plan_date", width: 140, render: (v: string) => (v ? v.slice(0, 16) : "-") },
+    { title: "计划单", dataIndex: "bill_no", width: 180, render: (v: string) => <span style={{ fontSize: 12.5, fontWeight: 600, color: "#3B5BDB" }}>{v}</span> },
+    { title: "编制人", dataIndex: "creator_name", width: 110, render: (v: string) => <span style={{ fontSize: 12, color: "#5B6478" }}>{v || "—"}</span> },
     {
-      title: "状态",
-      dataIndex: "status",
-      width: 90,
-      render: (v: number) => <Tag color={STATUS_META[v]?.color}>{STATUS_META[v]?.label ?? v}</Tag>,
+      title: "材料", key: "mat", width: 260,
+      render: (_, r) => {
+        const first = r.items?.[0];
+        if (!first) return <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span>;
+        return (
+          <span style={{ fontSize: 12.5, color: "#1E2433" }}>
+            {first.product_name}
+            {r.items.length > 1 && <span style={{ color: "#8A93A8", fontSize: 11 }}> 等 {r.items.length} 种</span>}
+          </span>
+        );
+      },
+    },
+    { title: "数量", key: "qty", width: 90, render: (_, r) => <span style={{ fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{qtyText(r.total_qty, r.items?.[0]?.unit_name)}</span> },
+    {
+      title: "已入库", key: "recv", width: 100,
+      render: (_, r) => {
+        const recv = (r.items ?? []).reduce((s, it) => s + Number(it.received_qty || 0), 0);
+        return <span style={{ fontSize: 12.5, fontWeight: 600, color: "#15803D", fontVariantNumeric: "tabular-nums" }}>{qtyText(recv, r.items?.[0]?.unit_name)}</span>;
+      },
+    },
+    { title: "申请日期", dataIndex: "plan_date", width: 140, render: (v: string) => <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v ? dayjs(v).format("MM-DD") : "—"}</span> },
+    {
+      title: "状态", dataIndex: "status", width: 110,
+      render: (v: number) => { const m = STATUS_META[v] ?? { label: String(v), bg: "#EFF3FC", fg: "#5B6478" }; return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>; },
     },
     {
-      title: "操作",
-      key: "op",
-      width: 240,
+      title: "操作", key: "op", width: 150,
       render: (_, r) => (
-        <Space size={4} wrap>
-          <Button size="small" onClick={() => setDetail(r)}>查看</Button>
-          {r.status === 0 && (
-            <>
-              <Button size="small" onClick={() => openEdit(r)}>编辑</Button>
-              <Button size="small" type="primary" ghost onClick={() => void submitPlan(r)}>提交</Button>
-            </>
-          )}
-          {(r.status === 1 || r.status === 2) && (
-            <Button size="small" type="primary" icon={<InboxOutlined />} onClick={() => navigate(`/purchase-in?plan_id=${r.id}`)}>
-              去入库
-            </Button>
-          )}
+        <Space size={10} style={{ padding: "0 10px" }}>
+          <Button {...linkBtn("#5B7FFF")} onClick={() => navigate(`/purchase-in?plan_id=${r.id}`)} disabled={r.status === 0 || r.status === -1 || r.status === 3}>入库</Button>
+          {r.status === 0 && <>
+            <Button {...linkBtn("#5B6478")} onClick={() => openEdit(r)}>编辑</Button>
+            <Button {...linkBtn("#5B7FFF")} onClick={() => void submitPlan(r)}>提交</Button>
+          </>}
           {r.status !== -1 && r.status !== 3 && (
             <Popconfirm title={`确认作废计划单「${r.bill_no}」？`} onConfirm={() => void voidPlan(r)}>
-              <Button size="small" danger>作废</Button>
+              <Button {...linkBtn("#DC2626")}>作废</Button>
             </Popconfirm>
           )}
+          <Button {...linkBtn("#5B6478")} onClick={() => setDetail(r)}>详情</Button>
         </Space>
       ),
     },
@@ -273,56 +291,65 @@ export function PurchasePlansPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+      {/* 页头（设计页 18） */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>采购计划单</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
-            事物流：采购计划单 → 材料入库（送货单图片可选存底）→ 库存落账；计划按累计实收自动推进状态
+            计划 → 材料入库（送货单图片最多 10 张）闭环；状态：草稿/已提交/部分入库/已完成/作废
           </p>
         </div>
-        <Space>
-          <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新建采购计划</Button>
-        </Space>
+        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新建计划</Button>
       </div>
 
-      <Space style={{ marginBottom: 12 }} wrap>
-        <Input.Search placeholder="计划单号" allowClear style={{ width: 180 }} onSearch={(v) => { setBillNo(v.trim()); setPage(1); }} />
-        <Select
-          placeholder="状态"
+      {/* 筛选条（设计页 18） */}
+      <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <Input
+          prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+          placeholder="计划单号 / 材料"
           allowClear
-          style={{ width: 130 }}
-          value={status}
-          options={Object.entries(STATUS_META).map(([v, m]) => ({ value: Number(v), label: m.label }))}
-          onChange={(v) => { setStatus(v); setPage(1); }}
+          style={{ width: 300, background: "#F6F8FE" }}
+          onChange={(e) => { if (!e.target.value) { setBillNo(""); setPage(1); } }}
+          onPressEnter={(e) => { setBillNo((e.target as HTMLInputElement).value.trim()); setPage(1); }}
         />
-      </Space>
+        <Select
+          placeholder="全部状态"
+          allowClear
+          style={{ width: 170 }}
+          value={status}
+          onChange={(v) => { setStatus(v); setPage(1); }}
+          options={Object.entries(STATUS_META).map(([v, m]) => ({ value: Number(v), label: m.label }))}
+        />
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 张</span>
+      </div>
 
-      <Table<PurchasePlanBill>
-        rowKey="id"
-        size="small"
-        columns={columns}
-        dataSource={list}
-        loading={loading}
-        locale={{ emptyText: "暂无采购计划单" }}
-        pagination={{
-          current: page,
-          pageSize,
-          total,
-          showSizeChanger: true,
-          showTotal: (t) => `共 ${t} 条`,
-          onChange: (p, ps) => {
-            if (ps !== pageSize) {
-              setPage(1);
-              setPageSize(ps);
-            } else {
-              setPage(p);
-            }
-          },
-        }}
-      />
+      {/* 表格（设计列：计划单/编制人/材料/数量/已入库/申请日期/状态/操作） */}
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <Table<PurchasePlanBill>
+          rowKey="id"
+          columns={columns}
+          dataSource={list}
+          loading={loading}
+          locale={{ emptyText: "暂无采购计划单" }}
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            showSizeChanger: true,
+            showTotal: (t) => `共 ${t} 条`,
+            onChange: (p, ps) => {
+              if (ps !== pageSize) {
+                setPage(1);
+                setPageSize(ps);
+              } else {
+                setPage(p);
+              }
+            },
+          }}
+        />
+      </div>
 
-      {/* ===== 新建 / 编辑（方案 A：基本信息卡片 + 明细表格 + 双按钮） ===== */}
+      {/* ===== 新建 / 编辑（基本信息卡片 + 明细表格 + 双按钮） ===== */}
       <Modal
         title={editing ? `编辑采购计划单：${editing.bill_no}` : "新建采购计划单"}
         open={open}
@@ -436,7 +463,7 @@ export function PurchasePlansPage() {
               <span>计划日期：{detail.plan_date?.slice(0, 16)}</span>
               <span>计划数量合计：{detail.total_qty}</span>
               {detail.remark && <span>备注：{detail.remark}</span>}
-              <Tag color={STATUS_META[detail.status]?.color}>{STATUS_META[detail.status]?.label}</Tag>
+              {(() => { const m = STATUS_META[detail.status] ?? { label: String(detail.status), bg: "#EFF3FC", fg: "#5B6478" }; return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent" }}>{m.label}</Tag>; })()}
             </Space>
             <Table
               rowKey="id"

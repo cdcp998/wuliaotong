@@ -90,7 +90,13 @@ export function DeleteReviewsPage() {
         title: "类型",
         dataIndex: "biz_type",
         width: 80,
-        render: (v: string) => (v === "product" ? <Tag color="blue">材料</Tag> : v === "category" ? <Tag color="orange">分类</Tag> : <Tag color="purple">故障</Tag>),
+        render: (v: string) => (
+          v === "product"
+            ? <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>材料</Tag>
+            : v === "category"
+              ? <Tag style={{ borderRadius: 999, background: "#FEF4E2", color: "#B45309", borderColor: "transparent", marginInlineEnd: 0 }}>分类</Tag>
+              : <Tag style={{ borderRadius: 999, background: "#F3E8FF", color: "#7C3AED", borderColor: "transparent", marginInlineEnd: 0 }}>故障</Tag>
+        ),
       },
       { title: "目标", dataIndex: "target_name", width: 180, ellipsis: true, render: (v: string, r) => <span title={r.target_desc}>{v}</span> },
       { title: "删除原因", dataIndex: "reason", width: 220, ellipsis: true },
@@ -129,7 +135,9 @@ export function DeleteReviewsPage() {
               width: 220,
               render: (_: unknown, r: DeleteReview) => (
                 <Space size={4} wrap>
-                  {r.status === 1 ? <Tag color="green">已删除</Tag> : <Tag color="red">已驳回</Tag>}
+                  {r.status === 1
+                    ? <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>已删除</Tag>
+                    : <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>已驳回</Tag>}
                   {r.review_remark ? <Typography.Text type="secondary" style={{ fontSize: 12 }}>{r.review_remark}</Typography.Text> : null}
                 </Space>
               ),
@@ -144,17 +152,17 @@ export function DeleteReviewsPage() {
     <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0 }}>删除审核</h2>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1E2433", letterSpacing: "-0.01em" }}>删除审核</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
             物料/分类/已关闭故障删除审批流：仓管员及以上提交删除申请，管理者及以上审核通过后才执行删除；审核结果站内通知申请人
           </p>
         </div>
-        <Button icon={<AuditOutlined />} onClick={() => void load()}>刷新</Button>
+        <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<AuditOutlined style={{ color: "#5B7FFF" }} />} onClick={() => void load()}>刷新</Button>
       </div>
 
       {!isManager && (
         <div style={{ marginBottom: 12, fontSize: 12.5, color: "#5B6478" }}>
-          <Tag color="orange">当前为 {user?.role?.name ?? "未知角色"}：可查看删除申请进度，审核操作需管理者及以上角色</Tag>
+          <Tag style={{ borderRadius: 999, background: "#FEF4E2", color: "#B45309", borderColor: "transparent" }}>当前为 {user?.role?.name ?? "未知角色"}：可查看删除申请进度，审核操作需管理者及以上角色</Tag>
         </div>
       )}
 
@@ -168,7 +176,7 @@ export function DeleteReviewsPage() {
         ]}
       />
 
-      <div style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, boxShadow: "0 6px 24px rgba(30,36,51,.06)", padding: "12px 16px" }}>
+      <div className="wlt-glass" style={{ padding: 12 }}>
       <Table<DeleteReview>
         rowKey="id"
         size="small"

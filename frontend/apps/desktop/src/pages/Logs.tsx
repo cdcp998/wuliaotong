@@ -1,13 +1,29 @@
-import { useCallback, useEffect, useState } from "react";
-import { App, Button, Input, Select, Space, Tag } from "antd";
-import { DownloadOutlined } from "@ant-design/icons";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { App, Button, DatePicker, Drawer, Input, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { Dayjs } from "dayjs";
+import { DownloadOutlined, SearchOutlined } from "@ant-design/icons";
+import dayjs from "dayjs";
 
 import { adminApi, type OperationLog } from "@wlt/shared";
 
-import { DataTable } from "../components/DataTable";
-
 const MODULES = ["认证", "系统", "系统设置", "用户", "角色", "注册审核", "材料", "分类", "供应商", "仓库", "货架", "库位", "组织单位", "删除审核", "导航管理", "采购入库", "采购计划", "期初", "库存调拨", "盘点", "其他出入库", "领用申请", "通知", "OCR/大模型", "AI建议", "文件", "存储", "AI调用日志", "备份", "其他"];
+
+/** 时间 → MM-DD HH:mm:ss（设计页 37 时间列）。 */
+function fmtTime(v: string): string {
+  const d = dayjs(v);
+  return d.isValid() ? d.format("MM-DD HH:mm:ss") : "—";
+}
+
+/** 详情抽屉字段行。 */
+function LogField({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+      <span style={{ width: 56, flexShrink: 0, fontSize: 12, color: "#8A93A8" }}>{label}</span>
+      <span style={{ fontSize: 13, color: "#1E2433", fontFamily: mono ? "ui-monospace, SFMono-Regular, Consolas, monospace" : undefined, wordBreak: "break-all" }}>{children}</span>
+    </div>
+  );
+}
 
 /** 操作日志（电脑端，超管 sys:log）：写操作审计查询（模块/动作已中文化、具体化）。 */
 export function LogsPage() {
@@ -20,21 +36,31 @@ export function LogsPage() {
   const [username, setUsername] = useState("");
   const [module, setModule] = useState("");
   const [method, setMethod] = useState("");
+  const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
+  const [detail, setDetail] = useState<OperationLog | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
     try {
-    const data = await adminApi.logs({ username: username || undefined, module: module || undefined, method: method || undefined, page, page_size: pageSize });
-    setList(data.list);
-    setTotal(data.total);
+      const data = await adminApi.logs({
+        username: username || undefined,
+        module: module || undefined,
+        method: method || undefined,
+        start: range?.[0]?.format("YYYY-MM-DD"),
+        end: range?.[1]?.format("YYYY-MM-DD"),
+        page,
+        page_size: pageSize,
+      });
+      setList(data.list);
+      setTotal(data.total);
     } finally {
       setLoading(false);
     }
-  }, [username, module, method, page, pageSize]);
+  }, [username, module, method, range, page, pageSize]);
 
   useEffect(() => {
-    void load().catch((e) => messageError(e));
+    void load().catch((e) => message.error(e instanceof Error ? e.message : "加载失败"));
   }, [load]);
 
   /** 导出当前页为 CSV（设计页 37：可导出）。 */
@@ -52,45 +78,106 @@ export function LogsPage() {
   }
 
   const columns: ColumnsType<OperationLog> = [
-    { title: "时间", dataIndex: "created_at", width: 160 },
-    { title: "用户", dataIndex: "username", width: 90 },
-    { title: "操作", dataIndex: "action", width: 180, render: (v: string) => <b style={{ fontWeight: 500 }}>{v}</b> },
-    { title: "模块", dataIndex: "module", width: 100, render: (v: string) => <Tag>{v}</Tag> },
-    { title: "方法", dataIndex: "method", width: 80, render: (v: string) => <Tag color={v === "POST" ? "green" : v === "DELETE" ? "red" : "blue"}>{v}</Tag> },
-    { title: "URL", dataIndex: "url", width: 220, ellipsis: true },
-    { title: "参数", dataIndex: "params", ellipsis: { showTitle: false }, render: (v: string) => v || "-" },
-    { title: "IP", dataIndex: "ip", width: 110 },
-    { title: "耗时", dataIndex: "duration_ms", width: 70, render: (v: number) => `${v}ms` },
+    { title: "时间", dataIndex: "created_at", width: 150, render: (v: string) => <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{fmtTime(v)}</span> },
+    { title: "操作人", dataIndex: "username", width: 100, render: (v: string) => <span style={{ fontSize: 12.5, fontWeight: 500, color: "#1E2433" }}>{v}</span> },
+    { title: "模块", dataIndex: "module", width: 120, render: (v: string) => <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>{v}</Tag> },
+    { title: "动作", dataIndex: "action", width: 150, render: (v: string) => <span style={{ fontSize: 12.5, fontWeight: 500, color: "#1E2433" }}>{v}</span> },
+    { title: "详情", dataIndex: "params", ellipsis: true, render: (v: string) => <span style={{ fontSize: 12, color: "#5B6478" }}>{v || "—"}</span> },
+    { title: "IP", dataIndex: "ip", width: 120, render: (v: string) => <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v || "—"}</span> },
   ];
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: "0 0 16px" }}>操作日志</h2>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Input.Search placeholder="用户名" allowClear style={{ width: 160 }} onSearch={(v) => { setUsername(v); setPage(1); }} />
-        <Select
-          style={{ width: 150 }}
-          placeholder="模块"
+      {/* 页头（设计页 37）：标题 + 副题 + 右侧 导出 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>操作日志</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
+            全量审计：谁/何时/做了什么（中文动作），支持按用户/模块/时间筛选与导出
+          </p>
+        </div>
+        <Space>
+          <Button type="primary" icon={<DownloadOutlined />} onClick={exportCsv}>导出</Button>
+        </Space>
+      </div>
+
+      {/* 筛选条（设计页 37：搜索 + 模块 + 方法 + 日期 + 统计） */}
+      <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <Input
+          prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+          placeholder="操作人 / 内容关键词"
           allowClear
-          options={MODULES.map((m) => ({ label: m, value: m }))}
+          style={{ width: 300, background: "#F6F8FE" }}
+          onChange={(e) => { if (!e.target.value) { setUsername(""); setPage(1); } }}
+          onPressEnter={(e) => { setUsername((e.target as HTMLInputElement).value.trim()); setPage(1); }}
+        />
+        <Select
+          placeholder="全部模块"
+          allowClear
+          style={{ width: 160 }}
+          value={module || undefined}
           onChange={(v) => { setModule(v ?? ""); setPage(1); }}
+          options={MODULES.map((m) => ({ label: m, value: m }))}
         />
         <Select
-          style={{ width: 110 }}
-          placeholder="方法"
+          placeholder="全部方法"
           allowClear
-          options={["POST", "PUT", "DELETE"].map((m) => ({ label: m, value: m }))}
+          style={{ width: 120 }}
+          value={method || undefined}
           onChange={(v) => { setMethod(v ?? ""); setPage(1); }}
+          options={["POST", "PUT", "DELETE"].map((m) => ({ label: m, value: m }))}
         />
-        <Button onClick={() => void load()}>查询</Button>
-        <Button icon={<DownloadOutlined />} onClick={exportCsv}>导出 CSV</Button>
-      </Space>
-      <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
+        <DatePicker.RangePicker
+          style={{ width: 210 }}
+          value={range}
+          onChange={(v) => { setRange(v as [Dayjs | null, Dayjs | null] | null); setPage(1); }}
+        />
+        <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} onClick={() => void load()}>查询</Button>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 条</span>
+      </div>
+
+      {/* 表格（设计列：时间/操作人/模块/动作/详情/IP；点击行查看完整参数） */}
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <Table<OperationLog>
+          rowKey="id"
+          loading={loading}
+          columns={columns}
+          dataSource={list}
+          locale={{ emptyText: "暂无操作日志" }}
+          onRow={(r) => ({ onClick: () => setDetail(r), style: { cursor: "pointer" } })}
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50, 100],
+            showTotal: (t) => `共 ${t} 条`,
+            onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } },
+          }}
+        />
+        <p style={{ margin: "8px 0 0", fontSize: 11, color: "#8A93A8" }}>
+          提示：关键操作（模块启停/地图源/删除审核/短信）单独高亮；日志只增不改不删（保留追溯），点击行查看完整参数。
+        </p>
+      </div>
+
+      <Drawer title="日志详情" open={Boolean(detail)} onClose={() => setDetail(null)} width={480}>
+        {detail && (
+          <Space direction="vertical" size={10} style={{ width: "100%" }}>
+            <LogField label="时间">{detail.created_at}</LogField>
+            <LogField label="操作人">{detail.username}</LogField>
+            <LogField label="模块">{detail.module}</LogField>
+            <LogField label="动作">{detail.action}</LogField>
+            <LogField label="方法">{detail.method}</LogField>
+            <LogField label="IP">{detail.ip}</LogField>
+            <LogField label="耗时">{detail.duration_ms} ms</LogField>
+            <LogField label="URL" mono>{detail.url || "—"}</LogField>
+            <div>
+              <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 6 }}>参数</div>
+              <pre style={{ margin: 0, padding: 10, background: "#F6F8FE", borderRadius: 8, fontSize: 12, color: "#1E2433", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{detail.params || "—"}</pre>
+            </div>
+          </Space>
+        )}
+      </Drawer>
     </div>
   );
-}
-
-function messageError(e: unknown) {
-  // 局部提示，避免引入全局 message 依赖
-  console.error(e);
 }

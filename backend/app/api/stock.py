@@ -244,6 +244,7 @@ def purchase_in_history_price(
     product_id: int = Query(0, description="材料 id（0=全部材料，历史价格管理页用）"),
     keyword: str = Query("", max_length=100, description="材料名称/编码/物料编码模糊查询"),
     supplier_id: int = Query(0, description="供应商 id（0=全部供应商）"),
+    start: str = Query("", max_length=20, description="起始日期 YYYY-MM-DD（0=不限，历史价格管理页「近 N 天」）"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -265,6 +266,8 @@ def purchase_in_history_price(
         stmt = stmt.where(PchPurchaseInItem.product_id == product_id)
     if supplier_id:
         stmt = stmt.where(PchPurchaseIn.supplier_id == supplier_id)
+    if start:
+        stmt = stmt.where(PchPurchaseIn.bill_date >= start)
     if keyword:
         like = f"%{keyword.strip()}%"
         stmt = stmt.where(

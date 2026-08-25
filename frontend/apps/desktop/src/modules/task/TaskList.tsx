@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, theme, Upload } from "antd";
-import { PlusOutlined, UploadOutlined, UnorderedListOutlined, AppstoreOutlined, ReloadOutlined, RobotOutlined, FileTextOutlined } from "@ant-design/icons";
+import { PlusOutlined, UploadOutlined, AppstoreOutlined, RobotOutlined, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { fileApi } from "@wlt/shared";
@@ -133,24 +133,41 @@ export function TaskListPage() {
   };
 
   const columns: ColumnsType<TaskItem> = [
-    { title: "任务", width: 300, render: (_, t) => (
+    { title: "任务", key: "task", width: 260, render: (_, t) => (
       <div>
-        <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t.title}</div>
-        <div style={{ fontSize: 11, color: token.colorTextTertiary, marginTop: 2 }}>{t.task_no} · 创建 {t.creator_name} · {t.created_at ? new Date(t.created_at).toLocaleString() : "—"}</div>
+        <div style={{ fontWeight: 600, fontSize: 12.5, color: "#1E2433" }}>{t.title}</div>
+        <div style={{ fontSize: 10.5, color: "#8A93A8", marginTop: 2 }}>{t.task_no}</div>
       </div>
     ) },
-    { title: "状态", width: 110, render: (_, t) => { const s = ST[t.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? t.status}</Tag>; } },
-    { title: "优先级", width: 90, render: (_, t) => (t.priority === 2 ? <Tag color="red" style={{ borderRadius: 999 }}>紧急</Tag> : <Tag style={{ borderRadius: 999, color: "#64748B", background: "#EFF3FC", borderColor: "transparent" }}>普通</Tag>) },
-    { title: "维修人员", dataIndex: "assignee_name", width: 120, render: (v: string) => v || <span style={{ color: token.colorTextTertiary }}>未派发</span> },
-    { title: "计划时间", dataIndex: "scheduled_time", width: 130, render: (v: string | null) => v ? <span style={{ fontSize: 12 }}>{v.slice(0, 16)}</span> : <span style={{ color: token.colorTextTertiary }}>—</span> },
+    {
+      title: "优先", key: "priority", width: 100,
+      render: (_, t) => {
+        const m = t.priority === 2 ? { label: "紧急", fg: "#DC2626", bg: "#FDEBEC" } : t.priority === 1 ? { label: "高优", fg: "#B45309", bg: "#FEF4E2" } : { label: "普通", fg: "#64748B", bg: "#EFF3FC" };
+        return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>;
+      },
+    },
+    { title: "负责人", dataIndex: "assignee_name", width: 110, render: (v: string) => v || <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span> },
+    { title: "状态", key: "status", width: 110, render: (_, t) => { const s = ST[t.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? t.status}</Tag>; } },
+    { title: "排期", dataIndex: "scheduled_time", width: 130, render: (v: string | null) => v ? <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v.slice(0, 16)}</span> : <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span> },
+    { title: "来源", key: "src", width: 120, render: (_, t) => <span style={{ fontSize: 12, color: "#5B6478" }}>{t.fault_id ? `故障 #${t.fault_id}` : "人工派单"}</span> },
     {
       title: "操作", width: 180,
       render: (_, t) => (
-        <Space size={4}>
-          <Button size="small" icon={<FileTextOutlined />} onClick={() => openRecords(t)}>记录</Button>
+        <Space size={10} style={{ padding: "0 10px" }}>
+          <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B6478" }} onClick={() => openRecords(t)}>记录</Button>
+          {t.status === "done" && (
+            <>
+              <Popconfirm title="验收通过该任务？" onConfirm={() => void act(t, "verify", { verdict: "验收通过" })}>
+                <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#15803D" }}>验收</Button>
+              </Popconfirm>
+              <Popconfirm title="驳回该任务？" onConfirm={() => void act(t, "reject", { verdict: "驳回重做" })}>
+                <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#DC2626" }}>驳回</Button>
+              </Popconfirm>
+            </>
+          )}
           {(t.status === "pending" || t.status === "assigned") && (
             <Popconfirm title="取消该任务（需填写原因）？" onConfirm={() => cancel(t)}>
-              <Button size="small" danger>取消</Button>
+              <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#DC2626" }}>取消</Button>
             </Popconfirm>
           )}
         </Space>
@@ -158,36 +175,57 @@ export function TaskListPage() {
     },
   ];
 
+  /** 统一状态操作（验收/驳回等）。 */
+  const act = async (t: TaskItem, action: string, extra?: object) => {
+    try {
+      await taskApi.status(t.id, { action, ...extra });
+      message.success("已更新");
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "操作失败");
+    }
+  };
+
   return (
     <div style={{ padding: 24 }}>
+      {/* 页头（设计页 45） */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0 }}>任务列表</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>组合筛选：状态 / 优先级 / 维修人 / 时间范围；维修记录与知识推荐在「记录」抽屉内</p>
+          <h2 style={{ margin: 0 }}>维修任务列表</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+            全量任务：状态筛选 / 优先 / 负责人 / 排期；记录、知识推荐、验收与关闭
+          </p>
         </div>
         <Space>
-          <div style={{ display: "inline-flex", padding: 3, gap: 0, background: "#F6F8FE", border: `1px solid ${token.colorBorder}`, borderRadius: 10 }}>
-            <Button size="small" type="text" icon={<AppstoreOutlined />} onClick={() => navigate("/task/board")} style={{ borderRadius: 10 }}>看板</Button>
-            <Button type="primary" size="small" icon={<UnorderedListOutlined />} style={{ borderRadius: 10 }}>列表</Button>
-          </div>
-          <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
+          <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<AppstoreOutlined style={{ color: "#5B7FFF" }} />} onClick={() => navigate("/task/board")}>切换看板视图</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>新建任务</Button>
         </Space>
       </div>
 
+      {/* 筛选条（设计页 45） */}
+      <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <Input
+          prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+          placeholder="任务单号 / 内容"
+          allowClear
+          style={{ width: 300, background: "#F6F8FE" }}
+          onChange={(e) => { if (!e.target.value) { setKeyword(""); setPage(1); } }}
+          onPressEnter={(e) => { setKeyword((e.target as HTMLInputElement).value.trim()); setPage(1); }}
+        />
+        <Select placeholder="全部状态" allowClear style={{ width: 160 }} value={status || undefined} onChange={(v) => { setStatus(v ?? ""); setPage(1); }}
+          options={Object.entries(ST).map(([k, v]) => ({ value: k, label: v.label }))} />
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 条</span>
+      </div>
+
       <div className="wlt-glass" style={{ padding: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 4px 10px", flexWrap: "wrap" }}>
-          <Input.Search placeholder="单号 / 标题" allowClear style={{ width: 260 }} onSearch={(v) => { setKeyword(v); setPage(1); }} />
-          <Select placeholder="全部状态" allowClear style={{ width: 160 }} value={status || undefined} onChange={(v) => { setStatus(v ?? ""); setPage(1); }}
-            options={Object.entries(ST).map(([k, v]) => ({ value: k, label: v.label }))} />
-          <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 12, color: token.colorTextTertiary }}>共 {total} 条</span>
-        </div>
         <Table<TaskItem>
           rowKey="id" loading={loading} dataSource={rows} locale={{ emptyText: "暂无任务" }}
           pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else setPage(p); } }}
           columns={columns}
         />
+        <p style={{ margin: "8px 0 0", fontSize: 11, color: "#8A93A8" }}>
+          提示：知识推荐在任务记录抽屉内；完成需填写记录并上传现场照片（GPS+水印）
+        </p>
       </div>
 
       {/* 新建任务 */}
