@@ -965,12 +965,12 @@ INSERT INTO sys_menu (id, parent_id, name, path, icon, perm_code, visible, sort)
   (28, 26, '用户权限设置', '/system/roles', 'SafetyCertificateOutlined', 'sys:role', 1, 20),
   (29, 26, '注册审核', '/system/register-applies', 'AuditOutlined', 'sys:user', 1, 30),
   (30, 26, '单位管理', '/system/departments', 'ApartmentOutlined', 'dept:manage', 1, 40),
-  (31, 26, '导航管理', '/system/menus', 'MenuOutlined', 'sys:role', 1, 45),
+  (31, 26, '导航管理', '/system/menus', 'MenuOutlined', 'sys:role', 0, 45),
   (32, 26, '操作日志', '/system/logs', 'FileTextOutlined', 'sys:log', 1, 50),
   (33, 26, '备份管理', '/system/backups', 'HddOutlined', 'sys:backup', 1, 60),
   (34, 26, 'AI 调用日志', '/llm-logs', 'RobotOutlined', 'sys:llm-log', 1, 70),
   (35, 26, '系统设置', '/system/settings', 'SettingOutlined', 'sys:config', 1, 80),
-  (36, 26, '安装模块', '/system/modules', 'AppstoreAddOutlined', 'module:manage', 1, 25);
+  (36, 26, '安装模块', '/system/modules', 'AppstoreAddOutlined', 'module:manage', 0, 25);
 
 -- 初始管理员占位（不可登录）：密码哈希为无效值，必须通过「初始化安装向导」设置密码后方可登录。
 -- 若手工导入本脚本部署，请执行安装向导（删除 backend/data/.initialized 后访问系统入口），

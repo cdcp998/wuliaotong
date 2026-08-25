@@ -28,7 +28,7 @@ const STATE_META: Record<ModuleState, { color: string; label: string; fg?: strin
 
 /** 安装模块（系统管理，module:manage）：源码已部署模块的安装/启停/升级/卸载 + 源码重扫预检。
  * 设计页 32：模块卡片墙（浅色玻璃卡片 + 状态胶囊 + 依赖链标注），.wlt-grid 响应式（桌面多列→平板减列→手机单列）。 */
-export function ModulesPage() {
+export function ModulesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { message, modal } = App.useApp();
   const { token } = theme.useToken();
   const [rows, setRows] = useState<ModuleInfo[]>([]);
@@ -111,14 +111,16 @@ export function ModulesPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: embedded ? 0 : 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-        <div>
-          <h2 style={{ margin: 0 }}>安装模块</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
-            模块插件机制：源码存在 ≠ 已安装 ≠ 已启用。安装/启停由管理员触发；卸载不删除任何表与数据；升级后需重启后端进程加载新代码。
-          </p>
-        </div>
+        {!embedded && (
+          <div>
+            <h2 style={{ margin: 0 }}>安装模块</h2>
+            <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+              模块插件机制：源码存在 ≠ 已安装 ≠ 已启用。安装/启停由管理员触发；卸载不删除任何表与数据；升级后需重启后端进程加载新代码。
+            </p>
+          </div>
+        )}
         <Button icon={<ReloadOutlined />} onClick={rescan} loading={rescanning}>
           重新扫描模块源码
         </Button>

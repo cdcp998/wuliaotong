@@ -25,8 +25,6 @@ const HistoryPricePage = lazy(() => import("./pages/HistoryPrice").then((m) => (
 const InitPage = lazy(() => import("./pages/Init").then((m) => ({ default: m.InitPage })));
 const LandingPage = lazy(() => import("./pages/Landing").then((m) => ({ default: m.LandingPage })));
 const LogsPage = lazy(() => import("./pages/Logs").then((m) => ({ default: m.LogsPage })));
-const MenusPage = lazy(() => import("./pages/Menus").then((m) => ({ default: m.MenusPage })));
-const ModulesPage = lazy(() => import("./pages/Modules").then((m) => ({ default: m.ModulesPage })));
 const LoginPage = lazy(() => import("./pages/Login").then((m) => ({ default: m.LoginPage })));
 const MaterialsDataPage = lazy(() => import("./pages/MaterialsData").then((m) => ({ default: m.MaterialsDataPage })));
 const DeleteReviewsPage = lazy(() => import("./pages/DeleteReviews").then((m) => ({ default: m.DeleteReviewsPage })));
@@ -113,8 +111,8 @@ const router = createBrowserRouter(
   { path: "/system/settings", element: withLayout(<SettingsPage />) },
   { path: "/system/users", element: withLayout(<UsersPage />) },
   { path: "/system/roles", element: withLayout(<RolesPage />) },
-  { path: "/system/menus", element: withLayout(<MenusPage />) },
-  { path: "/system/modules", element: withLayout(<ModulesPage />) },
+  { path: "/system/menus", element: <Navigate to="/system/settings?tab=menus" replace /> }, // 导航管理已并入系统设置
+  { path: "/system/modules", element: <Navigate to="/system/settings?tab=modules" replace /> }, // 安装模块已并入系统设置
   // cable 模块（RequireModule：模块未启用时渲染占位；权限由菜单 perm_code 联动）
   { path: "/cable/map", element: withLayout(<RequireModule code="map"><MapWorkbenchPage /></RequireModule>) },
   { path: "/cable/list", element: withLayout(<RequireModule code="cable"><CableListPage /></RequireModule>) },

@@ -55,7 +55,7 @@ function ic(name?: string): React.ReactNode {
 }
 
 /** 导航管理（电脑端，sys:role）：左菜单树 + 中侧边栏实时预览（无权限灰化）+ 弹窗编辑（《UI设计方案.md》v2）。 */
-export function MenusPage() {
+export function MenusPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const hasAnyPerm = useAuthStore((s) => s.hasAnyPerm);
@@ -233,15 +233,17 @@ export function MenusPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      {/* 页头 */}
+    <div style={{ padding: embedded ? 0 : 24 }}>
+      {/* 页头（嵌入系统设置时隐藏标题区，仅保留操作按钮） */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-        <div>
-          <h2 style={{ margin: 0 }}>导航管理</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
-            左侧菜单树 · 右侧侧边栏预览 · 编辑以弹窗打开（新建/编辑/删除均弹窗确认）
-          </p>
-        </div>
+        {!embedded && (
+          <div>
+            <h2 style={{ margin: 0 }}>导航管理</h2>
+            <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+              左侧菜单树 · 右侧侧边栏预览 · 编辑以弹窗打开（新建/编辑/删除均弹窗确认）
+            </p>
+          </div>
+        )}
         <Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate(0)}>新建顶级分组</Button>
         </Space>

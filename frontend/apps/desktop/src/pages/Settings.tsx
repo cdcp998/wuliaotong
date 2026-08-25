@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import {
   App,
   Alert,
@@ -41,6 +42,7 @@ import {
 import {
   storageApi,
   systemApi,
+  useAuthStore,
   type ModelSceneInfo,
   type OcrInstallState,
   type QuotaPayload,
@@ -49,6 +51,9 @@ import {
   type StorageItem,
   type StoragePayload,
 } from "@wlt/shared";
+
+import { MenusPage } from "./Menus";
+import { ModulesPage } from "./Modules";
 
 const EMPTY: Settings = {
   "site.name": "",
@@ -128,10 +133,17 @@ function toStrings(values: Settings): Partial<Settings> {
   return out;
 }
 
-/** 系统设置（电脑端）：按功能分类平铺（Tabs）的表单页，符合《UI设计方案.md》§4.11 分 Tab 表单约定。 */
+/** 系统设置（电脑端）：左侧分区导航 —— 系统配置（基础/OCR 与大模型）+ 模块管理 + 导航管理（原独立页并入，按权限显示；?tab= 可直达）。 */
 export function SettingsPage() {
   const { message } = App.useApp();
   const { token } = theme.useToken();
+  // 分区状态同步到 URL（?tab=config|modules|menus），旧路由 /system/modules|menus 重定向至此
+  const [params, setParams] = useSearchParams();
+  const hasPerm = useAuthStore((s) => s.hasPerm);
+  const canModules = hasPerm("module:manage");
+  const canMenus = hasPerm("sys:role");
+  const rawTab = params.get("tab") ?? "config";
+  const section = rawTab === "modules" && canModules ? "modules" : rawTab === "menus" && canMenus ? "menus" : "config";
   const [form] = Form.useForm<Settings>();
   const ocrEngine = Form.useWatch("ocr.engine", form);
   // 模型字段在 Space.Compact 内，antd v6 Form.Item 只注入 value/onChange 给直接子元素（Space.Compact 不透传），
@@ -1092,37 +1104,55 @@ export function SettingsPage() {
         <div>
           <h2 style={{ margin: 0 }}>系统设置</h2>
           <p style={{ color: token.colorTextTertiary, fontSize: 12, margin: "4px 0 0" }}>
-            站点信息 · 邮件服务 · 水印 · 注册与找回 · 识别引擎与大模型 · 版本 v{__APP_VERSION__}
+            系统配置（站点信息 · 邮件服务 · 水印 · 注册与找回 · 识别引擎与大模型）{canModules ? " · 模块管理" : ""}{canMenus ? " · 导航管理" : ""} · 版本 v{__APP_VERSION__}
           </p>
         </div>
-        <Space>
-          {dirty && <Tag color="processing">有未保存的修改</Tag>}
-          <Button type="primary" loading={saving} onClick={() => void save()}>保存设置</Button>
-        </Space>
+        {section === "config" && (
+          <Space>
+            {dirty && <Tag color="processing">有未保存的修改</Tag>}
+            <Button type="primary" loading={saving} onClick={() => void save()}>保存设置</Button>
+          </Space>
+        )}
       </div>
-      <Spin spinning={loading}>
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={() => void save()}
-          onValuesChange={handleValuesChange}
-          style={{
-            background: token.colorBgContainer,
-            border: `1px solid #E4EAF6`,
-            borderRadius: 16,
-            boxShadow: "0 6px 24px rgba(30,36,51,.06)",
-            padding: "8px 24px 16px",
-          }}
-        >
-          <Tabs
-            tabPosition="left"
-            items={[
-              { key: "base", label: "基础设置", children: baseTab, forceRender: true },
-              { key: "ocr", label: "OCR 与大模型", children: ocrTab, forceRender: true },
-            ]}
-          />
-        </Form>
-      </Spin>
+      {/* 顶层分区：系统配置（表单）/ 模块管理 / 导航管理（原独立页并入；antd Tabs 激活过的面板保持挂载，表单值不丢） */}
+      <Tabs
+        tabPosition="left"
+        activeKey={section}
+        onChange={(k) => setParams({ tab: k }, { replace: true })}
+        items={[
+          {
+            key: "config",
+            label: "系统配置",
+            children: (
+              <Spin spinning={loading}>
+                <Form
+                  form={form}
+                  layout="vertical"
+                  onFinish={() => void save()}
+                  onValuesChange={handleValuesChange}
+                  style={{
+                    background: token.colorBgContainer,
+                    border: `1px solid #E4EAF6`,
+                    borderRadius: 16,
+                    boxShadow: "0 6px 24px rgba(30,36,51,.06)",
+                    padding: "8px 24px 16px",
+                  }}
+                >
+                  <Tabs
+                    tabPosition="top"
+                    items={[
+                      { key: "base", label: "基础设置", children: baseTab, forceRender: true },
+                      { key: "ocr", label: "OCR 与大模型", children: ocrTab, forceRender: true },
+                    ]}
+                  />
+                </Form>
+              </Spin>
+            ),
+          },
+          ...(canModules ? [{ key: "modules", label: "模块管理", children: <ModulesPage embedded /> }] : []),
+          ...(canMenus ? [{ key: "menus", label: "导航管理", children: <MenusPage embedded /> }] : []),
+        ]}
+      />
 
       <Modal
         title="水印效果预览（示例照片）"
