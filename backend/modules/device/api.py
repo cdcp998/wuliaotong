@@ -108,7 +108,9 @@ def _task_out(db: Session, t: DeviceTask) -> dict:
         "device_name": d.name if d else "", "device_code": d.code if d else "",
         "title": t.title, "description": t.description,
         "assignee_id": t.assignee_id, "assignee_name": assignee.real_name if assignee else "",
-        "status": t.status, "priority": t.priority,
+        "status": t.status,
+        "dispatch_mode": getattr(t, "dispatch_mode", "manual") or "manual",
+        "priority": t.priority,
         "scheduled_time": t.scheduled_time.isoformat() if t.scheduled_time else None,
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
         "verdict": t.verdict, "previous_status": t.previous_status,
@@ -271,6 +273,7 @@ def create_device_task(req: DeviceTaskCreate, user: SysUser = Depends(get_curren
     t = DeviceTask(
         task_no="", device_id=d.id, title=req.title, description=req.description,
         priority=req.priority, scheduled_time=req.scheduled_time,
+        dispatch_mode=getattr(req, "dispatch_mode", "manual") or "manual",
         created_by=user.id, status="pending",
         previous_status=d.status,  # v2.1：创建时设备状态快照（完成/取消回退）
     )
@@ -295,6 +298,8 @@ def create_device_task(req: DeviceTaskCreate, user: SysUser = Depends(get_curren
 @router.post("/device-tasks/{task_id}/assign", dependencies=[Depends(require_permission("device:task"))])
 def assign_device_task(task_id: int, req: AssignReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
     t = _task_or_404(db, task_id)
+    if (getattr(t, "dispatch_mode", "manual") or "manual") == "open" and t.status == "pending":
+        raise BizError(E_PARAM, "公开抢单任务由维修人员自行领取，不可手动派发")
     assignee = db.get(SysUser, req.assignee_id)
     if assignee is None or assignee.status != 1:
         raise BizError(E_PARAM, "维修人员不存在或已停用")
@@ -305,6 +310,31 @@ def assign_device_task(task_id: int, req: AssignReq, user: SysUser = Depends(get
                     f"设备任务 {task.task_no}「{task.title}」已派发给你。", "/device/tasks")
 
     transition(db, t, "assign", user.id, user.real_name, callbacks=[_cb], assignee_id=req.assignee_id)
+    db.commit()
+    return ok(_task_out(db, t))
+
+
+@router.post("/device-tasks/{task_id}/claim", dependencies=[Depends(require_permission("device:task"))])
+def claim_device_task(task_id: int, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """维修人员领取公开任务（open/hybrid 模式且未被领取时可用）。
+
+    领取 = 自我指派：assignee_id=当前用户、状态 pending → assigned；通知其他调度员略。
+    """
+    t = _task_or_404(db, task_id)
+    if (getattr(t, "dispatch_mode", "manual") or "manual") not in ("open", "hybrid"):
+        raise BizError(E_PARAM, "该任务为指定派发，不支持自行领取")
+    if t.status != "pending" or t.assignee_id:
+        raise BizError(E_BILL_STATUS, "任务已被领取或不在待领取状态")
+    if t.created_by == user.id and not _scope_all(db, user):
+        raise BizError(E_PARAM, "不能领取自己创建的任务")
+
+    def _cb(db: Session, task, action, actor_id, actor_name):
+        # 通知创建者：任务已被领取
+        if task.created_by and task.created_by != actor_id:
+            _notify(db, task.created_by, "设备维修任务已被领取",
+                    f"任务 {task.task_no}「{task.title}」已由 {actor_name} 领取。", "/device/tasks")
+
+    transition(db, t, "assign", user.id, user.real_name, callbacks=[_cb], assignee_id=user.id)
     db.commit()
     return ok(_task_out(db, t))
 

@@ -1,13 +1,13 @@
-/** device 模块：设备维修任务（/device/tasks，device:task）——创建/派发/接单/完成/验收/取消 + 维修记录。
- *  v2 界面：状态胶囊 Tabs + 玻璃表格 + 状态流转说明条（与设计稿一致）。 */
+/** device 模块：设备维修任务（/device/tasks，device:task）——创建/派发（手动·公开抢单·组合三模式）/接单/完成/验收/取消 + 维修记录。
+ *  v3 界面：状态胶囊 Tabs + 玻璃表格 + 三种派发模式。 */
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, theme, Tooltip, Upload } from "antd";
+import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, theme, Tooltip, Upload } from "antd";
 import { CheckCircleOutlined, CheckOutlined, DeleteOutlined, FileDoneOutlined, FileImageOutlined, LockOutlined, PlusOutlined, ReloadOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
-import { adminApi, fileApi } from "@wlt/shared";
+import { adminApi, fileApi, useAuthStore } from "@wlt/shared";
 
-import { DEVICE_STATUS, deviceApi, type DeviceItem, type DeviceTaskItem } from "./api";
+import { DEVICE_STATUS, DISPATCH_MODES, deviceApi, type DeviceItem, type DeviceTaskItem } from "./api";
 
 const ST: Record<string, { label: string; fg: string; bg: string }> = {
   pending: { label: "待派发", fg: "#B45309", bg: "#FEF4E2" },
@@ -23,6 +23,7 @@ const FLOW_STEPS = ["待派发", "已派发", "进行中", "完成待验", "已�
 export function DeviceTasksPage() {
   const { message } = App.useApp();
   const { token } = theme.useToken();
+  const me = useAuthStore((s) => s.user);
   const [rows, setRows] = useState<DeviceTaskItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -37,6 +38,8 @@ export function DeviceTasksPage() {
   const [assignee, setAssignee] = useState<number | undefined>();
   const [verdict, setVerdict] = useState("");
   const [records, setRecords] = useState<Awaited<ReturnType<typeof deviceApi.records>>>([]);
+  const [dispatchMode, setDispatchMode] = useState<keyof typeof DISPATCH_MODES>("manual");
+  const isManager = ["super_admin", "manager", "dispatcher"].includes(me?.role?.code ?? "");
   const [recContent, setRecContent] = useState("");
   const [recFile, setRecFile] = useState<File | null>(null);
   const [recSaving, setRecSaving] = useState(false);
@@ -57,8 +60,12 @@ export function DeviceTasksPage() {
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    deviceApi.list({ page_size: 200 }).then((r) => setDevices(r.items)).catch(() => undefined);
-    adminApi.users({ role_id: 6, status: 1, page_size: 200 })
+    // 设备/维修人员下拉数据源：page_size 上限为后端 le=100，超出会被 422 拒绝（此前 200 静默失败致下拉为空）
+    deviceApi
+      .list({ page_size: 100 })
+      .then((r) => setDevices(r.items))
+      .catch((e) => message.error(e instanceof Error ? `设备列表加载失败：${e.message}` : "设备列表加载失败"));
+    adminApi.users({ role_id: 6, status: 1, page_size: 100 })
       .then((r) => setWorkers(r.list.map((u) => ({ id: u.id, name: u.real_name || u.username }))))
       .catch(() => undefined);
   }, []);
@@ -67,8 +74,8 @@ export function DeviceTasksPage() {
     const v = await form.validateFields();
     setCreating(true);
     try {
-      await deviceApi.createTask({ device_id: v.device_id, title: v.title, description: v.description ?? "", priority: v.priority ?? 1 });
-      message.success("任务已创建（设备自动置维修中）");
+      await deviceApi.createTask({ device_id: v.device_id, title: v.title, description: v.description ?? "", priority: v.priority ?? 1, dispatch_mode: dispatchMode });
+      message.success(v.dispatch_mode === "manual" ? "任务已创建（设备自动置维修中），请在列表中派发维修人员" : "任务已发布到抢单池（设备自动置维修中）");
       setOpen(false);
       form.resetFields();
       void load();
@@ -87,6 +94,17 @@ export function DeviceTasksPage() {
       void load();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "操作失败");
+    }
+  };
+
+  /** 领取公开任务（自我指派：assignee=当前用户，状态 → 已派发）。 */
+  const claim = async (t: DeviceTaskItem) => {
+    try {
+      await deviceApi.claimTask(t.id);
+      message.success("领取成功，请及时接单处理");
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "领取失败");
     }
   };
 
@@ -137,15 +155,33 @@ export function DeviceTasksPage() {
       </div>
     ) },
     { title: "优先级", width: 90, render: (_, t) => (t.priority === 2 ? <Tag color="red" style={{ borderRadius: 999 }}>紧急</Tag> : <Tag style={{ borderRadius: 999, color: "#64748B", background: "#EFF3FC", borderColor: "transparent" }}>普通</Tag>) },
-    { title: "状态", width: 110, render: (_, t) => { const s = ST[t.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? t.status}</Tag>; } },
-    { title: "维修人员", dataIndex: "assignee_name", width: 110, render: (v: string) => v || <span style={{ color: token.colorTextTertiary }}>未派发</span> },
+    { title: "状态", width: 110, render: (_, t) => {
+      const s = ST[t.status];
+      // 公开抢单任务的 pending 语义为「待领取」
+      const label = t.status === "pending" && t.dispatch_mode !== "manual" ? "待领取" : s?.label ?? t.status;
+      return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{label}</Tag>;
+    } },
+    { title: "派发方式", width: 120, render: (_, t) => { const m = DISPATCH_MODES[t.dispatch_mode] ?? DISPATCH_MODES.manual; return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }} title={m.desc}>{m.label}</Tag>; } },
+    { title: "维修人员", dataIndex: "assignee_name", width: 110, render: (v: string, t) => {
+      if (v) return v;
+      if (t.status === "pending" && t.dispatch_mode !== "manual") return <span style={{ color: "#3B5BDB", fontSize: 12 }}>待领取</span>;
+      return <span style={{ color: token.colorTextTertiary }}>未派发</span>;
+    } },
     { title: "计划时间", dataIndex: "scheduled_time", width: 130, render: (v: string | null) => v ? <span style={{ fontSize: 12 }}>{v.slice(0, 16)}</span> : <span style={{ color: token.colorTextTertiary }}>—</span> },
     {
-      title: "操作", width: 200,
-      render: (_, t) => (
+      title: "操作", width: 210,
+      render: (_, t) => {
+        const claimable = (t.dispatch_mode === "open" || t.dispatch_mode === "hybrid") && t.status === "pending" && !t.assignee_id && !(t.created_by === me?.id && !isManager);
+        const canShowAssign = t.status === "pending" && (t.dispatch_mode !== "open");
+        return (
         <Space size={2}>
           <Tooltip title="维修记录"><Button size="small" icon={<FileImageOutlined />} onClick={() => openRecords(t)} /></Tooltip>
-          {t.status === "pending" && <Tooltip title="派发"><Button size="small" type="primary" icon={<SendOutlined />} onClick={() => { setCurrent(t); setAssignee(undefined); }} /></Tooltip>}
+          {claimable && (
+            <Popconfirm title="领取该任务？领取后由你负责维修。" onConfirm={() => void claim(t)}>
+              <Tooltip title="领取任务"><Button size="small" type="primary" ghost>领取</Button></Tooltip>
+            </Popconfirm>
+          )}
+          {canShowAssign && <Tooltip title="派发给维修人员"><Button size="small" type="primary" icon={<SendOutlined />} onClick={() => { setCurrent(t); setAssignee(undefined); }} /></Tooltip>}
           {t.status === "assigned" && <Tooltip title="接单"><Button size="small" icon={<CheckCircleOutlined />} onClick={() => act(t, "accept")} /></Tooltip>}
           {t.status === "in_progress" && <Tooltip title="完成"><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => act(t, "complete")} /></Tooltip>}
           {t.status === "done" && <Tooltip title="验收"><Button size="small" type="primary" icon={<FileDoneOutlined />} onClick={() => { setCurrent(t); setVerdict(""); }} /></Tooltip>}
@@ -156,7 +192,8 @@ export function DeviceTasksPage() {
             </Popconfirm>
           )}
         </Space>
-      ),
+        );
+      },
     },
   ];
 
@@ -169,7 +206,7 @@ export function DeviceTasksPage() {
         </div>
         <Space>
           <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true); }}>新建设备维修</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setDispatchMode("manual"); setOpen(true); }}>新建设备维修</Button>
         </Space>
       </div>
 
@@ -219,6 +256,23 @@ export function DeviceTasksPage() {
           </Form.Item>
           <Form.Item name="priority" label="优先级" initialValue={1}>
             <Select style={{ width: 140 }} options={[{ value: 1, label: "普通" }, { value: 2, label: "紧急" }]} />
+          </Form.Item>
+          {/* 派发方式（三种模式）：手动派发 / 公开抢单 / 公开+可派发 */}
+          <Form.Item label="派发方式" initialValue="manual">
+            <Radio.Group
+              value={dispatchMode}
+              onChange={(e) => setDispatchMode(e.target.value)}
+              style={{ display: "flex", gap: 8, width: "100%" }}
+            >
+              {(Object.keys(DISPATCH_MODES) as (keyof typeof DISPATCH_MODES)[]).map((m) => (
+                <Radio key={m} value={m} style={{ flex: 1, marginInlineEnd: 0 }}>
+                  <div style={{ paddingTop: 2, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: "#1E2433", whiteSpace: "nowrap" }}>{DISPATCH_MODES[m].label}</div>
+                    <div style={{ fontSize: 11, color: "#8A93A8", lineHeight: 1.5 }}>{DISPATCH_MODES[m].desc}</div>
+                  </div>
+                </Radio>
+              ))}
+            </Radio.Group>
           </Form.Item>
         </Form>
       </Modal>

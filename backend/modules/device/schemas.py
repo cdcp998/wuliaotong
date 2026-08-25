@@ -45,6 +45,7 @@ class DeviceTaskCreate(BaseModel):
     description: str = Field(default="", max_length=500)
     priority: int = Field(default=1, ge=1, le=2)
     scheduled_time: datetime | None = None
+    dispatch_mode: str = Field(default="manual", pattern="^(manual|open|hybrid)$")
 
 
 class DeviceStatusReqT(BaseModel):
