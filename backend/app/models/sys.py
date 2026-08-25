@@ -183,7 +183,8 @@ class SysOperationLog(Base):
     action: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     method: Mapped[str] = mapped_column(String(10), nullable=False, default="")
     url: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    params: Mapped[str] = mapped_column(Text, nullable=False)  # JSON 字符串
+    params: Mapped[str] = mapped_column(Text, nullable=False)  # JSON 字符串（query 参数）
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)  # 请求体 JSON（脱敏后；「具体改了什么」）
     ip: Mapped[str] = mapped_column(String(45), nullable=False, default="")
     user_agent: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

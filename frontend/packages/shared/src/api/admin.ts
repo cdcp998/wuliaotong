@@ -44,6 +44,8 @@ export interface OperationLog {
   method: string;
   url: string;
   params: string;
+  /** 请求体 JSON（脱敏后）——「具体改了什么」。 */
+  body: string;
   ip: string;
   duration_ms: number;
   status_code: number;

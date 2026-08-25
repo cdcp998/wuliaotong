@@ -75,9 +75,9 @@ export function LogsPage() {
 
   /** 导出当前页为 CSV（设计页 37：可导出）。 */
   function exportCsv() {
-    const header = ["时间", "用户", "操作", "模块", "方法", "URL", "参数", "IP", "耗时(ms)", "状态码"];
+    const header = ["时间", "用户", "操作", "模块", "方法", "URL", "参数", "提交内容", "IP", "耗时(ms)", "状态码"];
     const esc = (s: unknown) => `"${String(s ?? "").replace(/"/g, '""').replace(/\n/g, " ")}"`;
-    const rowsCsv = list.map((r) => [r.created_at, r.username, r.action, r.module, METHOD_CN(r.method), r.url, r.params, r.ip, r.duration_ms, r.status_code]);
+    const rowsCsv = list.map((r) => [r.created_at, r.username, r.action, r.module, METHOD_CN(r.method), r.url, r.params, r.body, r.ip, r.duration_ms, r.status_code]);
     const csv = [header, ...rowsCsv].map((row) => row.map(esc).join(",")).join("\n");
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
@@ -87,19 +87,36 @@ export function LogsPage() {
     URL.revokeObjectURL(a.href);
   }
 
-  /** 详情列摘要：动作 + 接口路径尾段 + 参数摘录（完整信息点行看抽屉）。 */
+  /** 详情列摘要：接口路径尾段 + 改动字段名（PUT/POST 取 body 顶层键）+ query 摘录。 */
   function detailSummary(r: OperationLog): string {
     const seg = (r.url || "").split("/").filter(Boolean).pop() ?? "";
-    let extra = "";
+    const parts: string[] = [];
+    if ((r.method === "PUT" || r.method === "POST" || r.method === "PATCH") && r.body) {
+      try {
+        const obj = JSON.parse(r.body) as Record<string, unknown>;
+        const keys = Object.keys(obj).filter((k) => obj[k] !== "" && obj[k] !== null && obj[k] !== undefined);
+        if (keys.length) parts.push(`${keys.slice(0, 3).join("、")}${keys.length > 3 ? ` 等${keys.length}项` : ""}`);
+      } catch { /* 非JSON忽略 */ }
+    }
     if (r.params && r.params !== "{}") {
       try {
         const q = JSON.parse(r.params) as Record<string, unknown>;
-        extra = Object.entries(q).slice(0, 2).map(([k, v]) => `${k}=${String(v)}`).join(" ");
-      } catch {
-        extra = r.params.slice(0, 40);
-      }
+        const kv = Object.entries(q).slice(0, 2).map(([k, v]) => `${k}=${String(v)}`).join(" ");
+        if (kv) parts.push(kv);
+      } catch { /* 忽略 */ }
     }
-    return [seg, extra].filter(Boolean).join(" · ") || "—";
+    if (!parts.length && seg) parts.push(seg);
+    return parts.join(" · ") || "—";
+  }
+
+  /** 解析 body/params 为美化 JSON 文本（失败原样返回）。 */
+  function prettyJson(v: string | undefined): string {
+    if (!v) return "";
+    try {
+      return JSON.stringify(JSON.parse(v), null, 2);
+    } catch {
+      return v;
+    }
   }
 
   const columns: ColumnsType<OperationLog> = [
@@ -208,9 +225,18 @@ export function LogsPage() {
             <LogField label="IP">{detail.ip}</LogField>
             <LogField label="耗时">{detail.duration_ms} ms</LogField>
             <LogField label="URL" mono>{detail.url || "—"}</LogField>
+            {detail.body && detail.body !== "{}" ? (
+              <div>
+                <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 6 }}>
+                  提交内容（具体改动）
+                  {detail.method === "PUT" && <span style={{ marginLeft: 6, color: "#B45309" }}>· 修改后各字段值</span>}
+                </div>
+                <pre style={{ margin: 0, padding: 10, background: "#F0F5FF", border: "1px solid #D9E3FF", borderRadius: 8, fontSize: 12, color: "#1E2433", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 320, overflowY: "auto" }}>{prettyJson(detail.body)}</pre>
+              </div>
+            ) : null}
             <div>
-              <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 6 }}>参数</div>
-              <pre style={{ margin: 0, padding: 10, background: "#F6F8FE", borderRadius: 8, fontSize: 12, color: "#1E2433", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{detail.params || "—"}</pre>
+              <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 6 }}>查询参数</div>
+              <pre style={{ margin: 0, padding: 10, background: "#F6F8FE", borderRadius: 8, fontSize: 12, color: "#1E2433", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 200, overflowY: "auto" }}>{prettyJson(detail.params) || "—"}</pre>
             </div>
           </Space>
         )}

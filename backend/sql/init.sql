@@ -153,6 +153,7 @@ CREATE TABLE sys_operation_log (
   method      VARCHAR(10) NOT NULL DEFAULT '',
   url         VARCHAR(255) NOT NULL DEFAULT '',
   params      TEXT        NULL COMMENT '请求参数 JSON',
+  body        TEXT        NULL COMMENT '请求体 JSON（脱敏后，记录具体改动）',
   ip          VARCHAR(64) NOT NULL DEFAULT '',
   user_agent  VARCHAR(255) NOT NULL DEFAULT '',
   duration_ms INT         NOT NULL DEFAULT 0,

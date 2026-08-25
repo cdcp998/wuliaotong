@@ -322,8 +322,10 @@ def list_logs(
         {
             "id": log.id, "user_id": log.user_id, "username": log.username,
             "module": log.module, "action": log.action, "method": log.method,
-            "url": log.url, "params": log.params[:500], "ip": log.ip,
-            "duration_ms": log.duration_ms, "created_at": log.created_at,
+            "url": log.url, "params": log.params[:500],
+            "body": (log.body or "")[:2000], "ip": log.ip,
+            "duration_ms": log.duration_ms, "status_code": getattr(log, "status_code", 0) or 0,
+            "created_at": log.created_at,
         }
         for log in rows
     ]

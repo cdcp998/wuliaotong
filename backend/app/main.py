@@ -329,8 +329,11 @@ def _audit_action(method: str, path: str) -> tuple[str, str]:
     return f"{module}{verb}", module
 
 
-def _audit_log(db, request: Request, status_code: int, duration_ms: int) -> None:
-    """写操作审计（sys_operation_log）。fire-and-forget，失败不影响主流程。"""
+def _audit_log(db, request: Request, status_code: int, duration_ms: int, body_text: str = "") -> None:
+    """写操作审计（sys_operation_log）。fire-and-forget，失败不影响主流程。
+
+    body_text 为已脱敏的请求体 JSON（「具体改了什么」），空串表示无体/未采集。
+    """
     try:
         user = resolve_session_user(db, request.cookies.get(settings.session_cookie_name))
         action, module = _audit_action(request.method, request.url.path)
@@ -347,6 +350,7 @@ def _audit_log(db, request: Request, status_code: int, duration_ms: int) -> None
                 user_agent=request.headers.get("user-agent", "")[:255],
                 duration_ms=duration_ms,
                 status_code=status_code,
+                body=body_text,
             )
         )
         db.commit()
@@ -354,7 +358,62 @@ def _audit_log(db, request: Request, status_code: int, duration_ms: int) -> None
         db.rollback()
 
 
+_AUDIT_BODY_MAX_CHARS = 4000  # 审计请求体持久化上限（字符）
+_AUDIT_BODY_MAX_BYTES = 20000  # 超过此字节数的请求体不采集（防大文件/大 payload）
+_AUDIT_SENSITIVE_KEYS = ("password", "passwd", "secret", "token", "captcha")
+
+
+def _sanitize_body_text(text: str) -> str:
+    """审计请求体脱敏：含敏感关键词的字段值打码；解析失败按原文截断。"""
+    try:
+        obj = json.loads(text)
+    except ValueError:
+        return text[:_AUDIT_BODY_MAX_CHARS]
+
+    def walk(o):
+        if isinstance(o, dict):
+            return {
+                k: ("******" if any(s in k.lower() for s in _AUDIT_SENSITIVE_KEYS) else walk(v))
+                for k, v in o.items()
+            }
+        if isinstance(o, list):
+            return [walk(x) for x in o]
+        return o
+
+    try:
+        return json.dumps(walk(obj), ensure_ascii=False)[:_AUDIT_BODY_MAX_CHARS]
+    except (TypeError, ValueError):
+        return text[:_AUDIT_BODY_MAX_CHARS]
+
+
+async def _capture_body_for_audit(request: Request) -> str:
+    """读取写方法请求体供审计（读后回放 receive，不影响下游解析）。
+
+    - multipart/form-data（文件上传）与超限大包不采集；
+    - 非UTF-8文本不采集；返回脱敏后的 JSON 文本。
+    """
+    ct = (request.headers.get("content-type") or "").lower()
+    if "multipart/form-data" in ct:
+        return ""
+    try:
+        raw = await request.body()
+    except Exception:  # noqa: BLE001 读体失败不影响主流程
+        return ""
+
+    async def _replay_receive():  # 回放已读 body 给下游
+        return {"type": "http.request", "body": raw, "more_body": False}
+
+    request._receive = _replay_receive  # noqa: SLF001 Starlette 标准回放手法
+    if not raw or len(raw) > _AUDIT_BODY_MAX_BYTES:
+        return ""
+    try:
+        return _sanitize_body_text(raw.decode("utf-8"))
+    except UnicodeDecodeError:
+        return ""
+
+
 async def audit_middleware(request: Request, call_next):
+    body_text = await _capture_body_for_audit(request)
     start = time.time()
     try:
         response = await call_next(request)
@@ -372,7 +431,7 @@ async def audit_middleware(request: Request, call_next):
             def _run() -> None:
                 db = SessionLocal()
                 try:
-                    _audit_log(db, request, response.status_code, duration_ms)
+                    _audit_log(db, request, response.status_code, duration_ms, body_text)
                 finally:
                     db.close()
                     _audit_semaphore.release()
