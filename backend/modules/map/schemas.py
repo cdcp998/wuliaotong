@@ -23,3 +23,13 @@ class RegionCreate(BaseModel):
     min_zoom: int = 0
     max_zoom: int = 18
     update_mode: str = "manual"  # daily/weekly/manual
+
+
+class RegionUpdate(BaseModel):
+    """缓存区域编辑（名称/范围/缩放级别/更新模式；默认缓存行不可编辑）。"""
+
+    name: str = Field(min_length=1, max_length=100)
+    geometry: dict | None = None
+    min_zoom: int = 0
+    max_zoom: int = 18
+    update_mode: str = "manual"

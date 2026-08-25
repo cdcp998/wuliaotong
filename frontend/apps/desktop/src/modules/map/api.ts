@@ -25,6 +25,8 @@ export interface RegionItem {
   last_download_at: string | null;
   update_mode: string;
   status: number;
+  /** 「默认缓存」系统聚合行（收集代理浏览落盘的瓦片；不可编辑/下载）。 */
+  is_default?: boolean;
 }
 
 export interface RegionProgress {
@@ -54,6 +56,8 @@ export const mapApi = {
   listRegions: () => http.get<RegionItem[]>("/map/cache/regions"),
   createRegion: (body: { name: string; geometry?: unknown; min_zoom: number; max_zoom: number; update_mode: string }) =>
     http.post<{ id: number }>("/map/cache/regions", body),
+  updateRegion: (id: number, body: { name: string; geometry?: unknown; min_zoom: number; max_zoom: number; update_mode: string }) =>
+    http.put<{ id: number }>(`/map/cache/regions/${id}`, body),
   startRegionDownload: (id: number) => http.post<{ tiles_queued?: number }>(`/map/cache/regions/${id}/start`),
   pauseRegionDownload: (id: number) => http.post<null>(`/map/cache/regions/${id}/pause`),
   clearRegion: (id: number) => http.post<{ tiles_removed?: number }>(`/map/cache/regions/${id}/clear`),

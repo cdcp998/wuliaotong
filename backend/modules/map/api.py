@@ -19,7 +19,7 @@ from app.core.modules import require_module_enabled
 from app.core.response import BizError, E_NOT_FOUND, E_PARAM, ok
 from app.db import get_db
 from app.modules.map.models import MapCacheRegion, MapDownloadTask
-from app.modules.map.schemas import MapSourceIn, RegionCreate
+from app.modules.map.schemas import MapSourceIn, RegionCreate, RegionUpdate
 from app.modules.map.services import config_store, tile_cache
 
 logger = logging.getLogger("app.map")
@@ -27,6 +27,7 @@ logger = logging.getLogger("app.map")
 router = APIRouter(tags=["地图"], dependencies=[Depends(get_current_user), Depends(require_module_enabled("map"))])
 
 TILE_MAX_ZOOM = 22
+DEFAULT_REGION_NAME = "默认缓存"  # 收集代理浏览等非任务方式落盘的瓦片（无 bbox，不参与批量下载）
 
 
 # ============================ 地图源 & 瓦片代理 ============================
@@ -115,8 +116,45 @@ def save_map_config(config: dict, db: Session = Depends(get_db)) -> dict:
 
 # ============================ 缓存区域（批量下载） ============================
 
+def _ensure_default_region(db: Session) -> MapCacheRegion:
+    """「默认缓存」行：get_or_create（幂等）。收集代理浏览等非任务方式落盘的瓦片。"""
+    r = db.scalar(select(MapCacheRegion).where(MapCacheRegion.name == DEFAULT_REGION_NAME))
+    if r is None:
+        r = MapCacheRegion(name=DEFAULT_REGION_NAME, min_zoom=0, max_zoom=TILE_MAX_ZOOM,
+                           update_mode="manual", status=2)
+        db.add(r)
+        db.commit()
+        db.refresh(r)
+    return r
+
+
+def _kept_task_tiles(db: Session) -> dict[str, set[tuple[int, int, int]]]:
+    """全部下载任务覆盖的瓦片集合（按源分组）——磁盘上其余瓦片即「默认缓存」收集的孤儿瓦片。"""
+    kept: dict[str, set[tuple[int, int, int]]] = {}
+    for source, z, x, y in db.execute(
+        select(MapDownloadTask.source, MapDownloadTask.z, MapDownloadTask.x, MapDownloadTask.y)
+    ):
+        kept.setdefault(source or "", set()).add((int(z), int(x), int(y)))
+    return kept
+
+
 @router.get("/map/cache/regions", dependencies=[Depends(require_permission("map:cache"))])
 def list_regions(db: Session = Depends(get_db)) -> dict:
+    default_row = _ensure_default_region(db)
+    # 孤儿瓦片统计（不属于任何下载任务的磁盘文件）→ 归入「默认缓存」
+    kept = _kept_task_tiles(db)
+    orphan_count = 0
+    orphan_size = 0
+    for source, z, x, y, size in tile_cache.scan_tiles():
+        if (z, x, y) not in kept.get(source, set()):
+            orphan_count += 1
+            orphan_size += size
+    default_row.tile_count = orphan_count
+    default_row.cache_size = orphan_size
+    if orphan_count > 0 and default_row.last_download_at is None:
+        default_row.last_download_at = datetime.now()
+    db.commit()
+
     rows = db.scalars(select(MapCacheRegion).order_by(MapCacheRegion.id.desc())).all()
     return ok([
         {
@@ -124,9 +162,30 @@ def list_regions(db: Session = Depends(get_db)) -> dict:
             "min_zoom": r.min_zoom, "max_zoom": r.max_zoom, "tile_count": r.tile_count,
             "cache_size": r.cache_size, "last_download_at": r.last_download_at.isoformat() if r.last_download_at else None,
             "update_mode": r.update_mode, "status": r.status,
+            "is_default": r.name == DEFAULT_REGION_NAME,
         }
         for r in rows
     ])
+
+
+@router.put("/map/cache/regions/{region_id}", dependencies=[Depends(require_permission("map:cache"))])
+def update_region(region_id: int, req: RegionUpdate, db: Session = Depends(get_db)) -> dict:
+    """编辑缓存区域（名称/框选范围/缩放级别/更新模式；「默认缓存」为系统聚合行不可编辑）。"""
+    r = db.get(MapCacheRegion, region_id)
+    if r is None:
+        raise BizError(E_NOT_FOUND, "缓存区域不存在")
+    if r.name == DEFAULT_REGION_NAME:
+        raise BizError(E_PARAM, "「默认缓存」由系统自动收集，不可编辑")
+    if req.min_zoom < 0 or req.max_zoom > TILE_MAX_ZOOM or req.min_zoom > req.max_zoom:
+        raise BizError(E_PARAM, "缩放级别范围不合法")
+    r.name = req.name.strip() or r.name
+    if req.geometry is not None:
+        r.geometry = json.dumps(req.geometry, ensure_ascii=False)
+    r.min_zoom = req.min_zoom
+    r.max_zoom = req.max_zoom
+    r.update_mode = req.update_mode
+    db.commit()
+    return ok({"id": r.id})
 
 
 @router.post("/map/cache/regions", dependencies=[Depends(require_permission("map:cache"))])
@@ -148,6 +207,8 @@ def start_region_download(region_id: int, db: Session = Depends(get_db)) -> dict
     r = db.get(MapCacheRegion, region_id)
     if r is None:
         raise BizError(E_NOT_FOUND, "缓存区域不存在")
+    if r.name == DEFAULT_REGION_NAME:
+        raise BizError(E_PARAM, "「默认缓存」为浏览自动收集，无需手动下载")
     if r.status == 1:
         return ok({"message": "下载已在进行中"})
     config = config_store.load_config(db)
@@ -212,6 +273,14 @@ def clear_region(region_id: int, db: Session = Depends(get_db)) -> dict:
     r = db.get(MapCacheRegion, region_id)
     if r is None:
         raise BizError(E_NOT_FOUND, "缓存区域不存在")
+    # 「默认缓存」：只清理孤儿瓦片（不属于任何下载任务的磁盘文件），不动任务区域
+    if r.name == DEFAULT_REGION_NAME:
+        kept = _kept_task_tiles(db)
+        result = tile_cache.clear_orphan_tiles(kept)
+        r.tile_count = 0
+        r.cache_size = 0
+        db.commit()
+        return ok({"tiles_removed": result["removed"], "freed_bytes": result["freed_bytes"]})
     tasks = db.execute(
         select(MapDownloadTask.source, MapDownloadTask.z, MapDownloadTask.x, MapDownloadTask.y)
         .where(MapDownloadTask.region_id == region_id)

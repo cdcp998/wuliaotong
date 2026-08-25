@@ -24,7 +24,9 @@ _MAX_TILE_BYTES = 5 * 1024 * 1024  # 单瓦片上限（异常大视为错误响�
 _HTTP_TIMEOUT = 15
 _lock = threading.Lock()
 _daily_counter = {"date": "", "count": 0}  # 进程内每日抓取计数（简单实现，多进程部署需共享存储）
-_default_ttl = 30 * 24 * 3600  # 瓦片默认有效期 30 天
+# 缓存策略（用户要求）：瓦片**永不自动清理/过期**——磁盘命中即返回；
+# 仅管理员在「地图缓存管理」手动清理（clear_tiles / clear_tiles_for / clear_orphan_tiles）。
+# cache_ttl 参数保留兼容旧调用，但 None 一律视为永久。
 
 
 def _tile_path(source: str, z: int, x: int, y: int) -> Path:
@@ -93,15 +95,17 @@ def fetch_remote(source_cfg: dict, z: int, x: int, y: int) -> bytes:
 
 
 def get_tile(source_cfg: dict, source: str, z: int, x: int, y: int, cache_ttl: int | None = None) -> bytes:
-    """代理读取瓦片：缓存优先；未命中/过期 → 抓在线源落盘返回。"""
-    ttl = cache_ttl or _default_ttl
+    """代理读取瓦片：磁盘缓存命中即返回（**永不自动过期**）；未命中 → 抓在线源落盘。
+
+    cache_ttl 仅为兼容保留；传 None（默认）= 永久缓存，传正整数秒则该瓦片超过时效会刷新。
+    """
     path = _tile_path(source, z, x, y)
     meta = _meta_path(source, z, x, y)
     if path.exists():
-        cache_age = time.time() - path.stat().st_mtime
-        if cache_age <= ttl:
+        expired = cache_ttl is not None and (time.time() - path.stat().st_mtime) > cache_ttl
+        if not expired:
             return path.read_bytes()
-        # 过期：尝试刷新，失败时回退旧缓存（离线可用）
+        # 显式 TTL 场景才尝试刷新，失败时回退旧缓存（离线可用）
         try:
             data = fetch_remote(source_cfg, z, x, y)
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -169,3 +173,44 @@ def tile_md5(source: str, z: int, x: int, y: int) -> str:
     if path.exists():
         return hashlib.md5(path.read_bytes()).hexdigest()
     return ""
+
+
+def scan_tiles() -> list[tuple[str, int, int, int, int]]:
+    """扫描磁盘全部瓦片 → [(source, z, x, y, size_bytes)]（默认缓存区域统计/孤儿清理用）。
+
+    目录结构 root/source/z/x/y.png；解析失败（脏文件）跳过。
+    """
+    out: list[tuple[str, int, int, int, int]] = []
+    if not TILE_CACHE_ROOT.exists():
+        return out
+    for p in TILE_CACHE_ROOT.rglob("*.png"):
+        try:
+            rel = p.relative_to(TILE_CACHE_ROOT)
+            source = rel.parts[0]
+            z, x, y = int(rel.parts[1]), int(rel.parts[2]), int(rel.parts[3].removesuffix(".png"))
+        except (ValueError, IndexError):
+            continue
+        try:
+            out.append((source, z, x, y, p.stat().st_size))
+        except OSError:
+            continue
+    return out
+
+
+def clear_orphan_tiles(kept: dict[str, set[tuple[int, int, int]]]) -> dict:
+    """清理「不属于任何下载任务」的孤儿瓦片（默认缓存区域手动清理用；kept=各源任务瓦片集合）。"""
+    removed = 0
+    freed = 0
+    with _lock:
+        for source, z, x, y, size in scan_tiles():
+            if (z, x, y) in kept.get(source, set()):
+                continue
+            for p in (_tile_path(source, z, x, y), _meta_path(source, z, x, y)):
+                try:
+                    if p.exists():
+                        freed += p.stat().st_size
+                        p.unlink()
+                        removed += 1
+                except OSError as exc:  # noqa: BLE001
+                    logger.warning("清理孤儿瓦片失败 %s：%s", p, exc)
+    return {"removed": removed, "freed_bytes": freed}

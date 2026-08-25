@@ -29,6 +29,7 @@ interface RegionRow {
   done?: number;
   failed?: number;
   total?: number;
+  is_default?: boolean;
 }
 
 /** 字节 → 可读大小（磁盘列）。 */
@@ -56,6 +57,7 @@ export function MapCachePage() {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<RegionRow | null>(null);
   const [sources, setSources] = useState<Record<string, MapSourceInfo>>({});
   const [srcOpen, setSrcOpen] = useState(false);
   const [srcModalOpen, setSrcModalOpen] = useState(false);
@@ -141,7 +143,42 @@ export function MapCachePage() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void loadSources(); }, [loadSources]);
 
-  const createRegion = async () => {
+  const openCreate = () => {
+    setEditing(null);
+    form.resetFields();
+    form.setFieldsValue({ min_zoom: 12, max_zoom: 18, update_mode: "manual" });
+    setRegionPicks([]);
+    setRegionRect([]);
+    setRegionPicking(false);
+    setOpen(true);
+  };
+
+  /** 编辑缓存区域（默认缓存行不可编辑，入口已隐藏）。 */
+  const openEdit = (r: RegionRow) => {
+    setEditing(r);
+    let bbox: number[] | undefined;
+    try {
+      const geo = (r as unknown as { geometry?: { bbox?: number[] } }).geometry;
+      bbox = geo?.bbox;
+    } catch {
+      bbox = undefined;
+    }
+    form.setFieldsValue({
+      name: r.name,
+      west: bbox?.[0], south: bbox?.[1], east: bbox?.[2], north: bbox?.[3],
+      min_zoom: r.min_zoom, max_zoom: r.max_zoom, update_mode: r.update_mode || "manual",
+    });
+    setRegionPicks([]);
+    setRegionPicking(false);
+    if (bbox && bbox.length === 4) {
+      setRegionRect([[bbox[1], bbox[0]], [bbox[1], bbox[2]], [bbox[3], bbox[2]], [bbox[3], bbox[0]], [bbox[1], bbox[0]]] as [number, number][]);
+    } else {
+      setRegionRect([]);
+    }
+    setOpen(true);
+  };
+
+  const saveRegion = async () => {
     const v = await form.validateFields();
     if (v.east <= v.west || v.north <= v.south) {
       message.warning("bbox 范围不正确（east>west 且 north>south）");
@@ -154,16 +191,23 @@ export function MapCachePage() {
     setSaving(true);
     try {
       const geometry = { type: "Polygon", bbox: [v.west, v.south, v.east, v.north] };
-      await mapApi.createRegion({ name: v.name, geometry, min_zoom: v.min_zoom, max_zoom: v.max_zoom, update_mode: v.update_mode ?? "manual" });
-      message.success("区域已创建（点击「开始下载」生成瓦片任务）");
+      const body = { name: v.name, geometry, min_zoom: v.min_zoom, max_zoom: v.max_zoom, update_mode: v.update_mode ?? "manual" };
+      if (editing) {
+        await mapApi.updateRegion(editing.id, body);
+        message.success("区域已更新");
+      } else {
+        await mapApi.createRegion(body);
+        message.success("区域已创建（点击「开始下载」生成瓦片任务）");
+      }
       setOpen(false);
+      setEditing(null);
       form.resetFields();
       setRegionPicks([]);
       setRegionRect([]);
       setRegionPicking(false);
       void load();
     } catch (e) {
-      message.error(e instanceof Error ? e.message : "创建失败");
+      message.error(e instanceof Error ? e.message : "保存失败");
     } finally {
       setSaving(false);
     }
@@ -278,12 +322,12 @@ export function MapCachePage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>地图缓存管理</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>按地图源/区域管理瓦片缓存：生成/下载任务、磁盘占用、按 source+z/x/y 精准清理</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>按地图源/区域管理瓦片缓存：缓存永不自动过期，仅手动清理；「默认缓存」自动收集浏览产生的瓦片</p>
         </div>
         <Space>
           <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<ReloadOutlined style={{ color: "#5B7FFF" }} />} onClick={() => { void load(); void loadSources(); }}>刷新</Button>
           <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<SettingOutlined style={{ color: "#5B7FFF" }} />} onClick={() => setSrcOpen(true)}>图源管理</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>生成缓存</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>生成缓存</Button>
         </Space>
       </div>
 
@@ -360,18 +404,28 @@ export function MapCachePage() {
             },
           },
           {
-            title: "操作", width: 170,
+            title: "操作", width: 190,
             render: (_, r) => (
               <Space size={10}>
-                {(r.status === 0 || r.status === 2) && (
-                  <Button type="link" size="small" style={{ padding: 0, color: "#5B7FFF" }} onClick={() => act(r, "start")}>
-                    {r.status === 2 ? "重试" : "开始下载"}
-                  </Button>
+                {r.is_default ? (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>浏览自动收集</Typography.Text>
+                ) : (
+                  <>
+                    {(r.status === 0 || r.status === 2) && (
+                      <Button type="link" size="small" style={{ padding: 0, color: "#5B7FFF" }} onClick={() => act(r, "start")}>
+                        {r.status === 2 ? "重试" : "开始下载"}
+                      </Button>
+                    )}
+                    {r.status === 1 && <Button type="link" size="small" style={{ padding: 0 }} onClick={() => act(r, "pause")}>暂停</Button>}
+                    {r.status === 3 && <Button type="link" size="small" style={{ padding: 0, color: "#5B7FFF" }} onClick={() => act(r, "start")}>继续</Button>}
+                    <Button type="link" size="small" style={{ padding: 0, color: "#3B5BDB" }} onClick={() => openEdit(r)}>编辑</Button>
+                  </>
                 )}
-                {r.status === 1 && <Button type="link" size="small" style={{ padding: 0 }} onClick={() => act(r, "pause")}>暂停</Button>}
-                {r.status === 3 && <Button type="link" size="small" style={{ padding: 0, color: "#5B7FFF" }} onClick={() => act(r, "start")}>继续</Button>}
-                <Popconfirm title="清理区域任务与磁盘瓦片？" onConfirm={() => act(r, "clear")}>
-                  <Button type="link" size="small" danger style={{ padding: 0, color: "#DC2626" }}>清理</Button>
+                <Popconfirm
+                  title={r.is_default ? "清理所有未归属区域的缓存瓦片？" : "清理区域任务与磁盘瓦片？"}
+                  onConfirm={() => act(r, "clear")}
+                >
+                  <Button type="link" size="small" danger style={{ padding: 0, color: "#DC2626" }}>{r.is_default ? "清理缓存" : "清理"}</Button>
                 </Popconfirm>
               </Space>
             ),
@@ -450,7 +504,7 @@ export function MapCachePage() {
         </Space>
       </Modal>
 
-      <Modal open={open} onCancel={() => setOpen(false)} onOk={createRegion} confirmLoading={saving} title="新建缓存下载区域" width={720} destroyOnHidden>
+      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); }} onOk={saveRegion} confirmLoading={saving} title={editing ? `编辑缓存区域：${editing.name}` : "新建缓存下载区域"} width={720} destroyOnHidden>
         <Form form={form} layout="vertical">
           <Form.Item name="name" label="区域名称" rules={[{ required: true, message: "请输入名称" }]}>
             <Input maxLength={100} placeholder="如 城东机房片区" />
