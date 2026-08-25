@@ -3,6 +3,10 @@
 - 磁盘缓存优先命中 → 未命中按源 url_template 抓在线源并落盘（.png + .meta.json）。
 - 容量保护：cache.max_size（字节）、download.max_daily（每日抓取上限，进程内计数）。
 - 瓦片清理统一入口：clear_tiles()（worker 与清理接口共用，v2.1 ⑭）。
+- 瓦片统计走**增量注册表**（进程内，事件驱动自动更新）：写入即登记、清理即注销，
+  区域列表等统计请求 O(注册表大小) 拷贝、**永不触发全盘扫描**；
+  仅后台对账任务（reconcile_scan_cache，默认 10 分钟）周期性强制重扫，
+  自愈外部改动（手工删目录/备份还原等本模块感知不到的磁盘变化）。
 """
 from __future__ import annotations
 
@@ -27,6 +31,49 @@ _daily_counter = {"date": "", "count": 0}  # 进程内每日抓取计数（简�
 # 缓存策略（用户要求）：瓦片**永不自动清理/过期**——磁盘命中即返回；
 # 仅管理员在「地图缓存管理」手动清理（clear_tiles / clear_tiles_for / clear_orphan_tiles）。
 # cache_ttl 参数保留兼容旧调用，但 None 一律视为永久。
+
+# ============================ 增量统计注册表 ============================
+# key=(source, z, x, y) → size_bytes。全部读写持 _lock（操作为 µs 级 dict 变更，
+# 与清理由同一把锁定序：先删文件后注销，统计不会看到已删仍计数的中间态）。
+_tile_registry: dict[tuple[str, int, int, int], int] = {}
+_registry_ready = False  # 冷启动标记：首次统计调用时从磁盘装载一次，之后纯增量维护
+
+
+class TileQuotaExceeded(ValueError):
+    """今日瓦片下载配额已用尽（区别于普通失败：不应消耗任务重试次数）。"""
+
+
+def _register_tile(source: str, z: int, x: int, y: int, size: int) -> None:
+    """瓦片成功落盘后登记（get_tile 写入路径调用）。"""
+    with _lock:
+        _tile_registry[(source, z, x, y)] = size
+
+
+def _parse_tile_path(p: Path) -> tuple[str, int, int, int] | None:
+    """磁盘 png 路径 → 注册表 key；解析失败（脏文件）返回 None。"""
+    try:
+        rel = p.relative_to(TILE_CACHE_ROOT)
+        source = rel.parts[0]
+        z, x, y = int(rel.parts[1]), int(rel.parts[2]), int(rel.parts[3].removesuffix(".png"))
+        return source, z, x, y
+    except (ValueError, IndexError):
+        return None
+
+
+def _walk_tiles_to_dict() -> dict[tuple[str, int, int, int], int]:
+    """全盘扫描 → {key: size}（仅在冷启动装载与后台对账时调用，不在请求路径上）。"""
+    out: dict[tuple[str, int, int, int], int] = {}
+    if not TILE_CACHE_ROOT.exists():
+        return out
+    for p in TILE_CACHE_ROOT.rglob("*.png"):
+        key = _parse_tile_path(p)
+        if key is None:
+            continue
+        try:
+            out[key] = p.stat().st_size
+        except OSError:
+            continue
+    return out
 
 
 def _tile_path(source: str, z: int, x: int, y: int) -> Path:
@@ -95,7 +142,7 @@ def fetch_remote(source_cfg: dict, z: int, x: int, y: int) -> bytes:
 
 
 def get_tile(source_cfg: dict, source: str, z: int, x: int, y: int, cache_ttl: int | None = None) -> bytes:
-    """代理读取瓦片：磁盘缓存命中即返回（**永不自动过期**）；未命中 → 抓在线源落盘。
+    """代理读取瓦片：磁盘缓存命中即返回（**永不自动过期**）；未命中 → 抓在线源落盘并登记统计。
 
     cache_ttl 仅为兼容保留；传 None（默认）= 永久缓存，传正整数秒则该瓦片超过时效会刷新。
     """
@@ -112,17 +159,19 @@ def get_tile(source_cfg: dict, source: str, z: int, x: int, y: int, cache_ttl: i
             path.write_bytes(data)
             meta.write_text(json.dumps({"etag": "", "last_modified": "", "fetched_at": int(time.time())}), encoding="utf-8")
             _write_source_meta(source, int(time.time()))
+            _register_tile(source, z, x, y, len(data))
             return data
         except Exception as exc:  # noqa: BLE001
             logger.warning("瓦片刷新失败，回退缓存 %s/%d/%d/%d：%s", source, z, x, y, exc)
             return path.read_bytes()
     if not _daily_ok(int(source_cfg.get("max_daily", 0))):
-        raise ValueError("今日瓦片下载配额已用尽")
+        raise TileQuotaExceeded("今日瓦片下载配额已用尽")
     data = fetch_remote(source_cfg, z, x, y)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     meta.write_text(json.dumps({"etag": "", "last_modified": "", "fetched_at": int(time.time())}), encoding="utf-8")
     _write_source_meta(source, int(time.time()))
+    _register_tile(source, z, x, y, len(data))
     return data
 
 
@@ -130,12 +179,14 @@ def clear_tiles(source: str | None = None, before_ts: float | None = None) -> di
     """瓦片清理统一入口（下载 worker 与清理接口共用 + 进程锁，v2.1 ⑭）。
 
     扫描删除 .png + .meta.json；返回 {removed, freed_bytes}。
+    删除的瓦片同步从统计注册表注销（与删除同锁同序，无需失效重扫）。
     """
     root = TILE_CACHE_ROOT / source if source else TILE_CACHE_ROOT
     if not root.exists():
         return {"removed": 0, "freed_bytes": 0}
     removed = 0
     freed = 0
+    unregistered: list[tuple[str, int, int, int]] = []
     with _lock:
         for p in list(root.rglob("*.png")) + list(root.rglob("*.meta.json")):
             try:
@@ -145,8 +196,14 @@ def clear_tiles(source: str | None = None, before_ts: float | None = None) -> di
                 p.unlink(missing_ok=True)
                 removed += 1
                 freed += size
+                if p.suffix == ".png":
+                    key = _parse_tile_path(p)
+                    if key is not None:
+                        unregistered.append(key)
             except OSError as exc:
                 logger.warning("清理瓦片失败 %s：%s", p, exc)
+        for key in unregistered:
+            _tile_registry.pop(key, None)
     return {"removed": removed, "freed_bytes": freed}
 
 
@@ -164,6 +221,7 @@ def clear_tiles_for(source: str, pieces: list[tuple[int, int, int]]) -> dict:
                         removed += 1
                 except OSError as exc:
                     logger.warning("清理瓦片失败 %s：%s", p, exc)
+            _tile_registry.pop((source, z, x, y), None)
     return {"removed": removed, "freed_bytes": freed}
 
 
@@ -175,34 +233,52 @@ def tile_md5(source: str, z: int, x: int, y: int) -> str:
     return ""
 
 
-def scan_tiles() -> list[tuple[str, int, int, int, int]]:
-    """扫描磁盘全部瓦片 → [(source, z, x, y, size_bytes)]（默认缓存区域统计/孤儿清理用）。
+def scan_tiles(force: bool = False) -> list[tuple[str, int, int, int, int]]:
+    """全部瓦片统计 → [(source, z, x, y, size_bytes)]（默认缓存区域统计/孤儿清理用）。
 
-    目录结构 root/source/z/x/y.png；解析失败（脏文件）跳过。
+    增量注册表语义（区域列表每次打开都是 O(n) 内存拷贝，毫秒级、零磁盘扫描）：
+    - 写入自动登记（get_tile）、清理自动注销（clear_*），统计始终与「本模块已知磁盘状态」一致；
+    - 冷启动首次调用从磁盘装载一次（唯一一次全盘 rglob，通常发生在启动后几秒内的
+      首次统计或对账任务，而非用户高峰）；
+    - 本模块感知不到的外部改动（手工删目录等）由后台对账纠偏：
+      reconcile_scan_cache() 周期强制重扫替换注册表；force=True 即时生效。
     """
-    out: list[tuple[str, int, int, int, int]] = []
-    if not TILE_CACHE_ROOT.exists():
-        return out
-    for p in TILE_CACHE_ROOT.rglob("*.png"):
-        try:
-            rel = p.relative_to(TILE_CACHE_ROOT)
-            source = rel.parts[0]
-            z, x, y = int(rel.parts[1]), int(rel.parts[2]), int(rel.parts[3].removesuffix(".png"))
-        except (ValueError, IndexError):
-            continue
-        try:
-            out.append((source, z, x, y, p.stat().st_size))
-        except OSError:
-            continue
-    return out
+    global _tile_registry, _registry_ready
+    if not force and _registry_ready:
+        with _lock:
+            return [(s, z, x, y, size) for (s, z, x, y), size in _tile_registry.items()]
+    walked = _walk_tiles_to_dict()
+    with _lock:
+        _tile_registry = walked
+        _registry_ready = True
+        return [(s, z, x, y, size) for (s, z, x, y), size in _tile_registry.items()]
+
+
+def reconcile_scan_cache() -> int:
+    """后台对账任务：强制重扫磁盘替换注册表（自愈外部改动；APScheduler 周期调用）。
+
+    扫描在工作线程执行，用户请求路径永不承担全盘扫描成本。
+    返回当前注册瓦片数。
+    """
+    count = len(scan_tiles(force=True))
+    logger.debug("瓦片统计注册表已对账：%d 个瓦片", count)
+    return count
+
+
+reconcile_scan_cache.interval_minutes = 10  # 对账周期（分钟）：外部改动最迟 10 分钟被纠正
 
 
 def clear_orphan_tiles(kept: dict[str, set[tuple[int, int, int]]]) -> dict:
-    """清理「不属于任何下载任务」的孤儿瓦片（默认缓存区域手动清理用；kept=各源任务瓦片集合）。"""
+    """清理「不属于任何下载任务」的孤儿瓦片（默认缓存区域手动清理用；kept=各源任务瓦片集合）。
+
+    注意：先在锁外取统计快照再进锁删除（scan_tiles 与本函数共用 _lock，避免重入死锁）。
+    删除的瓦片同步从注册表注销。
+    """
     removed = 0
     freed = 0
+    tiles = scan_tiles()
     with _lock:
-        for source, z, x, y, size in scan_tiles():
+        for source, z, x, y, size in tiles:
             if (z, x, y) in kept.get(source, set()):
                 continue
             for p in (_tile_path(source, z, x, y), _meta_path(source, z, x, y)):
@@ -213,4 +289,5 @@ def clear_orphan_tiles(kept: dict[str, set[tuple[int, int, int]]]) -> dict:
                         removed += 1
                 except OSError as exc:  # noqa: BLE001
                     logger.warning("清理孤儿瓦片失败 %s：%s", p, exc)
+            _tile_registry.pop((source, z, x, y), None)
     return {"removed": removed, "freed_bytes": freed}

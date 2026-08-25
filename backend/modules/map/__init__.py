@@ -16,6 +16,7 @@ from app.core.modules import ModuleDef, ModuleContext
 from app.modules.map.api import router
 from app.modules.map.services.config_store import ensure_seeded
 from app.modules.map.services.download_worker import download_worker_tick
+from app.modules.map.services.tile_cache import reconcile_scan_cache
 
 _MAP_PATHS = ("/cable/map", "/cable/cache")
 
@@ -83,5 +84,5 @@ module = ModuleDef(
     migration_executors={"0001_add_task_source.sql": _migrate_0001},
     on_install=_seed_sources,
     on_enable=_seed_sources,
-    jobs=[download_worker_tick],  # 瓦片批量下载（tick 校验 ENABLED）
+    jobs=[download_worker_tick, reconcile_scan_cache],  # 瓦片批量下载 + 统计注册表后台对账（tick 校验 ENABLED）
 )

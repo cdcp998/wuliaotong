@@ -140,6 +140,11 @@ def _kept_task_tiles(db: Session) -> dict[str, set[tuple[int, int, int]]]:
 
 @router.get("/map/cache/regions", dependencies=[Depends(require_permission("map:cache"))])
 def list_regions(db: Session = Depends(get_db)) -> dict:
+    """区域列表（含「默认缓存」孤儿瓦片统计；瓦片统计走增量注册表——
+
+    写入自动登记/清理自动注销，本接口 O(n) 内存拷贝、零磁盘扫描；
+    仅本模块感知不到的外部改动由后台对账任务（默认 10 分钟）纠偏）。
+    """
     default_row = _ensure_default_region(db)
     # 孤儿瓦片统计（不属于任何下载任务的磁盘文件）→ 归入「默认缓存」
     kept = _kept_task_tiles(db)
