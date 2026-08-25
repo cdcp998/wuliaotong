@@ -73,10 +73,14 @@ export function LogsPage() {
     void load().catch((e) => message.error(e instanceof Error ? e.message : "加载失败"));
   }, [load]);
 
-  /** 导出当前页为 CSV（设计页 37：可导出）。 */
+  /** 导出当前页为 CSV（设计页 37：可导出）。长数字用 ="…" 包裹，避免 Excel 打开变科学计数法。 */
   function exportCsv() {
     const header = ["时间", "用户", "操作", "模块", "方法", "URL", "参数", "提交内容", "IP", "耗时(ms)", "状态码"];
-    const esc = (s: unknown) => `"${String(s ?? "").replace(/"/g, '""').replace(/\n/g, " ")}"`;
+    const esc = (s: unknown) => {
+      let str = String(s ?? "");
+      if (/^\d{12,}$/.test(str)) str = `="${str}"`; // 纯数字 ≥12 位：强制文本
+      return `"${str.replace(/"/g, '""').replace(/\n/g, " ")}"`;
+    };
     const rowsCsv = list.map((r) => [r.created_at, r.username, r.action, r.module, METHOD_CN(r.method), r.url, r.params, r.body, r.ip, r.duration_ms, r.status_code]);
     const csv = [header, ...rowsCsv].map((row) => row.map(esc).join(",")).join("\n");
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });

@@ -1,13 +1,45 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, DatePicker, Input, Select, Space, Tabs, Tag, Typography } from "antd";
+import { App, Button, DatePicker, Input, Select, Space, Tabs, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
+import { SettingOutlined } from "@ant-design/icons";
 
-import { baseApi, exportReportUrl, reportApi, type InventorySummaryRow, type StockReportRow, type Warehouse } from "@wlt/shared";
+import { baseApi, exportReportPreview, exportReportUrl, reportApi, type InventorySummaryRow, type StockReportRow, type Warehouse } from "@wlt/shared";
 
 import dayjs from "dayjs";
 
 import { DataTable } from "../components/DataTable";
+import { ExportFormatModal, type ExportField, type ExportFormatSpec } from "../components/ExportFormatModal";
+
+/** 库存报表源列（与后端 export_report stock 分支表头一致）。 */
+const STOCK_FIELDS: ExportField[] = [
+  { key: 0, label: "商品编码", hint: "text" },
+  { key: 1, label: "商品名称" },
+  { key: 2, label: "规格" },
+  { key: 3, label: "仓库" },
+  { key: 4, label: "数量", hint: "number" },
+  { key: 5, label: "成本价", hint: "number" },
+  { key: 6, label: "金额", hint: "number" },
+  { key: 7, label: "30天出库", hint: "number" },
+  { key: 8, label: "最近变动" },
+  { key: 9, label: "呆滞天数", hint: "number" },
+];
+
+/** 库存流水源列（与后端 flow 分支表头一致）。 */
+const FLOW_FIELDS: ExportField[] = [
+  { key: 0, label: "时间" },
+  { key: 1, label: "商品编码", hint: "text" },
+  { key: 2, label: "商品名称" },
+  { key: 3, label: "仓库" },
+  { key: 4, label: "库位" },
+  { key: 5, label: "类型" },
+  { key: 6, label: "单据号", hint: "text" },
+  { key: 7, label: "变动前", hint: "number" },
+  { key: 8, label: "变动数量", hint: "number" },
+  { key: 9, label: "变动后", hint: "number" },
+  { key: 10, label: "成本价", hint: "number" },
+  { key: 11, label: "备注" },
+];
 
 /** 报表中心（电脑端，管理者，设计页 29 风格）：进销存汇总、库存报表、Excel 导出、AI 月报摘要。 */
 export function ReportsPage() {
@@ -124,6 +156,18 @@ function StockReportTab() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [fmtOpen, setFmtOpen] = useState(false);
+
+  /** 导出 URL（含导出格式设置）。 */
+  function doExport(fmt?: ExportFormatSpec) {
+    const params: Record<string, string | number | undefined> = { type: "stock", warehouse_id: warehouseId || undefined, sort };
+    if (fmt) params.fmt = JSON.stringify(fmt);
+    window.open(exportReportUrl(params));
+  }
+
+  /** 预览样例：后端 preview=1 返回前 10 条真实数据（源列全序）。 */
+  const previewRows = () =>
+    exportReportPreview({ type: "stock", warehouse_id: warehouseId || undefined, sort }).then((r) => r.rows);
 
   const load = useCallback(async () => {
     setList([]); // 清空旧数据，避免切换每页条数时 dataSource 与分页配置不匹配
@@ -175,11 +219,22 @@ function StockReportTab() {
           onChange={(v) => { setSort(v); setPage(1); }}
         />
         <Button type="primary" onClick={() => void load()}>查询</Button>
+        <Tooltip title="点击设置导出文件的列格式、列宽等选项">
+          <Button icon={<SettingOutlined style={{ color: "#5B7FFF" }} />} onClick={() => setFmtOpen(true)}>导出设置</Button>
+        </Tooltip>
         <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 行</span>
-        <Button onClick={() => window.open(exportReportUrl({ type: "stock", warehouse_id: warehouseId || undefined, sort }))}>
+        <Button onClick={() => doExport()}>
           导出 Excel
         </Button>
       </div>
+      <ExportFormatModal
+        open={fmtOpen}
+        onClose={() => setFmtOpen(false)}
+        fields={STOCK_FIELDS}
+        storageKey="export_fmt_stock"
+        getPreviewRows={previewRows}
+        onExport={(spec) => doExport(spec)}
+      />
       <div className="wlt-glass" style={{ padding: 12 }}>
         <DataTable rowKey={(r) => `${r.product_id}-${r.warehouse_name}`} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
       </div>
@@ -191,6 +246,30 @@ function FlowExportTab() {
   const [billNo, setBillNo] = useState("");
   const [changeType, setChangeType] = useState("");
   const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
+  const [fmtOpen, setFmtOpen] = useState(false);
+
+  function doExport(fmt?: ExportFormatSpec) {
+    const params: Record<string, string | number | undefined> = {
+      type: "flow",
+      bill_no: billNo || undefined,
+      change_type: changeType || undefined,
+      start: range?.[0]?.format("YYYY-MM-DD"),
+      end: range?.[1]?.format("YYYY-MM-DD"),
+    };
+    if (fmt) params.fmt = JSON.stringify(fmt);
+    window.open(exportReportUrl(params));
+  }
+
+  /** 流水预览：后端 preview=1 返回前 10 条真实数据（源列全序）。 */
+  const previewRows = () =>
+    exportReportPreview({
+      type: "flow",
+      bill_no: billNo || undefined,
+      change_type: changeType || undefined,
+      start: range?.[0]?.format("YYYY-MM-DD"),
+      end: range?.[1]?.format("YYYY-MM-DD"),
+    }).then((r) => r.rows);
+
   return (
     <div>
       <div className="wlt-glass" style={{ padding: "12px 16px", marginBottom: 16 }}>
@@ -212,25 +291,23 @@ function FlowExportTab() {
             onChange={(e) => setChangeType(e.target.value)}
             style={{ width: 200 }}
           />
-        <DatePicker.RangePicker value={range} onChange={(v) => setRange(v as [Dayjs | null, Dayjs | null] | null)} />
-        <Button
-          type="primary"
-          onClick={() =>
-            window.open(
-              exportReportUrl({
-                type: "flow",
-                bill_no: billNo || undefined,
-                change_type: changeType || undefined,
-                start: range?.[0]?.format("YYYY-MM-DD"),
-                end: range?.[1]?.format("YYYY-MM-DD"),
-              })
-            )
-          }
-        >
-          导出 Excel
-        </Button>
+          <DatePicker.RangePicker value={range} onChange={(v) => setRange(v as [Dayjs | null, Dayjs | null] | null)} />
+          <Tooltip title="点击设置导出文件的列格式、列宽等选项">
+            <Button icon={<SettingOutlined style={{ color: "#5B7FFF" }} />} onClick={() => setFmtOpen(true)}>导出设置</Button>
+          </Tooltip>
+          <Button type="primary" onClick={() => doExport()}>
+            导出 Excel
+          </Button>
         </Space>
       </div>
+      <ExportFormatModal
+        open={fmtOpen}
+        onClose={() => setFmtOpen(false)}
+        fields={FLOW_FIELDS}
+        storageKey="export_fmt_flow"
+        getPreviewRows={previewRows}
+        onExport={(spec) => doExport(spec)}
+      />
     </div>
   );
 }

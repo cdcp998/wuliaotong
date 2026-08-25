@@ -392,6 +392,8 @@ async def _capture_body_for_audit(request: Request) -> str:
     - multipart/form-data（文件上传）与超限大包不采集；
     - 非UTF-8文本不采集；返回脱敏后的 JSON 文本。
     """
+    if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return ""
     ct = (request.headers.get("content-type") or "").lower()
     if "multipart/form-data" in ct:
         return ""
@@ -400,7 +402,14 @@ async def _capture_body_for_audit(request: Request) -> str:
     except Exception:  # noqa: BLE001 读体失败不影响主流程
         return ""
 
-    async def _replay_receive():  # 回放已读 body 给下游
+    # 标准回放：首次返回 body 帧、其后一律 http.disconnect
+    # （否则 BaseHTTPMiddleware.wrapped_receive 收到重复 request 帧会抛 RuntimeError）
+    replayed = {"done": False}
+
+    async def _replay_receive():
+        if replayed["done"]:
+            return {"type": "http.disconnect"}
+        replayed["done"] = True
         return {"type": "http.request", "body": raw, "more_body": False}
 
     request._receive = _replay_receive  # noqa: SLF001 Starlette 标准回放手法

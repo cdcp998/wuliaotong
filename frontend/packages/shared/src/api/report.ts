@@ -109,3 +109,13 @@ export function exportReportUrl(params: Record<string, string | number | undefin
   }
   return `${apiBase()}/reports/export?${q}`;
 }
+
+/** 导出预览：preview=1 时后端返回前 10 条 JSON（「导出格式设置」预览用）。 */
+export function exportReportPreview(params: Record<string, string | number | undefined>) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== "") q.set(k, String(v));
+  }
+  q.set("preview", "1");
+  return http.get<{ headers: string[]; rows: string[][] }>(`/reports/export?${q}`);
+}
