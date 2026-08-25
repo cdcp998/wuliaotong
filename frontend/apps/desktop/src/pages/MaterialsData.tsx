@@ -887,31 +887,36 @@ export function MaterialsDataPage() {
         <input ref={barcodeFileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { void scanBarcode(e.target.files?.[0]); e.target.value = ""; }} />
         <input ref={barcodeAlbumRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { void scanBarcode(e.target.files?.[0]); e.target.value = ""; }} />
         <Form form={form} layout="vertical">
-          <Space style={{ display: "flex" }} wrap>
-            <Form.Item name="name" label="材料名称" rules={[{ required: true, message: "请输入材料名称" }]} style={{ width: 320 }}>
+          {/* 分节一：基础信息 */}
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3B5BDB", display: "flex", alignItems: "center", gap: 8, margin: "2px 0 12px" }}>
+            <span style={{ width: 3, height: 12, borderRadius: 2, background: "#5B7FFF", display: "inline-block" }} />
+            基础信息
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 130px", gap: "10px 14px" }}>
+            <Form.Item name="name" label="材料名称" rules={[{ required: true, message: "请输入材料名称" }]} style={{ marginBottom: 0 }}>
               <Space.Compact style={{ width: "100%" }}>
                 <Input placeholder="如：轴承6204" maxLength={100} value={nameValue} onChange={(e) => form.setFieldValue("name", e.target.value)} />
                 <Button icon={<CameraOutlined style={{ color: "#5B7FFF" }} />} title="拍照识别名称" onClick={() => nameFileRef.current?.click()} />
                 <Button icon={<PictureOutlined style={{ color: "#5B7FFF" }} />} title="相册选图识别名称" onClick={() => nameAlbumRef.current?.click()} />
               </Space.Compact>
             </Form.Item>
-            <Form.Item name="unit_id" label="基本单位" rules={[{ required: true, message: "请选择单位" }]} style={{ width: 120 }}>
+            <Form.Item name="unit_id" label="基本单位" rules={[{ required: true, message: "请选择单位" }]} style={{ marginBottom: 0 }}>
               <Select placeholder="选择" options={units} fieldNames={{ label: "name", value: "id" }} />
             </Form.Item>
-            <Form.Item name="barcode" label="条码（可选，扫码录入用）" style={{ width: 280 }}>
+            <Form.Item name="barcode" label="条码（可选，扫码录入用）" style={{ marginBottom: 0 }}>
               <Space.Compact style={{ width: "100%" }}>
                 <Input placeholder="扫码枪/手输，或拍照扫码" maxLength={50} value={barcodeValue} onChange={(e) => form.setFieldValue("barcode", e.target.value)} />
                 <Button icon={<CameraOutlined style={{ color: "#5B7FFF" }} />} title="拍照识别条码" onClick={() => barcodeFileRef.current?.click()} />
                 <Button icon={<PictureOutlined style={{ color: "#5B7FFF" }} />} title="相册选图识别条码" onClick={() => barcodeAlbumRef.current?.click()} />
               </Space.Compact>
             </Form.Item>
-            <Form.Item name="material_code" label="物料编码（公司系统编码，可选）" style={{ width: 240 }}>
+            <Form.Item name="material_code" label="物料编码（可选）" style={{ marginBottom: 0 }}>
               <Input placeholder="留空则提示管理员补录" maxLength={50} />
             </Form.Item>
-            <Form.Item name="spec" label="型号规格" style={{ width: 200 }}>
+            <Form.Item name="spec" label="型号规格" style={{ marginBottom: 0 }}>
               <Input placeholder="如：20x12" maxLength={100} />
             </Form.Item>
-            <Form.Item name="category_id" label="分类" style={{ width: 260 }}>
+            <Form.Item name="category_id" label="分类" style={{ marginBottom: 0 }}>
               <Select
                 placeholder="选择（含未分类）"
                 allowClear
@@ -919,32 +924,46 @@ export function MaterialsDataPage() {
                 fieldNames={{ label: "name", value: "id" }}
               />
             </Form.Item>
-            <Form.Item name="supplier_ids" label="关联供应商（可多选）" style={{ width: 280 }}>
-              <Select
-                mode="multiple"
-                placeholder="输入名称搜索 / 选择"
-                allowClear
-                showSearch
-                filterOption={false}
-                onSearch={querySuppliers}
-                options={suppliers}
-                fieldNames={{ label: "name", value: "id" }}
-                maxTagCount={2}
-              />
+          </div>
+
+          {/* 分节二：采购与库存 */}
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3B5BDB", display: "flex", alignItems: "center", gap: 8, margin: "16px 0 12px" }}>
+            <span style={{ width: 3, height: 12, borderRadius: 2, background: "#5B7FFF", display: "inline-block" }} />
+            采购与库存
+          </div>
+          <Form.Item name="supplier_ids" label="关联供应商（可多选）" style={{ marginBottom: 10 }}>
+            <Select
+              mode="multiple"
+              placeholder="输入名称搜索 / 选择"
+              allowClear
+              showSearch
+              filterOption={false}
+              onSearch={querySuppliers}
+              options={suppliers}
+              fieldNames={{ label: "name", value: "id" }}
+              maxTagCount={3}
+            />
+          </Form.Item>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+            <Form.Item name="purchase_price" label="参考价格（元）" style={{ marginBottom: 0 }}>
+              <InputNumber min={0} precision={2} style={{ width: "100%" }} placeholder="0.00" />
             </Form.Item>
-            <Form.Item name="purchase_price" label="价格" style={{ width: 120 }}>
-              <InputNumber min={0} precision={2} style={{ width: "100%" }} />
+            <Form.Item name="min_stock" label="库存下限" style={{ marginBottom: 0 }}>
+              <InputNumber min={0} precision={3} style={{ width: "100%" }} placeholder="预警阈值" />
             </Form.Item>
-            <Form.Item name="min_stock" label="库存下限" style={{ width: 120 }}>
-              <InputNumber min={0} precision={3} style={{ width: "100%" }} />
+            <Form.Item name="max_stock" label="库存上限" style={{ marginBottom: 0 }}>
+              <InputNumber min={0} precision={3} style={{ width: "100%" }} placeholder="容量上限" />
             </Form.Item>
-            <Form.Item name="max_stock" label="库存上限" style={{ width: 120 }}>
-              <InputNumber min={0} precision={3} style={{ width: "100%" }} />
-            </Form.Item>
-            <Form.Item name="remark" label="备注" style={{ width: 520 }}>
-              <Input maxLength={255} />
-            </Form.Item>
-          </Space>
+          </div>
+
+          {/* 分节三：备注 */}
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3B5BDB", display: "flex", alignItems: "center", gap: 8, margin: "16px 0 12px" }}>
+            <span style={{ width: 3, height: 12, borderRadius: 2, background: "#5B7FFF", display: "inline-block" }} />
+            备注
+          </div>
+          <Form.Item name="remark" style={{ marginBottom: 0 }}>
+            <Input.TextArea rows={2} maxLength={255} placeholder="选填：用途、存放要求等补充说明" />
+          </Form.Item>
         </Form>
       </Modal>
 

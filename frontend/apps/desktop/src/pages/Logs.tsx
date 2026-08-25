@@ -9,6 +9,16 @@ import { adminApi, type OperationLog } from "@wlt/shared";
 
 const MODULES = ["认证", "系统", "系统设置", "用户", "角色", "注册审核", "材料", "分类", "供应商", "仓库", "货架", "库位", "组织单位", "删除审核", "导航管理", "采购入库", "采购计划", "期初", "库存调拨", "盘点", "其他出入库", "领用申请", "通知", "OCR/大模型", "AI建议", "文件", "存储", "AI调用日志", "备份", "其他"];
 
+/** HTTP 方法中文化（设计页 37：动作已中文，方法同步中文；筛选仍传英文原值）。 */
+const METHOD_LABELS: Record<string, { label: string; bg: string; fg: string }> = {
+  POST: { label: "新增", bg: "#E8F9EF", fg: "#15803D" },
+  PUT: { label: "修改", bg: "#EAEFFF", fg: "#3B5BDB" },
+  PATCH: { label: "更新", bg: "#F3E8FF", fg: "#7C3AED" },
+  DELETE: { label: "删除", bg: "#FDEBEC", fg: "#DC2626" },
+  GET: { label: "查询", bg: "#EFF3FC", fg: "#5B6478" },
+};
+const METHOD_CN = (m: string) => METHOD_LABELS[m]?.label ?? m;
+
 /** 时间 → MM-DD HH:mm:ss（设计页 37 时间列）。 */
 function fmtTime(v: string): string {
   const d = dayjs(v);
@@ -65,9 +75,9 @@ export function LogsPage() {
 
   /** 导出当前页为 CSV（设计页 37：可导出）。 */
   function exportCsv() {
-    const header = ["时间", "用户", "操作", "模块", "方法", "URL", "参数", "IP", "耗时(ms)"];
+    const header = ["时间", "用户", "操作", "模块", "方法", "URL", "参数", "IP", "耗时(ms)", "状态码"];
     const esc = (s: unknown) => `"${String(s ?? "").replace(/"/g, '""').replace(/\n/g, " ")}"`;
-    const rowsCsv = list.map((r) => [r.created_at, r.username, r.action, r.module, r.method, r.url, r.params, r.ip, r.duration_ms]);
+    const rowsCsv = list.map((r) => [r.created_at, r.username, r.action, r.module, METHOD_CN(r.method), r.url, r.params, r.ip, r.duration_ms, r.status_code]);
     const csv = [header, ...rowsCsv].map((row) => row.map(esc).join(",")).join("\n");
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
@@ -77,12 +87,35 @@ export function LogsPage() {
     URL.revokeObjectURL(a.href);
   }
 
+  /** 详情列摘要：动作 + 接口路径尾段 + 参数摘录（完整信息点行看抽屉）。 */
+  function detailSummary(r: OperationLog): string {
+    const seg = (r.url || "").split("/").filter(Boolean).pop() ?? "";
+    let extra = "";
+    if (r.params && r.params !== "{}") {
+      try {
+        const q = JSON.parse(r.params) as Record<string, unknown>;
+        extra = Object.entries(q).slice(0, 2).map(([k, v]) => `${k}=${String(v)}`).join(" ");
+      } catch {
+        extra = r.params.slice(0, 40);
+      }
+    }
+    return [seg, extra].filter(Boolean).join(" · ") || "—";
+  }
+
   const columns: ColumnsType<OperationLog> = [
     { title: "时间", dataIndex: "created_at", width: 150, render: (v: string) => <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{fmtTime(v)}</span> },
     { title: "操作人", dataIndex: "username", width: 100, render: (v: string) => <span style={{ fontSize: 12.5, fontWeight: 500, color: "#1E2433" }}>{v}</span> },
     { title: "模块", dataIndex: "module", width: 120, render: (v: string) => <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>{v}</Tag> },
     { title: "动作", dataIndex: "action", width: 150, render: (v: string) => <span style={{ fontSize: 12.5, fontWeight: 500, color: "#1E2433" }}>{v}</span> },
-    { title: "详情", dataIndex: "params", ellipsis: true, render: (v: string) => <span style={{ fontSize: 12, color: "#5B6478" }}>{v || "—"}</span> },
+    { title: "方法", dataIndex: "method", width: 90, render: (v: string) => {
+      const m = METHOD_LABELS[v] ?? { label: v || "—", bg: "#EFF3FC", fg: "#5B6478" };
+      return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>;
+    } },
+    { title: "详情", key: "detail", ellipsis: true, render: (_, r) => (
+      <span style={{ fontSize: 12, color: "#5B6478" }}>
+        <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace" }}>{detailSummary(r)}</span>
+      </span>
+    ) },
     { title: "IP", dataIndex: "ip", width: 120, render: (v: string) => <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v || "—"}</span> },
   ];
 
@@ -125,7 +158,7 @@ export function LogsPage() {
           style={{ width: 120 }}
           value={method || undefined}
           onChange={(v) => { setMethod(v ?? ""); setPage(1); }}
-          options={["POST", "PUT", "DELETE"].map((m) => ({ label: m, value: m }))}
+          options={Object.entries(METHOD_LABELS).filter(([k]) => k !== "GET").map(([value, m]) => ({ label: m.label, value }))}
         />
         <DatePicker.RangePicker
           style={{ width: 210 }}
@@ -167,7 +200,11 @@ export function LogsPage() {
             <LogField label="操作人">{detail.username}</LogField>
             <LogField label="模块">{detail.module}</LogField>
             <LogField label="动作">{detail.action}</LogField>
-            <LogField label="方法">{detail.method}</LogField>
+            <LogField label="方法">
+              <Tag style={{ borderRadius: 999, background: METHOD_LABELS[detail.method]?.bg ?? "#EFF3FC", color: METHOD_LABELS[detail.method]?.fg ?? "#5B6478", borderColor: "transparent", marginInlineEnd: 6 }}>{METHOD_CN(detail.method)}</Tag>
+              <span style={{ fontSize: 12, color: "#8A93A8" }}>{detail.method}</span>
+            </LogField>
+            <LogField label="状态码" mono>{detail.status_code ? String(detail.status_code) : "—"}</LogField>
             <LogField label="IP">{detail.ip}</LogField>
             <LogField label="耗时">{detail.duration_ms} ms</LogField>
             <LogField label="URL" mono>{detail.url || "—"}</LogField>

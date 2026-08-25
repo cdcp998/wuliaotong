@@ -9,6 +9,8 @@ export interface SysUser {
   email: string;
   role_id: number;
   role_name: string;
+  department_id: number;
+  department_name: string;
   status: number;
   last_login_at: string | null;
   created_at: string;
@@ -44,6 +46,7 @@ export interface OperationLog {
   params: string;
   ip: string;
   duration_ms: number;
+  status_code: number;
   created_at: string;
 }
 
@@ -85,9 +88,9 @@ export const adminApi = {
     q.set("page_size", String(params.page_size ?? 20));
     return http.get<PageData<SysUser>>(`/users?${q}`);
   },
-  createUser: (body: { username: string; password: string; real_name?: string; phone?: string; email?: string; role_id: number }) =>
+  createUser: (body: { username: string; password: string; real_name?: string; phone?: string; email?: string; role_id: number; department_id?: number }) =>
     http.post<{ id: number; username: string }>("/users", body),
-  updateUser: (id: number, body: { real_name?: string; phone?: string; email?: string; role_id?: number; status?: number; password?: string }) =>
+  updateUser: (id: number, body: { real_name?: string; phone?: string; email?: string; role_id?: number; department_id?: number; status?: number; password?: string }) =>
     http.put<null>(`/users/${id}`, body),
   deleteUser: (id: number) => http.delete<null>(`/users/${id}`),
 

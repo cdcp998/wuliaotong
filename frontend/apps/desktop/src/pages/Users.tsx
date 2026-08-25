@@ -2,15 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
-import { adminApi, type SysRole, type SysUser } from "@wlt/shared";
+import { adminApi, type Department, type SysRole, type SysUser } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
 
-/** 用户管理（电脑端，超管 sys:user）。 */
+/** 用户管理（电脑端，超管 sys:user）：账号/角色/所属单位维护（单位控制可货架架与组织归属）。 */
 export function UsersPage() {
   const { message } = App.useApp();
   const [list, setList] = useState<SysUser[]>([]);
   const [roles, setRoles] = useState<SysRole[]>([]);
+  const [depts, setDepts] = useState<Department[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -38,13 +39,14 @@ export function UsersPage() {
 
   useEffect(() => {
     adminApi.roles().then(setRoles).catch(() => undefined);
+    adminApi.departments().then(setDepts).catch(() => undefined);
   }, []);
 
   async function submit() {
     const v = await form.validateFields();
     try {
       if (creating) {
-        await adminApi.createUser({ username: v.username, password: v.password, real_name: v.real_name ?? "", phone: v.phone ?? "", email: v.email ?? "", role_id: v.role_id });
+        await adminApi.createUser({ username: v.username, password: v.password, real_name: v.real_name ?? "", phone: v.phone ?? "", email: v.email ?? "", role_id: v.role_id, department_id: v.department_id ?? 0 });
         message.success("用户已创建");
       } else if (editing) {
         await adminApi.updateUser(editing.id, {
@@ -52,6 +54,7 @@ export function UsersPage() {
           phone: v.phone,
           email: v.email,
           role_id: v.role_id,
+          department_id: v.department_id ?? 0,
           password: v.password || undefined,
         });
         message.success("已保存");
@@ -88,6 +91,11 @@ export function UsersPage() {
     { title: "手机", dataIndex: "phone", width: 130 },
     { title: "邮箱", dataIndex: "email", width: 170, render: (v: string) => v || "-" },
     { title: "角色", dataIndex: "role_name", width: 110, render: (v: string) => (v ? <span className="wlt-pill" style={{ background: "#EAEFFF", color: "#3B5BDB" }}>{v}</span> : "-") },
+    { title: "所属单位", dataIndex: "department_name", width: 130, render: (v: string, r) => {
+      const id = r.department_id ?? 0;
+      if (!v || !id) return <span style={{ color: "#8A93A8", fontSize: 12 }}>未分配</span>;
+      return <span className="wlt-pill" style={{ background: "#E0F2FE", color: "#0E7490" }}>{v}</span>;
+    } },
     { title: "状态", width: 90, render: (_, r) => (r.status === 1 ? <Tag color="green">启用</Tag> : <Tag color="default">停用</Tag>) },
     { title: "最近登录", dataIndex: "last_login_at", width: 160, render: (v: string | null) => v ?? "-" },
     {
@@ -172,7 +180,7 @@ export function UsersPage() {
         afterOpenChange={(o) => {
           if (!o) return;
           if (editing) {
-            form.setFieldsValue({ username: editing.username, real_name: editing.real_name, phone: editing.phone, email: editing.email, role_id: editing.role_id, password: "" });
+            form.setFieldsValue({ username: editing.username, real_name: editing.real_name, phone: editing.phone, email: editing.email, role_id: editing.role_id, department_id: editing.department_id || undefined, password: "" });
           } else {
             form.resetFields();
           }
@@ -199,6 +207,15 @@ export function UsersPage() {
           <Form.Item name="email" label="邮箱（找回密码用）"><Input maxLength={100} /></Form.Item>
           <Form.Item name="role_id" label="角色" rules={[{ required: true, message: "请选择角色" }]}>
             <Select options={roles.map((r) => ({ label: r.name, value: r.id }))} />
+          </Form.Item>
+          <Form.Item name="department_id" label="所属单位（可选）" extra="关联组织单位：非超管/管理者账号按单位限定可见货架">
+            <Select
+              placeholder="未分配"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={depts.map((d) => ({ label: d.name, value: d.id }))}
+            />
           </Form.Item>
         </Form>
       </Modal>

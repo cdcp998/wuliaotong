@@ -19,6 +19,22 @@ interface LlmLogRow {
   created_at: string;
 }
 
+/** 调用场景中文化（值为接口原样英文场景码）。 */
+const SCENE_LABELS: Record<string, string> = {
+  vision_delivery: "送货单识别",
+  vision_product: "材料识别",
+  vision_text: "图片文字识别",
+  match_vision: "视觉匹配",
+  ocr_correct: "OCR 纠错",
+  classify_items: "分类建议",
+  structured: "结构化提取",
+  alert_text: "预警文案生成",
+  dedupe: "疑似重复合并",
+  supplier_norm: "供应商简称归一",
+  req_summary: "领用摘要",
+};
+const sceneLabel = (s: string) => SCENE_LABELS[s] ?? s;
+
 /** 详情抽屉：完整展示输入/输出/错误（不受列表截断影响）。 */
 function LogDetailDrawer({ record, onClose }: { record: LlmLogRow | null; onClose: () => void }) {
   return (
@@ -33,7 +49,7 @@ function LogDetailDrawer({ record, onClose }: { record: LlmLogRow | null; onClos
         <>
           <Descriptions size="small" column={2} bordered style={{ marginBottom: 16 }}>
             <Descriptions.Item label="时间">{record.created_at}</Descriptions.Item>
-            <Descriptions.Item label="场景">{record.scene || "-"}</Descriptions.Item>
+            <Descriptions.Item label="场景">{record.scene ? `${sceneLabel(record.scene)}（${record.scene}）` : "-"}</Descriptions.Item>
             <Descriptions.Item label="模型">{record.model || "-"}</Descriptions.Item>
             <Descriptions.Item label="状态">
               <Tag style={{ borderRadius: 999, background: record.status === "ok" ? "#E8F9EF" : "#FDEBEC", color: record.status === "ok" ? "#15803D" : "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>{record.status === "ok" ? "成功" : "失败"}</Tag>
@@ -106,18 +122,14 @@ export function AiLogsPage() {
     void load();
   }, [load]);
 
-  const SCENES = [
-    "vision_delivery", "vision_product", "vision_text", "match_vision",
-    "ocr_correct", "classify_items", "structured", "alert_text",
-    "dedupe", "supplier_norm", "req_summary",
-  ];
+  const SCENES = Object.keys(SCENE_LABELS);
 
   const columns: ColumnsType<LlmLogRow> = [
     { title: "时间", dataIndex: "created_at", width: 150 },
     {
       title: "场景", dataIndex: "scene", width: 140,
       render: (v: string) => (v
-        ? <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>{v}</Tag>
+        ? <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }} title={v}>{sceneLabel(v)}</Tag>
         : "-"),
     },
     { title: "模型", dataIndex: "model", width: 100 },
@@ -167,7 +179,7 @@ export function AiLogsPage() {
           style={{ width: 200 }}
           placeholder="场景"
           allowClear
-          options={SCENES.map((s) => ({ value: s, label: s }))}
+          options={SCENES.map((s) => ({ value: s, label: SCENE_LABELS[s] ?? s }))}
           value={scene || undefined}
           onChange={(v) => { setScene(v ?? ""); setPage(1); }}
         />

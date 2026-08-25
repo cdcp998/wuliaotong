@@ -34,6 +34,7 @@ class SysUser(TimestampMixin, Base):
     phone: Mapped[str] = mapped_column(String(20), nullable=False, default="")
     email: Mapped[str] = mapped_column(String(100), nullable=False, default="")  # 找回密码用
     role_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    department_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)  # 所属单位 → base_department.id
     status: Mapped[int] = mapped_column(Integer, nullable=False, default=1)  # 1启用 0停用
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -186,6 +187,7 @@ class SysOperationLog(Base):
     ip: Mapped[str] = mapped_column(String(45), nullable=False, default="")
     user_agent: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # HTTP 状态码（详情展示）
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )

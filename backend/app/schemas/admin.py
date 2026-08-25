@@ -13,6 +13,7 @@ class UserCreateReq(BaseModel):
     phone: str = Field(default="", max_length=20)
     email: str = Field(default="", max_length=100)
     role_id: int = Field(gt=0)
+    department_id: int = Field(default=0, ge=0)  # 所属单位（0=未分配）
 
 
 class UserUpdateReq(BaseModel):
@@ -20,6 +21,7 @@ class UserUpdateReq(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
     email: str | None = Field(default=None, max_length=100)
     role_id: int | None = Field(default=None, gt=0)
+    department_id: int | None = Field(default=None, ge=0)
     status: int | None = Field(default=None)
     password: str | None = Field(default=None, min_length=6, max_length=64)
 
@@ -56,6 +58,8 @@ class UserOut(BaseModel):
     email: str
     role_id: int
     role_name: str
+    department_id: int = 0
+    department_name: str = ""
     status: int
     last_login_at: Any = None
     created_at: Any = None

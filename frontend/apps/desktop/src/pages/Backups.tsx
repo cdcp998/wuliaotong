@@ -12,8 +12,9 @@ function fmtSize(n: number): string {
   return `${n} B`;
 }
 
-/** 备份管理（电脑端，超管 sys:backup）：手动备份 / 下载 / 删除；每日 02:00 自动备份。 */
-export function BackupsPage() {
+/** 备份管理（电脑端，超管 sys:backup；设计页 38 风格）：手动备份 / 下载 / 删除；每日 02:00 自动备份。
+ *  支持嵌入系统设置（embedded：去外层标题与内边距）。 */
+export function BackupsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const [list, setList] = useState<BackupRecord[]>([]);
@@ -133,15 +134,17 @@ export function BackupsPage() {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      {/* 页头（设计页 38）：标题+副题+右侧主按钮 */}
+    <div style={{ padding: embedded ? 0 : 24 }}>
+      {/* 页头（设计页 38）：标题+副题+右侧主按钮；嵌入设置页时隐藏标题区 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>备份管理</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
-            数据库备份：手动 + 每日 02:00 自动，保留最近 14 份滚动清理；gzip 压缩的 mysqldump 导出，支持下载
-          </p>
-        </div>
+        {!embedded && (
+          <div>
+            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>备份管理</h2>
+            <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+              数据库备份：手动 + 每日 02:00 自动，保留最近 14 份滚动清理；gzip 压缩的 mysqldump 导出，支持下载
+            </p>
+          </div>
+        )}
         <Button type="primary" loading={busy} onClick={() => void doBackup()}>立即备份</Button>
       </div>
       {/* 统计卡（设计页 38：彩色大数字在上、灰标签在下） */}

@@ -49,9 +49,12 @@ router = APIRouter(tags=["系统管理"], dependencies=[Depends(get_current_user
 
 def _user_out(db: Session, u: SysUser) -> dict:
     role = db.get(SysRole, u.role_id)
+    dept = db.get(BaseDepartment, getattr(u, "department_id", 0) or 0)
     return UserOut(
         id=u.id, username=u.username, real_name=u.real_name, phone=u.phone, email=u.email,
         role_id=u.role_id, role_name=role.name if role else "",
+        department_id=getattr(u, "department_id", 0) or 0,
+        department_name=dept.name if dept else "",
         status=u.status, last_login_at=u.last_login_at, created_at=u.created_at,
     ).model_dump()
 
@@ -97,6 +100,9 @@ def create_user(
         actor = db.get(SysRole, user.role_id)
         if not (actor and actor.code == SUPER_ADMIN_ROLE_CODE):
             raise BizError(E_NO_PERMISSION, "仅超级管理员可创建超级管理员账号", http_status=403)
+    dept_id = getattr(req, "department_id", 0) or 0
+    if dept_id and db.get(BaseDepartment, dept_id) is None:
+        raise BizError(E_PARAM, "所属单位不存在")
     u = SysUser(
         username=req.username,
         password_hash=hash_password(req.password),
@@ -104,6 +110,7 @@ def create_user(
         phone=req.phone,
         email=req.email,
         role_id=req.role_id,
+        department_id=dept_id,
         status=1,
     )
     db.add(u)
@@ -151,6 +158,11 @@ def update_user(
         u.phone = req.phone
     if req.email is not None:
         u.email = req.email
+    dept_id = getattr(req, "department_id", None)
+    if dept_id is not None:
+        if dept_id and db.get(BaseDepartment, dept_id) is None:
+            raise BizError(E_PARAM, "所属单位不存在")
+        u.department_id = dept_id
     if req.password:
         u.password_hash = hash_password(req.password)
     db.commit()

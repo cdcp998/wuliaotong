@@ -15,7 +15,6 @@ import { RequireModule } from "./components/RequireModule";
 // 页面全部按路由懒加载：首屏不再打包全部页面（此前单 chunk >1.6MB）
 const AiSuggestionsPage = lazy(() => import("./pages/AiSuggestions").then((m) => ({ default: m.AiSuggestionsPage })));
 const AiLogsPage = lazy(() => import("./pages/AiLogs").then((m) => ({ default: m.AiLogsPage })));
-const BackupsPage = lazy(() => import("./pages/Backups").then((m) => ({ default: m.BackupsPage })));
 const CheckDetailPage = lazy(() => import("./pages/CheckDetail").then((m) => ({ default: m.CheckDetailPage })));
 const ChecksPage = lazy(() => import("./pages/Checks").then((m) => ({ default: m.ChecksPage })));
 const DashboardPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.DashboardPage })));
@@ -128,7 +127,7 @@ const router = createBrowserRouter(
   { path: "/device/list", element: withLayout(<RequireModule code="device"><DeviceListPage /></RequireModule>) },
   { path: "/device/tasks", element: withLayout(<RequireModule code="device"><DeviceTasksPage /></RequireModule>) },
   { path: "/system/logs", element: withLayout(<LogsPage />) },
-  { path: "/system/backups", element: withLayout(<BackupsPage />) },
+  { path: "/system/backups", element: <Navigate to="/system/settings?tab=backups" replace /> }, // 备份管理已并入系统设置
   { path: "/system/register-applies", element: withLayout(<RegisterAppliesPage />) },
   { path: "/system/departments", element: withLayout(<DepartmentsPage />) },
   { path: "/transfers", element: withLayout(<TransfersPage />) },

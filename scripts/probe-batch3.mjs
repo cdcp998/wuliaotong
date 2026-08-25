@@ -11,16 +11,12 @@ const BASE = "https://localhost:5174";
 const CHROME = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const OUT = "G:/wuliaotong_dev/AI开发文档/screenshots";
 const PAGES = [
-  ["/units", "b3_units"],
-  ["/reports", "b3_reports"],
-  ["/system/register-applies", "b3_register"],
-  ["/system/backups", "b3_backups"],
-  ["/requisitions/apply", "b3_req_apply"],
-  ["/ai-suggestions", "b3_ai_sug"],
-  ["/cable/list", "b3_cable_list"],
-  ["/task/board", "b3_task_board"],
-  ["/system/settings?tab=modules", "b3_settings_modules"],
-  ["/system/settings?tab=menus", "b3_settings_menus"],
+  ["/cable/cache", "b4_mapcache"],
+  ["/system/logs", "b4_logs"],
+  ["/llm-logs", "b4_ai_logs"],
+  ["/system/settings?tab=backups", "b4_settings_backups"],
+  ["/system/users", "b4_users"],
+  ["/materials-data", "b4_materials"],
 ];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

@@ -583,7 +583,15 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
         width={232}
         collapsedWidth={64}
         theme="light"
-        style={{ height: "100dvh", overflow: "hidden", borderRight: `1px solid #E4EAF6`, background: "#FFFFFF", display: "flex", flexDirection: "column" }}
+        style={{ height: "100dvh", overflow: "hidden", borderRight: `1px solid #E4EAF6`, background: "#FFFFFF", display: "flex", flexDirection: "column", cursor: collapsed ? "pointer" : undefined }}
+        title={collapsed ? "点击展开侧边栏" : undefined}
+        onClick={(e) => {
+          // 收缩态点击空白处（非菜单项/按钮/链接）展开侧栏
+          if (!collapsed) return;
+          const t = e.target as HTMLElement;
+          if (t.closest(".ant-menu-item, .ant-menu-submenu, button, a, input")) return;
+          setCollapsed(false);
+        }}
       >
         <div style={{ height: 60, display: "flex", alignItems: "center", gap: 10, padding: "0 14px" }}>
           <div

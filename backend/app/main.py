@@ -346,6 +346,7 @@ def _audit_log(db, request: Request, status_code: int, duration_ms: int) -> None
                 ip=request.client.host if request.client else "",
                 user_agent=request.headers.get("user-agent", "")[:255],
                 duration_ms=duration_ms,
+                status_code=status_code,
             )
         )
         db.commit()

@@ -54,6 +54,7 @@ import {
 
 import { MenusPage } from "./Menus";
 import { ModulesPage } from "./Modules";
+import { BackupsPage } from "./Backups";
 
 const EMPTY: Settings = {
   "site.name": "",
@@ -142,8 +143,9 @@ export function SettingsPage() {
   const hasPerm = useAuthStore((s) => s.hasPerm);
   const canModules = hasPerm("module:manage");
   const canMenus = hasPerm("sys:role");
+  const canBackups = hasPerm("sys:backup");
   const rawTab = params.get("tab") ?? "config";
-  const section = rawTab === "modules" && canModules ? "modules" : rawTab === "menus" && canMenus ? "menus" : "config";
+  const section = rawTab === "modules" && canModules ? "modules" : rawTab === "menus" && canMenus ? "menus" : rawTab === "backups" && canBackups ? "backups" : "config";
   const [form] = Form.useForm<Settings>();
   const ocrEngine = Form.useWatch("ocr.engine", form);
   // 模型字段在 Space.Compact 内，antd v6 Form.Item 只注入 value/onChange 给直接子元素（Space.Compact 不透传），
@@ -1104,7 +1106,7 @@ export function SettingsPage() {
         <div>
           <h2 style={{ margin: 0 }}>系统设置</h2>
           <p style={{ color: token.colorTextTertiary, fontSize: 12, margin: "4px 0 0" }}>
-            系统配置（站点信息 · 邮件服务 · 水印 · 注册与找回 · 识别引擎与大模型）{canModules ? " · 模块管理" : ""}{canMenus ? " · 导航管理" : ""} · 版本 v{__APP_VERSION__}
+            系统配置（站点信息 · 邮件服务 · 水印 · 注册与找回 · 识别引擎与大模型）{canModules ? " · 模块管理" : ""}{canMenus ? " · 导航管理" : ""}{canBackups ? " · 备份管理" : ""} · 版本 v{__APP_VERSION__}
           </p>
         </div>
         {section === "config" && (
@@ -1151,6 +1153,7 @@ export function SettingsPage() {
           },
           ...(canModules ? [{ key: "modules", label: "模块管理", children: <ModulesPage embedded /> }] : []),
           ...(canMenus ? [{ key: "menus", label: "导航管理", children: <MenusPage embedded /> }] : []),
+          ...(canBackups ? [{ key: "backups", label: "备份管理", children: <BackupsPage embedded /> }] : []),
         ]}
       />
 
