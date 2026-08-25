@@ -1,5 +1,6 @@
 -- =====================================================================
 -- map 模块安装基线（地图：图源配置/瓦片缓存区域；从 cable 模块拆分）
+-- SQL 版本：v1（未发布阶段，结构变更直接并入本基线）
 -- 约定：
 --   1. 幂等：全部 CREATE TABLE IF NOT EXISTS / INSERT ... WHERE NOT EXISTS，可重复执行
 --   2. 禁止 DROP TABLE（卸载不删表不删数据，数据红线）
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS map_cache_region (
 CREATE TABLE IF NOT EXISTS map_download_task (
   id          BIGINT NOT NULL AUTO_INCREMENT,
   region_id   BIGINT NOT NULL COMMENT '→ map_cache_region.id',
+   source      VARCHAR(50) NOT NULL DEFAULT '' COMMENT '所属地图源 key',
   z           INT NOT NULL,
   x           INT NOT NULL,
   y           INT NOT NULL,

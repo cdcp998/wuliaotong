@@ -1,5 +1,6 @@
 -- =====================================================================
 -- cable 模块安装基线（线缆和设备插件方案 §4.2，7 张表 + 权限/菜单种子）
+-- SQL 版本：v1（未发布阶段，结构变更直接并入本基线）
 -- 约定：
 --   1. 幂等：全部 CREATE TABLE IF NOT EXISTS / INSERT ... WHERE NOT EXISTS，可重复执行
 --   2. 禁止 DROP TABLE（卸载不删表不删数据，数据红线）
@@ -66,6 +67,7 @@ CREATE TABLE IF NOT EXISTS cable_fault (
   severity            TINYINT NOT NULL DEFAULT 1 COMMENT '1 低 / 2 中 / 3 高',
   description         VARCHAR(500) NOT NULL DEFAULT '',
   status              TINYINT NOT NULL DEFAULT 0 COMMENT '0 待处理 / 1 处理中 / 2 待验证 / 3 已修复 / 4 已关闭',
+   deleted             TINYINT NOT NULL DEFAULT 0 COMMENT '软删除标记（错误标点）',
   reported_by         BIGINT NOT NULL DEFAULT 0 COMMENT '上报人 → sys_user.id',
   reported_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   photos_note         VARCHAR(255) NOT NULL DEFAULT '',

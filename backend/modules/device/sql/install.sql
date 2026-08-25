@@ -1,5 +1,6 @@
 -- =====================================================================
 -- device 模块安装基线（线缆和设备插件方案 §4.5，4 张表 + 权限/菜单种子）
+-- SQL 版本：v1（未发布阶段，结构变更直接并入本基线）
 -- 约定：幂等（CREATE TABLE IF NOT EXISTS / INSERT ... WHERE NOT EXISTS）、禁止 DROP TABLE
 -- 生命周期：1 在用 / 2 维修中 / 3 闲置 / 4 报废；维修中禁止报废
 -- =====================================================================
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS device_task (
   assignee_id     BIGINT NOT NULL DEFAULT 0 COMMENT '维修人员 → sys_user.id',
   status          VARCHAR(20) NOT NULL DEFAULT 'pending'
                   COMMENT 'pending/assigned/in_progress/done/verified/closed/cancelled',
+  dispatch_mode   VARCHAR(10) NOT NULL DEFAULT 'manual' COMMENT '派发方式: manual手动/open公开抢单/hybrid公开+可派发',
   priority        TINYINT NOT NULL DEFAULT 1 COMMENT '1 普通 / 2 紧急',
   scheduled_time  DATETIME NULL,
   completed_at    DATETIME NULL,
@@ -84,6 +86,18 @@ CREATE TABLE IF NOT EXISTS device_task_record_file (
   PRIMARY KEY (id),
   KEY idx_record (record_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设备维修记录照片';
+
+-- ---------- 设备图片 ----------
+CREATE TABLE IF NOT EXISTS device_file (
+  id         BIGINT NOT NULL AUTO_INCREMENT,
+  device_id  BIGINT NOT NULL COMMENT '→ device.id',
+  file_id    BIGINT NOT NULL COMMENT '→ sys_file.id',
+  sort_order INT NOT NULL DEFAULT 0,
+  created_by BIGINT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_device (device_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设备图片';
 
 -- =====================================================================
 -- 权限点种子（module_code='device'）

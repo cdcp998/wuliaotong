@@ -1,5 +1,6 @@
 -- =====================================================================
 -- task 模块安装基线（线缆和设备插件方案 §4.3，4 张表 + 权限/菜单种子）
+-- SQL 版本：v1（未发布阶段，结构变更直接并入本基线）
 -- 约定：幂等（CREATE TABLE IF NOT EXISTS / INSERT ... WHERE NOT EXISTS）、禁止 DROP TABLE
 -- 依赖：cable>=1.0.0,<2.0.0（模块级依赖，安装/启用在模块管理器校验）
 -- =====================================================================
@@ -33,7 +34,7 @@ CREATE TABLE IF NOT EXISTS maintenance_task (
   KEY idx_status (status),
   KEY idx_assignee (assignee_id),
   KEY idx_fault (fault_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='维修任务';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务管理';
 
 -- ---------- 维修记录 ----------
 CREATE TABLE IF NOT EXISTS task_record (
@@ -97,17 +98,17 @@ WHERE r.code = 'repairer' AND p.code = 'task:process'
 -- 菜单种子（module_code='task'；模块停用时菜单自动隐藏）
 -- =====================================================================
 INSERT INTO sys_menu (parent_id, name, path, icon, perm_code, visible, sort, module_code)
-SELECT 0, '维修任务', '', 'ToolOutlined', '', 1, 46, 'task'
-WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE parent_id = 0 AND name = '维修任务' AND module_code = 'task');
+SELECT 0, '任务管理', '', 'ToolOutlined', '', 1, 46, 'task'
+WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE parent_id = 0 AND name = '任务管理' AND module_code = 'task');
 
 INSERT INTO sys_menu (parent_id, name, path, icon, perm_code, visible, sort, module_code)
 SELECT m.id, '任务看板', '/task/board', 'ProjectOutlined', 'task:dispatch', 1, 10, 'task'
 FROM sys_menu m
-WHERE m.parent_id = 0 AND m.name = '维修任务' AND m.module_code = 'task'
+WHERE m.parent_id = 0 AND m.name = '任务管理' AND m.module_code = 'task'
   AND NOT EXISTS (SELECT 1 FROM sys_menu s WHERE s.parent_id = m.id AND s.path = '/task/board');
 
 INSERT INTO sys_menu (parent_id, name, path, icon, perm_code, visible, sort, module_code)
 SELECT m.id, '任务列表', '/task/list', 'UnorderedListOutlined', 'task:dispatch', 1, 20, 'task'
 FROM sys_menu m
-WHERE m.parent_id = 0 AND m.name = '维修任务' AND m.module_code = 'task'
+WHERE m.parent_id = 0 AND m.name = '任务管理' AND m.module_code = 'task'
   AND NOT EXISTS (SELECT 1 FROM sys_menu s WHERE s.parent_id = m.id AND s.path = '/task/list');

@@ -62,17 +62,6 @@ def _seed_sources(db, module, ctx: ModuleContext | None = None) -> None:
     ensure_seeded(db)
 
 
-def _migrate_0001(db) -> None:
-    """0001_add_task_source.sql：map_download_task.source 列（幂等：column_exists 判断）。"""
-    from app.core.migration_utils import column_exists
-
-    if not column_exists(db, "map_download_task", "source"):
-        db.execute(text(
-            "ALTER TABLE map_download_task ADD COLUMN source VARCHAR(50) NOT NULL DEFAULT '' "
-            "COMMENT '地图源 key（下载任务生成时记录）' AFTER region_id"
-        ))
-
-
 module = ModuleDef(
     code="map",
     name="地图",
@@ -91,7 +80,6 @@ module = ModuleDef(
         ("POST", "/map/cache/regions/{id}/clear"): "清理区域缓存瓦片",
     },
     install_sql=["sql/install.sql"],
-    migration_executors={"0001_add_task_source.sql": _migrate_0001},
     on_install=_seed_sources,
     on_enable=_seed_sources,
     jobs=[download_worker_tick, reconcile_scan_cache],  # 瓦片批量下载 + 统计注册表后台对账（tick 校验 ENABLED）

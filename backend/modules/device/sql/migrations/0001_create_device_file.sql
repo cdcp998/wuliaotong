@@ -1,1 +1,0 @@
--- 0001：device_file 设备图片关联表（幂等 CREATE TABLE IF NOT EXISTS；由 migration_executors 执行）

@@ -1,1 +1,0 @@
--- 0002：cable_fault 增加 deleted 列（软删除错误标点；migration_executors 幂等判断）
