@@ -1,10 +1,12 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Alert, App, Button, Form, Input, InputNumber, Steps } from "antd";
+import { Alert, App, Button, Form, Input, InputNumber } from "antd";
+import { CheckOutlined } from "@ant-design/icons";
 
 import { initApi, useAuthStore } from "@wlt/shared";
 
-/** 安装向导五步（《前端设计.md》§2.2）：系统信息 → 数据库 → Redis → 管理员账号 → 联系方式。 */
+/** 安装向导五步（《前端设计.md》§2.2 功能契约不变）：系统信息 → 数据库 → Redis → 管理员账号 → 联系方式。
+ *  视觉按设计页 55 同步：#F2F5FB 页底 + 顶部 Logo 条 + 860 居中白卡（r20 柔投影）+ 胶囊步骤条。 */
 const STEP_TITLES = ["系统信息", "数据库配置", "Redis 配置", "管理员账号", "联系方式"];
 
 interface InitForm {
@@ -111,85 +113,84 @@ export function InitPage() {
     }
   }
 
-  return (
-    <div style={{ minHeight: "100dvh", display: "flex", background: "#fff" }}>
-      {/* 左侧品牌区（与登录页一致：深蓝纯色底，不用渐变） */}
-      <div
-        className="wlt-brand"
-        style={{
-          flex: "1.15",
-          background: "#0d2b52",
-          color: "#fff",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "0 64px",
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            right: -140,
-            bottom: -140,
-            width: 420,
-            height: 420,
-            borderRadius: "50%",
-            border: "60px solid rgba(255,255,255,.06)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            top: -120,
-            left: -120,
-            width: 300,
-            height: 300,
-            borderRadius: "50%",
-            border: "44px solid rgba(255,255,255,.04)",
-          }}
-        />
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 40 }}>
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 11,
-              background: "rgba(255,255,255,.14)",
-              border: "1px solid rgba(255,255,255,.22)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 20,
-              fontWeight: 700,
-            }}
-          >
-            物
-          </div>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>物料通</div>
-            <div style={{ fontSize: 11, opacity: 0.75, letterSpacing: 2 }}>MATERIAL FLOW</div>
-          </div>
-        </div>
-        <h1 style={{ fontSize: 30, lineHeight: 1.4, margin: 0 }}>系统初始化安装</h1>
-        <p style={{ fontSize: 14, opacity: 0.78, marginTop: 14, lineHeight: 1.8 }}>
-          首次启动引导：配置数据库与 Redis 连接、系统名称、管理员账号后即可投入使用。<br />
-          仅需执行一次，完成后将直接进入主系统。
-        </p>
-      </div>
+  /** 胶囊步骤条（设计页 55）：已完成=浅蓝底✓ / 当前=品牌蓝白字 / 未到=浅灰底灰字。 */
+  const stepState = (i: number): "done" | "active" | "idle" => (i < step ? "done" : i === step ? "active" : "idle");
+  const pillStyle = (state: "done" | "active" | "idle"): React.CSSProperties =>
+    state === "active"
+      ? { background: "#5B7FFF", color: "#FFFFFF", fontWeight: 600 }
+      : state === "done"
+        ? { background: "#EAEFFF", color: "#3B5BDB", fontWeight: 600 }
+        : { background: "#F6F8FE", color: "#5B6478", fontWeight: 500 };
 
-      {/* 右侧表单区 */}
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
-        <div style={{ width: 440 }}>
-          <h2 style={{ fontSize: 22, margin: 0 }}>初始化安装</h2>
-          <div style={{ fontSize: 13, color: "#5B6478", margin: "6px 0 26px" }}>物料通管理系统 · 首次使用引导</div>
-          <Steps
-            current={step}
-            size="small"
-            items={STEP_TITLES.map((title) => ({ title }))}
-            style={{ marginBottom: 28 }}
-          />
+  return (
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB", display: "flex", flexDirection: "column", padding: "28px 48px" }}>
+      {/* 顶部 Logo 条（设计页 55：品牌蓝方块 Logo + 名称/副标，左上） */}
+      <header style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            background: "#5B7FFF",
+            color: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 20,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          物
+        </div>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "#1E2433", lineHeight: 1.3 }}>物料通 · 初始化安装</div>
+          <div style={{ fontSize: 12, color: "#8A93A8" }}>首次部署引导 · 5 分钟完成</div>
+        </div>
+      </header>
+
+      {/* 居中主卡（设计页 55：860 宽白卡 r20 p28/32 gap16 柔投影） */}
+      <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 0" }}>
+        <div
+          style={{
+            width: 860,
+            maxWidth: "100%",
+            background: "#FFFFFF",
+            borderRadius: 20,
+            padding: "28px 32px",
+            boxShadow: "0 12px 40px rgba(30,36,51,0.08)",
+            border: "1px solid #EFF3FC",
+          }}
+        >
+          {/* 胶囊步骤条 */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+            {STEP_TITLES.map((title, i) => {
+              const state = stepState(i);
+              return (
+                <div
+                  key={title}
+                  style={{
+                    flex: 1,
+                    height: 34,
+                    borderRadius: 10,
+                    padding: "8px 12px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    fontSize: 12.5,
+                    whiteSpace: "nowrap",
+                    transition: "all .2s ease",
+                    ...pillStyle(state),
+                  }}
+                >
+                  {state === "done" ? <CheckOutlined style={{ fontSize: 11 }} /> : <span>{i + 1}</span>}
+                  <span>{title}</span>
+                </div>
+              );
+            })}
+          </div>
+
           <Form
             form={form}
             layout="vertical"
@@ -337,7 +338,7 @@ export function InitPage() {
             </div>
           </Form>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { App, Alert, Button, Checkbox, Form, Input, Modal, theme } from "antd";
+import { App, Alert, Button, Checkbox, Form, Input, Modal } from "antd";
+import { LockOutlined, UserOutlined } from "@ant-design/icons";
 
 import { authApi, BizError, initApi, otherEndUrl, useAuthStore, type RegisterStatus } from "@wlt/shared";
 
-/** 登录页（电脑端双栏：品牌区 + 表单区）：未初始化跳初始化安装页；已登录直进主页；连续失败 3 次需验证码；忘记密码/注册入口。 */
+/** 登录页（设计页 54，电脑端双栏）：左品牌区蓝渐变（一物一码，全程留痕）+ 右白色卡片区。
+ *  未初始化跳初始化安装页；已登录直进主页；连续失败 3 次需验证码；忘记密码/注册入口。 */
 export function LoginPage() {
   const { message } = App.useApp();
-  const { token } = theme.useToken();
   const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
   const fetchMe = useAuthStore((s) => s.fetchMe);
@@ -16,6 +17,7 @@ export function LoginPage() {
   const [needCaptcha, setNeedCaptcha] = useState(false);
   const [captchaId, setCaptchaId] = useState("");
   const [captchaImg, setCaptchaImg] = useState("");
+  const [siteName, setSiteName] = useState("");
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotStep, setForgotStep] = useState<"ask" | "reset" | "done">("ask");
   const [forgotInfo, setForgotInfo] = useState<{ method: string; contact_phone?: string; message: string } | null>(null);
@@ -35,6 +37,7 @@ export function LoginPage() {
           navigate("/init", { replace: true });
           return;
         }
+        if (st.site_name) setSiteName(st.site_name);
       } catch {
         /* 状态接口异常不阻塞登录 */
       }
@@ -111,53 +114,48 @@ export function LoginPage() {
     }
   }
 
+  /** 输入框统一样式（设计页 54 Box：h42 r12 底 #F6F8FE，前缀图标 15px）。 */
+  const boxStyle = { height: 42, borderRadius: 12, background: "#F6F8FE" } as const;
+  /** 字段标签（设计页 54：11.5→12px/500 #5B6478）。 */
+  const label = (text: string) => <span style={{ fontSize: 12, fontWeight: 500, color: "#5B6478" }}>{text}</span>;
+
   return (
-    <div style={{ minHeight: "100dvh", display: "flex", background: "#fff" }}>
-      {/* 左侧品牌区（深蓝纯色底，不用渐变，《UI设计方案.md》§2.1/§4.1） */}
+    <div style={{ minHeight: "100dvh", display: "flex", background: "#F2F5FB" }}>
+      {/* 左侧品牌区（设计页 54：135° 蓝渐变 #4F6DF5 → #7C93FF，白字标语 + 装饰圆） */}
       <div
         className="wlt-brand"
         style={{
-          flex: "1.15",
-          background: "#0d2b52",
+          flex: 1,
+          background: "linear-gradient(135deg, #4F6DF5 0%, #7C93FF 100%)",
           color: "#fff",
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
-          padding: "0 64px",
+          padding: "48px 56px",
           position: "relative",
           overflow: "hidden",
         }}
       >
+        {/* Deco：220×220 半透明白圆（设计页 54 右上装饰） */}
         <div
           style={{
             position: "absolute",
-            right: -140,
-            bottom: -140,
-            width: 420,
-            height: 420,
+            top: 96,
+            right: -56,
+            width: 220,
+            height: 220,
             borderRadius: "50%",
-            border: "60px solid rgba(255,255,255,.06)",
+            background: "rgba(255,255,255,.10)",
+            pointerEvents: "none",
           }}
         />
-        <div
-          style={{
-            position: "absolute",
-            top: -120,
-            left: -120,
-            width: 300,
-            height: 300,
-            borderRadius: "50%",
-            border: "44px solid rgba(255,255,255,.04)",
-          }}
-        />
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 40 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 56 }}>
           <div
             style={{
               width: 44,
               height: 44,
-              borderRadius: 11,
-              background: "rgba(255,255,255,.14)",
-              border: "1px solid rgba(255,255,255,.22)",
+              borderRadius: 14,
+              background: "rgba(255,255,255,.2)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -168,71 +166,97 @@ export function LoginPage() {
             物
           </div>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>物料通</div>
-            <div style={{ fontSize: 11, opacity: 0.75, letterSpacing: 2 }}>MATERIAL FLOW</div>
+            <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.25 }}>物料通</div>
+            <div style={{ fontSize: 12.5, opacity: 0.75 }}>企业物资管理平台</div>
           </div>
         </div>
-        <h1 style={{ fontSize: 30, lineHeight: 1.4, margin: 0 }}>企业内部物料管理<br />入库 · 出库 · 领用</h1>
-        <p style={{ fontSize: 14, opacity: 0.78, marginTop: 14, lineHeight: 1.8 }}>
-          单据录入效率、库存准确率、多端随时开单 ——<br />
-          拍照 + OCR + 大模型辅助录入，仓管员手机即可完成出入库与盘点。
+        <h1 style={{ fontSize: 30, fontWeight: 700, lineHeight: 1.45, margin: 0 }}>一物一码，全程留痕</h1>
+        <p style={{ fontSize: 14, opacity: 0.85, marginTop: 14, lineHeight: 1.9, maxWidth: 480 }}>
+          库存 · 领用 · 线缆 · 地图 · 维修 · 知识，一站式物资数字底座
         </p>
       </div>
 
-      {/* 右侧表单区 */}
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
-        <div style={{ width: 340 }}>
-          <h2 style={{ fontSize: 22, margin: 0 }}>登录系统</h2>
-          <div style={{ fontSize: 13, color: "#5B6478", margin: "6px 0 26px" }}>物料通管理系统 · 企业内部使用</div>
-          <Form layout="vertical" onFinish={(v) => void onSubmit(v)}>
-            <Form.Item name="username" rules={[{ required: true, message: "请输入账号" }]}>
-              <Input placeholder="账号 / 用户名" size="large" autoFocus />
+      {/* 右侧表单区（设计页 54：白底 520 宽 + 白卡 r20 柔投影；窄屏由 mobile.css 堆叠为全宽） */}
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          maxWidth: 520,
+          background: "#FFFFFF",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          padding: "48px 56px",
+        }}
+      >
+        <div
+          style={{
+            background: "#FFFFFF",
+            borderRadius: 20,
+            padding: "32px 36px",
+            boxShadow: "0 12px 40px rgba(30,36,51,0.08)",
+            border: "1px solid #EFF3FC",
+          }}
+        >
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1E2433", margin: 0 }}>欢迎回来</h2>
+          <div style={{ fontSize: 12.5, color: "#5B6478", margin: "6px 0 22px" }}>登录你的物料通账号，继续今天的工作</div>
+          <Form layout="vertical" requiredMark={false} onFinish={(v) => void onSubmit(v)}>
+            <Form.Item name="username" label={label("登录名")} colon={false} style={{ marginBottom: 16 }} rules={[{ required: true, message: "请输入账号" }]}>
+              <Input placeholder="账号 / 用户名" autoFocus prefix={<UserOutlined style={{ color: "#8A93A8", fontSize: 15 }} />} style={boxStyle} />
             </Form.Item>
-            <Form.Item name="password" rules={[{ required: true, message: "请输入密码" }]}>
-              <Input.Password placeholder="密码" size="large" />
+            <Form.Item name="password" label={label("密码")} colon={false} style={{ marginBottom: 16 }} rules={[{ required: true, message: "请输入密码" }]}>
+              <Input.Password placeholder="密码" prefix={<LockOutlined style={{ color: "#8A93A8", fontSize: 15 }} />} style={boxStyle} />
             </Form.Item>
             {needCaptcha && (
-              <Form.Item name="captcha" rules={[{ required: true, message: "请输入验证码" }]}>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <Input placeholder="4 位验证码" size="large" maxLength={4} style={{ textTransform: "uppercase" }} />
+              <Form.Item name="captcha" label={label("验证码")} colon={false} style={{ marginBottom: 16 }} rules={[{ required: true, message: "请输入验证码" }]}>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <Input placeholder="4 位验证码" maxLength={4} style={{ ...boxStyle, textTransform: "uppercase", flex: 1 }} />
                   <img
                     src={captchaImg}
                     alt="验证码"
                     title="点击刷新"
                     onClick={() => void refreshCaptcha()}
-                    style={{ height: 40, borderRadius: 8, cursor: "pointer", border: `1px solid ${token.colorBorder}` }}
+                    style={{ height: 42, width: 110, borderRadius: 10, cursor: "pointer", border: "1px solid #E4EAF6", background: "#EAEFFF" }}
                   />
                 </div>
               </Form.Item>
             )}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "2px 0 18px" }}>
-              <Checkbox defaultChecked>记住我</Checkbox>
-              <span style={{ fontSize: 12.5 }}>
-                <a
-                  onClick={() => {
-                    setForgotOpen(true);
-                    setForgotStep("ask");
-                    setForgotInfo(null);
-                  }}
-                  style={{ marginRight: 10 }}
-                >
-                  忘记密码？
-                </a>
-                {regStatus && regStatus.mode !== "closed" && (
-                  <a onClick={() => setRegisterOpen(true)}>注册账号</a>
-                )}
-              </span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "0 0 18px" }}>
+              <Checkbox style={{ fontSize: 12, color: "#5B6478" }} defaultChecked>
+                记住我
+              </Checkbox>
+              <a
+                onClick={() => {
+                  setForgotOpen(true);
+                  setForgotStep("ask");
+                  setForgotInfo(null);
+                }}
+                style={{ fontSize: 12, fontWeight: 500 }}
+              >
+                忘记密码？
+              </a>
             </div>
-            <Button type="primary" htmlType="submit" size="large" block loading={loading} style={{ height: 40, fontSize: 15 }}>
+            <Button type="primary" htmlType="submit" size="large" block loading={loading} style={{ height: 46, fontSize: 14, fontWeight: 700, borderRadius: 12 }}>
               登 录
             </Button>
           </Form>
-          <div style={{ marginTop: 18, textAlign: "center", fontSize: 12.5, color: "#5B6478" }}>
-            手机端操作请前往 <a href={otherEndUrl("mobile")} style={{ color: "#5B7FFF" }}>手机版入口</a>
+          <div style={{ marginTop: 16, textAlign: "center", fontSize: 11, color: "#8A93A8" }}>
+            {regStatus && regStatus.mode !== "closed" && (
+              <>
+                <a onClick={() => setRegisterOpen(true)} style={{ color: "#8A93A8", textDecoration: "underline", textDecorationStyle: "dotted" }}>
+                  注册账号{regStatus.mode === "review" ? "（需管理员审核）" : "（开放注册）"}
+                </a>
+                {" · "}
+              </>
+            )}
+            <a href={otherEndUrl("mobile")} style={{ color: "#8A93A8", textDecoration: "underline", textDecorationStyle: "dotted" }} title="手机版入口">
+              电脑版/手机版互通
+            </a>
           </div>
-          <div style={{ marginTop: 10, textAlign: "center", fontSize: 11.5, color: "#a0a4ab" }}>
-            物料通管理系统 v{__APP_VERSION__}
-          </div>
+        </div>
+        {/* 归属行（设计页 54 右下角元信息） */}
+        <div style={{ marginTop: 18, textAlign: "center", fontSize: 11, color: "#8A93A8" }}>
+          {siteName ? `${siteName} · ` : ""}v{__APP_VERSION__}
         </div>
       </div>
 
