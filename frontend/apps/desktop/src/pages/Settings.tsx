@@ -56,6 +56,7 @@ import { MenusPage } from "./Menus";
 import { ModulesPage } from "./Modules";
 import { BackupsPage } from "./Backups";
 import { AboutPanel } from "./AboutPanel";
+import { ExportFormatsPanel } from "./ExportFormatsPanel";
 
 const EMPTY: Settings = {
   "site.name": "",
@@ -145,12 +146,14 @@ export function SettingsPage() {
   const canModules = hasPerm("module:manage");
   const canMenus = hasPerm("sys:role");
   const canBackups = hasPerm("sys:backup");
+  const canEdit = hasPerm("sys:config");
   const rawTab = params.get("tab") ?? "config";
   const validTabs: Record<string, boolean> = {
     config: true,
     modules: canModules,
     menus: canMenus,
     backups: canBackups,
+    export_formats: true, // 导出格式设置：所有用户可看，修改需 sys:config
     about: true, // 「关于」对所有可进入设置的用户可见
   };
   const section = validTabs[rawTab] ? rawTab : "config";
@@ -1162,7 +1165,7 @@ export function SettingsPage() {
           ...(canModules ? [{ key: "modules", label: "模块管理", children: <ModulesPage embedded /> }] : []),
           ...(canMenus ? [{ key: "menus", label: "导航管理", children: <MenusPage embedded /> }] : []),
           ...(canBackups ? [{ key: "backups", label: "备份管理", children: <BackupsPage embedded /> }] : []),
-          // 「关于」恒排最末（需求：排序永远最下面）
+          { key: "export_formats", label: "导出格式设置", children: <ExportFormatsPanel canEdit={canEdit} /> },          // 「关于」恒排最末（需求：排序永远最下面）
           { key: "about", label: "关于", children: <AboutPanel /> },
         ]}
       />

@@ -196,6 +196,39 @@ def get_settings(db: Session = Depends(get_db)) -> dict:
     return ok(out)
 
 
+# ============================ 导出格式设置（统一管理） ============================
+
+@router.get("/export-formats")
+def get_export_formats(db: Session = Depends(get_db)) -> dict:
+    """读取导出格式配置（内置默认 + 全局已存 + 各模块覆盖 + 合并生效结果）。"""
+    from app.services.export_service import get_all_formats
+
+    return ok(get_all_formats(db))
+
+
+@router.put("/export-formats/global", dependencies=[Depends(require_permission("sys:config"))])
+def put_global_format(body: dict, db: Session = Depends(get_db)) -> dict:
+    """保存全局默认导出格式（深合并存储；仅超管/管理者）。"""
+    from app.services.export_service import save_global_format
+
+    if not isinstance(body, dict):
+        raise BizError(E_PARAM, "格式配置必须为 JSON 对象")
+    save_global_format(db, body)
+    return ok({"saved": True})
+
+
+@router.put("/export-formats/module/{module_key}", dependencies=[Depends(require_permission("sys:config"))])
+def put_module_format(module_key: str, body: dict | None, db: Session = Depends(get_db)) -> dict:
+    """保存/清除模块级格式覆盖（body=null 表示清除覆盖、回退全局默认）。"""
+    from app.services.export_service import save_module_format
+
+    try:
+        save_module_format(db, module_key, body)
+    except ValueError as exc:
+        raise BizError(E_PARAM, str(exc)) from exc
+    return ok({"saved": True})
+
+
 @router.put("/settings", dependencies=[Depends(require_permission("sys:config"))])
 def update_settings(body: dict[str, str], db: Session = Depends(get_db)) -> dict:
     """部分更新系统设置；密钥字段传空或掩码（****）表示不修改。"""

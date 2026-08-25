@@ -114,6 +114,14 @@ export const adminApi = {
     q.set("page_size", String(params.page_size ?? 20));
     return http.get<PageData<OperationLog>>(`/logs?${q}`);
   },
+  /** 操作日志导出 Excel（统一导出服务，模块标识 operation_logs）。 */
+  logsExportUrl: (params: { username?: string; module?: string; method?: string; start?: string; end?: string } = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== "") q.set(k, String(v));
+    }
+    return `${apiBase()}/logs/export?${q}`;
+  },
 
   backups: (page = 1, pageSize = 20) => http.get<PageData<BackupRecord>>(`/backups?page=${page}&page_size=${pageSize}`),
   createBackup: () => http.post<{ id: number; file_path: string; file_size: number }>("/backups"),

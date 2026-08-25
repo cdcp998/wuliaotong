@@ -334,6 +334,60 @@ def list_logs(
     return ok(PageData(list=out, total=total, page=page, page_size=page_size).model_dump())
 
 
+@router.get("/logs/export", dependencies=[Depends(require_permission("sys:log"))])
+def export_logs(
+    username: str = Query("", max_length=50),
+    module: str = Query("", max_length=50),
+    method: str = Query("", max_length=10),
+    start: str = Query(""),
+    end: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """操作日志导出 Excel（统一导出服务，模块标识 operation_logs；最多导出最近 5000 条）。"""
+    stmt = select(SysOperationLog)
+    if username:
+        stmt = stmt.where(SysOperationLog.username.like(f"%{username}%"))
+    if module:
+        stmt = stmt.where(SysOperationLog.module == module)
+    if method:
+        stmt = stmt.where(SysOperationLog.method == method)
+    if start:
+        stmt = stmt.where(SysOperationLog.created_at >= f"{start} 00:00:00")
+    if end:
+        stmt = stmt.where(SysOperationLog.created_at <= f"{end} 23:59:59")
+    rows = db.scalars(stmt.order_by(SysOperationLog.id.desc()).limit(5000)).all()
+
+    method_cn = {"POST": "新增", "PUT": "修改", "DELETE": "删除", "PATCH": "更新", "GET": "查询"}
+    headers = ["时间", "操作人", "模块", "动作", "方法", "URL", "查询参数", "提交内容", "IP", "耗时(ms)", "状态码"]
+    data = [
+        [
+            log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else "",
+            log.username,
+            log.module,
+            log.action,
+            f"{method_cn.get(log.method, log.method)}({log.method})" if log.method else "",
+            log.url,
+            (log.params or "")[:500],
+            (getattr(log, "body", None) or "")[:1000],
+            getattr(log, "diff", None) or "",
+            log.ip,
+            log.duration_ms,
+            getattr(log, "status_code", 0) or 0,
+        ]
+        for log in rows
+    ]
+    from app.services.export_service import write_table_xlsx
+
+    today = datetime.now().strftime("%Y%m%d")
+    return write_table_xlsx(
+        db, "operation_logs",
+        headers=headers, rows=data,
+        filename=f"操作日志_{today}.xlsx",
+        sheet="操作日志",
+        column_widths=[19, 12, 12, 18, 14, 30, 24, 36, 15, 11, 9],
+    )
+
+
 # ============================ 备份 ============================
 
 

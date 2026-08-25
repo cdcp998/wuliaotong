@@ -400,107 +400,48 @@ _INV_TITLE_MERGE = "A1:P1"  # 模板标题仅跨 A~P（16 列）
 
 
 def _export_xlsx(
+    db: Session,
     headers: list[str],
     data: list[list],
     filename: str,
     sheet: str = "报表",
     title: str | None = None,
     spec: "ExportSpec | None" = None,
+    module: str = "stock_query",
 ) -> StreamingResponse:
-    """通用导出：可选标题行 + 加粗居中表头 + 宋体数据行，风格与收发存模板一致。
+    """统一导出入口（委托 services/export_service.write_table_xlsx，三级格式合并）。
 
-    spec（「导出格式设置」规格，见 services/export_format.py）：
-    - 列筛选与顺序（order 引用源列下标）；
-    - 列格式（文本 '@' 防科学计数法 / 数值小数位 / 日期 / 自定义 Excel 格式代码）；
-    - 全局：≥15 位数字强制文本（防精度丢失）、数据区自动换行、禁止缩小字体填充；
-    - 列宽：auto 按内容自适应（CJK 计 2），或按列手动指定。
+    spec（ExportFormatModal 请求级格式）转换为 request_spec 叠加：请求级 > 模块级 > 全局 > 内置。
     """
+    from app.services.export_service import write_table_xlsx
+
+    req_spec: dict | None = None
     if spec and spec.has_column_filter():
         order = [i for i in spec.order if 0 <= i < len(headers)]
         if order:
-            # fmt / col_widths 的键是「源列下标」→ 重排后映射为「导出位置下标」
-            pos_of_src = {src: pos for pos, src in enumerate(order)}
-            remapped_fmt = {
-                pos_of_src[src]: cf for src, cf in spec.fmt.items() if src in pos_of_src
-            }
-            remapped_widths = {
-                pos_of_src[src]: w for src, w in spec.col_widths.items() if src in pos_of_src
-            }
-            import dataclasses
-
-            spec = dataclasses.replace(spec, fmt=remapped_fmt, col_widths=remapped_widths)
             headers = [headers[i] for i in order]
             data = [[(r[i] if 0 <= i < len(r) else "") for i in order] for r in data]
-
-    def _col_format(idx: int):
-        return spec.fmt.get(idx) if spec else None
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = sheet
-    row = 1
-    if title:
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
-        c = ws.cell(1, 1, title)
-        c.font, c.alignment, c.border = _FONT_TITLE, _ALIGN_CENTER, _BORDER_ALL
-        ws.row_dimensions[1].height = 47.45
-        row = 2
-    for col, h in enumerate(headers, 1):
-        c = ws.cell(row, col, h)
-        c.font, c.alignment, c.border = _FONT_HEADER, _ALIGN_CENTER, _BORDER_LRT
-    ws.row_dimensions[row].height = 52.15
-
-    # 全局默认：数据区自动换行 + 禁止缩小字体填充
-    data_align = Alignment(vertical="center", wrap_text=bool(spec.wrap_text) if spec else False, shrink_to_fit=False)
-    for r in data:
-        row += 1
-        ws.row_dimensions[row].height = 25.15
-        for col_idx, v in enumerate(r):
-            cf = _col_format(col_idx)
-            cell_value = safe_excel_value(v)
-            number_format = None
-            if cf is not None and cf.type != "default":
+            col_widths: dict[int, float] = {}
+            text_cols: list[int] = []
+            number_cols: dict[int, int] = {}
+            for src, cf in (spec.fmt or {}).items():
+                if src not in range(len(headers)):
+                    continue
+                pos = order.index(src)
                 if cf.type == "text":
-                    cell_value = "" if v is None else str(v)
-                    number_format = "@"
+                    text_cols.append(pos)
                 elif cf.type == "number":
-                    number_format = cf.custom or ("0." + "0" * (cf.decimals or 0))
-                elif cf.type == "date":
-                    cell_value = "" if v is None else str(v)
-                    number_format = cf.custom or "yyyy-mm-dd"
-                elif cf.type == "custom" and cf.custom:
-                    number_format = cf.custom
-            # 全局默认：≥15 位长号码强制文本单元格（防科学计数法/精度丢失）
-            plain = str(cell_value).lstrip("'") if isinstance(cell_value, str) else cell_value
-            if number_format is None and spec and spec.long_number_as_text and export_fmt.is_long_number(plain):
-                cell_value = plain
-                number_format = "@"
-            c = ws.cell(row, col_idx + 1, cell_value)
-            c.font, c.alignment, c.border = _FONT_DATA, data_align, _BORDER_ALL
-            if number_format:
-                c.number_format = number_format
+                    number_cols[pos] = cf.decimals or 2
+            for src, w in (spec.col_widths or {}).items():
+                if src in order:
+                    col_widths[order.index(src)] = w
+            req_spec = {"colWidths": {str(k): v for k, v in col_widths.items()},
+                        "textCols": text_cols,
+                        "numberCols": {str(k): v for k, v in number_cols.items()}}
 
-    # 列宽：手动指定优先 → auto 按内容自适应（表头+数据最长值；CJK 字符计 2；钳制 8~55）
-    from openpyxl.utils import get_column_letter
-
-    for col_idx in range(len(headers)):
-        manual = spec.col_widths.get(col_idx) if spec else None
-        if manual:
-            width = manual
-        else:
-            samples = [str(headers[col_idx])] + [str(r[col_idx]) for r in data[:300] if col_idx < len(r)]
-            content_max = max((len(s) for s in samples), default=8)
-            cjk = sum(1 for s in samples[:100] for ch in s if ord(ch) > 0x2E80) // max(1, min(len(samples), 100))
-            width = max(8.0, min(55.0, content_max + cjk * 1.0 + 4))
-        ws.column_dimensions[get_column_letter(col_idx + 1)].width = width
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{quote(filename)}"'},
+    return write_table_xlsx(
+        db, module, headers=headers, rows=data, filename=filename,
+        sheet=sheet, title=title, request_spec=req_spec,
     )
 
 
@@ -631,11 +572,13 @@ def export_report(
             for r in stock_rows
         ]
         return _export_xlsx(
+            db,
             ["商品编码", "商品名称", "规格", "仓库", "数量", "成本价", "金额", "30天出库", "最近变动", "呆滞天数"],
             data,
             f"stock_{today}.xlsx",
             title="库存报表",
             spec=spec,
+            module="stock_query",
         ) if not preview else ok({"headers": ["商品编码", "商品名称", "规格", "仓库", "数量", "成本价", "金额", "30天出库", "最近变动", "呆滞天数"], "rows": [[str(c) if c is not None else "" for c in r] for r in data[:10]]})
     if type == "flow":
         stmt = select(StkStockLog)
@@ -692,11 +635,13 @@ def export_report(
                 ]
             )
         return _export_xlsx(
+            db,
             ["时间", "商品编码", "商品名称", "仓库", "库位", "类型", "单据号", "变动前", "变动数量", "变动后", "成本价", "备注"],
             data,
             f"flow_{today}.xlsx",
             title="库存流水",
             spec=spec,
+            module="flow",
         ) if not preview else ok({"headers": ["时间", "商品编码", "商品名称", "仓库", "库位", "类型", "单据号", "变动前", "变动数量", "变动后", "成本价", "备注"], "rows": [[str(c) if c is not None else "" for c in r] for r in data[:10]]})
     raise BizError(E_PARAM, "type 仅支持 inventory-summary|stock|flow")
 

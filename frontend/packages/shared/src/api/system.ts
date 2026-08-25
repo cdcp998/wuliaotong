@@ -91,6 +91,12 @@ export const systemApi = {
   /** 服务端健康/版本信息（「关于」页：服务端版本 + 数据库/Redis 状态）。 */
   serverHealth: () =>
     http.get<{ status: string; version: string; db: string; redis: string }>("/health"),
+  /** 导出格式配置（统一管理）：内置/全局/各模块覆盖与合并结果。 */
+  getExportFormats: () =>
+    http.get<{ builtin: Record<string, any>; global: Record<string, any>; modules: Record<string, Record<string, any> | null>; effective: Record<string, Record<string, any>> }>("/export-formats"),
+  saveGlobalExportFormat: (cfg: Record<string, any>) => http.put<null>("/export-formats/global", cfg),
+  saveModuleExportFormat: (moduleKey: string, cfg: Record<string, any> | null) =>
+    http.put<null>(`/export-formats/module/${moduleKey}`, cfg),
   /** 用已保存的 SiliconFlow Key 拉取模型列表（保存设置后调用）。 */
   listSiliconflowModels: () => http.post<{ models: { id: string; owned_by: string }[] }>("/llm/siliconflow/models"),
   /** 用已保存的 DeepSeek Key 拉取模型列表（保存设置后调用）。 */

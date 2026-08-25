@@ -523,7 +523,7 @@ def _month_flow_rows(db: Session, warehouse_id: int, start: datetime, end: datet
 
 @router.get("/checks/{bill_id}/export", dependencies=[Depends(require_permission("stk:check"))])
 def export_check(bill_id: int, db: Session = Depends(get_db)):
-    """导出盘点结果 Excel：列结构与《库存金额收发存（2026.06）》模板一致，追加账面/实盘/盈亏列。"""
+    """导出盘点结果 Excel（统一导出服务，模块标识 check_export）：21 列收发存结构 + 账面/实盘/盈亏。"""
     b = db.get(StkCheck, bill_id)
     if b is None:
         raise BizError(E_NOT_FOUND, "盘点单不存在")
@@ -533,41 +533,14 @@ def export_check(bill_id: int, db: Session = Depends(get_db)):
     month_end = datetime(month_start.year + 1, 1, 1) if month_start.month == 12 else month_start.replace(month=month_start.month + 1)
     flow = _month_flow_rows(db, b.warehouse_id, month_start, month_end)
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "盘点结果"
-    ncols = len(_CHECK_HEADERS)
-    thin = Side(style="thin")
-    border = Border(left=thin, right=thin, top=thin, bottom=thin)
-    title_font = Font(name="宋体", size=14, bold=True)
-    head_font = Font(name="宋体", size=14, bold=True)
-    body_font = Font(name="宋体", size=11)
-    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-
-    # 标题行（合并，与模板 A1:P1 一致）
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
-    title = f"{month_start.year}年{month_start.month}月库存金额收发存表（盘点结果 {b.bill_no}）"
-    c = ws.cell(row=1, column=1, value=title)
-    c.font = title_font
-    c.alignment = center
-    c.border = border
-    for col in range(2, ncols + 1):
-        ws.cell(row=1, column=col).border = border
-    # 表头行
-    for col, name in enumerate(_CHECK_HEADERS, start=1):
-        c = ws.cell(row=2, column=col, value=name)
-        c.font = head_font
-        c.alignment = center
-        c.border = border
-    # 数据行
-    # 批量预取商品/分类/单位，避免每行 3 次回表（N+1）
     pids = {it.product_id for it in items}
     prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(pids))).all()} if pids else {}
     cids = {p.category_id for p in prod_map.values() if p.category_id}
     cat_map = {c.id: c for c in db.scalars(select(BaseCategory).where(BaseCategory.id.in_(cids))).all()} if cids else {}
     uids = {p.unit_id for p in prod_map.values() if p.unit_id}
     unit_map = {u.id: u for u in db.scalars(select(BaseUnit).where(BaseUnit.id.in_(uids))).all()} if uids else {}
-    row = 3
+
+    rows_out = []
     for it in items:
         p = prod_map.get(it.product_id)
         cat = cat_map.get(p.category_id) if p and p.category_id else None
@@ -577,10 +550,10 @@ def export_check(bill_id: int, db: Session = Depends(get_db)):
         closing_a = f.get("closing_amount", Decimal(0))
         cost = closing_a / closing_q if closing_q else Decimal(0)
         real = it.real_qty if it.real_qty is not None else ""
-        values = [
+        rows_out.append([
             month_start.strftime("%Y-%m"),
             wh.name if wh else "",
-            p.category_id if p and p.category_id else "",
+            str(p.category_id) if p and p.category_id else "",
             cat.name if cat else "",
             (p.material_code or p.code) if p else "",
             p.name if p else "",
@@ -590,33 +563,22 @@ def export_check(bill_id: int, db: Session = Depends(get_db)):
             f.get("in_qty", 0), f.get("in_amount", 0),
             f.get("out_qty", 0), f.get("out_amount", 0),
             closing_q, closing_a,
-            it.book_qty, real, it.diff_qty, it.diff_qty * cost,
+            "", "", it.book_qty, real, it.diff_qty, float(it.diff_qty * cost),
             "",
-        ]
-        for col, v in enumerate(values, start=1):
-            c = ws.cell(row=row, column=col, value=float(v) if isinstance(v, Decimal) else safe_excel_value(v))
-            c.font = body_font
-            c.border = border
-            c.alignment = Alignment(vertical="center")
-        row += 1
-    # 列宽
-    widths = [10, 18, 13, 14, 20, 26, 22, 10, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 14, 14, 20]
-    for i, w in enumerate(widths, start=1):
-        ws.column_dimensions[ws.cell(row=2, column=i).column_letter].width = w
-    ws.freeze_panes = "A3"
+        ])
 
-    buf = BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    filename = f"库存金额收发存表_{b.bill_no}.xlsx"
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    title = f"{month_start.year}年{month_start.month}月库存金额收发存表（盘点结果 {b.bill_no}）"
+    from app.services.export_service import write_table_xlsx
+
+    return write_table_xlsx(
+        db, "check_export",
+        headers=list(_CHECK_HEADERS),
+        rows=rows_out,
+        filename=f"库存金额收发存表_{b.bill_no}.xlsx",
+        sheet="盘点结果",
+        title=title,
+        column_widths=[10, 18, 13, 14, 20, 26, 22, 10, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 14, 14, 20],
     )
-
-
-# ============================ 其他出入库 ============================
 
 
 @router.post("/other-io", dependencies=[Depends(require_permission("stk:other"))])
