@@ -1,4 +1,4 @@
-/** device 模块：设备维修任务（/device/tasks，device:task）——创建/派发（手动·公开抢单·组合三模式）/接单/完成/验收/取消 + 维修记录。
+/** device 模块：设备维修任务（/device/tasks，device:task）——创建/派发（手动·公开任务单·组合三模式）/接单/完成/验收/取消 + 维修记录。
  *  v3 界面：状态胶囊 Tabs + 玻璃表格 + 三种派发模式。 */
 import { useCallback, useEffect, useState } from "react";
 import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, theme, Tooltip, Upload } from "antd";
@@ -75,7 +75,7 @@ export function DeviceTasksPage() {
     setCreating(true);
     try {
       await deviceApi.createTask({ device_id: v.device_id, title: v.title, description: v.description ?? "", priority: v.priority ?? 1, dispatch_mode: dispatchMode });
-      message.success(v.dispatch_mode === "manual" ? "任务已创建（设备自动置维修中），请在列表中派发维修人员" : "任务已发布到抢单池（设备自动置维修中）");
+      message.success(v.dispatch_mode === "manual" ? "任务已创建（设备自动置维修中），请在列表中派发维修人员" : "任务已发布到任务池（设备自动置维修中）");
       setOpen(false);
       form.resetFields();
       void load();
@@ -157,7 +157,7 @@ export function DeviceTasksPage() {
     { title: "优先级", width: 90, render: (_, t) => (t.priority === 2 ? <Tag color="red" style={{ borderRadius: 999 }}>紧急</Tag> : <Tag style={{ borderRadius: 999, color: "#64748B", background: "#EFF3FC", borderColor: "transparent" }}>普通</Tag>) },
     { title: "状态", width: 110, render: (_, t) => {
       const s = ST[t.status];
-      // 公开抢单任务的 pending 语义为「待领取」
+      // 公开任务单任务的 pending 语义为「待领取」
       const label = t.status === "pending" && t.dispatch_mode !== "manual" ? "待领取" : s?.label ?? t.status;
       return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{label}</Tag>;
     } },
@@ -257,7 +257,7 @@ export function DeviceTasksPage() {
           <Form.Item name="priority" label="优先级" initialValue={1}>
             <Select style={{ width: 140 }} options={[{ value: 1, label: "普通" }, { value: 2, label: "紧急" }]} />
           </Form.Item>
-          {/* 派发方式（三种模式）：手动派发 / 公开抢单 / 公开+可派发 */}
+          {/* 派发方式（三种模式）：手动派发 / 公开任务单 / 公开+可派发 */}
           <Form.Item label="派发方式" initialValue="manual">
             <Radio.Group
               value={dispatchMode}

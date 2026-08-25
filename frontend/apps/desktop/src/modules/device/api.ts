@@ -30,7 +30,7 @@ export interface DeviceTaskItem {
   assignee_id: number;
   assignee_name: string;
   status: string;
-  /** 派发方式：manual 手动派发 / open 公开抢单 / hybrid 公开+可派发。 */
+  /** 派发方式：manual 手动派发 / open 公开任务单 / hybrid 公开+可派发。 */
   dispatch_mode: string;
   priority: number;
   scheduled_time: string | null;
@@ -70,8 +70,8 @@ export const DTASK_STATUS: Record<string, { label: string; color: string }> = {
 /** 派发方式（设计页 51 扩展：三种派发模式）。 */
 export const DISPATCH_MODES: Record<string, { label: string; desc: string; bg: string; fg: string }> = {
   manual: { label: "手动派发", desc: "创建后由调度员指定维修人员", bg: "#EFF3FC", fg: "#5B6478" },
-  open: { label: "公开抢单", desc: "发布到任务池，维修人员自行领取", bg: "#EAEFFF", fg: "#3B5BDB" },
-  hybrid: { label: "公开+可派发", desc: "进入抢单池，调度员也可直接指派", bg: "#E0F2FE", fg: "#0E7490" },
+  open: { label: "公开任务单", desc: "发布到任务池，维修人员自行领取", bg: "#EAEFFF", fg: "#3B5BDB" },
+  hybrid: { label: "公开+可派发", desc: "进入任务池，调度员也可直接指派", bg: "#E0F2FE", fg: "#0E7490" },
 };
 
 export const deviceApi = {

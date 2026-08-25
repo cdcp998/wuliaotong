@@ -299,7 +299,7 @@ def create_device_task(req: DeviceTaskCreate, user: SysUser = Depends(get_curren
 def assign_device_task(task_id: int, req: AssignReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
     t = _task_or_404(db, task_id)
     if (getattr(t, "dispatch_mode", "manual") or "manual") == "open" and t.status == "pending":
-        raise BizError(E_PARAM, "公开抢单任务由维修人员自行领取，不可手动派发")
+        raise BizError(E_PARAM, "公开任务单任务由维修人员自行领取，不可手动派发")
     assignee = db.get(SysUser, req.assignee_id)
     if assignee is None or assignee.status != 1:
         raise BizError(E_PARAM, "维修人员不存在或已停用")

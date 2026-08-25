@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS device_task (
   assignee_id     BIGINT NOT NULL DEFAULT 0 COMMENT '维修人员 → sys_user.id',
   status          VARCHAR(20) NOT NULL DEFAULT 'pending'
                   COMMENT 'pending/assigned/in_progress/done/verified/closed/cancelled',
-  dispatch_mode   VARCHAR(10) NOT NULL DEFAULT 'manual' COMMENT '派发方式: manual手动/open公开抢单/hybrid公开+可派发',
+  dispatch_mode   VARCHAR(10) NOT NULL DEFAULT 'manual' COMMENT '派发方式: manual手动/open公开任务单/hybrid公开+可派发',
   priority        TINYINT NOT NULL DEFAULT 1 COMMENT '1 普通 / 2 紧急',
   scheduled_time  DATETIME NULL,
   completed_at    DATETIME NULL,

@@ -43,7 +43,7 @@ class DeviceTask(Base):
     description: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     assignee_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
-    dispatch_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="manual")  # manual手动派发/open公开抢单/hybrid公开+可派发
+    dispatch_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="manual")  # manual手动派发/open公开任务单/hybrid公开+可派发
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     scheduled_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
