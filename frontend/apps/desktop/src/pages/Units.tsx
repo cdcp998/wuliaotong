@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
-import { App, Button, Form, Input, Modal, Popconfirm, Space } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, theme } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { ImportOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
 
 import { baseApi, type Unit } from "@wlt/shared";
 
@@ -27,13 +28,16 @@ const GB_UNITS: { name: string; remark: string }[] = [
   { name: "转每分钟", remark: "转速" },
 ];
 
-/** 材料单位管理（电脑端，base:product）：计量单位维护。材料/入库/送货单识别等场景的单位下拉均来自本表。 */
+/** 材料单位管理（电脑端，base:product，设计页 16 风格）：计量单位维护。材料/入库/送货单识别等场景的单位下拉均来自本表。 */
 export function UnitsPage() {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [list, setList] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Unit | null>(null);
+  const [keyword, setKeyword] = useState("");
+  const [category, setCategory] = useState<string | undefined>(undefined);
   const [form] = Form.useForm();
 
   const load = useCallback(async () => {
@@ -101,44 +105,90 @@ export function UnitsPage() {
     }
   }
 
+  /** 类别 = 备注归组（长度/质量/计数…），纯前端过滤。 */
+  const categories = useMemo(() => [...new Set(list.map((u) => (u.remark || "").trim()).filter(Boolean))].sort(), [list]);
+  const filtered = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    return list.filter((u) => {
+      if (category && (u.remark || "").trim() !== category) return false;
+      if (!kw) return true;
+      return u.name.toLowerCase().includes(kw) || (u.remark ?? "").toLowerCase().includes(kw);
+    });
+  }, [list, keyword, category]);
+
   const columns: ColumnsType<Unit> = [
-    { title: "名称", dataIndex: "name", width: 160, render: (v: string) => <b>{v}</b> },
-    { title: "备注", dataIndex: "remark", render: (v?: string) => v || "-" },
+    { title: "单位名称", dataIndex: "name", width: 200, render: (v: string) => <span style={{ fontWeight: 600, fontSize: 13.5 }}>{v}</span> },
+    { title: "类别", dataIndex: "remark", width: 160, render: (v?: string) => v || "-" },
+    {
+      title: "操作",
+      width: 140,
+      render: (_, r) => (
+        <Space size={10}>
+          <Button size="small" type="link" style={{ padding: 0 }} onClick={() => openEdit(r)}>编辑</Button>
+          <Popconfirm title={`确认删除单位「${r.name}」？已被材料引用的单位不可删除。`} onConfirm={() => void remove(r)}>
+            <Button size="small" type="link" danger style={{ padding: 0 }}>删除</Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
   ];
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: "0 0 16px" }}>材料单位管理</h2>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Button type="primary" onClick={openCreate}>新建单位</Button>
-        <Button onClick={() => void importGbUnits()}>导入国标单位（{GB_UNITS.length} 项）</Button>
-        <span style={{ fontSize: 12, color: "#5B6478" }}>
-          材料 / 新建入库 / 送货单识别等场景的单位选项均来自本表，请使用规范单位名（个 / 件 / 套 / 箱 / 盒 / 包 / 台 / 米 / kg 等）
-        </span>
-      </Space>
-      <DataTable
-        rowKey="id"
-        loading={loading}
-        columns={columns}
-        dataSource={list}
-        pagination={false}
-        locale={{ emptyText: "暂无单位" }}
-        rowSelection
-        onBatchDelete={async (keys) => {
-          for (const k of keys) await baseApi.deleteUnit(Number(k));
-          message.success(`已删除 ${keys.length} 个单位`);
-          void load();
-        }}
-        actionsWidth={160}
-        actions={(r) => (
-          <Space>
-            <Button size="small" onClick={() => openEdit(r)}>编辑</Button>
-            <Popconfirm title={`确认删除单位「${r.name}」？已被材料引用的单位不可删除。`} onConfirm={() => void remove(r)}>
-              <Button size="small" danger>删除</Button>
-            </Popconfirm>
-          </Space>
-        )}
-      />
+      {/* 页头（设计页 16）：标题+副题+右侧按钮 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>材料单位管理</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+            计量单位字典：材料 / 新建入库 / 送货单识别等场景的单位选项来源，支持国标常用单位一键导入
+          </p>
+        </div>
+        <Space>
+          <Button icon={<ImportOutlined />} onClick={() => void importGbUnits()}>导入国标单位（{GB_UNITS.length} 项）</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增单位</Button>
+        </Space>
+      </div>
+
+      {/* 筛选条（设计页 16 Filter：白卡 r14 + 搜索 300 + 类别下拉 + 共 N 项） */}
+      <div className="wlt-glass" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 16px", marginBottom: 16 }}>
+        <Input
+          allowClear
+          prefix={<SearchOutlined style={{ color: token.colorTextTertiary }} />}
+          placeholder="单位名称 / 备注"
+          style={{ width: 300 }}
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+        />
+        <Select
+          placeholder="全部类别"
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          style={{ width: 160 }}
+          value={category}
+          onChange={(v) => setCategory(v)}
+          options={categories.map((c) => ({ label: c, value: c }))}
+        />
+        <span style={{ marginLeft: "auto", fontSize: 12, color: token.colorTextTertiary }}>共 {filtered.length} 项 · 全部 {list.length} 项</span>
+      </div>
+
+      {/* 表格卡 */}
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <DataTable<Unit>
+          rowKey="id"
+          loading={loading}
+          columns={columns}
+          dataSource={filtered}
+          locale={{ emptyText: "暂无单位" }}
+          pagination={false}
+          rowSelection
+          onBatchDelete={async (keys) => {
+            for (const k of keys) await baseApi.deleteUnit(Number(k));
+            message.success(`已删除 ${keys.length} 个单位`);
+            void load();
+          }}
+        />
+      </div>
 
       <Modal
         title={editing ? `编辑单位：${editing.name}` : "新建单位"}

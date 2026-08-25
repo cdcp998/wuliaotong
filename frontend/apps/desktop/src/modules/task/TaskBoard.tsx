@@ -1,12 +1,13 @@
 /** task 模块：任务看板（/task/board，task:dispatch）——按状态分列 + 派发/流转快捷操作。
- *  v2 界面：玻璃看板列 + 优先级/维修人卡片 + 看板⇄列表切换（与设计稿一致）。 */
+ *  v3 界面：玻璃看板列 + 优先级/维修人卡片 + 看板⇄列表切换；「新建任务」直接开弹窗（不再跳列表页）。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { App, Button, Descriptions, Drawer, Input, Popconfirm, Select, Space, Tag, theme } from "antd";
+import { App, Button, Descriptions, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Tag, theme } from "antd";
 import { UnorderedListOutlined, PlusOutlined, FlagOutlined } from "@ant-design/icons";
 
 import { adminApi } from "@wlt/shared";
 
+import { cableApi } from "../cable/api";
 import { taskApi, type TaskItem } from "./api";
 
 const COLUMNS = ["pending", "assigned", "in_progress", "done", "verified", "closed", "cancelled"];
@@ -31,6 +32,11 @@ export function TaskBoardPage() {
   const [current, setCurrent] = useState<TaskItem | null>(null);
   const [assignee, setAssignee] = useState<number | undefined>();
   const [verdict, setVerdict] = useState("");
+  // 新建任务弹窗（看板页直接创建，不再跳转列表页）
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [faults, setFaults] = useState<{ id: number; label: string }[]>([]);
+  const [form] = Form.useForm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,7 +52,32 @@ export function TaskBoardPage() {
     adminApi.users({ role_id: 6, status: 1, page_size: 200 })
       .then((r) => setWorkers(r.list.map((u) => ({ id: u.id, name: u.real_name || u.username }))))
       .catch(() => undefined);
+    cableApi.listFaults({ page_size: 100 }).then((r) => {
+      setFaults(r.items.map((f) => ({ id: f.id, label: `#${f.id} ${f.fault_type || "故障"}（${["待处理", "处理中", "待验证", "已修复", "已关闭"][f.status] ?? f.status}）` })));
+    }).catch(() => undefined);
   }, []);
+
+  /** 看板页直接新建任务（与列表页同字段）。 */
+  const createTask = async () => {
+    const v = await form.validateFields();
+    setSaving(true);
+    try {
+      await taskApi.create({ title: v.title, description: v.description ?? "", priority: v.priority ?? 1, fault_id: v.fault_id ?? null });
+      message.success("任务已创建");
+      setOpen(false);
+      form.resetFields();
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "创建失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openCreate = () => {
+    form.resetFields();
+    setOpen(true);
+  };
 
   const act = async (t: TaskItem, action: string, extra?: object) => {
     try {
@@ -78,7 +109,7 @@ export function TaskBoardPage() {
         </div>
         <Space>
           <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<UnorderedListOutlined style={{ color: "#5B7FFF" }} />} onClick={() => navigate("/task/list")}>切换列表视图</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/task/list")}>新建任务</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新建任务</Button>
         </Space>
       </div>
 
@@ -166,6 +197,26 @@ export function TaskBoardPage() {
           </div>
         )}
       </Drawer>
+
+      {/* 新建任务弹窗（看板页直接创建） */}
+      <Modal open={open} onCancel={() => setOpen(false)} onOk={() => void createTask()} confirmLoading={saving} title="新建维修任务" width={560} destroyOnHidden afterOpenChange={(o) => { if (o) form.resetFields(); }}>
+        <Form form={form} layout="vertical">
+          <Form.Item name="title" label="标题" rules={[{ required: true, message: "请输入标题" }]}>
+            <Input maxLength={100} />
+          </Form.Item>
+          <Form.Item name="description" label="描述">
+            <Input.TextArea rows={3} maxLength={500} />
+          </Form.Item>
+          <Space>
+            <Form.Item name="priority" label="优先级" initialValue={1}>
+              <Select style={{ width: 140 }} options={[{ value: 1, label: "普通" }, { value: 2, label: "紧急" }]} />
+            </Form.Item>
+            <Form.Item name="fault_id" label="关联故障（可选）">
+              <Select style={{ width: 280 }} allowClear options={faults} showSearch optionFilterProp="label" />
+            </Form.Item>
+          </Space>
+        </Form>
+      </Modal>
     </div>
   );
 }

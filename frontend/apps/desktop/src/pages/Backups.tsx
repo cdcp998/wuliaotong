@@ -88,8 +88,25 @@ export function BackupsPage() {
     { title: "时间", dataIndex: "created_at", width: 170 },
     { title: "文件名", dataIndex: "file_path" },
     { title: "大小", dataIndex: "file_size", width: 110, render: (v: number) => fmtSize(v) },
-    { title: "类型", dataIndex: "backup_type", width: 90, render: (v: string) => (v === "auto" ? <Tag color="blue">自动</Tag> : <Tag color="green">手动</Tag>) },
-    { title: "状态", dataIndex: "status", width: 80, render: (v: number) => (v === 1 ? <Tag color="green">成功</Tag> : <Tag color="red">失败</Tag>) },
+    {
+      title: "类型",
+      dataIndex: "backup_type",
+      width: 90,
+      render: (v: string) => (
+        <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>{v === "auto" ? "自动" : "手动"}</Tag>
+      ),
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 90,
+      render: (v: number) =>
+        v === 1 ? (
+          <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>成功</Tag>
+        ) : (
+          <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>失败</Tag>
+        ),
+    },
     {
       title: "操作",
       width: 160,
@@ -117,28 +134,34 @@ export function BackupsPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>备份管理</h2>
+      {/* 页头（设计页 38）：标题+副题+右侧主按钮 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>备份管理</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+            数据库备份：手动 + 每日 02:00 自动，保留最近 14 份滚动清理；gzip 压缩的 mysqldump 导出，支持下载
+          </p>
+        </div>
         <Button type="primary" loading={busy} onClick={() => void doBackup()}>立即备份</Button>
       </div>
-      {/* 统计卡（设计页 38：份数/大小/自动任务/最近） */}
+      {/* 统计卡（设计页 38：彩色大数字在上、灰标签在下） */}
       <div className="wlt-grid" style={{ marginBottom: 16 }}>
         {[
-          { label: "备份份数", value: `${stats.count}`, color: "#3B5BDB", bg: "#EAEFFF" },
-          { label: "总大小", value: fmtSize(stats.size), color: "#1E2433", bg: "#F6F8FE" },
-          { label: "自动备份", value: `${stats.auto} 份`, color: "#B45309", bg: "#FEF4E2" },
-          { label: "最近备份", value: stats.latest ? stats.latest.slice(0, 16) : "—", color: "#15803D", bg: "#E8F9EF" },
+          { label: "备份份数", value: `${stats.count}`, color: "#5B7FFF" },
+          { label: "总大小", value: fmtSize(stats.size), color: "#1E2433" },
+          { label: "自动任务", value: stats.auto ? `每日 02:00` : "未启用", color: "#15803D" },
+          { label: "最近备份", value: stats.latest ? stats.latest.slice(5, 16) : "—", color: "#15803D" },
         ].map((c) => (
-          <div key={c.label} className="wlt-glass-sm" style={{ padding: "12px 16px" }}>
-            <div style={{ fontSize: 12, color: token.colorTextSecondary }}>{c.label}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: c.color, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>{c.value}</div>
+          <div key={c.label} className="wlt-glass-sm" style={{ padding: "14px 18px" }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: c.color, fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>{c.value}</div>
+            <div style={{ fontSize: 12.5, color: token.colorTextSecondary, marginTop: 4 }}>{c.label}</div>
           </div>
         ))}
       </div>
-      <p style={{ color: "#5B6478", fontSize: 12, marginBottom: 16 }}>
-        每日 02:00 自动备份（保留最近 14 份，更早自动清理）；备份文件为 gzip 压缩的 mysqldump 导出。
-      </p>
-      <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }} rowSelection onBatchDelete={async (keys) => { for (const k of keys) await adminApi.deleteBackup(Number(k)); message.success(`已删除 ${keys.length} 个备份`); void load(); }} />
+      {/* 表格卡 */}
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }} rowSelection onBatchDelete={async (keys) => { for (const k of keys) await adminApi.deleteBackup(Number(k)); message.success(`已删除 ${keys.length} 个备份`); void load(); }} />
+      </div>
     </div>
   );
 }

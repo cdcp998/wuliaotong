@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, DatePicker, Select, Space, Tabs, Tag, Typography } from "antd";
+import { App, Button, DatePicker, Input, Select, Space, Tabs, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
 
@@ -9,11 +9,16 @@ import dayjs from "dayjs";
 
 import { DataTable } from "../components/DataTable";
 
-/** 报表中心（电脑端，管理者）：进销存汇总、库存报表、Excel 导出。 */
+/** 报表中心（电脑端，管理者，设计页 29 风格）：进销存汇总、库存报表、Excel 导出、AI 月报摘要。 */
 export function ReportsPage() {
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ margin: "0 0 16px" }}>报表中心</h2>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>报表中心</h2>
+        <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>
+          进销存汇总 · 库存报表 · 库存流水导出 · AI 月报摘要，均支持按仓库与日期范围筛选并导出 Excel
+        </p>
+      </div>
       <Tabs
         items={[
           { key: "inventory", label: "进销存汇总", children: <InventorySummaryTab /> },
@@ -74,7 +79,7 @@ function InventorySummaryTab() {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }} wrap>
+      <div className="wlt-glass" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 16px", marginBottom: 16 }}>
         <Select
           style={{ width: 200 }}
           placeholder="全部仓库"
@@ -85,6 +90,7 @@ function InventorySummaryTab() {
         />
         <DatePicker.RangePicker value={range} onChange={(v) => { setRange(v as [Dayjs | null, Dayjs | null] | null); setPage(1); }} />
         <Button type="primary" onClick={() => void load()}>查询</Button>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 行</span>
         <Button
           onClick={() =>
             window.open(
@@ -99,8 +105,10 @@ function InventorySummaryTab() {
         >
           导出 Excel
         </Button>
-      </Space>
-      <DataTable rowKey="product_id" size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
+      </div>
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <DataTable rowKey="product_id" size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
+      </div>
     </div>
   );
 }
@@ -139,14 +147,19 @@ function StockReportTab() {
     { title: "最近变动", dataIndex: "last_moved_at", width: 150, render: (v: string) => v || "-" },
     {
       title: "状态",
-      width: 90,
-      render: (_, r) => (r.dormant_days > 90 ? <Tag color="red">呆滞 {r.dormant_days} 天</Tag> : <Tag color="default">正常</Tag>),
+      width: 110,
+      render: (_, r) =>
+        r.dormant_days > 90 ? (
+          <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>呆滞 {r.dormant_days} 天</Tag>
+        ) : (
+          <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#64748B", borderColor: "transparent", marginInlineEnd: 0 }}>正常</Tag>
+        ),
     },
   ];
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }} wrap>
+      <div className="wlt-glass" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 16px", marginBottom: 16 }}>
         <Select
           style={{ width: 200 }}
           placeholder="全部仓库"
@@ -162,11 +175,14 @@ function StockReportTab() {
           onChange={(v) => { setSort(v); setPage(1); }}
         />
         <Button type="primary" onClick={() => void load()}>查询</Button>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 行</span>
         <Button onClick={() => window.open(exportReportUrl({ type: "stock", warehouse_id: warehouseId || undefined, sort }))}>
           导出 Excel
         </Button>
-      </Space>
-      <DataTable rowKey={(r) => `${r.product_id}-${r.warehouse_name}`} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
+      </div>
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <DataTable rowKey={(r) => `${r.product_id}-${r.warehouse_name}`} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection onBatchDelete={async () => { message.info("该列表为只读数据，不支持删除"); }} />
+      </div>
     </div>
   );
 }
@@ -177,22 +193,25 @@ function FlowExportTab() {
   const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   return (
     <div>
-      <p style={{ color: "#5B6478", fontSize: 12 }}>
-        按条件导出库存流水明细（stk_stock_log）。条件可留空（全量导出，数据量大时建议限定日期）。
-      </p>
-      <Space wrap>
-        <input
-          placeholder="单据号（模糊）"
-          value={billNo}
-          onChange={(e) => setBillNo(e.target.value)}
-          style={{ padding: "4px 8px", border: "1px solid #E4EAF6", borderRadius: 10 }}
-        />
-        <input
-          placeholder="变动类型（如：入库）"
-          value={changeType}
-          onChange={(e) => setChangeType(e.target.value)}
-          style={{ padding: "4px 8px", border: "1px solid #E4EAF6", borderRadius: 10 }}
-        />
+      <div className="wlt-glass" style={{ padding: "12px 16px", marginBottom: 16 }}>
+        <p style={{ margin: "0 0 10px", color: "#5B6478", fontSize: 12.5 }}>
+          按条件导出库存流水明细（stk_stock_log）。条件可留空（全量导出，数据量大时建议限定日期）。
+        </p>
+        <Space wrap>
+          <Input
+            allowClear
+            placeholder="单据号（模糊）"
+            value={billNo}
+            onChange={(e) => setBillNo(e.target.value)}
+            style={{ width: 220 }}
+          />
+          <Input
+            allowClear
+            placeholder="变动类型（如：入库）"
+            value={changeType}
+            onChange={(e) => setChangeType(e.target.value)}
+            style={{ width: 200 }}
+          />
         <DatePicker.RangePicker value={range} onChange={(v) => setRange(v as [Dayjs | null, Dayjs | null] | null)} />
         <Button
           type="primary"
@@ -210,7 +229,8 @@ function FlowExportTab() {
         >
           导出 Excel
         </Button>
-      </Space>
+        </Space>
+      </div>
     </div>
   );
 }
@@ -242,14 +262,14 @@ function AiSummaryTab() {
   }
 
   return (
-    <div style={{ maxWidth: 720 }}>
-      <Space style={{ marginBottom: 12 }} wrap>
-        <span>日期范围</span>
+    <div>
+      <div className="wlt-glass" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 16px", marginBottom: 16 }}>
+        <span style={{ fontSize: 12.5, color: "#5B6478" }}>日期范围</span>
         <DatePicker.RangePicker value={range} onChange={(v) => setRange(v as [Dayjs | null, Dayjs | null] | null)} />
         <Button type="primary" loading={loading} onClick={() => void generate()}>生成 AI 月报摘要</Button>
-      </Space>
+      </div>
       {summary && (
-        <div style={{ border: "1px solid #E4EAF6", borderRadius: 12, padding: 16, background: "#F8FAFF", whiteSpace: "pre-wrap", lineHeight: 1.8 }}>
+        <div className="wlt-glass" style={{ padding: 16, whiteSpace: "pre-wrap", lineHeight: 1.8 }}>
           <Typography.Paragraph>{summary}</Typography.Paragraph>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {ai ? "AI 生成，仅供参考" : "规则版摘要（文本模型未配置或生成失败）"} · {range?.[0]?.format("YYYY-MM-DD")} ~ {range?.[1]?.format("YYYY-MM-DD")}

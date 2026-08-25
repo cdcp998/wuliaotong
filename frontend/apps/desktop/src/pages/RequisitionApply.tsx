@@ -173,7 +173,7 @@ export function RequisitionApplyPage() {
   ];
 
   return (
-    <div style={{ padding: 24, maxWidth: 980 }}>
+    <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1E2433", letterSpacing: "-0.01em" }}>领用申请</h2>

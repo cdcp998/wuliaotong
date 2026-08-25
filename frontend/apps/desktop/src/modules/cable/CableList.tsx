@@ -1,8 +1,8 @@
 /** cable 模块：线缆管理（/cable/list，cable:manage）—— CRUD + 路径节点（地图选点）+ 状态流转。
- *  v2 界面：左侧统计/筛选/表格 + 右侧「新增线缆」玻璃面板（与设计稿一致）。 */
+ *  v3 界面：满宽表格 + 「新增/编辑线缆」弹窗（原右侧面板移入 Modal）。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { App, Button, Form, Input, Popconfirm, Radio, Select, Space, Table, Tag, theme } from "antd";
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, EnvironmentOutlined, CheckOutlined } from "@ant-design/icons";
+import { App, Button, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, theme } from "antd";
+import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, CheckOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { cableApi, type CableItem, type MarkerItem } from "./api";
@@ -191,89 +191,78 @@ export function CableListPage() {
         })}
       </div>
 
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-        {/* 左：表格 */}
-        <div className="wlt-glass" style={{ flex: 1, minWidth: 320, padding: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 4px 10px", flexWrap: "wrap" }}>
-            <Input.Search placeholder="搜索编码 / 名称" allowClear style={{ width: 240 }} onSearch={(v) => { setKeyword(v); setPage(1); }} />
-            <Select placeholder="全部类型" allowClear style={{ width: 150 }} value={filterType || undefined} onChange={(v) => { setFilterType(v ?? ""); setPage(1); }}
-              options={Object.entries(TYPE_LABEL).map(([k, v]) => ({ value: k, label: v.label }))} />
-            <span style={{ flex: 1 }} />
-            <span style={{ fontSize: 12, color: token.colorTextTertiary }}>共 {total} 条</span>
-          </div>
-          <Table<CableItem>
-            rowKey="id"
-            loading={loading}
-            dataSource={rows}
-            locale={{ emptyText: "暂无线缆" }}
-            pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else setPage(p); } }}
-            columns={columns}
-          />
+      {/* 表格卡（满宽） */}
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 4px 10px", flexWrap: "wrap" }}>
+          <Input.Search placeholder="搜索编码 / 名称" allowClear style={{ width: 240 }} onSearch={(v) => { setKeyword(v); setPage(1); }} />
+          <Select placeholder="全部类型" allowClear style={{ width: 150 }} value={filterType || undefined} onChange={(v) => { setFilterType(v ?? ""); setPage(1); }}
+            options={Object.entries(TYPE_LABEL).map(([k, v]) => ({ value: k, label: v.label }))} />
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 12, color: token.colorTextTertiary }}>共 {total} 条</span>
         </div>
-
-        {/* 右：新增 / 编辑面板 */}
-        <div className="wlt-glass" style={{ width: 396, padding: 16, display: "flex", flexDirection: "column", gap: 12, flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, flex: 1 }}>{editing ? `编辑线缆：${editing.name}` : "新增线缆"}</span>
-            {editing ? <Tag style={{ marginInlineEnd: 0, borderRadius: 999 }} color="blue">编辑中</Tag> : <Tag style={{ marginInlineEnd: 0, borderRadius: 999 }} color="blue">新建</Tag>}
-          </div>
-          {!open && !editing && (
-            <div style={{ textAlign: "center", padding: "40px 12px", color: token.colorTextTertiary, display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
-              <EnvironmentOutlined style={{ fontSize: 36, color: "#CBD6EC" }} />
-              <div style={{ fontWeight: 600 }}>新增 / 编辑线缆</div>
-              <div style={{ fontSize: 12, lineHeight: 1.6 }}>点击右上角「新增线缆」打开表单：填写基本信息 → 地图选点生成路径（≥2 点）→ 保存自动重算长度</div>
-              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增线缆</Button>
-            </div>
-          )}
-          {open && (
-            <Form form={form} layout="vertical" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              {!editing && (
-                <Form.Item name="code" label="线缆编码" rules={[{ required: true, message: "请输入编码" }]} style={{ marginBottom: 12 }}>
-                  <Input maxLength={50} placeholder="如 DL-001" />
-                </Form.Item>
-              )}
-              <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]} style={{ marginBottom: 12 }}>
-                <Input maxLength={100} placeholder="如：环网 10kV 电缆 · 东区段" />
-              </Form.Item>
-              <Form.Item name="type" label="类型" rules={[{ required: true }]} style={{ marginBottom: 12 }}>
-                <Radio.Group optionType="button" buttonStyle="solid" style={{ display: "flex" }}>
-                  {Object.entries(TYPE_LABEL).map(([k, v]) => <Radio.Button key={k} value={k} style={{ flex: 1, textAlign: "center", borderRadius: 10 }}>{v.label}</Radio.Button>)}
-                </Radio.Group>
-              </Form.Item>
-              <Form.Item name="status" label="状态" rules={[{ required: true }]} style={{ marginBottom: 12 }}>
-                <Select options={Object.entries(STATUS_LABEL).map(([k, v]) => ({ value: Number(k), label: v.label }))} />
-              </Form.Item>
-              <Form.Item name="description" label="描述" style={{ marginBottom: 12 }}>
-                <Input.TextArea rows={2} maxLength={500} />
-              </Form.Item>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: token.colorTextSecondary, marginBottom: 6 }}>路径节点（≥2 · 点击地图加点）</div>
-              <div style={{ height: 220, borderRadius: 12, overflow: "hidden", border: `1px solid ${token.colorBorder}`, marginBottom: 8 }}>
-                <MapView sources={sources} overlays={{ cables: editing ? [editing] : [], faults: [], markersByCable: {} }}
-                  previewPath={points.map((p) => [p.lat, p.lng])} onPick={addPoint}
-                  picking={picking ? "点击地图添加路径节点（选点自动连线预览）" : undefined} height="220px" />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 150, overflowY: "auto", marginBottom: 8 }}>
-                {points.map((p, i) => (
-                  <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 8, background: "#F6F8FE", borderRadius: 8, padding: "5px 10px" }}>
-                    <span style={{ width: 22, height: 22, borderRadius: 11, background: "#EAEFFF", color: "#3B5BDB", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
-                    <span style={{ fontSize: 12, color: token.colorTextSecondary, flex: 1, fontVariantNumeric: "tabular-nums" }}>{p.lat.toFixed(6)}, {p.lng.toFixed(6)}</span>
-                    <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => setPoints((ps) => ps.filter((x) => x.key !== p.key))} />
-                  </div>
-                ))}
-                {!points.length && <span style={{ fontSize: 11.5, color: token.colorTextTertiary }}>尚未添加节点</span>}
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <Button icon={<PlusOutlined />} onClick={() => setPicking(true)} style={{ flex: 1 }}>地图选点</Button>
-              </div>
-              {markers.length > 0 && <span style={{ fontSize: 11, color: token.colorTextTertiary }}>已有关联标记点：{markers.map((m) => m.label || m.marker_type).join("、")}</span>}
-              <div style={{ display: "flex", gap: 10, marginTop: 12, borderTop: `1px solid ${token.colorBorder}`, paddingTop: 12 }}>
-                <Button style={{ width: 120 }} onClick={() => setOpen(false)}>取消</Button>
-                <Button type="primary" icon={<CheckOutlined />} loading={saving} style={{ flex: 1 }} onClick={() => void save()}>保存线缆</Button>
-              </div>
-            </Form>
-          )}
-        </div>
+        <Table<CableItem>
+          rowKey="id"
+          loading={loading}
+          dataSource={rows}
+          locale={{ emptyText: "暂无线缆" }}
+          pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else setPage(p); } }}
+          columns={columns}
+        />
       </div>
+
+      {/* 新增 / 编辑线缆弹窗（原右侧常驻面板 → Modal） */}
+      <Modal
+        title={<Space size={8}>{editing ? `编辑线缆：${editing.name}` : "新增线缆"}<Tag style={{ marginInlineEnd: 0, borderRadius: 999 }} color="blue">{editing ? "编辑中" : "新建"}</Tag></Space>}
+        open={open}
+        onCancel={() => setOpen(false)}
+        width={640}
+        centered
+        footer={null}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
+          {!editing && (
+            <Form.Item name="code" label="线缆编码" rules={[{ required: true, message: "请输入编码" }]} style={{ marginBottom: 12 }}>
+              <Input maxLength={50} placeholder="如 DL-001" />
+            </Form.Item>
+          )}
+          <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]} style={{ marginBottom: 12 }}>
+            <Input maxLength={100} placeholder="如：环网 10kV 电缆 · 东区段" />
+          </Form.Item>
+          <Form.Item name="type" label="类型" rules={[{ required: true }]} style={{ marginBottom: 12 }}>
+            <Radio.Group optionType="button" buttonStyle="solid" style={{ display: "flex" }}>
+              {Object.entries(TYPE_LABEL).map(([k, v]) => <Radio.Button key={k} value={k} style={{ flex: 1, textAlign: "center", borderRadius: 10 }}>{v.label}</Radio.Button>)}
+            </Radio.Group>
+          </Form.Item>
+          <Form.Item name="status" label="状态" rules={[{ required: true }]} style={{ marginBottom: 12 }}>
+            <Select options={Object.entries(STATUS_LABEL).map(([k, v]) => ({ value: Number(k), label: v.label }))} />
+          </Form.Item>
+          <Form.Item name="description" label="描述" style={{ marginBottom: 12 }}>
+            <Input.TextArea rows={2} maxLength={500} />
+          </Form.Item>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: token.colorTextSecondary, marginBottom: 6 }}>路径节点（≥2 · 点击地图加点）</div>
+          <div style={{ height: 220, borderRadius: 12, overflow: "hidden", border: `1px solid ${token.colorBorder}`, marginBottom: 8 }}>
+            <MapView sources={sources} overlays={{ cables: editing ? [editing] : [], faults: [], markersByCable: {} }}
+              previewPath={points.map((p) => [p.lat, p.lng])} onPick={addPoint}
+              picking={picking ? "点击地图添加路径节点（选点自动连线预览）" : undefined} height="220px" />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 150, overflowY: "auto", marginBottom: 8 }}>
+            {points.map((p, i) => (
+              <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 8, background: "#F6F8FE", borderRadius: 8, padding: "5px 10px" }}>
+                <span style={{ width: 22, height: 22, borderRadius: 11, background: "#EAEFFF", color: "#3B5BDB", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
+                <span style={{ fontSize: 12, color: token.colorTextSecondary, flex: 1, fontVariantNumeric: "tabular-nums" }}>{p.lat.toFixed(6)}, {p.lng.toFixed(6)}</span>
+                <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => setPoints((ps) => ps.filter((x) => x.key !== p.key))} />
+              </div>
+            ))}
+            {!points.length && <span style={{ fontSize: 11.5, color: token.colorTextTertiary }}>尚未添加节点，点击下方「地图选点」开始</span>}
+          </div>
+          <Button icon={<PlusOutlined />} onClick={() => setPicking(true)} block>地图选点</Button>
+          {markers.length > 0 && <span style={{ fontSize: 11, color: token.colorTextTertiary, display: "block", marginTop: 8 }}>已有关联标记点：{markers.map((m) => m.label || m.marker_type).join("、")}</span>}
+          <div style={{ display: "flex", gap: 10, marginTop: 14, borderTop: `1px solid ${token.colorBorder}`, paddingTop: 12 }}>
+            <Button style={{ width: 120 }} onClick={() => setOpen(false)}>取消</Button>
+            <Button type="primary" icon={<CheckOutlined />} loading={saving} style={{ flex: 1 }} onClick={() => void save()}>保存线缆</Button>
+          </div>
+        </Form>
+      </Modal>
     </div>
   );
 }

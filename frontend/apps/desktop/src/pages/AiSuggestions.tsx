@@ -225,14 +225,13 @@ export function AiSuggestionsPage() {
         </div>
       </div>
 
-      {/* 左列表 + 右详情（设计页 30） */}
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 420, background: "#fff", border: "1px solid #E4EAF6", borderRadius: 12, boxShadow: "0 6px 24px rgba(30,36,51,.06)", overflow: "hidden" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 20px", background: "#F6F8FE", borderBottom: "1px solid #EFF3FC" }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#1E2433" }}>待处理建议</span>
-            <span style={{ fontSize: 12, color: "#8A93A8" }}>勾选可批量忽略；点击「详情」看右侧</span>
-          </div>
-          <div style={{ padding: "12px 20px 4px" }}>
+      {/* 建议列表（设计页 30，满宽） */}
+      <div className="wlt-glass" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 20px", background: "#F6F8FE", borderBottom: "1px solid #EFF3FC" }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#1E2433" }}>待处理建议</span>
+          <span style={{ fontSize: 12, color: "#8A93A8" }}>勾选可批量忽略；点「详情」查看完整信息</span>
+        </div>
+        <div style={{ padding: "12px 20px 4px" }}>
           <DataTable
             rowKey="id"
             columns={columns}
@@ -242,41 +241,38 @@ export function AiSuggestionsPage() {
             locale={{ emptyText: "暂无待处理建议" }}
             onBatchDelete={async (keys) => { for (const k of keys) await aiApi.ignore(Number(k)); message.success(`已忽略 ${keys.length} 条建议`); void load(); }}
           />
-          </div>
-        </div>
-
-        {/* 右侧详情面板 */}
-        <div className="wlt-glass" style={{ width: 320, padding: 16, flexShrink: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-          {!selected ? (
-            <div style={{ textAlign: "center", padding: "40px 12px", color: "#8A93A8" }}>
-              <RobotOutlined style={{ fontSize: 32, color: "#CBD6EC" }} />
-              <div style={{ fontWeight: 600, marginTop: 10 }}>建议详情</div>
-              <div style={{ fontSize: 12, lineHeight: 1.7 }}>点击左侧建议行的「详情」查看该建议的完整信息与操作</div>
-            </div>
-          ) : (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <RobotOutlined style={{ color: "#5B7FFF" }} />
-                <span style={{ fontSize: 15, fontWeight: 700 }}>{selected.product_name}</span>
-                <Tag color="blue" style={{ marginInlineEnd: 0 }}>{selected.model}</Tag>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, fontSize: 12.5 }}>
-                <div><div style={{ color: "#8A93A8" }}>规格型号</div><div>{selected.suggestion?.spec || "—"}</div></div>
-                <div><div style={{ color: "#8A93A8" }}>建议分类</div><div>{selected.suggestion?.category || "—"}</div></div>
-                <div><div style={{ color: "#8A93A8" }}>建议理由</div><div>{selected.suggestion?.note || "—"}</div></div>
-                <div><div style={{ color: "#8A93A8" }}>识别时间</div><div>{selected.created_at}</div></div>
-              </div>
-              <div style={{ display: "flex", gap: 8, borderTop: `1px solid #EFF3FC`, paddingTop: 12 }}>
-                <Button size="small" type="primary" style={{ flex: 1 }} onClick={() => openAccept(selected)}>确认新增</Button>
-                <Button size="small" style={{ flex: 1 }} onClick={() => void toPlan(selected)}>一键转采购计划</Button>
-                <Popconfirm title="确认忽略该建议？" onConfirm={async () => { try { await aiApi.ignore(selected.id); message.success("已忽略"); setSelected(null); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
-                  <Button size="small" danger style={{ flex: 1 }}>忽略</Button>
-                </Popconfirm>
-              </div>
-            </>
-          )}
         </div>
       </div>
+
+      {/* 建议详情弹窗 */}
+      <Modal
+        title={<Space size={8}><RobotOutlined style={{ color: "#5B7FFF" }} />{selected?.product_name ?? "建议详情"}{selected && <Tag color="blue" style={{ marginInlineEnd: 0 }}>{selected.model}</Tag>}</Space>}
+        open={Boolean(selected)}
+        onCancel={() => setSelected(null)}
+        width={520}
+        centered
+        footer={
+          selected ? (
+            <Space style={{ display: "flex", justifyContent: "flex-end" }}>
+              <Button onClick={() => setSelected(null)}>关闭</Button>
+              <Popconfirm title="确认忽略该建议？" onConfirm={async () => { try { await aiApi.ignore(selected.id); message.success("已忽略"); setSelected(null); void load(); } catch (e) { message.error(e instanceof Error ? e.message : "失败"); } }}>
+                <Button danger>忽略</Button>
+              </Popconfirm>
+              <Button onClick={() => void toPlan(selected)}>一键转采购计划</Button>
+              <Button type="primary" onClick={() => openAccept(selected)}>确认新增</Button>
+            </Space>
+          ) : null
+        }
+      >
+        {selected && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, fontSize: 13 }}>
+            <div><div style={{ color: "#8A93A8", fontSize: 12 }}>规格型号</div><div>{selected.suggestion?.spec || "—"}</div></div>
+            <div><div style={{ color: "#8A93A8", fontSize: 12 }}>建议分类</div><div>{selected.suggestion?.category || "—"}</div></div>
+            <div><div style={{ color: "#8A93A8", fontSize: 12 }}>建议理由</div><div style={{ lineHeight: 1.7 }}>{selected.suggestion?.note || "—"}</div></div>
+            <div><div style={{ color: "#8A93A8", fontSize: 12 }}>识别时间</div><div>{selected.created_at}</div></div>
+          </div>
+        )}
+      </Modal>
 
       {/* 确认新增材料 */}
       <Modal
@@ -293,29 +289,34 @@ export function AiSuggestionsPage() {
           <Form.Item label="材料名称" required style={{ marginBottom: 16 }}>
             <Input placeholder="缺省用 AI 建议名" maxLength={100} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
           </Form.Item>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
-            <Form.Item label="分类" style={{ marginBottom: 0 }} extra="二级/三级分类可挂材料；下拉底部可新增 / 编辑分类">
-              <Select
-                placeholder="选择分类"
-                options={form.category_id && !catLeaf.some((o) => o.id === form.category_id) ? [{ id: form.category_id, name: "原分类（顶级，请改挂二级/三级）" }, ...catLeaf] : catLeaf}
-                fieldNames={{ label: "name", value: "id" }}
-                value={form.category_id || undefined}
-                onChange={(v) => setForm((f) => ({ ...f, category_id: v }))}
-                allowClear
-                open={catSelOpen}
-                onDropdownVisibleChange={(o) => setCatSelOpen(o)}
-                dropdownRender={(menu) => (
-                  <>
-                    {menu}
-                    <Divider style={{ margin: "8px 0" }} />
-                    <Space style={{ padding: "0 8px 8px" }}>
-                      <Button type="link" size="small" icon={<PlusOutlined />} onClick={openCatCreate}>新增分类</Button>
-                      <Button type="link" size="small" icon={<EditOutlined />} onClick={openCatEdit}>编辑分类</Button>
-                    </Space>
-                  </>
-                )}
-              />
-            </Form.Item>
+          {/* 分类独占整行：路径型选项（一级/二级/三级）较长，窄列会被截断；下拉不按框宽裁剪以显示完整路径 */}
+          <Form.Item label="分类" style={{ marginBottom: 16 }} extra="二级/三级分类可挂材料；下拉底部可新增 / 编辑分类">
+            <Select
+              placeholder="选择分类"
+              style={{ width: "100%" }}
+              options={form.category_id && !catLeaf.some((o) => o.id === form.category_id) ? [{ id: form.category_id, name: "原分类（顶级，请改挂二级/三级）" }, ...catLeaf] : catLeaf}
+              fieldNames={{ label: "name", value: "id" }}
+              value={form.category_id || undefined}
+              onChange={(v) => setForm((f) => ({ ...f, category_id: v }))}
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              popupMatchSelectWidth={false}
+              open={catSelOpen}
+              onDropdownVisibleChange={(o) => setCatSelOpen(o)}
+              dropdownRender={(menu) => (
+                <>
+                  {menu}
+                  <Divider style={{ margin: "8px 0" }} />
+                  <Space style={{ padding: "0 8px 8px" }}>
+                    <Button type="link" size="small" icon={<PlusOutlined />} onClick={openCatCreate}>新增分类</Button>
+                    <Button type="link" size="small" icon={<EditOutlined />} onClick={openCatEdit}>编辑分类</Button>
+                  </Space>
+                </>
+              )}
+            />
+          </Form.Item>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Form.Item label="单位" style={{ marginBottom: 0 }}>
               <Select style={{ width: "100%" }} placeholder="选择单位" options={units} fieldNames={{ label: "name", value: "id" }} value={form.unit_id || undefined} onChange={(v) => setForm((f) => ({ ...f, unit_id: v }))} />
             </Form.Item>

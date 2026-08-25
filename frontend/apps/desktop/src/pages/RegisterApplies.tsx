@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Space, Tabs, Tag } from "antd";
+import { App, Button, Space, Tabs, Tag, theme } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type RegisterApply } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
 
-const STATUS: Record<number, { text: string; color: string }> = {
-  0: { text: "待审核", color: "orange" },
-  1: { text: "已通过", color: "green" },
-  2: { text: "已拒绝", color: "default" },
+/** 状态胶囊（设计页 36 调色板：待审核橙/已通过绿/已驳回灰）。 */
+const STATUS: Record<number, { text: string; bg: string; fg: string }> = {
+  0: { text: "待审核", bg: "#FEF4E2", fg: "#B45309" },
+  1: { text: "已通过", bg: "#E8F9EF", fg: "#15803D" },
+  2: { text: "已拒绝", bg: "#EFF3FC", fg: "#64748B" },
 };
 
 /** 注册审核（电脑端，超管 sys:user）：审核注册模式下的账号开通申请。 */
 export function RegisterAppliesPage() {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [list, setList] = useState<RegisterApply[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -64,7 +66,10 @@ export function RegisterAppliesPage() {
     { title: "姓名", dataIndex: "real_name", width: 110 },
     { title: "手机", dataIndex: "phone", width: 130 },
     { title: "邮箱", dataIndex: "email", width: 180 },
-    { title: "状态", width: 90, render: (_, r) => <Tag color={STATUS[r.status].color}>{STATUS[r.status].text}</Tag> },
+    { title: "状态", width: 90, render: (_, r) => {
+      const s = STATUS[r.status];
+      return <Tag style={{ borderRadius: 999, background: s.bg, color: s.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s.text}</Tag>;
+    } },
     {
       title: "操作",
       width: 160,
@@ -82,10 +87,14 @@ export function RegisterAppliesPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h2 style={{ margin: 0 }}>注册审核</h2>
+      {/* 页头（设计页 36）：标题+副题 */}
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>注册审核</h2>
+        <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+          审核注册模式下，新用户提交的注册申请在此处理；通过后账号即为「使用者」角色
+        </p>
       </div>
-      {/* 状态 Tabs（设计页 36：待审核/已通过/已驳回） */}
+      {/* 状态 Tabs（设计页 36：待审核/已通过/已驳回，全局胶囊样式） */}
       <Tabs
         activeKey={String(status ?? 0)}
         onChange={(k) => {
@@ -97,15 +106,16 @@ export function RegisterAppliesPage() {
           { key: "1", label: "已通过" },
           { key: "2", label: "已驳回" },
         ]}
+        style={{ marginBottom: 12 }}
       />
-      <p style={{ color: "#5B6478", fontSize: 12, marginBottom: 16 }}>
-        审核注册模式下，新用户提交的注册申请在此处理；通过后账号即为"使用者"角色。
-      </p>
-      <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection
-        batchActions={[
-          { label: "批量通过", onClick: async (keys) => { for (const k of keys) await adminApi.approveRegisterApply(Number(k)); message.success(`已通过 ${keys.length} 条申请`); void load(); } },
-          { label: "批量拒绝", danger: true, confirm: "确定拒绝选中的注册申请吗？", onClick: async (keys) => { for (const k of keys) await adminApi.rejectRegisterApply(Number(k)); message.success(`已拒绝 ${keys.length} 条申请`); void load(); } },
-        ]} />
+      {/* 表格卡 */}
+      <div className="wlt-glass" style={{ padding: 12 }}>
+        <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}  rowSelection
+          batchActions={[
+            { label: "批量通过", onClick: async (keys) => { for (const k of keys) await adminApi.approveRegisterApply(Number(k)); message.success(`已通过 ${keys.length} 条申请`); void load(); } },
+            { label: "批量拒绝", danger: true, confirm: "确定拒绝选中的注册申请吗？", onClick: async (keys) => { for (const k of keys) await adminApi.rejectRegisterApply(Number(k)); message.success(`已拒绝 ${keys.length} 条申请`); void load(); } },
+          ]} />
+      </div>
     </div>
   );
 }
