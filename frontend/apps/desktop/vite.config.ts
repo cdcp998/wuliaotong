@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { execSync, type ExecSyncOptions } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import react from "@vitejs/plugin-react";
@@ -16,9 +17,27 @@ const hasCerts =
 // 一致（scripts/check_version.py 强制校验）。构建时注入 __APP_VERSION__ 供前端展示，避免 UI 内硬编码。
 const pkg = JSON.parse(fs.readFileSync(fileURLToPath(new URL("./package.json", import.meta.url)), "utf-8")) as { version: string };
 
+// 构建信息（「关于」页展示）：git 短哈希作为构建号、当前版本最后提交日期作为发布日期。
+// 非 git 环境（zip 分发/CI 隔离）优雅回退为 dev 标识。
+const REPO_DIR = fileURLToPath(new URL("../../..", import.meta.url));
+function gitBuildInfo(): { hash: string; released: string; builtAt: string } {
+  try {
+    const gitOpts: ExecSyncOptions = { cwd: REPO_DIR, stdio: ["pipe", "pipe", "ignore"] };
+    const hash = execSync("git rev-parse --short HEAD", gitOpts).toString().trim();
+    const released = execSync("git log -1 --format=%cs", gitOpts).toString().trim();
+    return { hash, released, builtAt: new Date().toISOString().slice(0, 16).replace("T", " ") };
+  } catch {
+    return { hash: "dev", released: new Date().toISOString().slice(0, 10), builtAt: new Date().toISOString().slice(0, 16).replace("T", " ") };
+  }
+}
+const buildInfo = gitBuildInfo();
+
 export default defineConfig({
   plugins: [react()],
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_INFO__: JSON.stringify(buildInfo),
+  },
   // workspace 源码包不参与依赖预构建：@wlt/shared 改动即时 HMR（否则 dev server 用旧缓存，改动不生效）
   optimizeDeps: {
     exclude: ["@wlt/shared"],

@@ -88,6 +88,9 @@ export interface ModelSceneInfo {
 export const systemApi = {
   getSettings: () => http.get<Settings>("/settings"),
   updateSettings: (body: Partial<Settings>) => http.put<null>("/settings", body),
+  /** 服务端健康/版本信息（「关于」页：服务端版本 + 数据库/Redis 状态）。 */
+  serverHealth: () =>
+    http.get<{ status: string; version: string; db: string; redis: string }>("/health"),
   /** 用已保存的 SiliconFlow Key 拉取模型列表（保存设置后调用）。 */
   listSiliconflowModels: () => http.post<{ models: { id: string; owned_by: string }[] }>("/llm/siliconflow/models"),
   /** 用已保存的 DeepSeek Key 拉取模型列表（保存设置后调用）。 */
