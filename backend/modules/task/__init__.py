@@ -19,5 +19,14 @@ module = ModuleDef(
     audit_labels={
         "tasks": "任务管理",
     },
+    audit_actions={
+        ("POST", "/tasks"): "新建维修任务",
+        ("PUT", "/tasks/{id}"): "编辑维修任务",
+        ("POST", "/tasks/{id}/assign"): "派发任务",
+        ("POST", "/tasks/{id}/status"): "流转任务状态",
+        ("POST", "/tasks/{id}/records"): "提交维修记录",
+        ("POST", "/tasks/{id}/requisitions"): "任务关联领用单",
+        ("POST", "/tasks/{id}/knowledge-recommend"): "生成知识推荐",
+    },
     install_sql=["sql/install.sql"],
 )

@@ -46,6 +46,8 @@ export interface OperationLog {
   params: string;
   /** 请求体 JSON（脱敏后）——「具体改了什么」。 */
   body: string;
+  /** 字段级变更 old/new JSON——「修改前后对比」。 */
+  diff: string;
   ip: string;
   duration_ms: number;
   status_code: number;

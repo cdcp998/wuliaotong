@@ -154,6 +154,7 @@ CREATE TABLE sys_operation_log (
   url         VARCHAR(255) NOT NULL DEFAULT '',
   params      TEXT        NULL COMMENT '请求参数 JSON',
   body        TEXT        NULL COMMENT '请求体 JSON（脱敏后，记录具体改动）',
+  diff        TEXT        NULL COMMENT '字段级变更 old/new JSON（before_flush 采集）',
   ip          VARCHAR(64) NOT NULL DEFAULT '',
   user_agent  VARCHAR(255) NOT NULL DEFAULT '',
   duration_ms INT         NOT NULL DEFAULT 0,

@@ -20,6 +20,14 @@ module = ModuleDef(
     audit_labels={
         "knowledge": "知识库",
     },
+    audit_actions={
+        ("POST", "/knowledge"): "新建知识条目",
+        ("PUT", "/knowledge/{id}"): "编辑知识条目",
+        ("POST", "/knowledge/{id}/publish"): "发布知识条目",
+        ("POST", "/knowledge/{id}/archive"): "归档知识条目",
+        ("POST", "/knowledge/{id}/materials"): "关联知识材料",
+        ("POST", "/knowledge/generate"): "AI 生成知识草稿",
+    },
     install_sql=["sql/install.sql"],
     jobs=[knowledge_worker_tick],
 )

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { App, Button, DatePicker, Drawer, Input, Select, Space, Table, Tag } from "antd";
+import { App, Button, Collapse, DatePicker, Drawer, Input, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
 import { DownloadOutlined, SearchOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
 import { adminApi, type OperationLog } from "@wlt/shared";
+
+import { formatDiffValue, maskValue, parseDiff, summarizeDiff, TABLE_LABELS } from "./logFieldMeta";
 
 const MODULES = ["认证", "系统", "系统设置", "用户", "角色", "注册审核", "材料", "分类", "供应商", "仓库", "货架", "库位", "组织单位", "删除审核", "导航管理", "采购入库", "采购计划", "期初", "库存调拨", "盘点", "其他出入库", "领用申请", "通知", "OCR/大模型", "AI建议", "文件", "存储", "AI调用日志", "备份", "其他"];
 
@@ -91,8 +93,10 @@ export function LogsPage() {
     URL.revokeObjectURL(a.href);
   }
 
-  /** 详情列摘要：接口路径尾段 + 改动字段名（PUT/POST 取 body 顶层键）+ query 摘录。 */
+  /** 详情列摘要：优先字段级 diff（「修改了 用户状态、手机号」），无 diff 回退路径+参数摘录。 */
   function detailSummary(r: OperationLog): string {
+    const s = summarizeDiff(r.diff, r.method);
+    if (s) return s;
     const seg = (r.url || "").split("/").filter(Boolean).pop() ?? "";
     const parts: string[] = [];
     if ((r.method === "PUT" || r.method === "POST" || r.method === "PATCH") && r.body) {
@@ -121,6 +125,87 @@ export function LogsPage() {
     } catch {
       return v;
     }
+  }
+
+  /** diff 变更行 → 「修改了 …」分组折叠详情。 */
+  function DiffDetail({ diffText }: { diffText: string }) {
+    const rows = parseDiff(diffText);
+    if (!rows.length) return null;
+    const items = rows.map((row, i) => ({
+      key: String(i),
+      label: (
+        <span style={{ fontSize: 13 }}>
+          <b>{TABLE_LABELS[row.table] ?? row.table}</b>
+          {row.pk && <span style={{ color: "#8A93A8", marginLeft: 6 }}>#{row.pk}</span>}
+          <Tag style={{ marginLeft: 8, borderRadius: 999, background: row.op === "delete" ? "#FDEBEC" : row.op === "insert" ? "#E8F9EF" : "#EAEFFF", color: row.op === "delete" ? "#DC2626" : row.op === "insert" ? "#15803D" : "#3B5BDB", borderColor: "transparent" }}>
+            {row.op === "insert" ? "新增" : row.op === "delete" ? "删除" : "修改"}
+          </Tag>
+          <span style={{ color: "#8A93A8", marginLeft: 8, fontSize: 12 }}>{row.fields.length} 个字段</span>
+        </span>
+      ),
+      children: (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {/* 表头 */}
+          <div style={{ display: "flex", gap: 12, fontSize: 11.5, color: "#8A93A8" }}>
+            <span style={{ width: 130 }}>字段</span>
+            <span style={{ flex: 1 }}>修改前</span>
+            <span style={{ width: 24, textAlign: "center" }} />
+            <span style={{ flex: 1 }}>修改后</span>
+          </div>
+          {row.fields.map((f) => {
+            const isNew = f.old === null && f.new !== null;
+            const isRemoved = f.new === null && f.old !== null;
+            return (
+              <div key={f.field} style={{ display: "flex", alignItems: "stretch", gap: 12 }}>
+                <div style={{ width: 130, fontSize: 12.5, fontWeight: 600, color: "#1E2433", paddingTop: 5 }} title={f.field}>{f.label}</div>
+                {/* 旧值 */}
+                <div
+                  style={{
+                    flex: 1, borderRadius: 8, padding: "5px 10px", fontSize: 12.5,
+                    background: isRemoved ? "#FEF4E2" : "#FDEBEC",
+                    border: `1px solid ${isRemoved ? "#FBD38D" : "#F5C2C6"}`,
+                  }}
+                >
+                  {isNew ? (
+                    <span style={{ color: "#8A93A8", fontStyle: "italic" }}>（新增字段）</span>
+                  ) : (
+                    <span style={{ textDecoration: isRemoved ? undefined : "line-through", color: isRemoved ? "#B45309" : "#9B1C1C", wordBreak: "break-all" }}>
+                      {formatDiffValue(f.field, maskValue(f.field, f.old))}
+                    </span>
+                  )}
+                </div>
+                <div style={{ width: 24, textAlign: "center", alignSelf: "center", color: "#8A93A8" }}>→</div>
+                {/* 新值 */}
+                <div
+                  style={{
+                    flex: 1, borderRadius: 8, padding: "5px 10px", fontSize: 12.5,
+                    background: isRemoved ? "#EFF3FC" : "#E8F9EF",
+                    border: `1px solid ${isRemoved ? "#D9E3FF" : "#BBE7C8"}`,
+                  }}
+                >
+                  {isRemoved ? (
+                    <span style={{ color: "#8A93A8", fontStyle: "italic" }}>（已移除）</span>
+                  ) : (
+                    <span style={{ fontWeight: 500, color: "#166534", wordBreak: "break-all" }}>
+                      {formatDiffValue(f.field, maskValue(f.field, f.new))}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ),
+    }));
+    return (
+      <Collapse
+        size="small"
+        defaultActiveKey={rows.length === 1 ? [items[0].key] : []}
+        items={items}
+        bordered={false}
+        style={{ background: "#F6F8FE", borderRadius: 10 }}
+      />
+    );
   }
 
   const columns: ColumnsType<OperationLog> = [
@@ -214,9 +299,9 @@ export function LogsPage() {
         </p>
       </div>
 
-      <Drawer title="日志详情" open={Boolean(detail)} onClose={() => setDetail(null)} width={480}>
+      <Drawer title="日志详情" open={Boolean(detail)} onClose={() => setDetail(null)} width={560}>
         {detail && (
-          <Space direction="vertical" size={10} style={{ width: "100%" }}>
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
             <LogField label="时间">{detail.created_at}</LogField>
             <LogField label="操作人">{detail.username}</LogField>
             <LogField label="模块">{detail.module}</LogField>
@@ -229,7 +314,13 @@ export function LogsPage() {
             <LogField label="IP">{detail.ip}</LogField>
             <LogField label="耗时">{detail.duration_ms} ms</LogField>
             <LogField label="URL" mono>{detail.url || "—"}</LogField>
-            {detail.body && detail.body !== "{}" ? (
+            {/* 字段级修改前后对比（优先展示；无 diff 的历史日志回退原始 JSON） */}
+            {parseDiff(detail.diff).length > 0 ? (
+              <div>
+                <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 6 }}>变更内容（字段级前后对照）</div>
+                <DiffDetail diffText={detail.diff} />
+              </div>
+            ) : detail.body && detail.body !== "{}" ? (
               <div>
                 <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 6 }}>
                   提交内容（具体改动）
@@ -238,10 +329,31 @@ export function LogsPage() {
                 <pre style={{ margin: 0, padding: 10, background: "#F0F5FF", border: "1px solid #D9E3FF", borderRadius: 8, fontSize: 12, color: "#1E2433", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 320, overflowY: "auto" }}>{prettyJson(detail.body)}</pre>
               </div>
             ) : null}
-            <div>
-              <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 6 }}>查询参数</div>
-              <pre style={{ margin: 0, padding: 10, background: "#F6F8FE", borderRadius: 8, fontSize: 12, color: "#1E2433", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 200, overflowY: "auto" }}>{prettyJson(detail.params) || "—"}</pre>
-            </div>
+            <Collapse
+              size="small"
+              items={[
+                {
+                  key: "raw",
+                  label: <span style={{ fontSize: 12, color: "#8A93A8" }}>原始数据（查询参数 / 请求体）</span>,
+                  children: (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11.5, color: "#8A93A8", marginBottom: 4 }}>查询参数</div>
+                        <pre style={{ margin: 0, padding: 8, background: "#F6F8FE", borderRadius: 8, fontSize: 11.5, whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 160, overflowY: "auto" }}>{prettyJson(detail.params) || "—"}</pre>
+                      </div>
+                      {detail.body ? (
+                        <div>
+                          <div style={{ fontSize: 11.5, color: "#8A93A8", marginBottom: 4 }}>请求体（脱敏）</div>
+                          <pre style={{ margin: 0, padding: 8, background: "#F6F8FE", borderRadius: 8, fontSize: 11.5, whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 200, overflowY: "auto" }}>{prettyJson(detail.body)}</pre>
+                        </div>
+                      ) : null}
+                    </div>
+                  ),
+                },
+              ]}
+              bordered={false}
+              style={{ background: "#F6F8FE", borderRadius: 10 }}
+            />
           </Space>
         )}
       </Drawer>

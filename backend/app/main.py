@@ -56,6 +56,10 @@ async def lifespan(app: FastAPI):
     # Proactor accept 加固：客户端在 accept 完成前断开时 stdlib 会关闭监听 socket、服务停止
     # 接受新连接，补丁改为短暂退避后重挂 accept（app/core/loop_guard.py）
     install_proactor_accept_patch()
+    # 操作日志字段级变更采集：注册全局 SQLAlchemy before_flush 监听（幂等）
+    from app.core.audit_diff import install_audit_diff_listeners
+
+    install_audit_diff_listeners()
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -198,7 +202,9 @@ _AUDIT_METHOD_VERB = {"POST": "新增", "PUT": "修改", "DELETE": "删除"}
 
 _AUDIT_ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/login"): "登录系统",
+    ("POST", "/auth/login"): "登录系统",
     ("POST", "/logout"): "退出登录",
+    ("POST", "/auth/logout"): "退出登录",
     ("PUT", "/password"): "修改密码",
     ("POST", "/forgot"): "申请找回密码",
     ("POST", "/forgot/reset"): "重置密码",
@@ -329,10 +335,11 @@ def _audit_action(method: str, path: str) -> tuple[str, str]:
     return f"{module}{verb}", module
 
 
-def _audit_log(db, request: Request, status_code: int, duration_ms: int, body_text: str = "") -> None:
+def _audit_log(db, request: Request, status_code: int, duration_ms: int, body_text: str = "", diff_text: str = "") -> None:
     """写操作审计（sys_operation_log）。fire-and-forget，失败不影响主流程。
 
-    body_text 为已脱敏的请求体 JSON（「具体改了什么」），空串表示无体/未采集。
+    body_text 为已脱敏的请求体 JSON（「具体改了什么」）；diff_text 为字段级
+    old/new 变更 JSON（来自 SQLAlchemy before_flush 钩子）。
     """
     try:
         user = resolve_session_user(db, request.cookies.get(settings.session_cookie_name))
@@ -351,6 +358,7 @@ def _audit_log(db, request: Request, status_code: int, duration_ms: int, body_te
                 duration_ms=duration_ms,
                 status_code=status_code,
                 body=body_text,
+                diff=diff_text,
             )
         )
         db.commit()
@@ -423,12 +431,17 @@ async def _capture_body_for_audit(request: Request) -> str:
 
 async def audit_middleware(request: Request, call_next):
     body_text = await _capture_body_for_audit(request)
+    # 字段级 diff 捕获：ContextVar 容器跨中间件/handler 任务共享引用
+    from app.core import audit_diff
+
+    diff_token = audit_diff.begin_request_capture()
     start = time.time()
     try:
         response = await call_next(request)
     except Exception:
         logger.error("请求异常 %s %s", request.method, request.url.path, exc_info=True)
         raise
+    diff_text = audit_diff.end_request_capture(diff_token)
     duration_ms = int((time.time() - start) * 1000)
     # 文件日志：关键操作（写方法 + 非 2xx）记录 INFO/WARN，便于按天日志排障
     level = logging.INFO if response.status_code < 400 else logging.WARNING
@@ -440,7 +453,7 @@ async def audit_middleware(request: Request, call_next):
             def _run() -> None:
                 db = SessionLocal()
                 try:
-                    _audit_log(db, request, response.status_code, duration_ms, body_text)
+                    _audit_log(db, request, response.status_code, duration_ms, body_text, diff_text)
                 finally:
                     db.close()
                     _audit_semaphore.release()
@@ -496,9 +509,10 @@ app.include_router(modules_api.router, prefix=settings.api_prefix)
 # - sys_module 表不存在/数据库不可用 → 静默跳过（核心启动不受影响）
 _module_register_summary = register_modules(app)
 if _module_register_summary["modules"]:
-    from app.core.modules import module_audit_labels
+    from app.core.modules import module_audit_actions, module_audit_labels
 
     _AUDIT_MODULES.update(module_audit_labels())
+    _AUDIT_ACTIONS.update(module_audit_actions())
     logger.info(
         "模块插件加载完成：%s（登记 %d，挂载 %d）",
         ",".join(_module_register_summary["modules"]),

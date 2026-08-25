@@ -72,6 +72,7 @@ class ModuleDef:
     router: APIRouter | None = None  # 模块全部接口（router 级 require_module_enabled(code)）
     dependencies: list[str] = field(default_factory=list)  # 如 ["cable>=1.2.0,<2.0.0"]
     audit_labels: dict[str, str] = field(default_factory=dict)  # URL 首段 → 中文模块名
+    audit_actions: dict[tuple[str, str], str] = field(default_factory=dict)  # (方法, 归一化路径) → 中文动作
     install_sql: list[str] = field(default_factory=list)  # 如 ["sql/install.sql"]
     migrations_dir: str = "sql/migrations"
     migration_executors: dict[str, Callable] = field(default_factory=dict)  # 文件名 → python 执行函数
@@ -136,6 +137,14 @@ def module_audit_labels() -> dict[str, str]:
     for d in _defs.values():
         labels.update(d.audit_labels)
     return labels
+
+
+def module_audit_actions() -> dict[tuple[str, str], str]:
+    """汇总各模块路由级审计动作（(方法, 归一化路径) → 中文动作），供 main.py 合并。"""
+    actions: dict[tuple[str, str], str] = {}
+    for d in _defs.values():
+        actions.update(d.audit_actions)
+    return actions
 
 
 def all_module_jobs() -> list[Callable]:
