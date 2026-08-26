@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { TabBar } from "antd-mobile";
 
-import { notificationApi, useAuthStore } from "@wlt/shared";
+import { notificationApi } from "@wlt/shared";
 
 interface TabItem {
   key: string;
@@ -34,13 +34,6 @@ const TABS: TabItem[] = [
     activeIcon: stroke(<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>, true),
   },
   {
-    key: "apply",
-    title: "领用",
-    path: "/requisitions/new",
-    icon: stroke(<><path d="M12 3v18M3 12h18" /></>),
-    activeIcon: stroke(<path d="M12 3v18M3 12h18" strokeWidth={2.4} />, true),
-  },
-  {
     key: "notice",
     title: "通知",
     path: "/notifications",
@@ -56,12 +49,11 @@ const TABS: TabItem[] = [
   },
 ];
 
-/** 手机端 TabBar 布局（《UI设计方案.md》§3.3）：首页/功能/领用/通知/我的。 */
+/** 手机端 TabBar 布局：首页/功能/通知/我的（四 Tab；领用入口在「功能」页卡片，
+ *  不再占用底部导航——/requisitions/new 路由保留，功能页/我的申请/OCR 仍可进入）。 */
 export function TabLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const user = useAuthStore((s) => s.user);
-  const hasPerm = useAuthStore((s) => s.hasPerm);
   const [unread, setUnread] = useState(0);
   // 内容滚动容器：TabBar 点击当前 Tab → 平滑回到顶端；切换 Tab → 路由变化即时回顶端
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -70,7 +62,8 @@ export function TabLayout() {
     // 拍照识别页（/ocr/scan）现归属「功能」Tab 高亮（功能卡片里的「拍照识别」进入）
     if (location.pathname.startsWith("/ocr/scan")) return "functions";
     const hit = TABS.find((t) => (t.path !== "/" ? location.pathname.startsWith(t.path) : location.pathname === t.path));
-    return hit?.key ?? "home";
+    // 非 Tab 页（如 /requisitions/new、/stock/query）不高亮任何 Tab，避免误亮「首页」
+    return hit?.key ?? "";
   })();
 
   // 路由切换（点击不同 Tab）时内容区即时回顶，避免停留在上一页的滚动位置
@@ -97,9 +90,6 @@ export function TabLayout() {
     };
   }, []);
 
-  // 使用者无领用权限时隐藏"领用"入口
-  const visibleTabs = TABS.filter((t) => (t.key === "apply" ? hasPerm("req:apply") || user?.role?.code === "super_admin" : true));
-
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#F2F5FB" }}>
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto" }}>
@@ -119,7 +109,7 @@ export function TabLayout() {
           boxShadow: "0 -4px 16px rgba(30,36,51,0.05)",
         }}
       >
-        {visibleTabs.map((t) => (
+        {TABS.map((t) => (
           <TabBar.Item
             key={t.key}
             icon={(active: boolean) => (active ? t.activeIcon : t.icon)}

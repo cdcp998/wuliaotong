@@ -34,7 +34,7 @@ const MyTasksPage = lazy(() => import("./modules/task/MyTasks").then((m) => ({ d
 const MobileKnowledgePage = lazy(() => import("./modules/knowledge/Knowledge").then((m) => ({ default: m.MobileKnowledgePage })));
 const MobileDevicesPage = lazy(() => import("./modules/device/Devices").then((m) => ({ default: m.MobileDevicesPage })));
 
-/** TabBar 五页：首页/功能/领用/通知/我的（《UI设计方案.md》§3.3）。
+/** TabBar 四页：首页/功能/通知/我的（领用入口在「功能」页，路由 /requisitions/new 保留）。
  * 生产环境经 Nginx 反代部署在 /m/ 前缀（入口后缀），路由 basename=/m/ 后
  * 应用内跳转不再拼接前缀，刷新/直达 /m/xxx 均正常；开发环境无前缀。 */
 const tabRouter = createBrowserRouter(
