@@ -8,10 +8,13 @@
  * 分区表单 + 底部固定操作条（脏状态提示 / 放弃修改 / 清除覆盖 / 保存）。
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { App, Button, Card, Col, ColorPicker, InputNumber, Row, Select, Space, Switch, Tag } from "antd";
-import { DatabaseOutlined, FileExcelOutlined, FileSearchOutlined, GlobalOutlined, ProfileOutlined, SaveOutlined, SwapOutlined, UndoOutlined } from "@ant-design/icons";
+import { App, Button, Card, Col, ColorPicker, InputNumber, Row, Select, Space, Switch, Tag, Tooltip } from "antd";
+import { DatabaseOutlined, FileExcelOutlined, FileSearchOutlined, GlobalOutlined, ProfileOutlined, SaveOutlined, SettingOutlined, SwapOutlined, UndoOutlined } from "@ant-design/icons";
 
-import { systemApi } from "@wlt/shared";
+import { adminApi, checkApi, exportReportPreview, systemApi } from "@wlt/shared";
+
+import { ExportFormatModal, type ExportField } from "../components/ExportFormatModal";
+import { CHECK_FIELDS, FLOW_FIELDS, LOGS_FIELDS, STOCK_FIELDS } from "./exportFields";
 
 type Format = Record<string, any>;
 
@@ -21,6 +24,25 @@ const MODULES: { key: string; label: string; desc: string; icon: ReactNode }[] =
   { key: "check_export", label: "盘点导出", desc: "收发存模板 + 盘点结果", icon: <ProfileOutlined /> },
   { key: "flow", label: "库存流水导出", desc: "出入库流明明细", icon: <SwapOutlined /> },
 ];
+
+/** 各模块「导出格式设置」弹窗接入：字段定义 / 本地存储键 / 预览数据源（前 10 条真实数据）。
+ * 与各业务模块页内按钮共用同一 storageKey，任意一处修改全局生效。 */
+const MODULE_EXPORT_META: Record<string, { fields: ExportField[]; storageKey: string; preview: () => Promise<unknown[][]> }> = {
+  stock_query: { fields: STOCK_FIELDS, storageKey: "export_fmt_stock", preview: () => exportReportPreview({ type: "stock" }).then((r) => r.rows) },
+  operation_logs: { fields: LOGS_FIELDS, storageKey: "export_fmt_operation_logs", preview: () => adminApi.logsExportPreview().then((r) => r.rows) },
+  check_export: {
+    fields: CHECK_FIELDS,
+    storageKey: "export_fmt_check_export",
+    // 预览取最近一张盘点单；无盘点单时返回空（仍可选择列/格式并保存）
+    preview: async () => {
+      const d = await checkApi.list(undefined, 1, 1);
+      const id = d.list[0]?.id;
+      if (!id) return [];
+      return (await checkApi.exportPreview(id)).rows;
+    },
+  },
+  flow: { fields: FLOW_FIELDS, storageKey: "export_fmt_flow", preview: () => exportReportPreview({ type: "flow" }).then((r) => r.rows) },
+};
 
 const C = {
   primary: "#5B7FFF",
@@ -84,6 +106,9 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
   /** 当前作用域内用户未保存的编辑增量（相对合并结果）。 */
   const [edits, setEdits] = useState<Format>({});
   const [saving, setSaving] = useState(false);
+  /** 当前打开「导出格式设置」弹窗的模块（null=关闭；global 无列级弹窗）。 */
+  const [fmtModule, setFmtModule] = useState<string | null>(null);
+  const fmtMeta = fmtModule ? MODULE_EXPORT_META[fmtModule] : null;
 
   const reload = () => {
     systemApi.getExportFormats().then((r) => {
@@ -159,7 +184,7 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
               <span style={{ fontSize: 17, fontWeight: 700, color: C.text }}>导出格式设置</span>
             </div>
             <div style={{ marginTop: 8, fontSize: 12.5, color: C.sub }}>
-              统一管理所有表格导出的样式与数据格式；各业务模块内的「导出设置」按钮会叠加此处配置。
+              统一管理所有表格导出的样式与数据格式；点击模块卡片右上角的 ⚙ 可直接打开该模块的「导出格式设置」弹窗（列选择 / 字段格式 / 列宽），各业务模块内的导出均会应用。
             </div>
             {/* 合并优先级链 */}
             <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 11.5 }}>
@@ -203,8 +228,20 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
                     <span style={{ width: 20, height: 20, borderRadius: 6, background: active ? C.primary : C.sectionBg, color: active ? "#fff" : C.deep, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11 }}>{m.icon}</span>
                     <b style={{ fontSize: 12.5, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.label}</b>
                   </span>
-                  {m.overridden && <span style={{ flexShrink: 0, fontSize: 10.5, background: "#E8F9EF", color: "#15803D", borderRadius: 999, padding: "1px 8px" }}>覆盖中</span>}
-                  {m.key === "global" && !active && <span style={{ flexShrink: 0, fontSize: 10.5, color: C.faint }}>默认</span>}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                    {m.overridden && <span style={{ fontSize: 10.5, background: "#E8F9EF", color: "#15803D", borderRadius: 999, padding: "1px 8px" }}>覆盖中</span>}
+                    {m.key === "global" && !active && <span style={{ fontSize: 10.5, color: C.faint }}>默认</span>}
+                    {m.key !== "global" && (
+                      <Tooltip title="打开该模块的「导出格式设置」弹窗（列选择 / 字段格式 / 列宽）">
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={<SettingOutlined style={{ color: active ? C.primary : C.sub }} />}
+                          onClick={(e) => { e.stopPropagation(); setFmtModule(m.key); }}
+                        />
+                      </Tooltip>
+                    )}
+                  </span>
                 </div>
                 <div style={{ marginTop: 5, fontSize: 11, color: m.overridden ? "#15803D" : C.sub, opacity: m.overridden ? undefined : 0.85 }}>{m.desc}</div>
               </div>
@@ -314,6 +351,17 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
           </Space>
         </div>
       )}
+
+      {/* 模块级「导出格式设置」弹窗（与业务模块页内按钮共用同一份本地格式，统一修改入口） */}
+      <ExportFormatModal
+        open={Boolean(fmtMeta)}
+        onClose={() => setFmtModule(null)}
+        fields={fmtMeta?.fields ?? []}
+        storageKey={fmtMeta?.storageKey ?? "export_fmt_none"}
+        getPreviewRows={() => (fmtMeta ? fmtMeta.preview() : Promise.resolve([]))}
+        onExport={() => message.info("请在对应业务页面点击「导出 Excel」，将自动应用此处保存的格式")}
+        hideExportAction
+      />
     </div>
   );
 }

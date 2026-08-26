@@ -87,9 +87,11 @@ export function ExportFormatModal(props: {
   getPreviewRows: () => unknown[][] | Promise<unknown[][]>;
   /** 「按此格式导出」回调（spec 已序列化为对象）。 */
   onExport: (spec: ExportFormatSpec) => void;
+  /** 隐藏「按此格式导出」按钮（从系统设置面板打开时仅调整格式，不在当前上下文导出）。 */
+  hideExportAction?: boolean;
 }) {
   const { message } = App.useApp();
-  const { open, onClose, fields, storageKey, getPreviewRows, onExport } = props;
+  const { open, onClose, fields, storageKey, getPreviewRows, onExport, hideExportAction } = props;
   const [spec, setSpec] = useState<ExportFormatSpec>(() => loadSpec(storageKey, fields));
   const [search, setSearch] = useState("");
   const [activeKey, setActiveKey] = useState<number | null>(null);
@@ -193,9 +195,11 @@ export function ExportFormatModal(props: {
           <Space>
             <Button onClick={onClose}>取消</Button>
             <Button type="primary" onClick={save}>保存设置</Button>
-            <Button type="primary" ghost onClick={exportNow} icon={<PlusOutlined style={{ color: "#5B7FFF" }} />}>
-              按此格式导出
-            </Button>
+            {!hideExportAction && (
+              <Button type="primary" ghost onClick={exportNow} icon={<PlusOutlined style={{ color: "#5B7FFF" }} />}>
+                按此格式导出
+              </Button>
+            )}
           </Space>
         </div>
       }
