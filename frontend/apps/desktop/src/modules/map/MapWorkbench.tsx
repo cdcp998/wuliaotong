@@ -22,10 +22,10 @@ import { mapApi, type MapSourceInfo } from "./api";
 import { MapView, type DrawnLine } from "./MapView";
 
 const TYPE_LABEL: Record<string, string> = { wire: "电线", fiber: "光缆", network: "网线" };
-/** 地图初始视图（指北回正 / 无数据时的视图）。 */
-const DEFAULT_VIEW: { center: LatLng; zoom: number } = { center: [30.2741, 120.1551], zoom: 12 };
+/** 「回到正视图」目标视图（有我的位置时居中当前位置，否则回默认中心）。 */
+const DEFAULT_VIEW: { center: LatLng; zoom: number } = { center: [30.2741, 120.1551], zoom: 15 };
 /** 「回到我的定位」目标缩放级别（街道级）。 */
-const MY_LOCATE_ZOOM = 16;
+const MY_LOCATE_ZOOM = 17;
 
 /** 工具栏小按钮（设计稿：40px 图标 + 8.5px 文字，激活=品牌蓝）。 */
 function ToolbarBtn({ active, tip, icon, label, onClick }: { active?: boolean; tip: string; icon: React.ReactNode; label: string; onClick: () => void }) {
