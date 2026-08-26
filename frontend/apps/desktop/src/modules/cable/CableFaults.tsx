@@ -329,9 +329,6 @@ export function CableFaultsPage() {
                 {i < FAULT_FLOW_STEPS.length - 1 && <span style={{ color: token.colorTextTertiary }}>›</span>}
               </span>
             ))}
-            <span style={{ fontSize: 11, color: token.colorTextTertiary, marginLeft: 8 }}>
-              故障状态由关联任务自动同步（领取→进行中、完毕→待审核、通过→已完成）{taskEnabled ? "；设备故障管理任务审核通过后设备自动回退快照前一状态" : ""}
-            </span>
           </div>
         </div>
 
