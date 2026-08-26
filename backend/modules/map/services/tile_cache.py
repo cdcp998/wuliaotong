@@ -235,6 +235,16 @@ def _compose_from_parent(source_cfg: dict, source: str, z: int, x: int, y: int) 
         return None
 
 
+def total_size_for(pieces: list[tuple[str, int, int, int]]) -> int:
+    """按增量注册表统计一组瓦片当前磁盘占用字节（未落盘/未登记计 0）。
+
+    区域下载完成时汇总真实占用用——无法下载的瓦片天然计 0，即「报告下载完毕时
+    磁盘空间按实际落盘如实统计」。
+    """
+    with _lock:
+        return sum(_tile_registry.get((str(s), int(z), int(x), int(y)), 0) for s, z, x, y in pieces)
+
+
 def remove_placeholder_tiles() -> dict:
     """全盘扫描删除已落盘的占位空瓦片（png+meta），统计注册表同步注销——存量清洗入口。"""
     removed = 0

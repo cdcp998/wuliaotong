@@ -574,3 +574,30 @@ def test_remove_placeholder_tiles_sweep(isolated_tile_cache):
     assert not ph_file.exists()
     assert not ph_file.with_suffix(".meta.json").exists()
     assert normal_file.read_bytes() == normal  # 正常瓦片不受影响
+
+
+# ============================ 无法下载瓦片的完成语义与磁盘统计 ============================
+
+def test_total_size_for_counts_only_registered_tiles(isolated_tile_cache):
+    """区域完成时的磁盘占用汇总：只计实际落盘瓦片；无法下载的缺口天然计 0。"""
+    tc, _root = isolated_tile_cache
+    _fake_fetch(tc, b"abc")  # 3 字节
+    cfg = {"url_template": "https://upstream/{z}/{x}/{y}", "max_daily": 0}
+    tc.get_tile(cfg, "esri", 10, 0, 0)
+    tc.get_tile(cfg, "esri", 10, 0, 1)
+
+    total = tc.total_size_for([
+        ("esri", 10, 0, 0),
+        ("esri", 10, 0, 1),
+        ("esri", 10, 9, 9),  # 无法下载 → 未落盘 → 计 0
+        ("other", 1, 1, 1),  # 其他源未登记 → 计 0
+    ])
+    assert total == 6
+
+
+def test_worker_max_retry_constant_is_defined():
+    """回归护栏：_MAX_RETRY 必须有定义——缺失会使失败路径触发 NameError、整个 tick 崩溃，
+    任务永远卡待下载、区域永远无法报告「下载完毕」（历史潜伏 bug）。"""
+    from app.modules.map.services import download_worker as dw
+
+    assert dw._MAX_RETRY >= 1

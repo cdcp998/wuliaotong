@@ -34,6 +34,8 @@ _CONC_MAX = 8
 _CONC_START = 4
 _BATCHES_PER_TICK = 5  # 每轮批次上限：limit ≈ 并发 × 5（最坏一轮 ≈ 5 × 单瓦片超时 15s）
 _COOLDOWN_SECONDS = 60.0
+_MAX_RETRY = 2  # 单瓦片失败重试上限：超过后置终态失败(2)——区域据此正常判定「下载完毕」，
+                # 无法下载的瓦片不再阻塞完成，磁盘统计按实际落盘如实计算
 
 # 进程内自适应状态（APScheduler max_instances=1 保证同一 job 不并发进入 tick，无需加锁）
 _concurrency = _CONC_START
@@ -166,6 +168,20 @@ def download_worker_tick() -> None:
             if pending == 0 and region.status == 1:
                 region.status = 2
                 region.last_download_at = datetime.now()
+                # 完成时如实统计磁盘占用：无法下载的瓦片按实际落盘计 0（不虚报、不再阻塞完成）
+                pieces = db.execute(
+                    select(MapDownloadTask.source, MapDownloadTask.z, MapDownloadTask.x, MapDownloadTask.y)
+                    .where(MapDownloadTask.region_id == region_id)
+                ).all()
+                region.cache_size = tile_cache.total_size_for(
+                    [(s or "", int(z), int(x), int(y)) for s, z, x, y in pieces]
+                )
+                failed_cnt = db.scalar(select(func.count()).select_from(MapDownloadTask).where(
+                    MapDownloadTask.region_id == region_id, MapDownloadTask.status == 2)) or 0
+                logger.info(
+                    "区域 %s 下载完毕：成功 %d · 无法下载 %d · 磁盘占用 %s",
+                    region_id, done, failed_cnt, f"{region.cache_size / 1024 / 1024:.1f}MB" if region.cache_size else "0B",
+                )
         db.commit()
 
         if quota_hit:
