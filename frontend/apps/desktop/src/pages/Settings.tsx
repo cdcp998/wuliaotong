@@ -731,7 +731,7 @@ export function SettingsPage() {
           onOk={() => void submitStorage()}
           confirmLoading={storageSaving}
           onCancel={() => setStorageModalOpen(false)}
-          destroyOnClose
+          destroyOnHidden
         >
           <Form form={storageForm} layout="vertical" style={{ marginTop: 8 }}>
             <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}>
@@ -1129,7 +1129,7 @@ export function SettingsPage() {
       </div>
       {/* 顶层分区：系统配置（表单）/ 模块管理 / 导航管理 / 备份管理 / 关于（恒最末；antd Tabs 激活过的面板保持挂载，表单值不丢） */}
       <Tabs
-        tabPosition="left"
+        tabPlacement="left"
         activeKey={section}
         onChange={(k) => setParams({ tab: k }, { replace: true })}
         items={[
@@ -1152,7 +1152,7 @@ export function SettingsPage() {
                   }}
                 >
                   <Tabs
-                    tabPosition="top"
+                    tabPlacement="top"
                     items={[
                       { key: "base", label: "基础设置", children: baseTab, forceRender: true },
                       { key: "ocr", label: "OCR 与大模型", children: ocrTab, forceRender: true },

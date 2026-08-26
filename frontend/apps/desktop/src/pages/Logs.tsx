@@ -314,7 +314,7 @@ export function LogsPage() {
         </p>
       </div>
 
-      <Drawer title="日志详情" open={Boolean(detail)} onClose={() => setDetail(null)} width={560}>
+      <Drawer title="日志详情" open={Boolean(detail)} onClose={() => setDetail(null)} size={560}>
         {detail && (
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
             <LogField label="时间">{detail.created_at}</LogField>

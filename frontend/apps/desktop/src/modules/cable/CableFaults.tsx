@@ -419,7 +419,7 @@ export function CableFaultsPage() {
       </Modal>
 
       {/* 详情抽屉（含反向关联维修任务） */}
-      <Drawer open={!!detail} onClose={() => setDetail(null)} width={520} title={detail ? `故障 #${detail.id}` : ""}>
+      <Drawer open={!!detail} onClose={() => setDetail(null)} size={520} title={detail ? `故障 #${detail.id}` : ""}>
         {detail && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div>

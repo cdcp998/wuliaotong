@@ -741,7 +741,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
 
     <Drawer
       title="通知中心"
-      width={440}
+      size={440}
       open={noticeOpen}
       onClose={() => setNoticeOpen(false)}
       destroyOnHidden
