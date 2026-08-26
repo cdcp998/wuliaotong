@@ -111,8 +111,15 @@ export function MapWorkbenchPage() {
       setMarkersByCable(byCable);
       try {
         const dev = await import("../device/api");
-        const devResp = await dev.deviceApi.list({ page_size: 200 });
-        setDevices(devResp.items.map((d) => ({ id: d.id, lat: d.lat, lng: d.lng, name: d.name, status: d.status })));
+        // 后端 list_devices 校验 page_size ≤ 100：分页聚合拉取（≤500 台），避免 page_size 超限 400
+        const first = await dev.deviceApi.list({ page: 1, page_size: 100 });
+        const items = [...first.items];
+        const totalPages = Math.min(Math.ceil((first.total || 0) / 100), 5);
+        for (let p = 2; p <= totalPages; p++) {
+          const next = await dev.deviceApi.list({ page: p, page_size: 100 });
+          items.push(...next.items);
+        }
+        setDevices(items.map((d) => ({ id: d.id, lat: d.lat, lng: d.lng, name: d.name, status: d.status })));
       } catch {
         setDevices([]);
       }
