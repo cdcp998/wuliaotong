@@ -29,6 +29,7 @@ def _auto_cleanup_test_data():
 # 排除（无法精确归因或属种子/配置，见 _data_cleanup 说明）：
 #   sys_session（登录会话）、sys_operation_log / sys_llm_log / sys_notification /
 #   sys_file（日志/通知/biz_id=0 历史 OCR 原图）、sys_config / sys_menu / sys_permission /
+#   sys_role_permission（模块 install 基线注入的角色授权，挂种子角色，属配置态——同 sys_menu/sys_permission）、
 #   sys_storage / sys_backup_log / sys_delete_review / pch_purchase_plan*
 _GUARD_TABLES = (
     "base_warehouse", "base_shelf", "base_location", "base_product", "base_product_unit",
@@ -38,7 +39,7 @@ _GUARD_TABLES = (
     "pch_purchase_in", "pch_purchase_in_item", "out_requisition", "out_requisition_item",
     "stk_other_io", "stk_other_io_item", "stk_transfer", "stk_transfer_item",
     "stk_check", "stk_check_item", "ocr_record", "ai_suggestion",
-    "sys_user", "sys_role", "sys_role_permission", "sys_register_apply",
+    "sys_user", "sys_role", "sys_register_apply",
 )
 
 

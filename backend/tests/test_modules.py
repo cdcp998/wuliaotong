@@ -28,11 +28,15 @@ def _login(username: str, password: str) -> None:
 
 @pytest.fixture(scope="module", autouse=True)
 def _ensure_cable_installed():
-    """前置：cable + map 模块安装并启用（cable 依赖 map；map 钩子归一菜单/权限归属；收尾由 _data_cleanup 复位隔离库）。"""
+    """前置：cable + map + task 模块安装并启用（cable 依赖 map/task；收尾由 _data_cleanup 复位隔离库）。"""
     _login("admin", "admin123")
     client.post("/api/v1/modules/cable/install")
     client.post("/api/v1/modules/map/install")
+    client.post("/api/v1/modules/task/install")
     r = client.post("/api/v1/modules/map/enable")
+    assert r.json()["code"] == 0, r.text
+    # 启用顺序须满足依赖：cable 依赖 task（task 先启用）
+    r = client.post("/api/v1/modules/task/enable")
     assert r.json()["code"] == 0, r.text
     r = client.post("/api/v1/modules/cable/enable")
     assert r.json()["code"] == 0, r.text

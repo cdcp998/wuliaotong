@@ -30,9 +30,11 @@ def _ensure_modules():
     client.post("/api/v1/modules/cable/install")
     client.post("/api/v1/modules/map/install")
     client.post("/api/v1/modules/map/enable")
-    client.post("/api/v1/modules/cable/enable")
+    # cable 依赖 task：task 先启用，cable 随后（顺序不满足会在全新库上连锁 ERROR）
     client.post("/api/v1/modules/task/install")
     r = client.post("/api/v1/modules/task/enable")
+    assert r.json()["code"] == 0, r.text
+    r = client.post("/api/v1/modules/cable/enable")
     assert r.json()["code"] == 0, r.text
     yield
 

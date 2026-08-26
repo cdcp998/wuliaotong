@@ -26,7 +26,8 @@ def _ensure_modules():
     _login("admin", "admin123")
     for code in ("cable", "map", "task", "knowledge"):
         client.post(f"/api/v1/modules/{code}/install")
-    for code in ("map", "cable", "task", "knowledge"):
+    # 启用顺序须满足依赖：cable 依赖 task（task 先启用）
+    for code in ("map", "task", "knowledge", "cable"):
         r = client.post(f"/api/v1/modules/{code}/enable")
         assert r.json()["code"] == 0, r.text
     yield

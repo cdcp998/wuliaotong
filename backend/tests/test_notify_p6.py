@@ -25,7 +25,10 @@ def _ensure_cable():
     _login()
     client.post("/api/v1/modules/cable/install")
     client.post("/api/v1/modules/map/install")
+    client.post("/api/v1/modules/task/install")
     assert client.post("/api/v1/modules/map/enable").json()["code"] == 0
+    # 启用顺序须满足依赖：cable 依赖 task（task 先启用）
+    assert client.post("/api/v1/modules/task/enable").json()["code"] == 0
     assert client.post("/api/v1/modules/cable/enable").json()["code"] == 0
     yield
 

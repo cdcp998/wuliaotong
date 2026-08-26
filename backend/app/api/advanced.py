@@ -573,7 +573,7 @@ def export_check(
             f.get("in_qty", 0), f.get("in_amount", 0),
             f.get("out_qty", 0), f.get("out_amount", 0),
             closing_q, closing_a,
-            "", "", it.book_qty, real, it.diff_qty, float(it.diff_qty * cost),
+            it.book_qty, real, it.diff_qty, float(it.diff_qty * cost),
             "",
         ])
 

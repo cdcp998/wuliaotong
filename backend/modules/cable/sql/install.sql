@@ -93,37 +93,12 @@ CREATE TABLE IF NOT EXISTS fault_file (
   KEY idx_fault (fault_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='故障照片关联';
 
--- ---------- 地图缓存区域 ----------
-CREATE TABLE IF NOT EXISTS map_cache_region (
-  id               BIGINT NOT NULL AUTO_INCREMENT,
-  name             VARCHAR(100) NOT NULL,
-  geometry         TEXT NULL COMMENT 'GeoJSON（含 bbox）',
-  min_zoom         INT NOT NULL DEFAULT 0,
-  max_zoom         INT NOT NULL DEFAULT 18,
-  tile_count       INT NOT NULL DEFAULT 0,
-  cache_size       BIGINT NOT NULL DEFAULT 0 COMMENT '缓存占用字节',
-  last_download_at DATETIME NULL,
-  update_mode      VARCHAR(10) NOT NULL DEFAULT 'manual' COMMENT 'daily/weekly/manual',
-  status           TINYINT NOT NULL DEFAULT 0 COMMENT '0 未开始 / 1 下载中 / 2 完成 / 3 暂停',
-  created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='地图缓存区域（批量下载）';
-
--- ---------- 瓦片下载任务 ----------
-CREATE TABLE IF NOT EXISTS map_download_task (
-  id          BIGINT NOT NULL AUTO_INCREMENT,
-  region_id   BIGINT NOT NULL COMMENT '→ map_cache_region.id',
-  z           INT NOT NULL,
-  x           INT NOT NULL,
-  y           INT NOT NULL,
-  status      TINYINT NOT NULL DEFAULT 0 COMMENT '0 待下载 / 1 成功 / 2 失败 / 3 跳过',
-  retry_count INT NOT NULL DEFAULT 0,
-  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uk_region_xyz (region_id, z, x, y)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='瓦片下载任务';
+-- ---------- 地图缓存表（已划归 map 模块，唯一 DDL 事实源：modules/map/sql/install.sql）----------
+-- 历史说明：map 从 cable 拆分时此处遗留 map_cache_region / map_download_task 的 CREATE 副本，
+-- 且本副本未随 map 的 source 列（migration 0001）演进——全新库先装 cable 会以旧结构建表，
+-- map baseline 的 IF NOT EXISTS 随即跳过，导致列缺失（CI 全量测试实证）。
+-- 故删除此处的建表副本：表由 map 模块 baseline 负责（幂等 IF NOT EXISTS，install 顺序无关）；
+-- 「仅装 cable 未装 map」的组合被 enable 的依赖校验拦截（cable depends map）。
 
 -- =====================================================================
 -- 权限点种子（module_code='cable'；禁用模块时权限点不生效，见 §8.1）
