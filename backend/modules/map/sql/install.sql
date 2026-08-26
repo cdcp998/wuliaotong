@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS map_cache_region (
   cache_size       BIGINT NOT NULL DEFAULT 0 COMMENT '缓存占用字节',
   last_download_at DATETIME NULL,
   update_mode      VARCHAR(10) NOT NULL DEFAULT 'manual' COMMENT 'daily/weekly/manual',
-  status           TINYINT NOT NULL DEFAULT 0 COMMENT '0 未开始 / 1 下载中 / 2 完成 / 3 暂停',
+  status           TINYINT NOT NULL DEFAULT 0 COMMENT '0 未开始 / 1 下载中 / 2 完成 / 3 暂停 / 4 任务生成中',
   created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),

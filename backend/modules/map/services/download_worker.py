@@ -161,7 +161,9 @@ def download_worker_tick() -> None:
             if region is None:
                 continue
             region.tile_count = done
-            if pending == 0 and region.status != 3:
+            # 完成判定收紧为仅「下载中(1)」：生成中(4)的分批插入窗口内 pending 可能短暂为 0，
+            # 若不判状态会把还没插完的区域误标完成；暂停(3)同样不被触碰。
+            if pending == 0 and region.status == 1:
                 region.status = 2
                 region.last_download_at = datetime.now()
         db.commit()

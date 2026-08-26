@@ -8,11 +8,13 @@ import { useAuthStore } from "@wlt/shared";
 import { mapApi, type MapSourceInfo } from "./api";
 import { MapView } from "./MapView";
 
+/** 区域状态（后端 0未开始/1下载中/2完成/3暂停/4任务生成中）。 */
 const REGION_STATUS: Record<number, { label: string; bg: string; fg: string }> = {
   0: { label: "未开始", bg: "#EFF3FC", fg: "#5B6478" },
-  1: { label: "生成中", bg: "#EAEFFF", fg: "#5B7FFF" },
+  1: { label: "下载中", bg: "#EAEFFF", fg: "#5B7FFF" },
   2: { label: "已完成", bg: "#E8F9EF", fg: "#15803D" },
   3: { label: "已暂停", bg: "#FEF4E2", fg: "#B45309" },
+  4: { label: "任务生成中", bg: "#F1ECFE", fg: "#6D28D9" },
 };
 
 interface RegionRow {
@@ -41,9 +43,12 @@ function fmtSize(n: number): string {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-/** 状态胶囊（设计页 47：已完成/生成中/失败×N/已暂停/未开始）。 */
+/** 状态胶囊（0未开始/1下载中/2已完成/3已暂停/4任务生成中；失败数优先于静态态展示）。 */
 function statusCapsule(r: RegionRow) {
-  if (r.status === 1) return <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#5B7FFF", borderColor: "transparent", marginInlineEnd: 0 }}>生成中</Tag>;
+  if (r.status === 1 || r.status === 4) {
+    const m = REGION_STATUS[r.status];
+    return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>;
+  }
   if ((r.failed ?? 0) > 0) return <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>失败 ×{r.failed}</Tag>;
   const m = REGION_STATUS[r.status] ?? { label: String(r.status), bg: "#EFF3FC", fg: "#5B6478" };
   return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>;
@@ -118,8 +123,8 @@ export function MapCachePage() {
     }
   }, [applyProgress, message]);
 
-  // 任一区域下载中 → 每 3 秒轮询进度（实时进度条；暂停/完成后自动停止）
-  const downloading = regions.some((r) => r.status === 1);
+  // 任一区域下载中/任务生成中 → 每 3 秒轮询进度（生成期任务数增长可见；暂停/完成后自动停止）
+  const downloading = regions.some((r) => r.status === 1 || r.status === 4);
   useEffect(() => {
     if (!downloading) return;
     const timer = window.setInterval(() => {
@@ -218,7 +223,10 @@ export function MapCachePage() {
       let msg = "";
       if (action === "start") {
         const resp = await mapApi.startRegionDownload(r.id);
-        msg = `已生成 ${resp.tiles_queued ?? 0} 个下载任务，后台开始下载`;
+        // 异步化：后端只做估算并置「任务生成中(4)」，任务由后台分批生成
+        msg = resp.tiles_estimated !== undefined
+          ? `预计 ${resp.tiles_estimated.toLocaleString("zh-CN")} 个瓦片任务，后台分批生成并开始下载`
+          : (resp.message || "已启动");
       } else if (action === "pause") {
         await mapApi.pauseRegionDownload(r.id);
         msg = "已暂停";
@@ -418,6 +426,7 @@ export function MapCachePage() {
                     )}
                     {r.status === 1 && <Button type="link" size="small" style={{ padding: 0 }} onClick={() => act(r, "pause")}>暂停</Button>}
                     {r.status === 3 && <Button type="link" size="small" style={{ padding: 0, color: "#5B7FFF" }} onClick={() => act(r, "start")}>继续</Button>}
+                    {r.status === 4 && <Button type="link" size="small" disabled style={{ padding: 0, color: "#8A93A8" }}>任务生成中…</Button>}
                     <Button type="link" size="small" style={{ padding: 0, color: "#3B5BDB" }} onClick={() => openEdit(r)}>编辑</Button>
                   </>
                 )}

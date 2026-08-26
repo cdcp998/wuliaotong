@@ -25,7 +25,7 @@ class MapCacheRegion(Base):
     cache_size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     last_download_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     update_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="manual")  # daily/weekly/manual
-    status: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 0未开始/1下载中/2完成/3暂停
+    status: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 0未开始/1下载中/2完成/3暂停/4任务生成中
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), onupdate=func.now()

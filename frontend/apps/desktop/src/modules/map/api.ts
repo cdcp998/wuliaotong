@@ -58,7 +58,8 @@ export const mapApi = {
     http.post<{ id: number }>("/map/cache/regions", body),
   updateRegion: (id: number, body: { name: string; geometry?: unknown; min_zoom: number; max_zoom: number; update_mode: string }) =>
     http.put<{ id: number }>(`/map/cache/regions/${id}`, body),
-  startRegionDownload: (id: number) => http.post<{ tiles_queued?: number }>(`/map/cache/regions/${id}/start`),
+  startRegionDownload: (id: number) =>
+    http.post<{ tiles_queued?: number; tiles_estimated?: number; message?: string }>(`/map/cache/regions/${id}/start`),
   pauseRegionDownload: (id: number) => http.post<null>(`/map/cache/regions/${id}/pause`),
   clearRegion: (id: number) => http.post<{ tiles_removed?: number }>(`/map/cache/regions/${id}/clear`),
   downloadProgress: () =>

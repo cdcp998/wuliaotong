@@ -180,9 +180,30 @@ def test_tile_batch_download_flow() -> None:
     region_id = r.json()["data"]["id"]
     r = client.post(f"/api/v1/map/cache/regions/{region_id}/start")
     assert r.json()["code"] == 0
-    assert r.json()["data"]["tiles_queued"] > 0
+    # 异步化：请求只做纯数学估算并置「任务生成中(4)」，毫秒级返回
+    assert r.json()["data"]["tiles_estimated"] > 0
 
     from app.modules.map.services.download_worker import download_worker_tick
+    from app.modules.map.services.region_generator import region_generate_tick
+
+    # 后台生成 tick：状态4 差集批量插入（每轮推进一个 zoom 级别）；小区域数轮内插完并翻转「下载中(1)」
+    st = None
+    for _ in range(8):
+        region_generate_tick()
+        db = SessionLocal()
+        try:
+            st = db.scalar(text("SELECT status FROM map_cache_region WHERE id = :r"), {"r": region_id})
+        finally:
+            db.close()
+        if st == 1:
+            break
+    db = SessionLocal()
+    try:
+        n = db.scalar(text("SELECT COUNT(*) FROM map_download_task WHERE region_id = :r"), {"r": region_id})
+    finally:
+        db.close()
+    assert st == 1, f"生成完毕应翻转为下载中(1)，实际 {st}"
+    assert n and n > 0
 
     # worker 消费（离线源抓取失败 → 标失败/重试；不抛异常）
     for _ in range(4):
@@ -192,10 +213,11 @@ def test_tile_batch_download_flow() -> None:
     prog = r.json()["data"]
     assert prog["pending"] + prog["done"] + prog["failed"] >= 0
 
-    # 暂停区域 → 再次 start 不重复生成（uk 幂等）
+    # 暂停区域 → 再次 start 允许重新评估续跑（差集幂等，重新进入生成中(4)）
     assert client.post(f"/api/v1/map/cache/regions/{region_id}/pause").json()["code"] == 0
     r = client.post(f"/api/v1/map/cache/regions/{region_id}/start")
     assert r.json()["code"] == 0
+    assert "tiles_estimated" in r.json()["data"]
 
     # source 记录 + 磁盘瓦片精确清理
     db = SessionLocal()

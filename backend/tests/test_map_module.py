@@ -332,3 +332,131 @@ def test_tile_proxy_reads_config_via_short_session(monkeypatch):
     assert captured["src_cfg"]["enabled"] is True  # 配置来自短会话读取
     # 关键时序：会话在 get_tile（慢 IO）之前已关闭——慢 IO 阶段无打开的 SQLAlchemy 会话
     assert events == ["open", "close", "get_tile"]
+
+
+# ============================ 区域任务生成异步化（状态4 + 差集批量插入） ============================
+
+_GEO = '{"type": "Polygon", "bbox": [0.0, 0.0, 0.35, 0.35]}'
+
+
+class _FakeRegion:
+    def __init__(self, rid, geometry, min_zoom, max_zoom, status):
+        self.id = rid
+        self.geometry = geometry
+        self.min_zoom = min_zoom
+        self.max_zoom = max_zoom
+        self.status = status
+
+
+class _FakeResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+class _FakeDb:
+    """最小 DB 桩：仅实现生成器 tick 内部逻辑用到的方法。"""
+
+    def __init__(self, existing=()):
+        self.existing = list(existing)
+        self.added = []
+        self.commits = 0
+        self.rollbacks = 0
+
+    def execute(self, stmt):
+        return _FakeResult(self.existing)
+
+    def add_all(self, objs):
+        self.added.extend(objs)
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+
+def test_plan_missing_tiles_expansion_diff_and_clip():
+    from app.modules.map.services import region_generator as rg
+
+    # 已知展开：bbox [0,0,0.35,0.35]、z=1 → x∈{1}，y∈{0,1}（Web Mercator 公式边界内取整）
+    plan = rg.plan_missing_tiles([0.0, 0.0, 0.35, 0.35], 1, 1, set())
+    assert plan == {1: [(1, 1, 0), (1, 1, 1)]}
+    # 与 existing 差集去重
+    plan2 = rg.plan_missing_tiles([0.0, 0.0, 0.35, 0.35], 1, 1, {(1, 1, 0)})
+    assert plan2 == {1: [(1, 1, 1)]}
+    # 越界裁剪：超世界范围 bbox 被裁到 [0, n-1]（与原 api.py 公式边界行为一致）
+    plan3 = rg.plan_missing_tiles([-200.0, -95.0, 200.0, 95.0], 1, 1, set())
+    assert plan3 == {1: [(1, 0, 0), (1, 0, 1), (1, 1, 0), (1, 1, 1)]}
+
+
+def test_next_level_batch_truncates_large_level_deterministically():
+    from app.modules.map.services import region_generator as rg
+
+    big = [(5, x, y) for x in range(250) for y in range(240)]  # 60000 个 > 单 tick 上限
+    assert len(big) > rg._MAX_ROWS_PER_TICK
+    plan = {6: [(6, 0, 0)], 5: big}
+    z, rows = rg.next_level_batch(plan)
+    assert z == 5  # zoom 升序推进
+    assert rows == big[: rg._MAX_ROWS_PER_TICK]  # 只产出前 50000 且顺序确定（下轮差集自然续跑）
+    assert len(rows) == rg._MAX_ROWS_PER_TICK
+    assert rg.next_level_batch({}) == (-1, [])  # 全部齐备 → 完毕信号
+
+
+def test_generator_state_transitions_with_fake_objects():
+    """状态机推演（假对象驱动）：4→1 完成翻转、暂停(3)不触碰、缺失时保持 4 并差集插入。"""
+    from app.modules.map.services import region_generator as rg
+
+    # 全部齐备：生成中(4) → 翻转下载中(1)，交由现有 worker
+    r_done = _FakeRegion(7, _GEO, 1, 1, 4)
+    db = _FakeDb(existing=[(1, 1, 0), (1, 1, 1)])
+    rg._advance_region(db, r_done, "esri")
+    assert r_done.status == 1
+    assert db.added == []
+
+    # 用户在生成期间暂停(3)：完成翻转只对 4 生效，暂停态不被触碰
+    r_paused = _FakeRegion(8, _GEO, 1, 1, 3)
+    db2 = _FakeDb(existing=[(1, 1, 0), (1, 1, 1)])
+    rg._advance_region(db2, r_paused, "esri")
+    assert r_paused.status == 3
+
+    # 仍有缺失：保持生成中(4)，按差集插入缺失任务
+    r_gen = _FakeRegion(9, _GEO, 1, 1, 4)
+    db3 = _FakeDb(existing=[(1, 1, 0)])
+    rg._advance_region(db3, r_gen, "esri")
+    assert r_gen.status == 4
+    assert [(t.z, t.x, t.y) for t in db3.added] == [(1, 1, 1)]
+    assert db3.commits >= 1
+
+    # 非法 geometry：校验抛 ValueError（tick 层据此回置 status=0）
+    with pytest.raises(ValueError, match="geometry"):
+        rg.region_bbox(None)
+
+
+def test_generator_tick_isolates_region_error(monkeypatch):
+    """单区域异常隔离：该区域回置 0（可重试），其余区域正常推进，异常不外泄。"""
+    from app.modules.map.services import region_generator as rg
+
+    ok_region = _FakeRegion(10, _GEO, 1, 1, 4)
+    bad_region = _FakeRegion(11, _GEO, 1, 1, 4)
+    db = _FakeDb()
+    seen: list[int] = []
+
+    def fake_advance(_db, region, _source_key):
+        seen.append(region.id)
+        if region.id == 11:
+            raise RuntimeError("boom")
+        region.status = 1
+
+    monkeypatch.setattr(rg, "_advance_region", fake_advance)
+    rg._run_tick(db, [ok_region, bad_region], "esri")
+
+    assert seen == [10, 11]
+    assert ok_region.status == 1
+    assert bad_region.status == 0
+    assert db.rollbacks >= 1

@@ -20,7 +20,7 @@ from app.core.response import BizError, E_NOT_FOUND, E_PARAM, ok
 from app.db import SessionLocal, get_db
 from app.modules.map.models import MapCacheRegion, MapDownloadTask
 from app.modules.map.schemas import MapSourceIn, RegionCreate, RegionUpdate
-from app.modules.map.services import config_store, tile_cache
+from app.modules.map.services import config_store, region_generator, tile_cache
 
 logger = logging.getLogger("app.map")
 
@@ -222,54 +222,38 @@ def create_region(req: RegionCreate, db: Session = Depends(get_db)) -> dict:
 
 @router.post("/map/cache/regions/{region_id}/start", dependencies=[Depends(require_permission("map:cache"))])
 def start_region_download(region_id: int, db: Session = Depends(get_db)) -> dict:
-    """启动区域下载：生成任务并保持「下载中」，由 worker 逐轮抓取、完成后置「完成」。"""
+    """启动区域下载（异步化）：校验通过后**纯数学估算**总量，置状态 4（任务生成中）立即返回。
+
+    任务由后台 region_generate_tick 按 zoom 升序分批差集插入（幂等），全部就绪后自动转
+    「下载中(1)」交由 download_worker 抓取。请求耗时恒定毫秒级，大区域不再长时间占用
+    请求线程/连接池；两个管理员同时启动不同区域互不拖累。
+    """
     r = db.get(MapCacheRegion, region_id)
     if r is None:
         raise BizError(E_NOT_FOUND, "缓存区域不存在")
     if r.name == DEFAULT_REGION_NAME:
         raise BizError(E_PARAM, "「默认缓存」为浏览自动收集，无需手动下载")
-    if r.status == 1:
+    # 幂等：下载中(1)/任务生成中(4)直接返回；暂停(3)允许重新评估续跑（差集幂等）
+    if r.status in (1, 4):
         return ok({"message": "下载已在进行中"})
     config = config_store.load_config(db)
     source_key = next((k for k, s in config.get("map_sources", {}).items() if s.get("enabled")), None)
     if source_key is None:
         raise BizError(E_PARAM, "未配置启用的地图源")
-    r.status = 1
-    db.commit()
     try:
-        created = _download_region_tiles(db, r, source_key)
-    except Exception as exc:  # noqa: BLE001
-        r.status = 3
-        db.commit()
-        raise BizError(E_PARAM, f"生成下载任务失败：{exc}") from exc
-    # 有剩余待下载任务 → 保持「下载中」，由 worker 逐轮抓取、完成后置「完成」
-    pending = db.scalar(select(func.count()).select_from(MapDownloadTask).where(
-        MapDownloadTask.region_id == r.id, MapDownloadTask.status == 0)) or 0
-    if pending == 0:
-        r.status = 2
-        r.last_download_at = datetime.now()
-    else:
-        r.status = 1
+        bbox = region_generator.region_bbox(r.geometry)
+    except ValueError as exc:
+        raise BizError(E_PARAM, str(exc)) from exc
+    if r.min_zoom < 0 or r.max_zoom > TILE_MAX_ZOOM or r.min_zoom > r.max_zoom:
+        raise BizError(E_PARAM, "缩放级别范围不合法")
+    estimated = region_generator.estimate_region_tiles(bbox, r.min_zoom, r.max_zoom)
+    if estimated > region_generator.MAX_TILES_PER_REGION:
+        raise BizError(E_PARAM,
+                       f"预估瓦片数 {estimated} 超过上限 {region_generator.MAX_TILES_PER_REGION}，"
+                       "请缩小区域范围或降低缩放级别")
+    r.status = region_generator.STATUS_GENERATING  # 4 = 任务生成中：由后台 tick 分批推进
     db.commit()
-    return ok({"tiles_queued": created})
-
-
-def _tile_bbox_to_xy_range(bbox: list[float], z: int) -> tuple[int, int, int, int]:
-    """bbox [west, south, east, north] → (x0, x1, y0, y1)（Web Mercator 标准公式）。"""
-    import math
-
-    n = 2 ** z
-
-    def lon2x(lon: float) -> int:
-        return int((lon + 180.0) / 360.0 * n)
-
-    def lat2y(lat: float) -> int:
-        lat = max(min(lat, 85.05112878), -85.05112878)
-        lat_rad = math.radians(lat)
-        return int((1.0 - math.log(math.tan(lat_rad) + 1.0 / math.cos(lat_rad)) / math.pi) / 2.0 * n)
-
-    west, south, east, north = bbox
-    return max(0, lon2x(west)), min(n - 1, lon2x(east)), max(0, lat2y(north)), min(n - 1, lat2y(south))
+    return ok({"tiles_estimated": estimated})
 
 
 @router.post("/map/cache/regions/{region_id}/pause", dependencies=[Depends(require_permission("map:cache"))])
@@ -348,33 +332,3 @@ def download_progress(db: Session = Depends(get_db)) -> dict:
             "last_download_at": r.last_download_at.isoformat() if r.last_download_at else None,
         })
     return ok({"pending": global_pending, "done": global_done, "failed": global_failed, "regions": per_region})
-
-
-def _download_region_tiles(db: Session, region: MapCacheRegion, source_key: str) -> int:
-    """生成区域瓦片下载任务（uk(region_id,z,x,y) 幂等；记录 source 供 worker/清理使用）。"""
-    if not region.geometry:
-        raise BizError(E_PARAM, "区域缺少 geometry（需含 bbox）")
-    try:
-        geo = json.loads(region.geometry)
-    except ValueError:
-        raise BizError(E_PARAM, "区域 geometry 不是合法 JSON") from None
-    bbox = geo.get("bbox") if isinstance(geo, dict) else None
-    if not bbox or len(bbox) != 4:
-        raise BizError(E_PARAM, "区域缺少 bbox（[west, south, east, north]）")
-    created = 0
-    for z in range(region.min_zoom, region.max_zoom + 1):
-        x0, x1, y0, y1 = _tile_bbox_to_xy_range(bbox, z)
-        for x in range(x0, x1 + 1):
-            for y in range(y0, y1 + 1):
-                exists = db.scalar(
-                    select(MapDownloadTask.id).where(
-                        MapDownloadTask.region_id == region.id,
-                        MapDownloadTask.z == z, MapDownloadTask.x == x, MapDownloadTask.y == y,
-                    )
-                )
-                if exists:
-                    continue
-                db.add(MapDownloadTask(region_id=region.id, source=source_key, z=z, x=x, y=y))
-                created += 1
-    db.commit()
-    return created
