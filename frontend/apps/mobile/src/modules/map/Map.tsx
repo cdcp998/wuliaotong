@@ -59,6 +59,24 @@ const myLocationIcon = L.divIcon({
     "</div>",
   iconSize: [22, 22], iconAnchor: [11, 11],
 });
+/** 上报取点：红色大头针（地图选中的待上报位置）。 */
+const pickIcon = L.divIcon({
+  className: "wlt-m",
+  html: '<div style="width:16px;height:16px;background:#DC2626;border:2px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>',
+  iconSize: [16, 16], iconAnchor: [8, 15],
+});
+/** 导航起点：绿色大头针（与桌面端「选起点」绿色标记一致）。 */
+const startIcon = L.divIcon({
+  className: "wlt-m",
+  html: '<div style="width:16px;height:16px;background:#22C55E;border:2px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>',
+  iconSize: [16, 16], iconAnchor: [8, 15],
+});
+/** 画线顶点：琥珀小圆点。 */
+const vertexIcon = L.divIcon({
+  className: "wlt-m",
+  html: '<div style="width:10px;height:10px;border-radius:50%;background:#F59E0B;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35)"></div>',
+  iconSize: [10, 10], iconAnchor: [5, 5],
+});
 
 /** 显示坐标系：手机端底图固定经后端代理（WGS84 源）→ 默认 GCJ-02 加密显示（与桌面端一致）。 */
 const DISPLAY_SPACE = resolveDisplaySpace("wgs84", null);
@@ -95,10 +113,27 @@ function disp([lat, lng]: [number, number]): [number, number] {
   return [dlat, dlng];
 }
 
-type PanelKey = "report" | "faults" | "measure" | "nav" | "layers" | null;
+/** 两 WGS84 坐标间球面距离（米，haversine）——画线测长用。 */
+function distMeters(a: [number, number], b: [number, number]): number {
+  const R = 6371000;
+  const dLat = ((b[0] - a[0]) * Math.PI) / 180;
+  const dLng = ((b[1] - a[1]) * Math.PI) / 180;
+  const la1 = (a[0] * Math.PI) / 180;
+  const la2 = (b[0] * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
 
-/** 工具栏五键（OP Toolbar：我的位置/测距/图层/故障/上报）。location 为即时动作非面板。 */
-const TOOLS: { key: PanelKey | "location"; label: string; icon: React.ReactNode }[] = [
+/** 距离展示：<1km 显示米，≥1km 显示公里。 */
+function fmtLen(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
+}
+
+type PanelKey = "report" | "faults" | "measure" | "nav" | "layers" | null;
+type MapMode = "none" | "fault" | "navStart" | "draw";
+
+/** 工具栏六键（位置/测距/画线/图层/故障/上报）。location 为即时动作；draw 进入画线取点模式。 */
+const TOOLS: { key: PanelKey | "location" | "draw"; label: string; icon: React.ReactNode }[] = [
   {
     key: "location",
     label: "我的位置",
@@ -116,6 +151,16 @@ const TOOLS: { key: PanelKey | "location"; label: string; icon: React.ReactNode 
       <>
         <path d="M3 16.5L16.5 3 21 7.5 7.5 21z" />
         <path d="M7 13l2 2M10.5 9.5l2 2M14 6l2 2" />
+      </>
+    ),
+  },
+  {
+    key: "draw",
+    label: "画线",
+    icon: (
+      <>
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5l4 4L8 20l-5 1 1-5z" />
       </>
     ),
   },
@@ -161,7 +206,9 @@ export function MobileMapPage() {
   const [layers, setLayers] = useState({ cables: true, faults: true, devices: true });
 
   const [pick, setPick] = useState<{ lat: number; lng: number } | null>(null);
-  const [mode, setMode] = useState<"none" | "fault" | "navStart">("none");
+  const [mode, setMode] = useState<MapMode>("none");
+  // 画线（临时测量线）：逐点落针成线，实时显示总长；仅前端展示，不落库
+  const [draftPts, setDraftPts] = useState<[number, number][]>([]);
   const [reporting, setReporting] = useState(false);
   const [sev, setSev] = useState(1);
   const [desc, setDesc] = useState("");
@@ -204,13 +251,13 @@ export function MobileMapPage() {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  /** 「我的位置」：定位降级链（GPS→IP 兜底）+ 平移地图到当前点。 */
+  /** 「我的位置」：定位降级链（GPS→IP 兜底，静默降级不弹提示）+ 平移地图到当前点。
+   * 只 pan 不动 zoom（保持用户当前缩放级别，避免猛跳层级）。 */
   const locateMe = async () => {
     try {
       const first = await getCurrentPositionWithFallback();
-      if (first.source === "ip") Toast.show("浏览器定位不可用，已使用 IP 粗略定位");
       setMyPos([first.lat, first.lng]);
-      mapRef.current?.setView(disp([first.lat, first.lng]), Math.max(mapRef.current?.getZoom() ?? 12, 15));
+      mapRef.current?.panTo(disp([first.lat, first.lng]));
     } catch {
       Toast.show("定位失败，请检查定位权限");
     }
@@ -225,7 +272,7 @@ export function MobileMapPage() {
 
   const startNav = async () => {
     if (!selFaultId) { Toast.show("请先选择故障点"); return; }
-    // 初始定位走降级链（浏览器 GPS → IP 兜底）：HTTP 内网 / 无 Geolocation API 的手机浏览器也可定位
+    // 初始定位走降级链（浏览器 GPS → IP 兜底，静默降级不弹提示）
     let first;
     try {
       first = await getCurrentPositionWithFallback();
@@ -235,7 +282,6 @@ export function MobileMapPage() {
       setMode("navStart");
       return;
     }
-    if (first.source === "ip") Toast.show("浏览器定位不可用，已使用 IP 粗略定位");
     setNavStart([first.lat, first.lng]);
     setMyPos([first.lat, first.lng]);
     setNavigating(true);
@@ -315,6 +361,8 @@ export function MobileMapPage() {
       const r = await cableApi.measure({ cable_id: selCableId, distance: Number(distance) });
       setMeasureResult(r);
       setHighlight([r.lat, r.lng]);
+      // 定位点飞行至 17 级（与故障定位一致，长线缆远端也能看清落点）
+      mapRef.current?.flyTo(disp([r.lat, r.lng]), 17);
     } catch (e) {
       Toast.show(e instanceof Error ? e.message : "测距失败");
     }
@@ -353,9 +401,10 @@ export function MobileMapPage() {
           <ZoomControl position="bottomright" />
           <TileLayer url={mapApi.tileUrl("esri", "{z}", "{x}", "{y}")} maxZoom={19} attribution="© 卫星影像" />
           <ClickCatcher onPick={(lat, lng) => {
-            if (mode === "fault") { setPick({ lat, lng }); setMode("none"); }
-            else if (mode === "navStart") { setNavStart([lat, lng]); setMode("none"); }
-            else setPick({ lat, lng });
+            // 取点模式：选完落针并自动回到对应面板确认；画线模式逐点追加；普通点击不落点
+            if (mode === "fault") { setPick({ lat, lng }); setMode("none"); setPanel("report"); }
+            else if (mode === "navStart") { setNavStart([lat, lng]); setMode("none"); setPanel("nav"); }
+            else if (mode === "draw") { setDraftPts((pts) => [...pts, [lat, lng]]); }
           }} />
           {layers.cables && cables.filter((c) => c.geometry).map((c) => (
             <Polyline key={c.id} positions={(c.geometry!.coordinates as [number, number][]).map(([lng, lat]) => disp([lat, lng]))}
@@ -365,6 +414,16 @@ export function MobileMapPage() {
           {layers.devices && devices.map((d) => <Marker key={`d${d.id}`} position={disp([d.lat!, d.lng!])} icon={deviceIcon} />)}
           {myPos && <Marker position={disp(myPos)} icon={myLocationIcon} />}
           {highlight && <Marker position={disp(highlight)} icon={navIcon} />}
+          {/* 上报取点 / 导航起点：地图上可见的落针（选点反馈） */}
+          {pick && <Marker position={disp([pick.lat, pick.lng])} icon={pickIcon} />}
+          {navStart && <Marker position={disp(navStart)} icon={startIcon} />}
+          {/* 画线：琥珀折线 + 顶点圆点（临时测量线） */}
+          {draftPts.length > 0 && (
+            <>
+              <Polyline positions={draftPts.map((p) => disp(p))} pathOptions={{ color: "#F59E0B", weight: 4 }} />
+              {draftPts.map((p, i) => <Marker key={`v${i}`} position={disp(p)} icon={vertexIcon} />)}
+            </>
+          )}
           {navPath && navPath.length > 1 && (
             <Polyline positions={navPath.map((p) => disp(p))} pathOptions={{ color: "#EF4444", weight: 5, dashArray: "8 6" }} />
           )}
@@ -398,27 +457,57 @@ export function MobileMapPage() {
           </svg>
         </div>
 
+        {/* 取点模式提示条（弹层已收起，地图可点；选完自动回到对应面板） */}
         {mode === "fault" && <div style={{ position: "absolute", top: 52, left: 8, background: "#fff", padding: "4px 10px", borderRadius: 8, fontSize: 12, zIndex: 1000, boxShadow: "0 2px 10px rgba(30,36,51,.12)" }}>请点击地图选择故障位置</div>}
+        {mode === "navStart" && <div style={{ position: "absolute", top: 52, left: 8, background: "#fff", padding: "4px 10px", borderRadius: 8, fontSize: 12, zIndex: 1000, boxShadow: "0 2px 10px rgba(30,36,51,.12)" }}>请点击地图选择导航起点</div>}
         {navInfo && <div style={{ position: "absolute", bottom: 12, left: 8, right: 8, background: "#fff", padding: 8, borderRadius: 12, fontSize: 14, zIndex: 1000, textAlign: "center", boxShadow: "0 2px 10px rgba(30,36,51,.12)" }}>{navInfo}</div>}
       </div>
 
-      {/* 底部五键工具栏（OP Toolbar rgba(255,255,255,.95)；.wlt-fixed-bar 宽屏限宽居中；
+      {/* 画线操作条（画线中或已画点时显示，悬于底部工具栏上方；随 .wlt-fixed-bar 宽屏限宽居中） */}
+      {(mode === "draw" || draftPts.length > 0) && (() => {
+        const total = draftPts.slice(1).reduce((s, p, i) => s + distMeters(draftPts[i], p), 0);
+        const miniBtn: React.CSSProperties = { height: 30, padding: "0 12px", borderRadius: 9, border: "1px solid #CBD6EC", background: "#fff", color: "#3B5BDB", fontSize: 12, cursor: "pointer" };
+        return (
+          <div className="wlt-fixed-bar" style={{ bottom: "calc(50px + env(safe-area-inset-bottom))", justifyContent: "space-between", padding: "8px 12px", zIndex: 899 }}>
+            <span style={{ fontSize: 12, fontWeight: mode === "draw" ? 600 : 400, color: mode === "draw" ? "#B45309" : "#5B6478" }}>
+              {mode === "draw"
+                ? draftPts.length > 0
+                  ? `画线中：${draftPts.length} 点 · ${fmtLen(total)}`
+                  : "画线：点击地图依次加点"
+                : `画线：${draftPts.length} 点 · 总长 ${fmtLen(total)}`}
+            </span>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={{ ...miniBtn, opacity: draftPts.length ? 1 : 0.45 }} disabled={!draftPts.length}
+                onClick={() => setDraftPts((pts) => pts.slice(0, -1))}>撤销</button>
+              <button style={{ ...miniBtn, opacity: draftPts.length ? 1 : 0.45 }} disabled={!draftPts.length}
+                onClick={() => setDraftPts([])}>清空</button>
+              {mode === "draw" && (
+                <button style={{ ...miniBtn, border: "none", background: "#5B7FFF", color: "#fff", fontWeight: 600 }}
+                  onClick={() => setMode("none")}>完成</button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 底部六键工具栏（位置/测距/画线/图层/故障/上报；.wlt-fixed-bar 宽屏限宽居中；
           zIndex 低于 Popup，避免遮挡呼出的功能界面） */}
       <div className="wlt-fixed-bar" style={{ justifyContent: "space-around", padding: "6px 8px", zIndex: 900 }}>
         {TOOLS.map((t) => {
-          const active = t.key !== "location" && panel === t.key;
+          const active = (t.key !== "location" && panel === t.key) || (t.key === "draw" && mode === "draw");
           return (
             <div
               key={t.key}
               onClick={() => {
                 if (t.key === "location") void locateMe();
+                else if (t.key === "draw") { setPanel(null); setMode((m) => (m === "draw" ? "none" : "draw")); }
                 else openPanel(t.key as Exclude<PanelKey, null>);
               }}
               style={{
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
                 padding: "4px 0", cursor: "pointer",
                 color: active ? "#3B5BDB" : "#5B6478",
-                minWidth: 52,
+                minWidth: 48,
               }}
             >
               <svg viewBox="0 0 24 24" width={18} height={18} fill="none"
@@ -468,9 +557,14 @@ export function MobileMapPage() {
             <span style={{ fontSize: 13, fontWeight: 700, color: "#1E2433" }}>上报故障</span>
             <span style={{ color: "#8A93A8", fontSize: 12 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
-          {pick && <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 6 }}>位置：{pick.lat.toFixed(6)}, {pick.lng.toFixed(6)}</div>}
-          <Button block size="small" fill="outline" color="danger" onClick={() => setMode(mode === "fault" ? "none" : "fault")} style={{ marginBottom: 8, borderColor: "#CBD6EC", color: "#DC2626" }}>
-            {mode === "fault" ? "点击地图取点中…（再点取消）" : (pick ? "重新选择位置" : "在地图上选择位置")}
+          {pick && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#FDEBEC", borderRadius: 8, padding: "4px 10px", marginBottom: 8 }}>
+              <span style={{ width: 7, height: 7, borderRadius: 4, background: "#DC2626" }} />
+              <span style={{ fontSize: 11.5, color: "#DC2626" }}>已选位置 {pick.lat.toFixed(5)}, {pick.lng.toFixed(5)}</span>
+            </div>
+          )}
+          <Button block size="small" fill="outline" color="danger" onClick={() => { setPanel(null); setMode("fault"); }} style={{ marginBottom: 8, borderColor: "#CBD6EC", color: "#DC2626" }}>
+            {pick ? "重新选择位置（当前弹层收起，点击地图取点）" : "在地图上选择位置"}
           </Button>
           <Selector options={[{ label: "低", value: 1 }, { label: "中", value: 2 }, { label: "高", value: 3 }]} value={[sev]} onChange={(v) => setSev(v[0] ?? 1)} style={{ marginBottom: 8, "--adm-color-primary": "#5B7FFF" } as React.CSSProperties} />
           <TextArea placeholder="故障描述（可选）" value={desc} onChange={setDesc} rows={2} maxLength={500} style={{ marginBottom: 8, "--background-color": "#F6F8FE" } as React.CSSProperties} />
@@ -498,7 +592,7 @@ export function MobileMapPage() {
                 </div>
                 <div style={{ fontSize: 11, color: "#8A93A8" }}>{f.lat.toFixed(5)}, {f.lng.toFixed(5)}　{FAULT_STATUS[f.status] ?? f.status}</div>
               </div>
-              <Button size="mini" color="primary" fill="outline" onClick={() => { setHighlight([f.lat, f.lng]); setPanel(null); }} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>定位</Button>
+              <Button size="mini" color="primary" fill="outline" onClick={() => { setHighlight([f.lat, f.lng]); setPanel(null); mapRef.current?.flyTo(disp([f.lat, f.lng]), 17); }} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>定位</Button>
               <Button size="mini" color="primary" fill="outline" onClick={() => navToFault(f)} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>导航</Button>
               <Button size="mini" color="danger" fill="outline" onClick={() => deleteFault(f)} style={{ color: "#DC2626", borderColor: "#CBD6EC" }}>删除</Button>
             </div>
@@ -515,11 +609,17 @@ export function MobileMapPage() {
             <span style={{ color: "#8A93A8", fontSize: 12 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
+            {/* antd-mobile v5 Picker 不向子元素注入点击事件：须经 render-prop 第二参 actions 开关 */}
             <Picker
               columns={[cables.filter((c) => c.status === 1).map((c) => ({ label: `${c.name}（${Math.round(c.total_length)}m）`, value: c.id }))]}
+              value={selCableId ? [selCableId] : undefined}
               onConfirm={(v) => setSelCableId(v[0] as number)}
             >
-              {(items) => <Button size="small" fill="outline" style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>{items[0]?.label ?? "选择线缆"}</Button>}
+              {(items, actions) => (
+                <Button size="small" fill="outline" style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }} onClick={() => actions.open()}>
+                  {items[0]?.label ?? "选择线缆"}
+                </Button>
+              )}
             </Picker>
             <Input placeholder="距离(m)" type="number" value={distance} onChange={setDistance} style={{ flex: 1 }} />
             <Button size="small" color="primary" onClick={doMeasure} style={{ background: "#5B7FFF", borderColor: "#5B7FFF" }}>定位</Button>
@@ -541,15 +641,20 @@ export function MobileMapPage() {
             <span style={{ color: "#8A93A8", fontSize: 12 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
+            {/* 同测距：Picker 需经 actions.open() 打开 */}
             <Picker
               columns={[faults.map((f) => ({ label: `#${f.id} ${f.fault_type || "故障"}（${f.description?.slice(0, 10) || ""}）`, value: f.id }))]}
               value={selFaultId ? [selFaultId] : undefined}
               onConfirm={(v) => setSelFaultId(v[0] as number)}
             >
-              {(items) => <Button size="small" fill="outline" style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>{items[0]?.label ?? "选择故障点"}</Button>}
+              {(items, actions) => (
+                <Button size="small" fill="outline" style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }} onClick={() => actions.open()}>
+                  {items[0]?.label ?? "选择故障点"}
+                </Button>
+              )}
             </Picker>
-            <Button size="small" fill="outline" onClick={() => setMode(mode === "navStart" ? "none" : "navStart")} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>
-              {mode === "navStart" ? "取点中…" : "选起点"}
+            <Button size="small" fill="outline" onClick={() => { setPanel(null); setMode("navStart"); }} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>
+              选起点
             </Button>
           </div>
           {navStart && <div style={{ fontSize: 12, color: "#8A93A8", marginTop: 6 }}>起点 {navStart[0].toFixed(6)}, {navStart[1].toFixed(6)}</div>}
