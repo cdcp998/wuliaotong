@@ -241,9 +241,14 @@ export function MapCachePage() {
       let msg = "";
       if (action === "start") {
         const resp = await mapApi.startRegionDownload(r.id);
-        // 异步化：后端只做估算并置「任务生成中(4)」，任务由后台分批生成
+        // 异步化 + 断点续传：后端估算总量并重置失败任务（磁盘已有缓存的免下载直接记成功）
+        const parts: string[] = [];
+        if (resp.failed_reset) parts.push(`续传 ${resp.failed_reset} 个未完成瓦片`);
+        if (resp.failed_cached) parts.push(`${resp.failed_cached} 个已有缓存免下载`);
         msg = resp.tiles_estimated !== undefined
-          ? `预计 ${resp.tiles_estimated.toLocaleString("zh-CN")} 个瓦片任务，后台分批生成并开始下载`
+          ? (parts.length
+              ? `${parts.join("，")}（总预估 ${resp.tiles_estimated.toLocaleString("zh-CN")}），后台继续`
+              : `预计 ${resp.tiles_estimated.toLocaleString("zh-CN")} 个瓦片任务，后台分批生成并开始下载`)
           : (resp.message || "已启动");
       } else if (action === "pause") {
         await mapApi.pauseRegionDownload(r.id);

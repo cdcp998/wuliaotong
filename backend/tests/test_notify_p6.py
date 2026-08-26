@@ -225,6 +225,38 @@ def test_tile_batch_download_flow() -> None:
     # 磁盘缓存命中的环境全部成功、离线环境部分失败——两者都属正常完成；关键是不再有待下载且已收尾
     assert mine["status"] == 2 and (mine["done"] + mine["failed"]) > 0
 
+    # 断点续传：手动把至多 3 个成功任务置为失败 → start 重置（磁盘有缓存直接记成功），且不重复插入任务行
+    db = SessionLocal()
+    try:
+        rows = db.execute(
+            text("SELECT id FROM map_download_task WHERE region_id = :r AND status = 1 ORDER BY id LIMIT 3"),
+            {"r": region_id},
+        ).fetchall()
+        flipped = len(rows)
+        assert flipped >= 1, "至少需要 1 个成功任务来验证续传重置"
+        for (tid,) in rows:
+            db.execute(text("UPDATE map_download_task SET status = 2 WHERE id = :i"), {"i": tid})
+        total_before = db.scalar(text("SELECT COUNT(*) FROM map_download_task WHERE region_id = :r"), {"r": region_id})
+        db.commit()
+    finally:
+        db.close()
+    r = client.post(f"/api/v1/map/cache/regions/{region_id}/start")
+    assert r.json()["code"] == 0
+    data_resume = r.json()["data"]
+    assert data_resume["failed_reset"] + data_resume["failed_cached"] == flipped
+    db = SessionLocal()
+    try:
+        total_after = db.scalar(text("SELECT COUNT(*) FROM map_download_task WHERE region_id = :r"), {"r": region_id})
+        bad = db.scalar(text(
+            "SELECT COUNT(*) FROM map_download_task WHERE region_id = :r AND status NOT IN (0, 1)"
+        ), {"r": region_id})
+        st_after = db.scalar(text("SELECT status FROM map_cache_region WHERE id = :r"), {"r": region_id})
+    finally:
+        db.close()
+    assert total_after == total_before  # 差集幂等：不重复建任务
+    assert bad == 0                     # 失败终态已被重置（待下载或磁盘命中记成功）
+    assert st_after in (4, 1)           # 已进入续传流程
+
     # 暂停区域 → 再次 start 允许重新评估续跑（差集幂等，重新进入生成中(4)）
     assert client.post(f"/api/v1/map/cache/regions/{region_id}/pause").json()["code"] == 0
     r = client.post(f"/api/v1/map/cache/regions/{region_id}/start")

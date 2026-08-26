@@ -235,6 +235,11 @@ def _compose_from_parent(source_cfg: dict, source: str, z: int, x: int, y: int) 
         return None
 
 
+def has_tile(source: str, z: int, x: int, y: int) -> bool:
+    """该瓦片磁盘是否已有缓存文件（断点续传免重复下载判断用）。"""
+    return _tile_path(source, z, x, y).exists()
+
+
 def total_size_for(pieces: list[tuple[str, int, int, int]]) -> int:
     """按增量注册表统计一组瓦片当前磁盘占用字节（未落盘/未登记计 0）。
 

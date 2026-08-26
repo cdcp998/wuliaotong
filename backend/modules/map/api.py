@@ -326,6 +326,10 @@ def start_region_download(region_id: int, db: Session = Depends(get_db)) -> dict
     任务由后台 region_generate_tick 按 zoom 升序分批差集插入（幂等），全部就绪后自动转
     「下载中(1)」交由 download_worker 抓取。请求耗时恒定毫秒级，大区域不再长时间占用
     请求线程/连接池；两个管理员同时启动不同区域互不拖累。
+
+    断点续传语义：已成功任务不重复下载（worker 仅消费待下载）；上次失败的终态任务在此
+    重置——其中磁盘已有瓦片的直接记成功（跨区域/浏览缓存复用，零网络抓取），其余转回
+    待下载由 worker 续跑。
     """
     r = db.get(MapCacheRegion, region_id)
     if r is None:
@@ -350,9 +354,22 @@ def start_region_download(region_id: int, db: Session = Depends(get_db)) -> dict
         raise BizError(E_PARAM,
                        f"预估瓦片数 {estimated} 超过上限 {region_generator.MAX_TILES_PER_REGION}，"
                        "请缩小区域范围或降低缩放级别")
+    # 断点续传：失败终态任务重置（磁盘已有 → 直接记成功避免重复下载；否则转待下载）
+    failed_reset = 0
+    failed_cached = 0
+    failed_rows = db.scalars(select(MapDownloadTask).where(
+        MapDownloadTask.region_id == region_id, MapDownloadTask.status == 2)).all()
+    for t in failed_rows:
+        if t.source and tile_cache.has_tile(t.source, t.z, t.x, t.y):
+            t.status = 1
+            failed_cached += 1
+        else:
+            t.status = 0
+            t.retry_count = 0
+            failed_reset += 1
     r.status = region_generator.STATUS_GENERATING  # 4 = 任务生成中：由后台 tick 分批推进
     db.commit()
-    return ok({"tiles_estimated": estimated})
+    return ok({"tiles_estimated": estimated, "failed_reset": failed_reset, "failed_cached": failed_cached})
 
 
 @router.post("/map/cache/regions/{region_id}/pause", dependencies=[Depends(require_permission("map:cache"))])
