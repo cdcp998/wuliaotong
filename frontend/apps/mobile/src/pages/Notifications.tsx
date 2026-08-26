@@ -2,88 +2,23 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog, SpinLoading, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
-import { notificationApi, type NotificationItem } from "@wlt/shared";
+import {
+  notificationApi,
+  NOTICE_CAT_STYLE,
+  NOTICE_DAY_GROUPS,
+  NoticeCatIcon,
+  NoticeCheckIcon,
+  noticeCatOf,
+  noticeDayKey,
+  noticeRelTime,
+  type NotificationItem,
+} from "@wlt/shared";
 
 /** 移动端可跳转的通知链接前缀（其余如删除审核在电脑端处理，仅标记已读不跳转）。 */
 const MOBILE_LINK_PREFIXES = ["/requisitions/", "/stock/query"];
 
-/* ---------- 类型语义分类（OP 设计页 M7b 改版提案）----------
- * 后端 biz_type 实际值为 预警/待办/审批/提醒 等：按语义归入四类配色，
- * 胶囊文案保留真实业务类型；筛选胶囊行按同一分类过滤（纯前端逻辑）。 */
-type Cat = "warn" | "todo" | "remind" | "other";
-
-function catOf(bizType: string): Cat {
-  if (bizType === "预警") return "warn";
-  if (bizType === "待办" || bizType === "审批" || bizType === "审计") return "todo";
-  if (bizType === "识别" || bizType === "提醒") return "remind";
-  return "other";
-}
-
-/** 分类视觉：图标块底色 / 前景色 / 胶囊类名（色值同 global.css 的 wlt-pill Token）。 */
-const CAT_STYLE: Record<Cat, { tileBg: string; fg: string; pillCls: string }> = {
-  warn: { tileBg: "#FDEBEC", fg: "#DC2626", pillCls: "wlt-pill--red" },
-  todo: { tileBg: "#EAEFFF", fg: "#3B5BDB", pillCls: "wlt-pill--blue" },
-  remind: { tileBg: "#FEF4E2", fg: "#B45309", pillCls: "wlt-pill--amber" },
-  other: { tileBg: "#EFF3FC", fg: "#64748B", pillCls: "wlt-pill--gray" },
-};
-
-/** 线性小图标（viewBox 24，描边风格与 TabBar 图标一致）。 */
-function LineIcon({ d, color, size = 15, strokeWidth = 1.7 }: { d: string; color: string; size?: number; strokeWidth?: number }) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
-      <path d={d} />
-    </svg>
-  );
-}
-
-const ICON_D = {
-  bell: "M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0",
-  clip: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9l2 2 4-4",
-  scan: "M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10",
-  info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 8h.01M12 11v5",
-  check: "M20 6L9 17l-5-5",
-};
-
-const CAT_ICON: Record<Cat, string> = {
-  warn: ICON_D.bell,
-  todo: ICON_D.clip,
-  remind: ICON_D.scan,
-  other: ICON_D.info,
-};
-
-/** 相对时间（OP M7b）：今天/昨天 → 「今天 HH:mm」；更早 → 「MM-DD HH:mm」。解析失败回退原始串。 */
-function relTime(iso: string): string {
-  const d = new Date(iso.replace(" ", "T"));
-  if (Number.isNaN(d.getTime())) return iso.slice(0, 16).replace("T", " ");
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const day0 = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diff = Math.round((day0(new Date()) - day0(d)) / 86400000);
-  if (diff <= 0) return `今天 ${hm}`;
-  if (diff === 1) return `昨天 ${hm}`;
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm}`;
-}
-
-type DayKey = "today" | "yesterday" | "early";
-
-/** 日期分组键：今天 / 昨天 / 更早。 */
-function dayKey(iso: string): DayKey {
-  const d = new Date(iso.replace(" ", "T"));
-  if (Number.isNaN(d.getTime())) return "early";
-  const day0 = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diff = Math.round((day0(new Date()) - day0(d)) / 86400000);
-  if (diff <= 0) return "today";
-  if (diff === 1) return "yesterday";
-  return "early";
-}
-
-const GROUPS: Array<{ key: DayKey; label: string }> = [
-  { key: "today", label: "今天" },
-  { key: "yesterday", label: "昨天" },
-  { key: "early", label: "更早" },
-];
-
-type FilterKey = "all" | "unread" | Cat;
+/** 筛选胶囊（OP M7b）：全部 / 未读 n / 预警 / 待办 / 提醒——按 biz_type 语义分类（shared noticeCatOf）前端过滤。 */
+type FilterKey = "all" | "unread" | "warn" | "todo" | "remind";
 
 const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: "all", label: "全部" },
@@ -93,11 +28,11 @@ const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: "remind", label: "提醒" },
 ];
 
-/** 通知列表（手机端 TabBar 第 4 项）——按 OP 设计页 M7b 改版提案实现：
- * NavBar 右侧「全部已读 · 管理」（管理模式变为红色「完成」）；类型筛选胶囊行
- * （全部 / 未读 n / 预警 / 待办 / 提醒，按 biz_type 语义分类，管理模式下隐藏）；
- * 列表按 今天 / 昨天 / 更早 分组；通知行 = 左侧 30×30 类型图标块 + 标题（未读尾随蓝点）
- * + 内容 + 类型胶囊 + 相对时间；管理模式保留：行尾方形勾选框 + 底部「删除选中 / 全部已读」操作栏。
+/** 通知列表（手机端 TabBar 第 4 项「通知」→ 页面标题「消息」）——按 OP 设计页 M7b 改版提案实现：
+ * NavBar 右侧「全部已读 · 管理」（管理模式变为红色「完成」）；类型筛选胶囊行（管理模式下隐藏）；
+ * 列表按 今天/昨天/更早 分组；通知行 = 左侧 30×30 类型图标块 + 标题（未读尾随蓝点）
+ * + 内容 + 类型胶囊 + 相对时间（分类/配色/时间/分组逻辑在 @wlt/shared/utils/notice，与桌面端通知中心共用）；
+ * 管理模式保留：行尾方形勾选框 + 底部「删除选中 / 全部已读」操作栏。
  * 筛选与分组均为前端逻辑（接口字段 biz_type/title/content/is_read/link/created_at 已足够）。 */
 export function NotificationsPage() {
   const navigate = useNavigate();
@@ -163,13 +98,13 @@ export function NotificationsPage() {
   const visible = useMemo(() => {
     if (manage || filter === "all") return list;
     if (filter === "unread") return list.filter((n) => !n.is_read);
-    return list.filter((n) => catOf(n.biz_type) === filter);
+    return list.filter((n) => noticeCatOf(n.biz_type) === filter);
   }, [list, filter, manage]);
 
   /** 按今天/昨天/更早分组（保持接口返回的时间倒序），空组不显示。 */
   const groups = useMemo(
     () =>
-      GROUPS.map((g) => ({ ...g, items: visible.filter((n) => dayKey(n.created_at) === g.key) })).filter(
+      NOTICE_DAY_GROUPS.map((g) => ({ ...g, items: visible.filter((n) => noticeDayKey(n.created_at) === g.key) })).filter(
         (g) => g.items.length > 0
       ),
     [visible]
@@ -253,9 +188,10 @@ export function NotificationsPage() {
           background: checked ? "#3B5BDB" : "#fff",
           border: checked ? "1px solid #3B5BDB" : "1px solid #CBD6EC",
           boxSizing: "border-box",
+          color: "#fff",
         }}
       >
-        {checked && <LineIcon d={ICON_D.check} color="#fff" size={10} strokeWidth={2.4} />}
+        {checked && <NoticeCheckIcon />}
       </span>
     );
   }
@@ -358,8 +294,8 @@ export function NotificationsPage() {
           <Fragment key={g.key}>
             <div style={{ padding: "6px 2px", fontSize: 11, fontWeight: 600, color: "#8A93A8" }}>{g.label}</div>
             {g.items.map((n) => {
-              const cat = catOf(n.biz_type);
-              const st = CAT_STYLE[cat];
+              const cat = noticeCatOf(n.biz_type);
+              const st = NOTICE_CAT_STYLE[cat];
               const checked = selected.has(n.id);
               const unread = !n.is_read;
               return (
@@ -377,20 +313,21 @@ export function NotificationsPage() {
                     border: checked || unread ? "none" : "1px solid #EDF1FA",
                   }}
                 >
-                  {/* 左侧类型图标块（30×30 r9 浅底 + 15×15 线性图标） */}
+                  {/* 左侧类型图标块（30×30 r9 浅底 + 线性图标） */}
                   <div
                     style={{
                       width: 30,
                       height: 30,
                       borderRadius: 9,
                       background: st.tileBg,
+                      color: st.tileFg,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       flexShrink: 0,
                     }}
                   >
-                    <LineIcon d={CAT_ICON[cat]} color={st.fg} />
+                    <NoticeCatIcon cat={cat} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
@@ -401,10 +338,23 @@ export function NotificationsPage() {
                     </div>
                     <div style={{ fontSize: 11, color: "#5B6478", lineHeight: 1.5 }}>{n.content}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1 }}>
-                      <span className={`wlt-pill ${st.pillCls}`} style={{ fontSize: 11, lineHeight: "16px", padding: "1px 9px" }}>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          borderRadius: 999,
+                          padding: "1px 9px",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          lineHeight: "16px",
+                          whiteSpace: "nowrap",
+                          background: st.pillBg,
+                          color: st.pillFg,
+                        }}
+                      >
                         {n.biz_type || "通知"}
                       </span>
-                      <span style={{ fontSize: 10, color: "#8A93A8" }}>{relTime(n.created_at)}</span>
+                      <span style={{ fontSize: 10, color: "#8A93A8" }}>{noticeRelTime(n.created_at)}</span>
                     </div>
                   </div>
                   {/* 管理模式行尾勾选框 */}

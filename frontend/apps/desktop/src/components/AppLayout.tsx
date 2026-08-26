@@ -1,23 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
   App,
   AutoComplete,
   Badge,
   Button,
-  Checkbox,
   Drawer,
   Dropdown,
-  Empty,
   Form,
   Input,
   Layout,
   Menu,
   Modal,
-  Popconfirm,
   Spin,
-  Tabs,
-  Tag,
   theme,
   type MenuProps,
 } from "antd";
@@ -65,7 +60,21 @@ import {
   DesktopOutlined,
 } from "@ant-design/icons";
 
-import { authApi, notificationApi, otherEndUrl, useAuthStore, type MenuNode, type NotificationItem } from "@wlt/shared";
+import {
+  authApi,
+  notificationApi,
+  NOTICE_CAT_STYLE,
+  NOTICE_DAY_GROUPS,
+  NoticeCatIcon,
+  NoticeCheckIcon,
+  noticeCatOf,
+  noticeDayKey,
+  noticeRelTime,
+  otherEndUrl,
+  useAuthStore,
+  type MenuNode,
+  type NotificationItem,
+} from "@wlt/shared";
 import { useViewportTier } from "../hooks/useViewportTier";
 
 const { Sider, Header, Content } = Layout;
@@ -166,12 +175,16 @@ export const MENU: MenuNodeDef[] = [
   },
 ];
 
-/** 通知分类标签样式（与手机端一致）。 */
-const BIZ_STYLE: Record<string, { text: string; color: string }> = {
-  "预警": { text: "预警", color: "red" },
-  "待办": { text: "待办", color: "orange" },
-  "审批": { text: "审批", color: "blue" },
-};
+/** 筛选胶囊（与手机端消息页一致，OP M7b）：全部 / 未读 n / 预警 / 待办 / 提醒——按 biz_type 语义分类前端过滤。 */
+type NoticeFilterKey = "all" | "unread" | "warn" | "todo" | "remind";
+
+const NOTICE_FILTERS: Array<{ key: NoticeFilterKey; label: string }> = [
+  { key: "all", label: "全部" },
+  { key: "unread", label: "未读" },
+  { key: "warn", label: "预警" },
+  { key: "todo", label: "待办" },
+  { key: "remind", label: "提醒" },
+];
 
 const TITLES: Record<string, string> = {
   "/dashboard": "统计面板",
@@ -312,7 +325,8 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
   }, []);
   const [noticeOpen, setNoticeOpen] = useState(false); // 通知中心抽屉
   const [notices, setNotices] = useState<NotificationItem[]>([]);
-  const [noticeTab, setNoticeTab] = useState<"unread" | "all">("unread"); // 未读 / 全部
+  const [noticeFilter, setNoticeFilter] = useState<NoticeFilterKey>("all"); // 类型筛选胶囊（前端过滤）
+  const [noticeManage, setNoticeManage] = useState(false); // 管理模式（勾选 + 删除，与手机端一致）
   const [noticeLoading, setNoticeLoading] = useState(false);
   const [noticeSelected, setNoticeSelected] = useState<Set<number>>(new Set());
   const [unread, setUnread] = useState(0);
@@ -375,18 +389,15 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
 
   // ==================== 通知中心（与手机端同功能） ====================
 
-  /** 拉取通知列表（按当前 tab：未读 / 全部，取前 50 条）。 */
-  const loadNotices = useCallback(
-    (tab: "unread" | "all" = noticeTab) => {
-      setNoticeLoading(true);
-      notificationApi
-        .list(tab === "unread" ? 0 : undefined, 1, 50)
-        .then((d) => setNotices(d.list))
-        .catch(() => message.error("通知加载失败"))
-        .finally(() => setNoticeLoading(false));
-    },
-    [noticeTab, message]
-  );
+  /** 拉取通知列表：取最近 50 条，类型筛选与日期分组均在前端做（与手机端消息页一致）。 */
+  const loadNotices = useCallback(() => {
+    setNoticeLoading(true);
+    notificationApi
+      .list(undefined, 1, 50)
+      .then((d) => setNotices(d.list))
+      .catch(() => message.error("通知加载失败"))
+      .finally(() => setNoticeLoading(false));
+  }, [message]);
 
   /** 刷新未读徽标。 */
   const refreshUnread = useCallback(() => {
@@ -396,14 +407,14 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
       .catch(() => undefined);
   }, []);
 
-  // 打开抽屉即加载；tab 切换重新加载
+  // 打开抽屉即加载
   useEffect(() => {
     if (noticeOpen) {
       loadNotices();
       refreshUnread();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [noticeOpen, noticeTab]);
+  }, [noticeOpen]);
 
   /** 通知点击：未读先标记已读；有联动链接则跳转桌面对应页面。 */
   function onNoticeClick(n: NotificationItem) {
@@ -429,7 +440,45 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
     });
   }
 
+  const unreadCount = useMemo(() => notices.filter((n) => !n.is_read).length, [notices]);
+
+  /** 当前展示集合：管理模式强制全部（筛选行隐藏）；否则按筛选胶囊过滤。 */
+  const visibleNotices = useMemo(() => {
+    if (noticeManage || noticeFilter === "all") return notices;
+    if (noticeFilter === "unread") return notices.filter((n) => !n.is_read);
+    return notices.filter((n) => noticeCatOf(n.biz_type) === noticeFilter);
+  }, [notices, noticeFilter, noticeManage]);
+
+  /** 按今天/昨天/更早分组（保持接口返回的时间倒序），空组不显示。 */
+  const noticeGroups = useMemo(
+    () =>
+      NOTICE_DAY_GROUPS.map((g) => ({ ...g, items: visibleNotices.filter((n) => noticeDayKey(n.created_at) === g.key) })).filter(
+        (g) => g.items.length > 0
+      ),
+    [visibleNotices]
+  );
+
   const allSelected = notices.length > 0 && noticeSelected.size === notices.length;
+
+  /** 全部已读（抽屉头部与底部操作栏共用）。 */
+  function markAllNotices() {
+    notificationApi
+      .markReadAll()
+      .then(() => {
+        setUnread(0);
+        setNotices((ns) => ns.map((n) => ({ ...n, is_read: 1 })));
+      })
+      .catch(() => undefined);
+  }
+
+  /** 切换管理模式；退出时清空选择（与手机端一致）。 */
+  function toggleNoticeManage() {
+    setNoticeManage((v) => {
+      const next = !v;
+      if (!next) setNoticeSelected(new Set());
+      return next;
+    });
+  }
 
   function toggleSelectAll() {
     setNoticeSelected(allSelected ? new Set() : new Set(notices.map((n) => n.id)));
@@ -479,21 +528,27 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
     }
   }
 
-  /** 单条删除。 */
-  async function removeOneNotice(n: NotificationItem) {
-    try {
-      await notificationApi.remove(n.id);
-      setNotices((ns) => ns.filter((x) => x.id !== n.id));
-      setNoticeSelected((s) => {
-        const next = new Set(s);
-        next.delete(n.id);
-        return next;
-      });
-      refreshUnread();
-      message.success("已删除");
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "删除失败");
-    }
+  /** 方形勾选框（17×17 r5，OP Manage 样式）：管理模式行尾与「全选」共用。 */
+  function SquareCheck({ checked }: { checked: boolean }) {
+    return (
+      <span
+        style={{
+          width: 17,
+          height: 17,
+          borderRadius: 5,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: checked ? "#3B5BDB" : "#fff",
+          border: checked ? "1px solid #3B5BDB" : "1px solid #CBD6EC",
+          boxSizing: "border-box",
+          color: "#fff",
+        }}
+      >
+        {checked && <NoticeCheckIcon />}
+      </span>
+    );
   }
 
   // 可折叠导航：主导航分类渲染为内联子菜单（点击标题展开/收起其子项），
@@ -765,118 +820,213 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
     </Layout>
 
     <Drawer
-      title="通知中心"
+      title="消息"
       size={440}
       open={noticeOpen}
       onClose={() => setNoticeOpen(false)}
       destroyOnHidden
+      styles={{ body: { background: "#F2F5FB", padding: "0 12px 12px", display: "flex", flexDirection: "column" } }}
+      extra={
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {!noticeManage && (
+            <span style={{ fontSize: 12, color: "#5B6478", cursor: "pointer" }} onClick={markAllNotices}>
+              全部已读
+            </span>
+          )}
+          <span style={{ fontSize: 12, fontWeight: 600, color: noticeManage ? "#DC2626" : "#5B7FFF", cursor: "pointer" }} onClick={toggleNoticeManage}>
+            {noticeManage ? "完成" : "管理"}
+          </span>
+        </div>
+      }
+      footer={
+        noticeManage ? (
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={() => void deleteSelectedNotices()}
+              disabled={noticeSelected.size === 0}
+              style={{
+                flex: 1,
+                height: 36,
+                borderRadius: 11,
+                border: "none",
+                background: "#FDEBEC",
+                color: noticeSelected.size === 0 ? "#F0A6AA" : "#DC2626",
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: noticeSelected.size === 0 ? "default" : "pointer",
+              }}
+            >
+              删除选中（{noticeSelected.size}）
+            </button>
+            <button
+              onClick={markAllNotices}
+              style={{
+                height: 36,
+                borderRadius: 11,
+                border: "1px solid #E4EAF6",
+                background: "#fff",
+                color: "#5B6478",
+                fontSize: 12,
+                fontWeight: 500,
+                padding: "0 14px",
+                cursor: "pointer",
+              }}
+            >
+              全部已读
+            </button>
+          </div>
+        ) : undefined
+      }
     >
-      <Tabs
-        activeKey={noticeTab}
-        onChange={(k) => {
-          setNoticeTab(k as "unread" | "all");
-          setNoticeSelected(new Set());
-        }}
-        items={[
-          { key: "unread", label: `未读${unread > 0 ? `（${unread}）` : ""}` },
-          { key: "all", label: "全部" },
-        ]}
-      />
-      {/* 工具栏（右对齐）：全部已读 / 删除选中 / 清空全部 统一靠右（与手机端行为一致） */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "4px 2px 10px", borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={toggleSelectAll}>
-          <Checkbox checked={allSelected} />
-          <span style={{ fontSize: 13 }}>全选</span>
-        </span>
-        <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 12, color: token.colorTextTertiary }}>已选 {noticeSelected.size} 条</span>
-        <Button type="link" size="small" onClick={() => {
-          notificationApi.markReadAll().then(() => {
-            setUnread(0);
-            setNotices((ns) => ns.map((n) => ({ ...n, is_read: 1 })));
-          }).catch(() => undefined);
-        }}>
-          全部已读
-        </Button>
-        <Button size="small" danger disabled={noticeSelected.size === 0} onClick={() => void deleteSelectedNotices()}>
-          删除选中（{noticeSelected.size}）
-        </Button>
-        <Button size="small" onClick={() => void clearAllNotices()}>
-          清空全部
-        </Button>
-      </div>
-      <div style={{ minHeight: 320 }}>
+      {/* 类型筛选胶囊行（OP A FilterChips：全部(激活蓝底)/未读 n/预警/待办/提醒；管理模式隐藏） */}
+      {!noticeManage && (
+        <div style={{ display: "flex", gap: 8, padding: "2px 0 10px", flexWrap: "wrap" }}>
+          {NOTICE_FILTERS.map((f) => {
+            const active = noticeFilter === f.key;
+            return (
+              <span
+                key={f.key}
+                onClick={() => setNoticeFilter(f.key)}
+                style={{
+                  borderRadius: 999,
+                  padding: "5px 12px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  background: active ? "#5B7FFF" : "#fff",
+                  border: `1px solid ${active ? "#5B7FFF" : "#E4EAF6"}`,
+                  color: active ? "#fff" : "#5B6478",
+                }}
+              >
+                {f.label}
+                {f.key === "unread" && unreadCount > 0 && (
+                  <b style={{ fontSize: 11, fontWeight: 700, color: active ? "#DDE6FF" : "#5B7FFF" }}>{unreadCount}</b>
+                )}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 管理模式条（OP B Manage：方形勾选+全选 | 已选 n 条 · 清空全部） */}
+      {noticeManage && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 2px 10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }} onClick={toggleSelectAll}>
+            <SquareCheck checked={allSelected} />
+            <span style={{ fontSize: 12, fontWeight: 500, color: "#5B6478" }}>全选</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 11, color: "#8A93A8" }}>已选 {noticeSelected.size} 条</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#DC2626", cursor: "pointer" }} onClick={() => void clearAllNotices()}>
+              清空全部
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* 分组通知流（OP NRow r14 p12 gap10：图标块 + 标题[未读尾随蓝点] + 内容 + 胶囊·相对时间；
+          未读=#EAEFFF / 已读=白底 #EDF1FA 描边 / 选中=#D9E3FF；点击行=标记已读+联动跳转，删除走管理模式） */}
+      <div style={{ flex: 1, minHeight: 320, display: "flex", flexDirection: "column", gap: 8 }}>
         {noticeLoading && (
           <div style={{ padding: 60, textAlign: "center" }}>
             <Spin />
           </div>
         )}
-        {!noticeLoading && notices.length === 0 && <Empty style={{ padding: "48px 0" }} description="暂无通知" />}
+        {!noticeLoading && notices.length > 0 && noticeGroups.length === 0 && (
+          <div style={{ textAlign: "center", color: "#8A93A8", fontSize: 13, padding: "48px 0" }}>该分类下暂无通知</div>
+        )}
+        {!noticeLoading && notices.length === 0 && (
+          <div style={{ textAlign: "center", color: "#8A93A8", fontSize: 13, padding: "48px 0" }}>暂无通知</div>
+        )}
         {!noticeLoading &&
-          notices.map((n) => {
-            const style = BIZ_STYLE[n.biz_type] ?? { text: n.biz_type, color: "default" };
-            return (
-              <div
-                key={n.id}
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  padding: "10px 2px",
-                  borderBottom: `1px solid ${token.colorBorderSecondary}`,
-                  background: noticeSelected.has(n.id) ? "rgba(22,119,255,.06)" : undefined,
-                }}
-              >
-                <Checkbox checked={noticeSelected.has(n.id)} onChange={() => toggleNoticeSelect(n.id)} style={{ paddingTop: 3 }} />
-                <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => onNoticeClick(n)}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontWeight: n.is_read ? 400 : 600, fontSize: 13.5 }}>{n.title}</span>
-                    <Tag color={style.color} style={{ marginInlineEnd: 0 }}>
-                      {style.text}
-                    </Tag>
-                  </div>
-                  <div style={{ fontSize: 12, color: token.colorTextSecondary, marginTop: 3, lineHeight: 1.5, wordBreak: "break-all" }}>{n.content}</div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                    <span style={{ fontSize: 11, color: token.colorTextTertiary }}>
-                      {n.created_at.slice(0, 16)}
-                      {desktopLink(n.link) ? " · 点击查看详情" : ""}
-                    </span>
-                    <span style={{ display: "inline-flex", gap: 4 }}>
-                      {!n.is_read && (
-                        <Button
-                          type="link"
-                          size="small"
-                          style={{ padding: 0, fontSize: 12 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            notificationApi
-                              .markRead(n.id)
-                              .then(() => {
-                                setNotices((ns) => ns.map((x) => (x.id === n.id ? { ...x, is_read: 1 } : x)));
-                                refreshUnread();
-                              })
-                              .catch(() => undefined);
+          noticeGroups.map((g) => (
+            <Fragment key={g.key}>
+              <div style={{ padding: "6px 2px", fontSize: 11, fontWeight: 600, color: "#8A93A8" }}>{g.label}</div>
+              {g.items.map((n) => {
+                const cat = noticeCatOf(n.biz_type);
+                const st = NOTICE_CAT_STYLE[cat];
+                const checked = noticeSelected.has(n.id);
+                const unread = !n.is_read;
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => onNoticeClick(n)}
+                    style={{
+                      borderRadius: 14,
+                      padding: 12,
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "flex-start",
+                      cursor: "pointer",
+                      background: checked ? "#D9E3FF" : unread ? "#EAEFFF" : "#fff",
+                      border: checked || unread ? "none" : "1px solid #EDF1FA",
+                    }}
+                  >
+                    {/* 左侧类型图标块（30×30 r9 浅底 + 线性图标） */}
+                    <div
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: 9,
+                        background: st.tileBg,
+                        color: st.tileFg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <NoticeCatIcon cat={cat} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: unread ? 600 : 500, color: "#1E2433", lineHeight: 1.45 }}>
+                          {n.title}
+                        </span>
+                        {unread && !noticeManage && <span style={{ width: 7, height: 7, borderRadius: 4, background: "#5B7FFF", flexShrink: 0 }} />}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#5B6478", lineHeight: 1.5, wordBreak: "break-all" }}>{n.content}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1 }}>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            borderRadius: 999,
+                            padding: "1px 9px",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            lineHeight: "16px",
+                            whiteSpace: "nowrap",
+                            background: st.pillBg,
+                            color: st.pillFg,
                           }}
                         >
-                          标记已读
-                        </Button>
-                      )}
-                      <Popconfirm
-                        title="删除该通知？"
-                        okText="删除"
-                        okButtonProps={{ danger: true }}
-                        cancelText="取消"
-                        onConfirm={() => void removeOneNotice(n)}
+                          {n.biz_type || "通知"}
+                        </span>
+                        <span style={{ fontSize: 11, color: "#8A93A8" }}>{noticeRelTime(n.created_at)}</span>
+                        {desktopLink(n.link) ? <span style={{ fontSize: 11, color: "#8A93A8" }}>· 点击查看详情</span> : null}
+                      </div>
+                    </div>
+                    {/* 管理模式行尾勾选框 */}
+                    {noticeManage && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleNoticeSelect(n.id);
+                        }}
                       >
-                        <Button type="link" size="small" style={{ padding: 0, fontSize: 12, color: token.colorError }} onClick={(e) => e.stopPropagation()}>
-                          删除
-                        </Button>
-                      </Popconfirm>
-                    </span>
+                        <SquareCheck checked={checked} />
+                      </span>
+                    )}
                   </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </Fragment>
+          ))}
       </div>
     </Drawer>
 
