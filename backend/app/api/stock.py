@@ -236,6 +236,28 @@ def create_purchase_in(
     raise BizError(E_PARAM, "单据编号生成失败，请重试")
 
 
+def _history_price_stmt(product_id: int, keyword: str, supplier_id: int, start: str):
+    """历史价格查询条件（列表页与导出共用）。"""
+    stmt = (
+        select(PchPurchaseInItem, PchPurchaseIn)
+        .join(PchPurchaseIn, PchPurchaseIn.id == PchPurchaseInItem.bill_id)
+        .join(BaseProduct, BaseProduct.id == PchPurchaseInItem.product_id)
+        .where(PchPurchaseIn.status == 1)
+    )
+    if product_id:
+        stmt = stmt.where(PchPurchaseInItem.product_id == product_id)
+    if supplier_id:
+        stmt = stmt.where(PchPurchaseIn.supplier_id == supplier_id)
+    if start:
+        stmt = stmt.where(PchPurchaseIn.bill_date >= start)
+    if keyword:
+        like = f"%{keyword.strip()}%"
+        stmt = stmt.where(
+            or_(BaseProduct.name.like(like), BaseProduct.code.like(like), BaseProduct.material_code.like(like), BaseProduct.spec.like(like))
+        )
+    return stmt
+
+
 @router.get(
     "/purchase-in/history-price",
     dependencies=[Depends(require_any_permission("stk:query", "pch:in", "pch:ocr"))],
@@ -256,23 +278,7 @@ def purchase_in_history_price(
     """
     if product_id and db.get(BaseProduct, product_id) is None:
         raise BizError(E_NOT_FOUND, "材料不存在")
-    stmt = (
-        select(PchPurchaseInItem, PchPurchaseIn)
-        .join(PchPurchaseIn, PchPurchaseIn.id == PchPurchaseInItem.bill_id)
-        .join(BaseProduct, BaseProduct.id == PchPurchaseInItem.product_id)
-        .where(PchPurchaseIn.status == 1)
-    )
-    if product_id:
-        stmt = stmt.where(PchPurchaseInItem.product_id == product_id)
-    if supplier_id:
-        stmt = stmt.where(PchPurchaseIn.supplier_id == supplier_id)
-    if start:
-        stmt = stmt.where(PchPurchaseIn.bill_date >= start)
-    if keyword:
-        like = f"%{keyword.strip()}%"
-        stmt = stmt.where(
-            or_(BaseProduct.name.like(like), BaseProduct.code.like(like), BaseProduct.material_code.like(like), BaseProduct.spec.like(like))
-        )
+    stmt = _history_price_stmt(product_id, keyword, supplier_id, start)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.execute(
         stmt.order_by(PchPurchaseIn.bill_date.desc(), PchPurchaseIn.id.desc())
@@ -300,6 +306,91 @@ def purchase_in_history_price(
         "page": page,
         "page_size": page_size,
     })
+
+
+@router.get(
+    "/purchase-in/history-price/export",
+    dependencies=[Depends(require_any_permission("stk:query", "pch:in", "pch:ocr"))],
+)
+def export_history_price(
+    product_id: int = Query(0),
+    keyword: str = Query("", max_length=100),
+    supplier_id: int = Query(0),
+    start: str = Query("", max_length=20),
+    fmt: str = Query("", max_length=8000),  # 「导出格式设置」JSON（ExportFormatModal 生成；空=默认样式）
+    preview: int = Query(0, ge=0, le=1),  # 1=不生成文件，返回前 10 条 JSON（格式设置预览）
+    db: Session = Depends(get_db),
+):
+    """历史价格导出 Excel（统一导出服务，模块标识 history_price；fmt/preview 同其他导出）。
+
+    涨跌列按全量「材料×供应商」组内与上一笔（更早）比较，口径与页面一致且不受分页影响。
+    """
+    from app.services.export_format import parse_export_spec
+
+    spec = parse_export_spec(fmt)
+    if fmt and spec is None:
+        raise BizError(E_PARAM, "导出格式设置（fmt）不是合法 JSON")
+    rows = db.execute(
+        _history_price_stmt(product_id, keyword, supplier_id, start)
+        .order_by(PchPurchaseIn.bill_date.desc(), PchPurchaseIn.id.desc())
+    ).all()
+    if len(rows) > 20000:
+        raise BizError(E_PARAM, "导出记录超过 20000 条，请缩小时间范围后分批导出")
+
+    # 批量预取材料/供应商/单位，避免逐行回表（N+1）
+    pids = {it.product_id for it, _ in rows}
+    sids = {b.supplier_id for _, b in rows}
+    prod_map = {p.id: p for p in db.scalars(select(BaseProduct).where(BaseProduct.id.in_(pids))).all()} if pids else {}
+    sup_map = {s.id: s for s in db.scalars(select(BaseSupplier).where(BaseSupplier.id.in_(sids))).all()} if sids else {}
+    uids = {p.unit_id for p in prod_map.values() if p.unit_id}
+    unit_map = {u.id: u for u in db.scalars(select(BaseUnit).where(BaseUnit.id.in_(uids))).all()} if uids else {}
+
+    headers = ["入库日期", "单据号", "材料编码", "材料名称", "规格", "单位", "供应商", "单价", "数量", "金额", "涨跌"]
+    data = []
+    last_price: dict[tuple[int, int], str] = {}
+    for it, b in rows:
+        p = prod_map.get(it.product_id)
+        s = sup_map.get(b.supplier_id)
+        u = unit_map.get(p.unit_id) if p else None
+        key = (it.product_id, b.supplier_id)
+        cur = format(it.price, "f")
+        prev = last_price.get(key)
+        if prev is None:
+            change = "首笔"
+        else:
+            pf, cf = float(prev), float(cur)
+            diff = cf - pf
+            pct = (diff / pf * 100) if pf else 0.0
+            change = "持平" if abs(diff) < 1e-9 else f"{'+' if diff > 0 else '-'}{abs(pct):.1f}%"
+        last_price[key] = cur
+        data.append([
+            str(b.bill_date or "")[:10],
+            b.bill_no,
+            p.material_code if p else "",
+            p.name if p else "",
+            p.spec if p else "",
+            (u.name if u else "") or it.unit_name,
+            s.name if s else "",
+            cur,
+            format(it.qty, "f"),
+            format(it.amount, "f"),
+            change,
+        ])
+
+    if preview:
+        return ok({"headers": headers, "rows": [[str(c) if c is not None else "" for c in r] for r in data[:10]]})
+
+    from app.services.export_service import apply_column_spec, write_table_xlsx
+
+    headers, data, req_spec = apply_column_spec(headers, data, spec)
+    today = datetime.now().strftime("%Y%m%d")
+    return write_table_xlsx(
+        db, "history_price",
+        headers=headers, rows=data,
+        filename=f"历史价格_{today}.xlsx",
+        sheet="历史价格",
+        request_spec=req_spec,
+    )
 
 
 @router.get("/purchase-in")

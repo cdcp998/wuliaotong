@@ -40,6 +40,7 @@ EXPORT_CONFIG_KEYS: dict[str, str] = {
     "operation_logs": "export.module.operation_logs",
     "check_export": "export.module.check_export",
     "flow": "export.module.flow",
+    "history_price": "export.module.history_price",
 }
 
 # 内置默认（代码兜底；管理员不可见不可改此层）

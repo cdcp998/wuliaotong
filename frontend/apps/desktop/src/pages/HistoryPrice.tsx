@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { App, Button, Input, Select, Table, Tag } from "antd";
+import { App, Button, Input, Select, Space, Table, Tag, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { DownloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { DownloadOutlined, SearchOutlined, SettingOutlined } from "@ant-design/icons";
 
 import { baseApi, purchaseApi, type HistoryPriceRow, type Supplier } from "@wlt/shared";
+
+import { ExportFormatModal, type ExportFormatSpec } from "../components/ExportFormatModal";
+import { HISTORY_PRICE_FIELDS } from "./exportFields";
 
 const RANGE_OPTIONS = [
   { value: 0, label: "全部时间" },
@@ -87,34 +90,21 @@ export function HistoryPricePage() {
     return <Tag style={{ borderRadius: 999, background: meta.bg, color: meta.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{text}</Tag>;
   }
 
-  /** 导出当前筛选（CSV）。 */
-  async function onExport() {
-    try {
-      const all: HistoryPriceRow[] = [];
-      for (let p = 1; p <= 20; p++) {
-        const d = await purchaseApi.historyPrice({ keyword, supplierId, start: rangeDays ? startOf(rangeDays) : undefined, page: p, pageSize: 100 });
-        all.push(...d.list);
-        if (all.length >= d.total) break;
-      }
-      const esc = (s: unknown) => `"${String(s ?? "").replace(/"/g, '""')}"`;
-      const csv = [
-        ["材料", "编码", "供应商", "单价", "涨跌", "单据", "日期"].join(","),
-        ...all.map((r) => {
-          const c = changeMap.get(list.indexOf(r));
-          const ch = !c ? "首笔" : c.dir === "flat" ? "持平" : `${c.dir === "up" ? "+" : "-"}${Math.abs(c.pct).toFixed(1)}%`;
-          return [r.product_name, r.material_code || "-", r.supplier_name, r.price, ch, r.bill_no, r.bill_date?.slice(0, 10)].map(esc).join(",");
-        }),
-      ].join("\n");
-      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `历史价格_${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "导出失败");
-    }
+  /** 当前筛选条件（导出/预览共用）。 */
+  const exportParams = {
+    keyword: keyword || undefined,
+    supplierId: supplierId || undefined,
+    start: rangeDays ? startOf(rangeDays) : undefined,
+  };
+  const [fmtOpen, setFmtOpen] = useState(false);
+
+  /** 导出 Excel（统一导出服务模块 history_price；fmt=「导出格式设置」JSON 可选）。 */
+  function doExport(fmt?: ExportFormatSpec) {
+    window.open(purchaseApi.historyPriceExportUrl({ ...exportParams, ...(fmt ? { fmt: JSON.stringify(fmt) } : {}) }));
   }
+
+  /** 导出预览：后端 preview=1 返回前 10 条真实数据（源列全序）。 */
+  const previewRows = () => purchaseApi.historyPriceExportPreview(exportParams).then((r) => r.rows);
 
   const columns: ColumnsType<HistoryPriceRow> = [
     {
@@ -143,8 +133,23 @@ export function HistoryPricePage() {
             按 材料 × 供应商 查看历史采购价，入库时自动提示涨跌（移动加权成本）
           </p>
         </div>
-        <Button type="primary" icon={<DownloadOutlined />} onClick={() => void onExport()}>导出</Button>
+        <Space>
+          <Tooltip title="点击设置导出文件的列选择、格式、列宽等选项">
+            <Button icon={<SettingOutlined style={{ color: "#5B7FFF" }} />} onClick={() => setFmtOpen(true)}>导出设置</Button>
+          </Tooltip>
+          <Button type="primary" icon={<DownloadOutlined />} onClick={() => doExport()}>导出 Excel</Button>
+        </Space>
       </div>
+
+      {/* 导出格式设置弹窗（模块标识 history_price，与系统设置「导出格式设置」统一管理） */}
+      <ExportFormatModal
+        open={fmtOpen}
+        onClose={() => setFmtOpen(false)}
+        fields={HISTORY_PRICE_FIELDS}
+        storageKey="export_fmt_history_price"
+        getPreviewRows={previewRows}
+        onExport={(spec) => doExport(spec)}
+      />
 
       {/* 筛选条（设计页 21：搜索 + 供应商 + 近 N 天 + 统计） */}
       <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>

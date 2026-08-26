@@ -74,3 +74,18 @@ export const CHECK_FIELDS: ExportField[] = [
   { key: 19, label: "盘盈盘亏金额", hint: "number" },
   { key: 20, label: "备注" },
 ];
+
+/** 历史价格（后端 /purchase-in/history-price/export 表头）。 */
+export const HISTORY_PRICE_FIELDS: ExportField[] = [
+  { key: 0, label: "入库日期" },
+  { key: 1, label: "单据号", hint: "text" },
+  { key: 2, label: "材料编码", hint: "text" },
+  { key: 3, label: "材料名称" },
+  { key: 4, label: "规格" },
+  { key: 5, label: "单位" },
+  { key: 6, label: "供应商" },
+  { key: 7, label: "单价", hint: "number" },
+  { key: 8, label: "数量", hint: "number" },
+  { key: 9, label: "金额", hint: "number" },
+  { key: 10, label: "涨跌" },
+];

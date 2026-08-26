@@ -267,6 +267,8 @@ export const requisitionApi = {
   /** 领用审核 AI 辅助摘要（P9-P1⑤）。 */
   aiSummary: (id: number) => http.get<{ summary: string; risk_level: string; reasons: string[]; ai: boolean }>(`/requisitions/${id}/ai-summary`),
   cancel: (id: number) => http.post<null>(`/requisitions/${id}/cancel`),
+  /** 删除领用单：仅已取消的单可删（连同明细一并移除，不可恢复）。 */
+  remove: (id: number) => http.delete<null>(`/requisitions/${id}`),
   /** 完成工作：在工作地点拍照留痕（手机定位供下载水印），提交后进入待审计。 */
   workDone: (id: number, photoFileId: number, lat = "", lng = "") =>
     http.post<null>(`/requisitions/${id}/work-done`, { photo_file_id: photoFileId, lat, lng }),
@@ -420,7 +422,7 @@ export interface AiSuggestion {
   ocr_record_id: number;
   product_name: string;
   model: string;
-  suggestion: { spec?: string; category?: string; note?: string } | null;
+  suggestion: { spec?: string; barcode?: string; unit?: string; category?: string; note?: string } | null;
   status: number;
   new_product_id: number;
   created_at: string;
@@ -429,7 +431,7 @@ export interface AiSuggestion {
 export const aiApi = {
   list: (status = 1, page = 1, pageSize = 20) =>
     http.get<PageData<AiSuggestion>>(`/ai-suggestions?status=${status}&page=${page}&page_size=${pageSize}`),
-  accept: (id: number, params: { code?: string; name?: string; category_id?: number; unit_id?: number; purchase_price?: string }) =>
+  accept: (id: number, params: { code?: string; name?: string; spec?: string; barcode?: string; category_id?: number; unit_id?: number; purchase_price?: string }) =>
     http.post<{ product_id: number; code: string }>(
       `/ai-suggestions/${id}/accept?${new URLSearchParams(
         Object.entries(params).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)])
@@ -551,6 +553,28 @@ export const purchaseApi = {
     if (params.keyword) p.set("keyword", params.keyword);
     if (params.start) p.set("start", params.start);
     return http.get<PageData<HistoryPriceRow>>(`/purchase-in/history-price?${p.toString()}`);
+  },
+  /** 历史价格导出 Excel（统一导出服务模块 history_price）；fmt=「导出格式设置」JSON 可选。 */
+  historyPriceExportUrl: (params: { productId?: number; supplierId?: number; keyword?: string; start?: string; fmt?: string } = {}) => {
+    const q = new URLSearchParams({
+      product_id: String(params.productId ?? 0),
+      supplier_id: String(params.supplierId ?? 0),
+    });
+    if (params.keyword) q.set("keyword", params.keyword);
+    if (params.start) q.set("start", params.start);
+    if (params.fmt) q.set("fmt", params.fmt);
+    return `${apiBase()}/purchase-in/history-price/export?${q.toString()}`;
+  },
+  /** 历史价格导出预览：preview=1 返回前 10 条 JSON（「导出格式设置」预览用）。 */
+  historyPriceExportPreview: (params: { productId?: number; supplierId?: number; keyword?: string; start?: string } = {}) => {
+    const q = new URLSearchParams({
+      preview: "1",
+      product_id: String(params.productId ?? 0),
+      supplier_id: String(params.supplierId ?? 0),
+    });
+    if (params.keyword) q.set("keyword", params.keyword);
+    if (params.start) q.set("start", params.start);
+    return http.get<{ headers: string[]; rows: string[][] }>(`/purchase-in/history-price/export?${q.toString()}`);
   },
 };
 

@@ -11,12 +11,12 @@
  */
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { App, Button, ColorPicker, InputNumber, Segmented, Select, Space, Switch, Tag, Tooltip } from "antd";
-import { DatabaseOutlined, FileExcelOutlined, FileSearchOutlined, GlobalOutlined, ProfileOutlined, SaveOutlined, SettingOutlined, SwapOutlined, UndoOutlined } from "@ant-design/icons";
+import { DatabaseOutlined, FileExcelOutlined, FileSearchOutlined, GlobalOutlined, LineChartOutlined, ProfileOutlined, SaveOutlined, SettingOutlined, SwapOutlined, UndoOutlined } from "@ant-design/icons";
 
-import { adminApi, checkApi, exportReportPreview, systemApi } from "@wlt/shared";
+import { adminApi, checkApi, exportReportPreview, purchaseApi, systemApi } from "@wlt/shared";
 
 import { ExportFormatModal, type ExportField } from "../components/ExportFormatModal";
-import { CHECK_FIELDS, FLOW_FIELDS, LOGS_FIELDS, STOCK_FIELDS } from "./exportFields";
+import { CHECK_FIELDS, FLOW_FIELDS, HISTORY_PRICE_FIELDS, LOGS_FIELDS, STOCK_FIELDS } from "./exportFields";
 import { useViewportTier } from "../hooks/useViewportTier";
 
 type Format = Record<string, any>;
@@ -38,6 +38,7 @@ const MODULES: { key: string; label: string; desc: string; icon: ReactNode }[] =
   { key: "operation_logs", label: "操作日志", desc: "写操作审计记录导出", icon: <FileSearchOutlined /> },
   { key: "check_export", label: "盘点导出", desc: "收发存模板 + 盘点结果", icon: <ProfileOutlined /> },
   { key: "flow", label: "库存流水导出", desc: "出入库流明明细", icon: <SwapOutlined /> },
+  { key: "history_price", label: "历史价格", desc: "采购价流水（谁供的货）", icon: <LineChartOutlined /> },
 ];
 
 /** 各模块「导出格式设置」弹窗接入：字段定义 / 本地存储键 / 预览数据源（前 10 条真实数据）。
@@ -57,6 +58,7 @@ const MODULE_EXPORT_META: Record<string, { fields: ExportField[]; storageKey: st
     },
   },
   flow: { fields: FLOW_FIELDS, storageKey: "export_fmt_flow", preview: () => exportReportPreview({ type: "flow" }).then((r) => r.rows) },
+  history_price: { fields: HISTORY_PRICE_FIELDS, storageKey: "export_fmt_history_price", preview: () => purchaseApi.historyPriceExportPreview().then((r) => r.rows) },
 };
 
 /** 合并优先级链（生效顺序自上而下递减）。 */
