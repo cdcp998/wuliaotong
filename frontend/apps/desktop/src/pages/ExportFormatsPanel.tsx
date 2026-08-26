@@ -17,6 +17,7 @@ import { adminApi, checkApi, exportReportPreview, systemApi } from "@wlt/shared"
 
 import { ExportFormatModal, type ExportField } from "../components/ExportFormatModal";
 import { CHECK_FIELDS, FLOW_FIELDS, LOGS_FIELDS, STOCK_FIELDS } from "./exportFields";
+import { useViewportTier } from "../hooks/useViewportTier";
 
 type Format = Record<string, any>;
 
@@ -77,18 +78,7 @@ function deepMerge(base: Format, override?: Format | null): Format {
   return out;
 }
 
-/** 响应式断点（按视口宽）：≥1024 桌面 / 768~1023 平板 / <768 移动端。 */
-export type ViewportTier = "mobile" | "tablet" | "desktop";
-
-export function useViewportTier(): ViewportTier {
-  const [w, setW] = useState(() => (typeof window === "undefined" ? 1024 : window.innerWidth));
-  useEffect(() => {
-    const onResize = () => setW(window.innerWidth);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return w >= 1024 ? "desktop" : w >= 768 ? "tablet" : "mobile";
-}
+/** 响应式断点（按视口宽）已统一迁移至 hooks/useViewportTier.ts。 */
 
 /** 表单字段：统一标签（上方）+ 控件（下方）的纵向节奏。 */
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -117,12 +107,12 @@ function BoolField({ label, checked, onChange, disabled }: { label: string; chec
 }
 
 /** 表单控件行：流式换行、底部对齐，窄容器自动折行而不拉伸。 */
-const FIELD_ROW: CSSProperties = { display: "flex", flexWrap: "wrap", gap: "14px 22px", alignItems: "flex-end" };
+const FIELD_ROW: CSSProperties = { display: "flex", flexWrap: "wrap", gap: "16px 28px", alignItems: "flex-end" };
 
 /** 内容区分节头：小图标 + 标题，右侧可放说明。 */
 function SectionHead({ icon, title, hint }: { icon: ReactNode; title: string; hint?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
         <span style={{ width: 22, height: 22, borderRadius: 7, background: C.selectedBg, color: C.deep, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>{icon}</span>
         <b style={{ fontSize: 13.5, color: C.text }}>{title}</b>
@@ -134,7 +124,7 @@ function SectionHead({ icon, title, hint }: { icon: ReactNode; title: string; hi
 
 /** 分节之间的通栏分隔线。 */
 function Rule() {
-  return <div aria-hidden style={{ height: 1, background: C.border, margin: "16px -18px" }} />;
+  return <div aria-hidden style={{ height: 1, background: C.border, margin: "20px -24px" }} />;
 }
 
 const PREVIEW_COLS: { title: string; width?: number; kind: "text" | "longtext" | "num" | "date" }[] = [
@@ -332,9 +322,9 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: railVertical ? "row" : "column", gap: 16, alignItems: "stretch", maxWidth: 1160 }}>
+    <div style={{ display: "flex", flexDirection: railVertical ? "row" : "column", gap: 20, alignItems: "stretch", maxWidth: 1160 }}>
       {/* ── 左栏：作用域导航 + 优先级图例 ─────────────────────────── */}
-      <aside style={{ width: railVertical ? 232 : undefined, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+      <aside style={{ width: railVertical ? 240 : undefined, flexShrink: 0, display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
         <div style={{ fontSize: 12, color: C.sub, padding: "0 2px" }}>配置范围</div>
         <div
           role="radiogroup"
@@ -342,7 +332,7 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
           style={{
             display: "flex",
             flexDirection: railVertical ? "column" : "row",
-            gap: 6,
+            gap: 8,
             overflowX: railVertical ? undefined : "auto",
             paddingBottom: railVertical ? undefined : 4,
           }}
@@ -407,7 +397,7 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
       </aside>
 
       {/* ── 右栏：当前作用域详情 ───────────────────────────────────── */}
-      <section style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+      <section style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 14 }}>
         {/* 作用域标题行 */}
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", padding: "0 2px" }}>
           <div style={{ minWidth: 0 }}>
@@ -429,7 +419,7 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
         </header>
 
         {/* 设置卡片：预览 + 各分节（单一平面，避免卡中卡） */}
-        <div style={{ background: "#fff", border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px" }}>
+        <div style={{ background: "#fff", border: `1px solid ${C.border}`, borderRadius: 16, padding: "22px 24px" }}>
           <section>
             <SectionHead icon={<FileExcelOutlined />} title="效果预览" hint="所见即所得 · 实时反映下方配置" />
             <ExcelPreview draft={draft} />
@@ -538,7 +528,7 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
             position: "sticky", bottom: 0, zIndex: 2,
             display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap",
             background: "rgba(255,255,255,.94)", backdropFilter: "blur(6px)",
-            border: `1px solid ${dirty ? "#D9E3FF" : C.border}`, borderRadius: 14, padding: "10px 14px",
+            border: `1px solid ${dirty ? "#D9E3FF" : C.border}`, borderRadius: 14, padding: "12px 16px",
             boxShadow: dirty ? "0 4px 18px rgba(91,127,255,.12)" : "0 2px 8px rgba(30,36,51,.04)",
           }}>
             <span style={{ fontSize: 12, color: C.sub, display: "inline-flex", alignItems: "center", gap: 8 }}>

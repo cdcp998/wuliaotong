@@ -57,6 +57,7 @@ import { ModulesPage } from "./Modules";
 import { BackupsPage } from "./Backups";
 import { AboutPanel } from "./AboutPanel";
 import { ExportFormatsPanel } from "./ExportFormatsPanel";
+import { useViewportTier } from "../hooks/useViewportTier";
 
 const EMPTY: Settings = {
   "site.name": "",
@@ -140,6 +141,8 @@ function toStrings(values: Settings): Partial<Settings> {
 export function SettingsPage() {
   const { message } = App.useApp();
   const { token } = theme.useToken();
+  // 响应式：≥1024 桌面分区页签在左侧；平板/移动移到顶部
+  const tier = useViewportTier();
   // 分区状态同步到 URL（?tab=config|modules|menus），旧路由 /system/modules|menus 重定向至此
   const [params, setParams] = useSearchParams();
   const hasPerm = useAuthStore((s) => s.hasPerm);
@@ -1129,7 +1132,7 @@ export function SettingsPage() {
       </div>
       {/* 顶层分区：系统配置（表单）/ 模块管理 / 导航管理 / 备份管理 / 关于（恒最末；antd Tabs 激活过的面板保持挂载，表单值不丢） */}
       <Tabs
-        tabPlacement="left"
+        tabPlacement={tier === "desktop" ? "start" : "top"}
         activeKey={section}
         onChange={(k) => setParams({ tab: k }, { replace: true })}
         items={[

@@ -66,6 +66,7 @@ import {
 } from "@ant-design/icons";
 
 import { authApi, notificationApi, otherEndUrl, useAuthStore, type MenuNode, type NotificationItem } from "@wlt/shared";
+import { useViewportTier } from "../hooks/useViewportTier";
 
 const { Sider, Header, Content } = Layout;
 
@@ -299,6 +300,9 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
   const { message, modal } = App.useApp();
   // 平板/窄窗（≤992px，与 mobile.css 断点一致）默认折叠为 64px 图标栏，避免展开导航遮住内容；
   // 桌面端保持默认展开。折叠状态切换仍由顶栏按钮控制；跨断点自动跟随。
+  // 统一响应式断点：≥1024 桌面（左侧导航）/ 768~1023 平板 / <768 移动（主导航移到顶部横排）
+  const tier = useViewportTier();
+  const isDesktop = tier === "desktop";
   const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth <= 992);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 992px)");
@@ -576,6 +580,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
   return (
     <>
       <Layout style={{ height: "100dvh", overflow: "hidden" }}>
+      {isDesktop && (
       <Sider
         collapsible
         collapsed={collapsed}
@@ -661,6 +666,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
           style={{ borderInlineEnd: "none", padding: "8px 0", flex: 1, minHeight: 0, overflowY: "auto" }}
         />
       </Sider>
+      )}
       <Layout style={{ height: "100dvh", overflow: "hidden" }}>
         <Header
           style={{
@@ -677,17 +683,21 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
             zIndex: 10,
           }}
         >
-          <Button
-            style={{ width: 34, height: 34, padding: 0, background: "#FFFFFF", border: `1px solid #E4EAF6`, borderRadius: 10, color: token.colorTextSecondary }}
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => setCollapsed(!collapsed)}
-          />
-          {/* 顶栏面包屑：当前页面名（页面内 h2 为视觉主标题，避免两处大标题重复） */}
-          <div style={{ fontSize: 13, whiteSpace: "nowrap" }}>
-            <span style={{ color: token.colorTextTertiary }}>物料通</span>
-            <span style={{ margin: "0 8px", color: "#CBD6EC" }}>/</span>
-            <span style={{ color: "#1E2433", fontWeight: 600 }}>{navLeaves.find((l) => l.path === selectedKey)?.label ?? TITLES[selectedKey] ?? "工作台"}</span>
-          </div>
+          {isDesktop && (
+            <Button
+              style={{ width: 34, height: 34, padding: 0, background: "#FFFFFF", border: `1px solid #E4EAF6`, borderRadius: 10, color: token.colorTextSecondary }}
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setCollapsed(!collapsed)}
+            />
+          )}
+          {/* 顶栏面包屑：当前页面名（页面内 h2 为视觉主标题，避免两处大标题重复）；窄屏隐藏省空间 */}
+          {tier !== "mobile" && (
+            <div style={{ fontSize: 13, whiteSpace: "nowrap" }}>
+              <span style={{ color: token.colorTextTertiary }}>物料通</span>
+              <span style={{ margin: "0 8px", color: "#CBD6EC" }}>/</span>
+              <span style={{ color: "#1E2433", fontWeight: 600 }}>{navLeaves.find((l) => l.path === selectedKey)?.label ?? TITLES[selectedKey] ?? "工作台"}</span>
+            </div>
+          )}
           <Input.Search
             placeholder="搜索材料 / 单号 / 条码…"
             allowClear
@@ -697,7 +707,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
               navigate(`/stock?keyword=${encodeURIComponent(v)}`);
               collapseOnMobile();
             }}
-            style={{ width: 260, marginLeft: 8, background: "#FFFFFF", borderColor: "#CBD6EC" }}
+            style={{ width: tier === "desktop" ? 260 : tier === "tablet" ? 170 : 120, marginLeft: tier === "mobile" ? 0 : 8, background: "#FFFFFF", borderColor: "#CBD6EC" }}
           />
           <div style={{ flex: 1 }} />
           <Badge count={unread} size="small">
@@ -733,6 +743,21 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
             </div>
           </Dropdown>
         </Header>
+        {/* 平板/移动（<1024）：主导航移到顶部，横排菜单（组渲染为下拉子菜单，溢出自动收进 …） */}
+        {!isDesktop && (
+          <div style={{ flexShrink: 0, background: "#FFFFFF", borderBottom: "1px solid #E4EAF6", padding: "0 8px" }}>
+            <Menu
+              mode="horizontal"
+              items={menuItems}
+              selectedKeys={[selectedKey]}
+              onClick={({ key }) => {
+                navigate(key);
+                scrollContentTop();
+              }}
+              style={{ borderInlineEnd: "none", background: "transparent" }}
+            />
+          </div>
+        )}
         <Content ref={contentRef} style={{ background: token.colorBgLayout, overflow: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           {children}
         </Content>
