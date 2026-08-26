@@ -332,7 +332,7 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: railVertical ? "row" : "column", gap: 16, alignItems: "stretch" }}>
+    <div style={{ display: "flex", flexDirection: railVertical ? "row" : "column", gap: 16, alignItems: "stretch", maxWidth: 1160 }}>
       {/* ── 左栏：作用域导航 + 优先级图例 ─────────────────────────── */}
       <aside style={{ width: railVertical ? 232 : undefined, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
         <div style={{ fontSize: 12, color: C.sub, padding: "0 2px" }}>配置范围</div>
@@ -342,10 +342,9 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
           style={{
             display: "flex",
             flexDirection: railVertical ? "column" : "row",
-            flexWrap: tier === "tablet" ? "wrap" : undefined,
             gap: 6,
-            overflowX: tier === "mobile" ? "auto" : undefined,
-            paddingBottom: tier === "mobile" ? 4 : undefined,
+            overflowX: railVertical ? undefined : "auto",
+            paddingBottom: railVertical ? undefined : 4,
           }}
         >
           {scopeItems.map((m) => {
@@ -359,11 +358,10 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
                 onClick={() => setScope(m.key)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setScope(m.key); } }}
                 style={{
-                  flexShrink: tier === "mobile" ? 0 : undefined,
+                  flexShrink: railVertical ? undefined : 0,
                   display: "flex", alignItems: "center", gap: 9,
                   padding: "8px 8px 8px 12px", borderRadius: 12, cursor: "pointer", userSelect: "none",
-                  minWidth: tier === "mobile" ? 176 : undefined,
-                  maxWidth: "100%",
+                  minWidth: railVertical ? undefined : 176,
                   background: active ? C.selectedBg : "#FFFFFF",
                   border: `1.5px solid ${active ? C.primary : C.border}`,
                   boxShadow: active ? "0 2px 10px rgba(91,127,255,.14)" : "none",
