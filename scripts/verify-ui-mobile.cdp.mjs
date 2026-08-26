@@ -107,24 +107,51 @@ async function main() {
   // 登录页（M20 重构）截图
   await cdp.shot(join(OUT, "mobile_390_login.png"));
 
-  // 登录 admin/admin123：无头环境 antd-mobile Input 的合成事件链不稳定，
-  // 改走同源 API 登录（Session Cookie 与 UI 登录完全一致），仅用于建立会话后截图核验页面。
-  const loginR = await cdp.eval(`
-    fetch('/api/v1/auth/login', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'admin123', captcha_id: '', captcha_code: '', remember: true }),
-    }).then(r => r.status)
+  // 登录 admin/admin123：优先走真实 UI（受控输入 + 点登录钮），端到端验证登录链路；
+  // 若无头环境输入注入仍不生效，回退同源 API 登录（仅建会话截图用）。
+  const uiLogin = await cdp.eval(`
+    (() => {
+      const set = (el, v) => {
+        const s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        s.call(el, v);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const u = document.querySelector('input[placeholder="账号 / 用户名"]');
+      const p = document.querySelector('input[placeholder="密码"]');
+      if (!u || !p) return 'inputs-missing';
+      set(u, 'admin');
+      set(p, 'admin123');
+      const btn = [...document.querySelectorAll('button')].find((b) => (b.textContent || '').includes('登'));
+      if (!btn) return 'submit-missing';
+      btn.click();
+      return 'ui-submitted';
+    })()
   `);
-  console.log("api-login status:", loginR);
-  await sleep(500);
-  const loaded0 = cdp.once("Page.loadEventFired", 15000);
-  await cdp.send("Runtime.evaluate", { expression: "location.assign('/')" });
-  await loaded0;
-  await sleep(3000);
+  console.log("ui-login:", uiLogin);
+  await sleep(4500);
   let path = await cdp.eval("location.pathname");
-  console.log("after-login path:", path);
+  let loginVia = "ui";
+  if (path !== "/") {
+    console.log("UI 登录未通过（无头输入注入限制），回退 API 登录");
+    loginVia = "api";
+    const status = await cdp.eval(`
+      fetch('/api/v1/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'admin', password: 'admin123', captcha_id: '', captcha_code: '', remember: true }),
+      }).then(r => r.status)
+    `);
+    console.log("api-login status:", status);
+    await sleep(500);
+    const loaded0 = cdp.once("Page.loadEventFired", 15000);
+    await cdp.send("Runtime.evaluate", { expression: "location.assign('/')" });
+    await loaded0;
+    await sleep(3000);
+    path = await cdp.eval("location.pathname");
+  }
+  console.log(`after-login path: ${path} (via ${loginVia})`);
   if (path !== "/") throw new Error("登录失败，停在 " + path);
 
   for (const p of PAGES) {

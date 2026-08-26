@@ -221,34 +221,31 @@ button:focus-visible,
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* ---------- 8. 登录页表单卡（M20 OP 规格：label 11px + 输入块 h40/r11/#F6F8FE）---------- */
-.wlt-login-form {
-  --border-top: 0;
-  --border-bottom: 0;
-  --border-inner: 0;
-}
-.wlt-login-form .adm-list-body {
-  background: transparent;
-}
-.wlt-login-form .adm-list-item,
-.wlt-login-form .adm-list-item-content {
-  background: transparent;
-}
-.wlt-login-form .adm-list-item-content-main {
-  padding: 0;
-}
-.wlt-login-form .adm-form-item-label-label {
+/* ---------- 8. 登录页（M20 OP 规格：label 11px/500 + 输入块 h40/r11/#F6F8FE）----------
+ * 输入为受控 state（不走 Form.Item 注入，自定义容器会吞掉绑定导致无法登录——踩坑留档）。 */
+.wlt-login-label {
   font-size: 11px;
   font-weight: 500;
   color: var(--wlt-text-2);
   padding-bottom: 4px;
 }
-.wlt-login-form .adm-input {
+
+.wlt-login-field {
+  height: 40px;
+  border-radius: 11px;
+  background: var(--wlt-surface-2);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+}
+
+.wlt-login-field .adm-input {
   --font-size: 14px;
   --placeholder-color: var(--wlt-text-3);
   --text-color: var(--wlt-text);
 }
-/* 输入块容器（Login.tsx 内联 h40/r11/#F6F8FE），Input 元素去默认内边距贴合 */
+
 .wlt-login-field .adm-input-element {
   height: 40px;
 }
