@@ -205,3 +205,78 @@ export function fromDisplaySpace(lng: number, lat: number, space: string): [numb
   if (space === "bd09") return bd09ToWgs84(lng, lat);
   return [lng, lat];
 }
+
+// ============================ 显示坐标系偏好（中国大陆 GCJ-02 加密显示） ============================
+
+/** 默认显示坐标系：GCJ-02（对 WGS-84 业务坐标做加密偏移显示，适配中国大陆使用场景）。 */
+export const DEFAULT_DISPLAY_SPACE = "gcj02";
+
+/**
+ * 解析当前生效的显示坐标系：
+ * - 非 WGS84 底图源（gcj02/bd09，如高德/百度瓦片）按源原生空间对齐，避免二次偏移；
+ * - WGS84 底图（如 Esri）按全局偏好显示；未设置时默认 GCJ-02（加密显示）。
+ */
+export function resolveDisplaySpace(
+  sourceSpace: string | null | undefined,
+  globalPref: string | null | undefined,
+): string {
+  if (sourceSpace && sourceSpace !== "wgs84") return sourceSpace;
+  return globalPref || DEFAULT_DISPLAY_SPACE;
+}
+
+// ============================ 定位获取（含降级链） ============================
+
+export interface AppPosition {
+  lat: number;
+  lng: number;
+  accuracy?: number;
+  /** gps=浏览器定位（WGS84）；ip=IP 粗略定位兜底。均为 WGS84 坐标。 */
+  source: "gps" | "ip";
+}
+
+/**
+ * 获取当前位置（WGS84），带降级链，修复 HTTP 内网/手机端浏览器无 Geolocation API 时无法定位：
+ * 1. 浏览器 Geolocation（GPS/WiFi，精度高；仅安全上下文可用）；
+ * 2. ipapi.co HTTPS IP 定位；
+ * 3. ip-api.com HTTP IP 定位（内网 HTTP 部署下可用）。
+ * 全部失败才 reject（调用方提示手动选点）。
+ */
+export function getCurrentPositionWithFallback(timeoutMs = 10000): Promise<AppPosition> {
+  const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+    new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("timeout")), ms);
+      p.then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
+    });
+
+  const viaBrowser = (): Promise<AppPosition> =>
+    new Promise((resolve, reject) => {
+      if (typeof navigator === "undefined" || !("geolocation" in navigator) || !navigator.geolocation) {
+        reject(new Error("geolocation unavailable"));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? undefined, source: "gps" }),
+        (err) => reject(new Error(`geolocation error ${err.code}`)),
+        { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 30000 },
+      );
+    });
+
+  const viaIpapi = async (): Promise<AppPosition> => {
+    const resp = await withTimeout(fetch("https://ipapi.co/json/", { cache: "no-store" }), timeoutMs);
+    if (!resp.ok) throw new Error(`ipapi HTTP ${resp.status}`);
+    const j = (await resp.json()) as { latitude?: number; longitude?: number };
+    if (typeof j.latitude !== "number" || typeof j.longitude !== "number") throw new Error("ipapi no coords");
+    return { lat: j.latitude, lng: j.longitude, source: "ip" };
+  };
+
+  const viaIpApiCom = async (): Promise<AppPosition> => {
+    const resp = await withTimeout(fetch("https://ip-api.com/json/?fields=status,lat,lon", { cache: "no-store" }), timeoutMs);
+    if (!resp.ok) throw new Error(`ip-api HTTP ${resp.status}`);
+    const j = (await resp.json()) as { status?: string; lat?: number; lon?: number };
+    if (j.status !== "success" || typeof j.lat !== "number" || typeof j.lon !== "number") throw new Error("ip-api no coords");
+    return { lat: j.lat, lng: j.lon, source: "ip" };
+  };
+
+  // 浏览器优先；失败（不支持/被拒绝/超时）依次降级到两个 IP 定位服务
+  return viaBrowser().catch(() => viaIpapi().catch(() => viaIpApiCom()));
+}

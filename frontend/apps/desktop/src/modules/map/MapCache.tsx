@@ -5,7 +5,7 @@ import { EnvironmentOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } fr
 
 import { useAuthStore } from "@wlt/shared";
 
-import { mapApi, type MapSourceInfo } from "./api";
+import { mapApi, type MapCacheConfig, type MapSourceInfo } from "./api";
 import { MapView } from "./MapView";
 
 /** 区域状态（后端 0未开始/1下载中/2完成/3暂停/4任务生成中）。 */
@@ -64,6 +64,9 @@ export function MapCachePage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<RegionRow | null>(null);
   const [sources, setSources] = useState<Record<string, MapSourceInfo>>({});
+  // 地图缓存/显示配置（含显示坐标系偏好；默认 GCJ-02 加密显示）
+  const [cacheCfg, setCacheCfg] = useState<MapCacheConfig | null>(null);
+  const [spaceSaving, setSpaceSaving] = useState(false);
   const [srcOpen, setSrcOpen] = useState(false);
   const [srcModalOpen, setSrcModalOpen] = useState(false);
   const [srcSaving, setSrcSaving] = useState(false);
@@ -140,10 +143,25 @@ export function MapCachePage() {
       const withKey = Object.fromEntries(Object.entries(r.map_sources).map(([k, v]) => [k, { ...v, key: k }]));
       setSources(withKey);
       setRegionSources(withKey);
+      setCacheCfg(r.cache ?? null);
     } catch {
       /* 无权限/接口异常静默 */
     }
   }, []);
+
+  /** 切换全局显示坐标系（GCJ-02 默认加密显示 / WGS-84 原始显示；需 map:config 权限）。 */
+  const changeDisplaySpace = async (v: "gcj02" | "wgs84") => {
+    setSpaceSaving(true);
+    try {
+      await mapApi.saveMapConfig({ cache: { ...(cacheCfg ?? {}), display_coordinate_space: v } });
+      message.success(v === "gcj02" ? "已切换为 GCJ-02 加密显示（默认，重新进入地图页生效）" : "已切换为 WGS-84 原始显示（重新进入地图页生效）");
+      setCacheCfg((c) => ({ ...(c ?? {}), display_coordinate_space: v }));
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "保存失败（需要「地图源配置」权限）");
+    } finally {
+      setSpaceSaving(false);
+    }
+  };
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void loadSources(); }, [loadSources]);
@@ -333,6 +351,19 @@ export function MapCachePage() {
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5B6478" }}>按地图源/区域管理瓦片缓存：缓存永不自动过期，仅手动清理；「默认缓存」自动收集浏览产生的瓦片</p>
         </div>
         <Space>
+          <span style={{ fontSize: 12, color: "#5B6478" }}>显示坐标系</span>
+          <Select
+            size="middle"
+            style={{ width: 150 }}
+            value={cacheCfg?.display_coordinate_space ?? "gcj02"}
+            onChange={(v) => void changeDisplaySpace(v)}
+            loading={spaceSaving}
+            disabled={!canConfig || spaceSaving}
+            options={[
+              { value: "gcj02", label: "GCJ-02（默认）" },
+              { value: "wgs84", label: "WGS-84" },
+            ]}
+          />
           <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<ReloadOutlined style={{ color: "#5B7FFF" }} />} onClick={() => { void load(); void loadSources(); }}>刷新</Button>
           <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<SettingOutlined style={{ color: "#5B7FFF" }} />} onClick={() => setSrcOpen(true)}>图源管理</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>生成缓存</Button>

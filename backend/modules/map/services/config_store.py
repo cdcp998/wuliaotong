@@ -223,7 +223,11 @@ _config_cache = _TtlCache()
 
 
 def default_config() -> dict:
-    """初始地图源配置（Esri World Imagery，WGS84）。"""
+    """初始地图源配置（Esri World Imagery，WGS84）。
+
+    cache.display_coordinate_space：全局显示坐标系（gcj02 默认——对 WGS84 业务坐标做
+    GCJ-02 加密偏移显示，适配中国大陆场景；wgs84 原始显示）。仅显示层语义，前端消费。
+    """
     return {
         "map_sources": {
             "esri": {
@@ -236,5 +240,5 @@ def default_config() -> dict:
                 "api_secret": "",
             }
         },
-        "cache": {"max_size": 20 * 1024 * 1024 * 1024, "max_daily": 0},
+        "cache": {"max_size": 20 * 1024 * 1024 * 1024, "max_daily": 0, "display_coordinate_space": "gcj02"},
     }

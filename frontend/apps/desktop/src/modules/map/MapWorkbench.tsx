@@ -2,21 +2,24 @@
  *
  * v3 界面（OpenPencil 设计稿全工作区化）：
  * - 无页头、无内边距：顶栏以下整块为地图工作区（底图 #DDE7F5）
- * - 左上 图源 pill（点击切换底图）｜右上 玻璃工具栏（位置/测距/图层/刷新/标记，激活=品牌色）
+ * - 左上 图源 pill（点击切换底图）｜右上 玻璃工具栏（位置/测距/图层/刷新/标记/画线，激活=品牌色）
  * - 图层下拉（线缆/故障/设备/标记 点击行开关，激活浅底）挂在工具栏下方
- * - 左下 故障导航 pill（点击展开导航浮层）+ 图例 pill；右下 缩放(+/-) + 指北回正
+ * - 左下 故障导航 pill（点击展开导航浮层）+ 图例 pill；右下 回到我的定位 + 指北回正（透明容器）+ 缩放
  * - 测距定位为工具栏展开的玻璃浮层卡（线缆选择 + 距离 + 结果）
+ *
+ * 并发/体验批次新增：手机端可用的定位降级链（浏览器 GPS→IP 兜底）、我的位置标识点、
+ * 画线工具、回到正视图自动居中当前位置、显示坐标系默认 GCJ-02（缓存管理可切换 WGS-84）。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { App, Button, Descriptions, Dropdown, InputNumber, Select, Tooltip } from "antd";
-import { AimOutlined, AppstoreOutlined, CompassOutlined, DownOutlined, EnvironmentOutlined, GlobalOutlined, MinusOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { AimOutlined, AppstoreOutlined, CompassOutlined, DownOutlined, EditOutlined, EnvironmentOutlined, GlobalOutlined, MinusOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import L from "leaflet";
 
-import type { LatLng } from "@wlt/shared";
+import { cumulativeDistances, getCurrentPositionWithFallback, resolveDisplaySpace, toDisplaySpace, type LatLng } from "@wlt/shared";
 
 import { cableApi, type CableItem, type FaultItem, type MarkerItem, type MeasureResult, type NavigateResult } from "../cable/api";
 import { mapApi, type MapSourceInfo } from "./api";
-import { MapView } from "./MapView";
+import { MapView, type DrawnLine } from "./MapView";
 
 const TYPE_LABEL: Record<string, string> = { wire: "电线", fiber: "光缆", network: "网线" };
 /** 地图初始视图（指北回正 / 无数据时的视图）。 */
@@ -72,6 +75,15 @@ export function MapWorkbenchPage() {
   const [measureOpen, setMeasureOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [map, setMap] = useState<L.Map | null>(null);
+  // 定位：我的当前位置（WGS84）+ 定位中标记 + 显示坐标系偏好（缓存管理设置）
+  const [myPos, setMyPos] = useState<LatLng | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [displayPref, setDisplayPref] = useState<string | null>(null);
+  // 画线工具：绘制模式 / 草稿节点（WGS84）/ 已完成线条
+  const [drawMode, setDrawMode] = useState(false);
+  const [draftPoints, setDraftPoints] = useState<LatLng[]>([]);
+  const [drawnLines, setDrawnLines] = useState<DrawnLine[]>([]);
+  const lineSeq = useRef(0);
 
   const load = useCallback(async () => {
     try {
@@ -81,6 +93,7 @@ export function MapWorkbenchPage() {
         cableApi.listFaults({ page_size: 100, exclude_closed: true }),
       ]);
       setSources(src.map_sources);
+      setDisplayPref(src.cache?.display_coordinate_space ?? null);
       setCables(cablesResp.items);
       setFaults(faultsResp.items);
       const byCable: Record<number, MarkerItem[]> = {};
@@ -140,13 +153,89 @@ export function MapWorkbenchPage() {
     }
   };
 
-  const locateMe = useCallback(() => {
-    navigator.geolocation?.getCurrentPosition(
-      (pos) => setNavStart([pos.coords.latitude, pos.coords.longitude]),
-      () => message.warning("无法获取定位，请点击地图选择起点（进入「选起点」模式）"),
-      { enableHighAccuracy: true, timeout: 8000 },
-    );
-  }, [message]);
+  /** 当前生效的显示坐标系：非 WGS84 底图按源空间；WGS84 底图按全局偏好（默认 GCJ-02）。 */
+  const effSpace = useMemo(() => {
+    const srcSpace =
+      (activeSource && sources[activeSource]?.coordinate_space) ||
+      Object.values(sources).find((s) => s.enabled)?.coordinate_space;
+    return resolveDisplaySpace(srcSpace, displayPref);
+  }, [sources, activeSource, displayPref]);
+
+  /** 把 WGS84 坐标转为地图显示坐标并平滑飞行过去。 */
+  const flyToWgs84 = useCallback(
+    (pos: LatLng, zoomLevel?: number) => {
+      if (!map) return;
+      const [dlng, dlat] = toDisplaySpace(pos[1], pos[0], effSpace);
+      map.flyTo([dlat, dlng], zoomLevel ?? Math.max(map.getZoom(), 14), { duration: 0.8 });
+    },
+    [map, effSpace],
+  );
+
+  /** 定位到我的位置（浏览器 GPS → IP 兜底降级链，修复手机端 HTTP 环境无法定位）。
+   *  成功后更新「我的位置」标识点并居中；同时作为导航起点复用。 */
+  const locateMe = useCallback(async () => {
+    if (myPos) {
+      // 已有定位：直接回到我的位置
+      setNavStart(myPos);
+      flyToWgs84(myPos);
+      return;
+    }
+    setLocating(true);
+    try {
+      const p = await getCurrentPositionWithFallback();
+      const pos: LatLng = [p.lat, p.lng];
+      setMyPos(pos);
+      setNavStart(pos);
+      flyToWgs84(pos);
+      if (p.source === "gps") {
+        message.success("已定位到当前位置");
+      } else {
+        message.info("浏览器定位不可用，已使用 IP 粗略定位（精度有限）");
+      }
+    } catch {
+      message.warning("无法获取定位（未授权或网络受限），请点击地图选择起点");
+    } finally {
+      setLocating(false);
+    }
+  }, [message, myPos, flyToWgs84]);
+
+  /** 回到正视图：自动拉回初始视角；已有我的位置时居中显示当前位置。 */
+  const resetToHomeView = useCallback(() => {
+    if (!map) return;
+    if (myPos) {
+      flyToWgs84(myPos, DEFAULT_VIEW.zoom);
+    } else {
+      const [dlng, dlat] = toDisplaySpace(DEFAULT_VIEW.center[1], DEFAULT_VIEW.center[0], effSpace);
+      map.flyTo([dlat, dlng], DEFAULT_VIEW.zoom, { duration: 0.8 });
+    }
+  }, [map, myPos, effSpace, flyToWgs84]);
+
+  // ============================ 画线工具 ============================
+  const toggleDraw = useCallback(() => {
+    setDrawMode((v) => {
+      if (!v) {
+        setDraftPoints([]);
+        setNavOpen(false);
+        setMeasureOpen(false);
+        setLayersOpen(false);
+      }
+      return !v;
+    });
+  }, []);
+
+  /** 完成当前线：落入手工线条列表（继续绘制下一条）。 */
+  const finishLine = useCallback(() => {
+    if (draftPoints.length < 2) return;
+    lineSeq.current += 1;
+    setDrawnLines((ls) => [...ls, { id: `draw-${lineSeq.current}`, points: draftPoints }]);
+    setDraftPoints([]);
+  }, [draftPoints]);
+
+  /** 草稿长度（米，逐点累计；仅交互预览用）。 */
+  const draftLengthM = useMemo(() => {
+    const dists = cumulativeDistances(draftPoints);
+    return dists.length ? dists[dists.length - 1] : 0;
+  }, [draftPoints]);
 
   const doNavigate = async () => {
     if (!navFault || !navStart) {
@@ -201,13 +290,25 @@ export function MapWorkbenchPage() {
         overlays={overlays}
         highlight={highlight}
         navPath={navResult?.path ?? null}
+        myPosition={myPos}
+        extraLines={drawnLines}
+        draftLine={drawMode && draftPoints.length > 0 ? draftPoints : null}
+        displaySpace={displayPref}
         onMapReady={setMap}
         onPick={
           pickMode === "navStart"
             ? (lat, lng) => { setNavStart([lat, lng]); setPickMode("none"); setNavOpen(true); }
-            : undefined
+            : drawMode
+              ? (lat, lng) => setDraftPoints((pts) => [...pts, [lat, lng]])
+              : undefined
         }
-        picking={pickMode === "navStart" ? "请在故障线路上点击选择导航起点（自动转换为 WGS84）" : undefined}
+        picking={
+          pickMode === "navStart"
+            ? "请在故障线路上点击选择导航起点（自动转换为 WGS84）"
+            : drawMode
+              ? "画线模式：点击地图添加节点（右侧可完成/撤销）"
+              : undefined
+        }
       />
 
       {/* 左上：图源 pill（点击切换底图） */}
@@ -219,14 +320,39 @@ export function MapWorkbenchPage() {
         </div>
       </Dropdown>
 
-      {/* 右上：玻璃工具栏（位置/测距/图层/刷新/标记） */}
+      {/* 右上：玻璃工具栏（位置/测距/图层/刷新/标记/画线） */}
       <div style={{ ...floatCard, top: 14, right: 14, display: "flex", gap: 4, padding: "6px 8px", borderRadius: 14 }}>
-        <ToolbarBtn icon={<AimOutlined />} tip="我的位置（导航起点）" label="位置" onClick={locateMe} />
+        <ToolbarBtn icon={<AimOutlined />} tip="我的位置（导航起点）" label="位置" onClick={() => void locateMe()} />
         <ToolbarBtn active={measureOpen} icon={<EnvironmentOutlined />} tip="测距定位" label="测距" onClick={() => { setMeasureOpen((v) => !v); setNavOpen(false); }} />
         <ToolbarBtn active={layersOpen} icon={<AppstoreOutlined />} tip="叠加图层开关" label="图层" onClick={() => { setLayersOpen((v) => !v); setMeasureOpen(false); }} />
         <ToolbarBtn icon={<ReloadOutlined />} tip="刷新数据" label="刷新" onClick={() => void load()} />
         <ToolbarBtn active={pickMode === "navStart"} icon={<PlusOutlined />} tip={pickMode === "navStart" ? "取消选起点" : "地图选起点"} label="标记" onClick={() => { setPickMode(pickMode === "navStart" ? "none" : "navStart"); setNavOpen(true); }} />
+        <ToolbarBtn active={drawMode} icon={<EditOutlined />} tip="画线工具（点击地图添加节点）" label="画线" onClick={toggleDraw} />
       </div>
+
+      {/* 画线浮层卡：节点数/长度 + 撤销/完成/清空 */}
+      {drawMode && (
+        <div style={{ ...floatCard, top: 64, right: 14, width: 224, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 700, color: "#1E2433" }}>画线</span>
+          <span style={{ fontSize: 11.5, color: "#5B6478" }}>
+            {draftPoints.length} 个节点 · 约 {Math.round(draftLengthM).toLocaleString("zh-CN")} m
+          </span>
+          <Button size="small" disabled={draftPoints.length === 0} onClick={() => setDraftPoints((pts) => pts.slice(0, -1))} block>
+            撤销上一点
+          </Button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <Button type="primary" size="small" disabled={draftPoints.length < 2} onClick={finishLine} style={{ flex: 1 }}>完成本线</Button>
+            <Button size="small" disabled={draftPoints.length === 0} onClick={() => setDraftPoints([])} style={{ flex: 1 }}>清空</Button>
+          </div>
+          {drawnLines.length > 0 && (
+            <>
+              <span style={{ fontSize: 11.5, color: "#8A93A8" }}>已画 {drawnLines.length} 条线</span>
+              <Button size="small" danger onClick={() => setDrawnLines([])} block>清除全部画线</Button>
+            </>
+          )}
+          <span style={{ fontSize: 10.5, color: "#8A93A8" }}>再点「画线」按钮退出绘制模式</span>
+        </div>
+      )}
 
       {/* 图层下拉（挂在工具栏下方）：点击行开/关，激活=品牌浅底 */}
       {layersOpen && (
@@ -325,15 +451,25 @@ export function MapWorkbenchPage() {
         </div>
       )}
 
-      {/* 右下：缩放 + 指北回正 */}
-      <div style={{ ...floatCard, bottom: 16, right: 16, display: "flex", alignItems: "flex-end", gap: 6 }}>
-        <Tooltip title="回正视图" placement="left">
-          <Button
-            style={{ width: 30, height: 30, padding: 0, borderRadius: 8, background: "#FFFFFF", border: "1px solid #E4EAF6" }}
-            icon={<CompassOutlined style={{ fontSize: 14, color: "#5B6478" }} />}
-            onClick={() => map?.setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom)}
-          />
-        </Tooltip>
+      {/* 右下：回到我的定位 / 指北回正 + 缩放（功能菜单容器背景透明） */}
+      <div style={{ position: "absolute", zIndex: 1000, bottom: 16, right: 16, display: "flex", alignItems: "flex-end", gap: 6, background: "transparent", border: "none", boxShadow: "none" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "transparent" }}>
+          <Tooltip title="回到我的定位" placement="left">
+            <Button
+              loading={locating}
+              style={{ width: 30, height: 30, padding: 0, borderRadius: 8, background: "#FFFFFF", border: "1px solid #E4EAF6" }}
+              icon={<AimOutlined style={{ fontSize: 14, color: "#3B5BDB" }} />}
+              onClick={() => void locateMe()}
+            />
+          </Tooltip>
+          <Tooltip title="回到正视图（自动居中我的当前位置）" placement="left">
+            <Button
+              style={{ width: 30, height: 30, padding: 0, borderRadius: 8, background: "#FFFFFF", border: "1px solid #E4EAF6" }}
+              icon={<CompassOutlined style={{ fontSize: 14, color: "#5B6478" }} />}
+              onClick={resetToHomeView}
+            />
+          </Tooltip>
+        </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 0", borderRadius: 12, background: "#FFFFFF", border: "1px solid #E4EAF6" }}>
           <Button type="text" size="small" style={{ width: 32, height: 26, padding: 0, color: "#5B6478" }} icon={<PlusOutlined />} onClick={() => map?.zoomIn()} />
           <div style={{ width: 20, height: 1, background: "#EFF3FC" }} />

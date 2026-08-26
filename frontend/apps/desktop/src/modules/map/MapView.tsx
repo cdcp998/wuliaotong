@@ -1,16 +1,16 @@
 /** map 模块：Leaflet 地图基础组件（方案 §5.2/§7.1 MapView；cable 模块复用）。
  *
  * - 底图：后端瓦片代理 /map/tile/{source}/{z}/{x}/{y}（缓存优先，未命中抓在线源）
- * - 叠加层：线缆 GeoJSON / 故障点 / 标记点 / 路径（导航）
- * - 坐标：数据与接口一律 WGS84，仅本组件按源 coordinate_space 做显示层转换（共享 geo.ts）
+ * - 叠加层：线缆 GeoJSON / 故障点 / 标记点 / 路径（导航）/ 我的位置 / 画线（工作台）
+ * - 坐标：数据与接口一律 WGS84，仅本组件做显示层转换：非 WGS84 底图按源原生空间对齐，
+ *   WGS84 底图按全局偏好显示（默认 GCJ-02 加密显示，中国大陆场景）——共享 geo.ts
  */
 import { useEffect, useMemo } from "react";
 import { GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Empty } from "antd";
 
-import { fromDisplaySpace, toDisplaySpace, type LatLng } from "@wlt/shared";
+import { fromDisplaySpace, resolveDisplaySpace, toDisplaySpace, type LatLng } from "@wlt/shared";
 
 import type { CableItem, FaultItem, MarkerItem } from "../cable/api";
 import { mapApi, type MapSourceInfo } from "./api";
@@ -25,17 +25,32 @@ export interface MapOverlayData {
   devices?: { id: number; lat: number | null; lng: number | null; name: string; status: number }[];
 }
 
+/** 画线功能：用户绘制的线条（WGS84 点列）。 */
+export interface DrawnLine {
+  id: number | string;
+  points: LatLng[];
+  color?: string;
+}
+
 interface MapViewProps {
-  /** 地图源（缺省 esri）；coordinate_space 决定显示层坐标转换 */
+  /** 地图源（缺省 esri）；coordinate_space 参与显示层坐标转换 */
   sources?: Record<string, MapSourceInfo>;
   sourceKey?: string;
   overlays?: MapOverlayData;
-  /** 高点亮（测距结果等）[lat, lng] WGS84 */
+  /** 高亮点（测距结果等）[lat, lng] WGS84 */
   highlight?: LatLng | null;
   /** 导航路径 [lat, lng][] WGS84 */
   navPath?: LatLng[] | null;
   /** 草稿预览线（新增线缆选点自动连线：蓝色实线 + 绿起点/橙终点标记 + 自动 fit） */
   previewPath?: LatLng[] | null;
+  /** 我的当前位置 [lat, lng] WGS84（蓝色定位标识点，随浏览器/IP 定位更新） */
+  myPosition?: LatLng | null;
+  /** 画线：已完成的线条列表 */
+  extraLines?: DrawnLine[];
+  /** 画线：正在绘制中的草稿点列（虚线预览，不参与 fitBounds） */
+  draftLine?: LatLng[] | null;
+  /** 全局显示坐标系偏好（地图缓存管理设置；缺省按源空间 → 默认 GCJ-02） */
+  displaySpace?: string | null;
   /** 地图点击回调（已转换为 WGS84 lat/lng） */
   onPick?: (lat: number, lng: number) => void;
   /** 初始中心 [lat, lng] 与缩放 */
@@ -82,6 +97,18 @@ const endIcon = L.divIcon({
   html: '<div style="width:14px;height:14px;border-radius:50%;background:#F59E0B;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [14, 14],
   iconAnchor: [7, 7],
+});
+
+/** 我的位置：蓝色定位标识点（外圈光晕 + 内芯）。 */
+const myLocationIcon = L.divIcon({
+  className: "wlt-map-marker",
+  html:
+    '<div style="position:relative;width:22px;height:22px">' +
+    '<span style="position:absolute;inset:0;border-radius:50%;background:rgba(59,130,246,.30)"></span>' +
+    '<span style="position:absolute;left:5px;top:5px;width:12px;height:12px;border-radius:50%;background:#3B82F6;border:2px solid #fff;box-shadow:0 0 6px rgba(37,99,235,.8)"></span>' +
+    "</div>",
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
 });
 
 function ClickCatcher({ onPick, space }: { onPick?: (lat: number, lng: number) => void; space: string }) {
@@ -133,6 +160,10 @@ export function MapView({
   highlight = null,
   navPath = null,
   previewPath = null,
+  myPosition = null,
+  extraLines = [],
+  draftLine = null,
+  displaySpace = null,
   onPick,
   center = [30.2741, 120.1551],
   zoom = 12,
@@ -140,7 +171,11 @@ export function MapView({
   picking,
   onMapReady,
 }: MapViewProps) {
-  const space = (sourceKey && sources[sourceKey]?.coordinate_space) || (Object.values(sources).find((s) => s.enabled)?.coordinate_space) || "wgs84";
+  const srcSpace =
+    (sourceKey && sources[sourceKey]?.coordinate_space) || Object.values(sources).find((s) => s.enabled)?.coordinate_space;
+  // 显示坐标系：非 WGS84 底图按源空间对齐；WGS84 底图按全局偏好（默认 GCJ-02 加密显示）
+  const space = resolveDisplaySpace(srcSpace, displaySpace);
+  const hasSources = Object.keys(sources).length > 0;
 
   const cableGeojson = useMemo(() => {
     const feats = overlays.cables
@@ -169,12 +204,15 @@ export function MapView({
     [overlays.devices],
   );
 
-  if (!Object.keys(sources).length) {
-    return <Empty style={{ marginTop: 80 }} description="未配置地图源（系统管理 → 安装模块 → cable 模块配置）" />;
-  }
-
+  // 无图源时不再整体替换为 Empty（那会连标记点/定位点一起隐藏）：
+  // 地图仍渲染，仅给出底图不可用提示，保证叠加数据始终可见。
   return (
     <div style={{ height, width: "100%", position: "relative" }}>
+      {!hasSources && (
+        <div style={{ position: "absolute", zIndex: 900, top: 8, left: 8, background: "rgba(255,255,255,.92)", padding: "5px 10px", borderRadius: 8, fontSize: 12, color: "#5B6478", boxShadow: "0 1px 6px rgba(0,0,0,.12)" }}>
+          未配置可用地图源：底图不可用（标记点仍正常显示）
+        </div>
+      )}
       {picking && (
         <div style={{ position: "absolute", zIndex: 1000, top: 8, left: 50, background: "#fff", padding: "6px 12px", borderRadius: 10, boxShadow: "0 2px 8px rgba(0,0,0,.15)" }}>
           {picking}
@@ -268,6 +306,57 @@ export function MapView({
               return <Marker position={pos} icon={endIcon} />;
             })()}
           </>
+        )}
+        {/* 画线：已完成线条（青绿实线） */}
+        {extraLines.map((line) =>
+          line.points.length >= 2 ? (
+            <Polyline
+              key={`line${line.id}`}
+              positions={line.points.map(([lat, lng]) => toDisplaySpace(lng, lat, space).reverse() as L.LatLngTuple)}
+              pathOptions={{ color: line.color ?? "#0D9488", weight: 4, opacity: 0.95 }}
+            />
+          ) : null,
+        )}
+        {/* 画线：绘制中草稿（虚线 + 已落节点小圆点），不触发 fitBounds */}
+        {draftLine && draftLine.length > 0 && (
+          <>
+            {draftLine.length >= 2 && (
+              <Polyline
+                positions={draftLine.map(([lat, lng]) => toDisplaySpace(lng, lat, space).reverse() as L.LatLngTuple)}
+                pathOptions={{ color: "#0D9488", weight: 3, opacity: 0.8, dashArray: "6 6" }}
+              />
+            )}
+            {draftLine.map(([lat, lng], i) => {
+              const [dlng, dlat] = toDisplaySpace(lng, lat, space);
+              return (
+                <Marker
+                  key={`dnode${i}`}
+                  position={[dlat, dlng]}
+                  icon={L.divIcon({
+                    className: "wlt-map-marker",
+                    html: '<div style="width:8px;height:8px;border-radius:50%;background:#0D9488;border:1px solid #fff"></div>',
+                    iconSize: [8, 8],
+                    iconAnchor: [4, 4],
+                  })}
+                />
+              );
+            })}
+          </>
+        )}
+        {/* 我的位置：蓝色定位标识点（GPS/IP 定位结果，WGS84 → 显示坐标系转换后渲染） */}
+        {myPosition && (
+          <Marker
+            position={toDisplaySpace(myPosition[1], myPosition[0], space).reverse() as L.LatLngTuple}
+            icon={myLocationIcon}
+            zIndexOffset={1000}
+          >
+            <Popup>
+              <div>
+                <b>我的位置</b>
+                <div>{myPosition[0].toFixed(6)}, {myPosition[1].toFixed(6)}（WGS84）</div>
+              </div>
+            </Popup>
+          </Marker>
         )}
       </MapContainer>
     </div>

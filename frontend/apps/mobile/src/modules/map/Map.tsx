@@ -1,11 +1,18 @@
 /** 手机端：地图工作台（map 模块，方案 §7.3）——全屏地图 + 底部工具栏（上报/故障管理/测距/导航），
- * 点击按钮弹窗打开对应面板（Popup 弹层，可关闭）。依赖 cable 模块数据（线缆/故障）。 */
+ * 点击按钮弹窗打开对应面板（Popup 弹层，可关闭）。依赖 cable 模块数据（线缆/故障）。
+ *
+ * 体验修复批次：
+ * - 定位降级链（浏览器 GPS → IP 兜底）：修复 HTTP 内网/手机浏览器无 Geolocation API 时无法定位；
+ * - 显示层坐标转换（默认 GCJ-02 加密显示，与桌面工作台一致；数据/接口仍一律 WGS84）；
+ * - 我的位置蓝色标识点随定位更新。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Dialog, Input, NavBar, Picker, Popup, Selector, Switch, Tag, TextArea, Toast } from "antd-mobile";
 import { MapContainer, Marker, Polyline, TileLayer, useMapEvents, ZoomControl } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+
+import { fromDisplaySpace, getCurrentPositionWithFallback, resolveDisplaySpace, toDisplaySpace } from "@wlt/shared";
 
 import { ModuleGate } from "../../components/ModuleGate";
 import { cableApi, type CableItem, type FaultItem } from "../cable/api";
@@ -32,10 +39,35 @@ const navIcon = L.divIcon({
   html: '<div style="width:16px;height:16px;border-radius:50%;background:#EF4444;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [16, 16], iconAnchor: [8, 8],
 });
+/** 我的位置：蓝色定位标识点（外圈光晕 + 内芯）。 */
+const myLocationIcon = L.divIcon({
+  className: "wlt-m",
+  html:
+    '<div style="position:relative;width:22px;height:22px">' +
+    '<span style="position:absolute;inset:0;border-radius:50%;background:rgba(59,130,246,.30)"></span>' +
+    '<span style="position:absolute;left:5px;top:5px;width:12px;height:12px;border-radius:50%;background:#3B82F6;border:2px solid #fff;box-shadow:0 0 6px rgba(37,99,235,.8)"></span>' +
+    "</div>",
+  iconSize: [22, 22], iconAnchor: [11, 11],
+});
+
+/** 显示坐标系：手机端底图固定经后端代理（WGS84 源）→ 默认 GCJ-02 加密显示（与桌面端一致）。 */
+const DISPLAY_SPACE = resolveDisplaySpace("wgs84", null);
 
 function ClickCatcher({ onPick }: { onPick: (lat: number, lng: number) => void }) {
-  useMapEvents({ click(e) { onPick(e.latlng.lat, e.latlng.lng); } });
+  useMapEvents({
+    click(e) {
+      // 地图点击为显示坐标 → 转回 WGS84 再交给业务（入库/接口一律 WGS84）
+      const [lng, lat] = fromDisplaySpace(e.latlng.lng, e.latlng.lat, DISPLAY_SPACE);
+      onPick(lat, lng);
+    },
+  });
   return null;
+}
+
+/** 显示坐标 → Leaflet [lat, lng]。 */
+function disp([lat, lng]: [number, number]): [number, number] {
+  const [dlng, dlat] = toDisplaySpace(lng, lat, DISPLAY_SPACE);
+  return [dlat, dlng];
 }
 
 type PanelKey = "report" | "faults" | "measure" | "nav" | "layers" | null;
@@ -66,6 +98,7 @@ export function MobileMapPage() {
   const [highlight, setHighlight] = useState<[number, number] | null>(null);
   const [selFaultId, setSelFaultId] = useState<number | undefined>();
   const [navStart, setNavStart] = useState<[number, number] | null>(null);
+  const [myPos, setMyPos] = useState<[number, number] | null>(null);
   const [navInfo, setNavInfo] = useState<string>("");
   const [navPath, setNavPath] = useState<[number, number][] | null>(null);
   const [navigating, setNavigating] = useState(false);
@@ -89,33 +122,54 @@ export function MobileMapPage() {
   };
   useEffect(() => () => { stopNav(); }, []);
 
-  const startNav = () => {
+  const startNav = async () => {
     if (!selFaultId) { Toast.show("请先选择故障点"); return; }
-    navigator.geolocation?.getCurrentPosition((pos) => {
-      setNavStart([pos.coords.latitude, pos.coords.longitude]);
-      setNavigating(true);
-      setNavInfo("正在导航…");
-      const tick = () => {
-        navigator.geolocation?.getCurrentPosition((p) => {
-          const lat = p.coords.latitude;
-          const lng = p.coords.longitude;
-          let heading: number | undefined;
-          if (p.coords.heading != null && !Number.isNaN(p.coords.heading)) heading = p.coords.heading;
-          cableApi.navigate({ lat, lng, fault_id: selFaultId, heading })
-            .then((r) => {
-              setNavPath(r.path as [number, number][]);
-              if (r.projection) setHighlight([r.projection.lat, r.projection.lng]);
-              setNavInfo(`剩余 ${r.remaining_distance.toFixed(0)}m（直线 ${r.straight_distance.toFixed(0)}m）`);
-              if (r.remaining_distance < 50) {
-                stopNav();
-              }
-            })
-            .catch(() => undefined);
-        }, () => undefined, { enableHighAccuracy: true, maximumAge: 2000 });
-      };
-      tick();
-      watchRef.current = window.setInterval(tick, 2000);
-    }, () => { Toast.show("无法获取定位，请在导航弹窗中「选起点」"); setPanel("nav"); setMode("navStart"); });
+    // 初始定位走降级链（浏览器 GPS → IP 兜底）：HTTP 内网 / 无 Geolocation API 的手机浏览器也可定位
+    let first;
+    try {
+      first = await getCurrentPositionWithFallback();
+    } catch {
+      Toast.show("无法获取定位，请在导航弹窗中「选起点」");
+      setPanel("nav");
+      setMode("navStart");
+      return;
+    }
+    if (first.source === "ip") Toast.show("浏览器定位不可用，已使用 IP 粗略定位");
+    setNavStart([first.lat, first.lng]);
+    setMyPos([first.lat, first.lng]);
+    setNavigating(true);
+    setNavInfo("正在导航…");
+    const apply = (lat: number, lng: number, heading?: number) => {
+      setMyPos([lat, lng]);
+      cableApi.navigate({ lat, lng, fault_id: selFaultId, heading })
+        .then((r) => {
+          setNavPath(r.path as [number, number][]);
+          if (r.projection) setHighlight([r.projection.lat, r.projection.lng]);
+          setNavInfo(`剩余 ${r.remaining_distance.toFixed(0)}m（直线 ${r.straight_distance.toFixed(0)}m）`);
+          if (r.remaining_distance < 50) {
+            stopNav();
+          }
+        })
+        .catch(() => undefined);
+    };
+    const tick = () => {
+      // 周期刷新仅在原生 Geolocation 可用时进行（IP 定位不做高频轮询，保持初始粗定位）
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (p) => {
+            const lat = p.coords.latitude;
+            const lng = p.coords.longitude;
+            let heading: number | undefined;
+            if (p.coords.heading != null && !Number.isNaN(p.coords.heading)) heading = p.coords.heading;
+            apply(lat, lng, heading);
+          },
+          () => undefined,
+          { enableHighAccuracy: true, maximumAge: 2000 },
+        );
+      }
+    };
+    tick();
+    watchRef.current = window.setInterval(tick, 2000);
   };
 
   const submitFault = async () => {
@@ -176,7 +230,7 @@ export function MobileMapPage() {
       <NavBar onBack={() => navigate(-1)}>地图工作台</NavBar>
       {/* 地图区（全屏最大化；底部工具栏常驻） */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, marginBottom: 56 }}>
-        <MapContainer center={[30.2741, 120.1551]} zoom={12} zoomControl={false} style={{ height: "100%", width: "100%" }}>
+        <MapContainer center={disp([30.2741, 120.1551])} zoom={12} zoomControl={false} style={{ height: "100%", width: "100%" }}>
           <ZoomControl position="bottomright" />
           <TileLayer url={mapApi.tileUrl("esri", "{z}", "{x}", "{y}")} maxZoom={19} attribution="© 卫星影像" />
           <ClickCatcher onPick={(lat, lng) => {
@@ -185,13 +239,14 @@ export function MobileMapPage() {
             else setPick({ lat, lng });
           }} />
           {layers.cables && cables.filter((c) => c.geometry).map((c) => (
-            <Polyline key={c.id} positions={(c.geometry!.coordinates as [number, number][]).map(([lng, lat]) => [lat, lng] as [number, number])}
+            <Polyline key={c.id} positions={(c.geometry!.coordinates as [number, number][]).map(([lng, lat]) => disp([lat, lng]))}
               pathOptions={{ color: "#5B7FFF", weight: 4 }} />
           ))}
-          {layers.faults && faults.map((f) => <Marker key={f.id} position={[f.lat, f.lng]} icon={warnIcon} />)}
-          {highlight && <Marker position={highlight} icon={navIcon} />}
+          {layers.faults && faults.map((f) => <Marker key={f.id} position={disp([f.lat, f.lng])} icon={warnIcon} />)}
+          {myPos && <Marker position={disp(myPos)} icon={myLocationIcon} />}
+          {highlight && <Marker position={disp(highlight)} icon={navIcon} />}
           {navPath && navPath.length > 1 && (
-            <Polyline positions={navPath} pathOptions={{ color: "#EF4444", weight: 5, dashArray: "8 6" }} />
+            <Polyline positions={navPath.map((p) => disp(p))} pathOptions={{ color: "#EF4444", weight: 5, dashArray: "8 6" }} />
           )}
         </MapContainer>
         {/* 图层叠加选择（右上角小图标，主流地图交互） */}

@@ -14,6 +14,14 @@ export interface MapSourceInfo {
   api_secret?: string;
 }
 
+/** 地图缓存/显示配置（sys_module.config.cache；接口脱敏后返回）。 */
+export interface MapCacheConfig {
+  max_size?: number;
+  max_daily?: number;
+  /** 全局显示坐标系：gcj02（默认，加密显示）| wgs84。 */
+  display_coordinate_space?: "gcj02" | "wgs84";
+}
+
 export interface RegionItem {
   id: number;
   name: string;
@@ -43,9 +51,11 @@ export interface RegionProgress {
 
 export const mapApi = {
   // ---- 图源 ----
-  mapSources: () => http.get<{ map_sources: Record<string, MapSourceInfo>; cache?: Record<string, unknown> }>("/map/sources"),
+  mapSources: () => http.get<{ map_sources: Record<string, MapSourceInfo>; cache?: MapCacheConfig }>("/map/sources"),
   saveMapSources: (sources: MapSourceInfo[]) => http.put<{ saved: number }>("/map/sources", sources),
   deleteMapSource: (key: string) => http.delete<{ removed: string; remaining: number }>(`/map/sources/${key}`),
+  /** 保存模块级配置（如 cache.display_coordinate_space 显示坐标系；需 map:config 权限）。 */
+  saveMapConfig: (body: Record<string, unknown>) => http.put<null>("/map/config", body),
   /** 瓦片代理 URL（经后端缓存；Session Cookie 同源携带）。 */
   tileUrl: (source: string, z: number | string, x: number | string, y: number | string) =>
     `${import.meta.env?.VITE_API_BASE ?? "/api/v1"}/map/tile/${source}/${z}/${x}/${y}`,
