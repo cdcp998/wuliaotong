@@ -15,7 +15,7 @@ export function CameraAlbum({ onPick, loading, translucent }: { onPick: (f: File
     ? {
         background: "rgba(22,119,255,.08)",
         border: "1px solid rgba(22,119,255,.35)",
-        color: "#1668dc",
+        color: "var(--adm-color-primary)",
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
       }

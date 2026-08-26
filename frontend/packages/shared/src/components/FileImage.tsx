@@ -30,7 +30,7 @@ export function FileImage({
   const [hovering, setHovering] = useState(false);
 
   if (!src) {
-    return <span style={{ color: "#bbb", fontSize: 12 }}>无</span>;
+    return <span style={{ color: "#5B6478", fontSize: 12 }}>无</span>;
   }
 
   function stop(e: MouseEvent) {

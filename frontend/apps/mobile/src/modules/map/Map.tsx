@@ -288,7 +288,7 @@ export function MobileMapPage() {
         <div style={{ padding: 16, paddingBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontWeight: 600 }}>图层叠加</span>
-            <span style={{ color: "#999", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
+            <span style={{ color: "var(--adm-color-weak)", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
           {[
             { key: "cables" as const, label: "线缆", color: "#5B7FFF" },
@@ -310,7 +310,7 @@ export function MobileMapPage() {
         <div style={{ padding: 16, paddingBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontWeight: 600 }}>上报故障</span>
-            <span style={{ color: "#999", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
+            <span style={{ color: "var(--adm-color-weak)", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
           {pick && <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>位置：{pick.lat.toFixed(6)}, {pick.lng.toFixed(6)}</div>}
           <Button block size="small" fill="outline" color="danger" onClick={() => setMode(mode === "fault" ? "none" : "fault")} style={{ marginBottom: 8 }}>
@@ -342,7 +342,7 @@ export function MobileMapPage() {
               <Button size="mini" color="danger" fill="outline" onClick={() => deleteFault(f)}>删除标点</Button>
             </div>
           ))}
-          {faults.length === 0 && <div style={{ textAlign: "center", color: "#999", padding: 16 }}>暂无故障</div>}
+          {faults.length === 0 && <div style={{ textAlign: "center", color: "var(--adm-color-weak)", padding: 16 }}>暂无故障</div>}
         </div>
       </Popup>
 
@@ -350,7 +350,7 @@ export function MobileMapPage() {
         <div style={{ padding: 16, paddingBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontWeight: 600 }}>测距定位</span>
-            <span style={{ color: "#999", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
+            <span style={{ color: "var(--adm-color-weak)", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <Picker
@@ -375,7 +375,7 @@ export function MobileMapPage() {
         <div style={{ padding: 16, paddingBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontWeight: 600 }}>故障导航</span>
-            <span style={{ color: "#999", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
+            <span style={{ color: "var(--adm-color-weak)", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <Picker

@@ -183,12 +183,12 @@ export function HomePage() {
                 </span>
                 <span style={{ color: "#5B7FFF" }}>{a.icon}</span>
                 <span style={{ fontSize: 11.5, color: "#1E2433", fontWeight: 500 }}>{a.title}</span>
-                <span style={{ fontSize: 9.5, color: "#c9cdd4" }}>{isHidden ? "已隐藏" : a.sub}</span>
+                <span style={{ fontSize: 9.5, color: "var(--adm-color-weak)" }}>{isHidden ? "已隐藏" : a.sub}</span>
               </div>
             );
           }}
           footer={
-            <div style={{ fontSize: 11, color: "#c9cdd4", lineHeight: 1.7, padding: "8px 4px 2px" }}>
+            <div style={{ fontSize: 11, color: "var(--adm-color-weak)", lineHeight: 1.7, padding: "8px 4px 2px" }}>
               按住卡片拖动调整功能顺序（与「功能」页同步）；点 − 从首页快捷操作隐藏，点 + 恢复。
             </div>
           }
@@ -216,7 +216,7 @@ export function HomePage() {
             >
               <span style={{ color: "#5B7FFF" }}>{a.icon}</span>
               <span style={{ fontSize: 11.5, color: "#1E2433", fontWeight: 500 }}>{a.title}</span>
-              <span style={{ fontSize: 9.5, color: "#c9cdd4" }}>{a.sub}</span>
+              <span style={{ fontSize: 9.5, color: "var(--adm-color-weak)" }}>{a.sub}</span>
             </div>
           ))}
         </div>
@@ -228,7 +228,7 @@ export function HomePage() {
           <span>我的申请</span>
           <span style={{ fontSize: 11.5, color: "#5B7FFF", fontWeight: 400, cursor: "pointer" }} onClick={() => navigate("/requisitions/list")}>全部 ›</span>
         </div>
-        {reqs.length === 0 && <div style={{ padding: "20px 14px", color: "#c9cdd4", fontSize: 12.5, textAlign: "center" }}>暂无申请记录，点右上角「领用申请」开单</div>}
+        {reqs.length === 0 && <div style={{ padding: "20px 14px", color: "var(--adm-color-weak)", fontSize: 12.5, textAlign: "center" }}>暂无申请记录，点右上角「领用申请」开单</div>}
         {reqs.map((r) => (
           <div key={r.id} onClick={() => navigate(`/requisitions/${r.id}`)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderBottom: "1px solid #F2F5FB", cursor: "pointer" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -240,7 +240,7 @@ export function HomePage() {
                 {r.use_location} · {r.use_reason} · {r.created_at.slice(0, 16)}
               </div>
             </div>
-            <span style={{ color: "#c9cdd4" }}>›</span>
+            <span style={{ color: "var(--adm-color-weak)" }}>›</span>
           </div>
         ))}
       </div>

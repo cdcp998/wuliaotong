@@ -316,7 +316,7 @@ export function RequisitionAuditPage() {
                 { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#5B6478" }}>{r.code}{r.spec ? ` / ${r.spec}` : ""}</div></div> },
                 { title: "库位", dataIndex: "location_code", width: 110 },
                 { title: "数量", dataIndex: "qty", width: 80, align: "right" as const },
-                { title: "出库拍照", width: 90, render: (_, r) => (r.photo_file_id ? <Tag color="blue">已留痕</Tag> : <span style={{ color: "#c9cdd4" }}>未拍</span>) },
+                { title: "出库拍照", width: 90, render: (_, r) => (r.photo_file_id ? <Tag color="blue">已留痕</Tag> : <span style={{ color: "#5B6478" }}>未拍</span>) },
               ]}
             />
 

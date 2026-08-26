@@ -231,7 +231,7 @@ export function MaterialsPage() {
 
   const columns: ColumnsType<Product> = [
     { title: "物料编码", dataIndex: "material_code", width: 120, render: (v: string) => v || "-" },
-    { title: "条码", dataIndex: "barcode", width: 140, render: (v: string) => v || <span style={{ color: "#c0c4cc" }}>未录</span> },
+    { title: "条码", dataIndex: "barcode", width: 140, render: (v: string) => v || <span style={{ color: "#5B6478" }}>未录</span> },
     { title: "材料名称", dataIndex: "name", width: 160 },
     { title: "型号规格", dataIndex: "spec", width: 120, render: (v: string) => v || "-" },
     { title: "单位", dataIndex: "unit_name", width: 70 },
@@ -240,7 +240,7 @@ export function MaterialsPage() {
       title: "供应商",
       dataIndex: "supplier_names",
       width: 160,
-      render: (v: string[]) => (v?.length ? v.join("、") : <span style={{ color: "#c0c4cc" }}>未关联</span>),
+      render: (v: string[]) => (v?.length ? v.join("、") : <span style={{ color: "#5B6478" }}>未关联</span>),
     },
     { title: "价格", dataIndex: "purchase_price", width: 90, align: "right" as const },
     { title: "下限", dataIndex: "min_stock", width: 80, align: "right" as const },

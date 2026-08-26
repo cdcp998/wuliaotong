@@ -213,7 +213,7 @@ export function NotificationsPage() {
               description={
                 <div>
                   <div style={{ fontSize: 12.5, color: "#4e5969", lineHeight: 1.6, marginTop: 2 }}>{n.content}</div>
-                  <div style={{ fontSize: 10.5, color: "#c9cdd4", marginTop: 5 }}>{n.created_at.slice(0, 16)}</div>
+                  <div style={{ fontSize: 10.5, color: "var(--adm-color-weak)", marginTop: 5 }}>{n.created_at.slice(0, 16)}</div>
                 </div>
               }
               extra={<Tag color={style.color}>{style.text}</Tag>}

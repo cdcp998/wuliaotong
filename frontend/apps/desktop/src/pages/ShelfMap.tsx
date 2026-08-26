@@ -117,7 +117,7 @@ export function ShelfMapPage() {
                 }}
               >
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{loc.location_code}</div>
-                {loc.items.length === 0 && <div style={{ fontSize: 12, color: "#bbb", marginTop: 6 }}>空库位</div>}
+                {loc.items.length === 0 && <div style={{ fontSize: 12, color: "#5B6478", marginTop: 6 }}>空库位</div>}
                 {loc.items.slice(0, 2).map((it) => (
                   <div key={it.product_id} style={{ fontSize: 12, marginTop: 4, color: "#333" }}>
                     {it.name} × {it.qty}

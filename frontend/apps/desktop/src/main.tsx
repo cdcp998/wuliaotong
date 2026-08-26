@@ -159,7 +159,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           // 品牌蓝 #5B7FFF · 页面底 #F2F5FB · 卡片 #FFFFFF + 1px 描边 + 柔和投影 · 圆角 10
           colorPrimary: "#5B7FFF",
           colorInfo: "#5B7FFF",
-          colorLink: "#5B7FFF",
+          colorLink: "#3B5BDB",
           colorSuccess: "#22C55E",
           colorWarning: "#F59E0B",
           colorError: "#EF4444",

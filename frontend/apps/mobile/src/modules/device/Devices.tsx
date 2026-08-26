@@ -144,7 +144,7 @@ export function MobileDevicesPage() {
                   </div>
                 ))}
                 {photos.length < 3 && (
-                  <label htmlFor="device-photo" style={{ width: 64, height: 64, border: "1px dashed #bbb", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "#999", fontSize: 22 }}>＋</label>
+                  <label htmlFor="device-photo" style={{ width: 64, height: 64, border: "1px dashed #bbb", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--adm-color-weak)", fontSize: 22 }}>＋</label>
                 )}
                 <input id="device-photo" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
                   const f = e.target.files?.[0];

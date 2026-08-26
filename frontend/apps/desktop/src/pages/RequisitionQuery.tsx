@@ -81,7 +81,7 @@ export function RequisitionQueryPage() {
     {
       title: "完成拍照",
       width: 90,
-      render: (_, r) => (r.work_photo_file_id > 0 ? <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>已留痕</Tag> : <span style={{ color: "#c9cdd4" }}>未拍</span>),
+      render: (_, r) => (r.work_photo_file_id > 0 ? <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>已留痕</Tag> : <span style={{ color: "#5B6478" }}>未拍</span>),
     },
     { title: "状态", width: 100, render: (_, r) => <Tag style={{ borderRadius: 999, background: STATUS[r.status]?.bg, color: STATUS[r.status]?.color, borderColor: "transparent", marginInlineEnd: 0 }}>{STATUS[r.status]?.text ?? r.status}</Tag> },
     { title: "申请时间", dataIndex: "created_at", width: 150, render: (v?: string) => (v ? v.slice(0, 16) : "-") },

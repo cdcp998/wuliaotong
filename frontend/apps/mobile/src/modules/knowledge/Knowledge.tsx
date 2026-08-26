@@ -66,7 +66,7 @@ export function MobileKnowledgePage() {
         <Card className="wlt-mobile-sheet" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000, maxHeight: "75dvh", overflow: "auto", borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <Tag color="primary">{detail.category || "未分类"}</Tag>
-            <span onClick={() => setDetail(null)} style={{ color: "#999" }}>关闭 ×</span>
+            <span onClick={() => setDetail(null)} style={{ color: "var(--adm-color-weak)" }}>关闭 ×</span>
           </div>
           <h3>{detail.title}</h3>
           <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.8, fontSize: 14 }}>{detail.content}</div>

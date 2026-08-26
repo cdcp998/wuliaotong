@@ -23,7 +23,7 @@ export function ModuleGate({ code, title, children }: { code: string; title: str
   }
   if (modulesStatus === "error") {
     return (
-      <div style={{ padding: 24, textAlign: "center", color: "#999" }}>
+      <div style={{ padding: 24, textAlign: "center", color: "var(--adm-color-weak)" }}>
         <NavBar onBack={() => navigate(-1)}>{title}</NavBar>
         <p>模块状态加载失败（网络/接口异常）。</p>
         <Button size="small" color="primary" fill="outline" onClick={() => void fetchModules()}>重新加载</Button>
@@ -32,7 +32,7 @@ export function ModuleGate({ code, title, children }: { code: string; title: str
   }
   if (!moduleEnabled(code)) {
     return (
-      <div style={{ padding: 24, textAlign: "center", color: "#999" }}>
+      <div style={{ padding: 24, textAlign: "center", color: "var(--adm-color-weak)" }}>
         <NavBar onBack={() => navigate(-1)}>{title}</NavBar>
         <p>「{title}」模块未启用，请先由管理员在电脑端安装并启用。</p>
       </div>

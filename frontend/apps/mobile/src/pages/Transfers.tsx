@@ -336,7 +336,7 @@ export function TransfersPage() {
                   <Tag color="primary" fill="outline" style={{ padding: "5px 10px", borderRadius: 7, marginRight: 0 }} onClick={() => openLocPicker("from", i)}>
                     {r.fromLoc ? r.fromLoc.display ?? r.fromLoc.code : "调出库位"}
                   </Tag>
-                  <span style={{ color: "#c9cdd4" }}>→</span>
+                  <span style={{ color: "var(--adm-color-weak)" }}>→</span>
                   <Tag color="success" fill="outline" style={{ padding: "5px 10px", borderRadius: 7, marginRight: 0 }} onClick={() => openLocPicker("to", i)}>
                     {r.toLoc ? r.toLoc.display ?? r.toLoc.code : "调入库位"}
                   </Tag>

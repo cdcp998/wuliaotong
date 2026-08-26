@@ -253,7 +253,7 @@ export function OtherIoPage() {
           { title: "材料", dataIndex: "product_name", render: (v, r) => <div><b>{v}</b><div style={{ fontSize: 11, color: "#5B6478" }}>{r.spec || "-"}</div></div> },
           { title: "库位", dataIndex: "location_code", width: 120 },
           { title: "数量", dataIndex: "qty", width: 90, align: "right" as const },
-          { title: "照片", dataIndex: "photo_file_id", width: 90, render: (v: number | undefined) => (v ? <img src={fileUrl(v)} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6, border: "1px solid #E4EAF6", cursor: "zoom-in" }} onClick={() => v && window.open(fileUrl(v), "_blank")} /> : <span style={{ color: "#c9cdd4", fontSize: 12 }}>—</span>) },
+          { title: "照片", dataIndex: "photo_file_id", width: 90, render: (v: number | undefined) => (v ? <img src={fileUrl(v)} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6, border: "1px solid #E4EAF6", cursor: "zoom-in" }} onClick={() => v && window.open(fileUrl(v), "_blank")} /> : <span style={{ color: "#5B6478", fontSize: 12 }}>—</span>) },
         ]}
         rows={(detail?.items ?? []).map((it) => ({ ...it, key: it.id ?? it.product_id ?? Math.random() }))}
       />

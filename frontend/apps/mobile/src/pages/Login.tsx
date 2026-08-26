@@ -254,7 +254,7 @@ export function LoginPage() {
           </div>
         )}
 
-        <div style={{ textAlign: "center", fontSize: 10.5, color: "#c9cdd4", marginTop: 16 }}>
+        <div style={{ textAlign: "center", fontSize: 10.5, color: "var(--adm-color-weak)", marginTop: 16 }}>
           物料通管理系统 v{__APP_VERSION__}
         </div>
       </div>

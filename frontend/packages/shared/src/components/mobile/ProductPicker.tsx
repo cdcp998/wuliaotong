@@ -140,7 +140,7 @@ export function ProductPicker({
       <NavBar
         onBack={onClose}
         right={
-          <span onClick={onClose} style={{ fontSize: 14, color: "#1668dc", padding: "0 12px" }}>
+          <span onClick={onClose} style={{ fontSize: 14, color: "var(--adm-color-primary)", padding: "0 12px" }}>
             关闭
           </span>
         }

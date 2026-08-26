@@ -83,8 +83,8 @@ button:focus-visible,
 }
 
 .wlt-cat-cell:hover {
-  border-color: rgba(22, 104, 220, 0.4);
-  box-shadow: 0 4px 12px rgba(22, 104, 220, 0.08);
+  border-color: rgba(91, 127, 255, 0.4);
+  box-shadow: 0 4px 12px rgba(91, 127, 255, 0.08);
 }
 
 .wlt-cat-cell:active {
@@ -103,7 +103,7 @@ button:focus-visible,
 .wlt-cat-add:hover {
   color: #5B7FFF !important;
   border-color: #5B7FFF !important;
-  background: rgba(22, 104, 220, 0.03);
+  background: rgba(91, 127, 255, 0.03);
 }
 
 /* ---------- 5c. 2.5D 货架视图：库位（隔）3D 方块 ----------
@@ -192,7 +192,7 @@ button:focus-visible,
 }
 .loc-cell3d-empty-text {
   font-size: 11px;
-  color: #a6adb4;
+  color: #5b6478;
   line-height: 1;
 }
 /* 货架层板（每层一个托盘面板） */
@@ -241,7 +241,7 @@ button:focus-visible,
 
 /* ---------- 7. 文本选区 ---------- */
 ::selection {
-  background: rgba(22, 104, 220, 0.18);
+  background: rgba(91, 127, 255, 0.18);
 }
 
 /* ---------- 8. 减少动态效果偏好（无障碍）：全局降级动画/过渡 ---------- */
@@ -507,7 +507,7 @@ button:focus-visible,
   border-radius: 10px !important;
 }
 .ant-btn-primary {
-  background: linear-gradient(135deg, #5b7fff 0%, #4f6df5 100%) !important;
+  background: linear-gradient(135deg, #475fe8 0%, #3b5bdb 100%) !important;
   border-color: transparent !important;
   box-shadow: 0 4px 12px rgba(91, 127, 255, 0.3) !important;
 }

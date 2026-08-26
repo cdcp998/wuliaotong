@@ -108,7 +108,7 @@ export function MinePage() {
         </List>
       </div>
 
-      <div style={{ padding: "0 16px", fontSize: 11, color: "#c9cdd4", lineHeight: 1.7, textAlign: "center" }}>
+      <div style={{ padding: "0 16px", fontSize: 11, color: "var(--adm-color-weak)", lineHeight: 1.7, textAlign: "center" }}>
         物料通管理系统 v{__APP_VERSION__}<br />
         照片永久保存 · 全程操作留痕
       </div>
@@ -168,7 +168,7 @@ export function MinePage() {
                   />
                 </Form.Item>
               </Form>
-              <div style={{ fontSize: 11, color: "#c9cdd4", lineHeight: 1.6, marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: "var(--adm-color-weak)", lineHeight: 1.6, marginTop: 4 }}>
                 修改成功后请使用新密码登录；如忘记密码请联系管理员重置。
               </div>
             </div>

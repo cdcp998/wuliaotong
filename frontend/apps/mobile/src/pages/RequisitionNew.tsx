@@ -288,7 +288,7 @@ export function RequisitionNewPage() {
         </div>
         <div style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 10, padding: 12, marginBottom: 8 }}>
           <div style={{ fontSize: 13, marginBottom: 8 }}>
-            备注 <span style={{ color: "#c9cdd4", fontSize: 11 }}>（可选）</span>
+            备注 <span style={{ color: "var(--adm-color-weak)", fontSize: 11 }}>（可选）</span>
           </div>
           <Input placeholder="选填" value={remark} onChange={setRemark} />
         </div>

@@ -282,7 +282,7 @@ export function RequisitionDetailPage() {
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{it.qty}</div>
-                <div style={{ fontSize: 10.5, color: "#c9cdd4", marginTop: 2 }}>{it.photo_file_id ? "已留痕" : "未拍照"}</div>
+                <div style={{ fontSize: 10.5, color: "var(--adm-color-weak)", marginTop: 2 }}>{it.photo_file_id ? "已留痕" : "未拍照"}</div>
               </div>
             </div>
           ))}

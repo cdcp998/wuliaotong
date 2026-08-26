@@ -67,13 +67,13 @@ export function WarehousesPage() {
               return (
                 <div key={sh.id} style={{ background: "#fff", border: "1px solid #f0f1f3", borderRadius: 12, marginBottom: 10, overflow: "hidden" }}>
                   <div style={{ padding: "10px 14px", borderBottom: "1px solid #F2F5FB", fontSize: 13.5, fontWeight: 600 }}>
-                    {sh.name || sh.code} <span style={{ color: "#c9cdd4", fontSize: 11, fontWeight: 400 }}>{sh.code}</span>
-                    {locs.length === 0 && <span style={{ color: "#c9cdd4", fontSize: 11, fontWeight: 400, marginLeft: 8 }}>无库存</span>}
+                    {sh.name || sh.code} <span style={{ color: "var(--adm-color-weak)", fontSize: 11, fontWeight: 400 }}>{sh.code}</span>
+                    {locs.length === 0 && <span style={{ color: "var(--adm-color-weak)", fontSize: 11, fontWeight: 400, marginLeft: 8 }}>无库存</span>}
                   </div>
                   {locs.map((loc) => (
                     <div key={loc.location_id} style={{ padding: "10px 14px", borderBottom: "1px solid #F2F5FB" }}>
                       <div style={{ fontSize: 12, color: "#5B7FFF", fontWeight: 500 }}>{loc.location_code}</div>
-                      {loc.items.length === 0 && <div style={{ fontSize: 11.5, color: "#c9cdd4", marginTop: 2 }}>空库位</div>}
+                      {loc.items.length === 0 && <div style={{ fontSize: 11.5, color: "var(--adm-color-weak)", marginTop: 2 }}>空库位</div>}
                       {loc.items.map((it, i) => (
                         <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontSize: 12.5 }}>
                           <span style={{ flex: 1, minWidth: 0 }}>{it.name}</span>
@@ -112,7 +112,7 @@ export function WarehousesPage() {
               </div>
             }
             extra={
-              <span style={{ fontSize: 11, color: "#c9cdd4" }}>
+              <span style={{ fontSize: 11, color: "var(--adm-color-weak)" }}>
                 货架 {w.shelf_count ?? 0} · 库位 {w.location_count ?? 0} · 材料 {w.product_kind_count ?? 0}
               </span>
             }

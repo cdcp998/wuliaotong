@@ -596,13 +596,13 @@ export function MaterialsDataPage() {
 
   const columns: ColumnsType<Product> = [
     { title: "物料编码", dataIndex: "material_code", width: 110, render: (v: string) => v || "-" },
-    { title: "条码", dataIndex: "barcode", width: 130, render: (v: string) => v || <span style={{ color: "#c0c4cc" }}>未录</span> },
+    { title: "条码", dataIndex: "barcode", width: 130, render: (v: string) => v || <span style={{ color: "#5B6478" }}>未录</span> },
     { title: "材料名称", dataIndex: "name", width: 150 },
     { title: "型号规格", dataIndex: "spec", width: 110, render: (v: string) => v || "-" },
     { title: "单位", dataIndex: "unit_name", width: 60 },
-    { title: "分类", dataIndex: "category_name", width: 110, render: (v: string) => v || <span style={{ color: "#c0c4cc" }}>未分类</span> },
+    { title: "分类", dataIndex: "category_name", width: 110, render: (v: string) => v || <span style={{ color: "#5B6478" }}>未分类</span> },
     { title: "库存", dataIndex: "stock_qty", width: 80, align: "right" as const, render: (v?: string) => (v === undefined ? "0" : v) },
-    { title: "供应商", dataIndex: "supplier_names", width: 150, render: (v: string[]) => (v?.length ? v.join("、") : <span style={{ color: "#c0c4cc" }}>未关联</span>) },
+    { title: "供应商", dataIndex: "supplier_names", width: 150, render: (v: string[]) => (v?.length ? v.join("、") : <span style={{ color: "#5B6478" }}>未关联</span>) },
     { title: "价格", dataIndex: "purchase_price", width: 80, align: "right" as const },
     { title: "下限", dataIndex: "min_stock", width: 70, align: "right" as const },
     { title: "上限", dataIndex: "max_stock", width: 70, align: "right" as const },

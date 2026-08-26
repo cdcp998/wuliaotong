@@ -107,7 +107,7 @@ export function FunctionsPage() {
                       right: 7,
                       fontSize: 13,
                       lineHeight: 1,
-                      color: pinned ? "#F59E0B" : "#c9cdd4",
+                      color: pinned ? "#F59E0B" : "var(--adm-color-weak)",
                     }}
                     title={pinned ? "已在首页快捷操作" : "未加入首页快捷操作"}
                   >
@@ -115,12 +115,12 @@ export function FunctionsPage() {
                   </span>
                   <span style={{ color: "#5B7FFF" }}>{a.icon}</span>
                   <span style={{ fontSize: 11.5, color: "#1E2433", fontWeight: 500 }}>{a.title}</span>
-                  <span style={{ fontSize: 9.5, color: "#c9cdd4" }}>{a.sub}</span>
+                  <span style={{ fontSize: 9.5, color: "var(--adm-color-weak)" }}>{a.sub}</span>
                 </div>
               );
             }}
             footer={
-              <div style={{ fontSize: 11, color: "#c9cdd4", lineHeight: 1.7, padding: "8px 4px 2px" }}>
+              <div style={{ fontSize: 11, color: "var(--adm-color-weak)", lineHeight: 1.7, padding: "8px 4px 2px" }}>
                 按住卡片拖动调整功能顺序（与首页「快捷操作」同步）；普通模式点 ★ 可加入/移出首页。
               </div>
             }
@@ -162,7 +162,7 @@ export function FunctionsPage() {
                       fontSize: 15,
                       lineHeight: 1,
                       cursor: "pointer",
-                      color: pinned ? "#F59E0B" : "#c9cdd4",
+                      color: pinned ? "#F59E0B" : "var(--adm-color-weak)",
                       padding: 2,
                     }}
                   >
@@ -170,7 +170,7 @@ export function FunctionsPage() {
                   </span>
                   <span style={{ color: "#5B7FFF" }}>{a.icon}</span>
                   <span style={{ fontSize: 11.5, color: "#1E2433", fontWeight: 500 }}>{a.title}</span>
-                  <span style={{ fontSize: 9.5, color: "#c9cdd4" }}>{a.sub}</span>
+                  <span style={{ fontSize: 9.5, color: "var(--adm-color-weak)" }}>{a.sub}</span>
                 </div>
               );
             })}
