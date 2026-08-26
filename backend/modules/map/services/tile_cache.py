@@ -158,16 +158,125 @@ def _sf_waiters(key: tuple[str, int, int, int]) -> int:
         return int(entry["waiters"]) if entry else 0
 
 
-def _download_missing(source_cfg: dict, source: str, z: int, x: int, y: int, path: Path, meta: Path) -> bytes:
-    """缓存未命中的普通下载流程：配额检查 → 抓上游 → 落盘 → 登记统计（leader 与等待者重试共用）。"""
-    if not _daily_ok(int(source_cfg.get("max_daily", 0))):
-        raise TileQuotaExceeded("今日瓦片下载配额已用尽")
-    data = fetch_remote(source_cfg, z, x, y)
+# ============================ 上游空瓦片（占位图）识别与父级回填 ============================
+# Esri 等源在无影像区域/层级返回 HTTP 200 的占位图（内容为 "Map data not yet available"，
+# 实测 256×256 JPEG，仍按瓦片 Content-Type 下发）。此类瓦片一旦落盘会被永久展示。
+# 以**字节 SHA256 指纹**识别（同款占位图字节完全一致；指纹取自实测样本 esri/19/*/233597.png）；
+# 命中时不落盘占位，改为取上一级(z-1)真实瓦片裁剪对应象限放大合成，避免地图显示占位文字。
+_PLACEHOLDER_SHA256 = frozenset({
+    "9eafd300d61393184a4abc1d458564cfd1cd9b6f9c4e9c74687045c0a0e5b858",
+})
+
+
+def _is_placeholder(data: bytes) -> bool:
+    """字节指纹命中已知上游空瓦片（占位图）。"""
+    return hashlib.sha256(data).hexdigest() in _PLACEHOLDER_SHA256
+
+
+def _write_tile(source: str, z: int, x: int, y: int, data: bytes) -> None:
+    """落盘 + meta + 源更新标记 + 统计登记（在线下载与父级合成共用写入路径）。"""
+    path = _tile_path(source, z, x, y)
+    meta = _meta_path(source, z, x, y)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     meta.write_text(json.dumps({"etag": "", "last_modified": "", "fetched_at": int(time.time())}), encoding="utf-8")
     _write_source_meta(source, int(time.time()))
     _register_tile(source, z, x, y, len(data))
+
+
+def _parent_raw_tile(source_cfg: dict, source: str, z: int, x: int, y: int) -> bytes | None:
+    """上一级(z-1)原始瓦片：磁盘非占位优先，否则在线抓取；仍是占位/失败返回 None。"""
+    if z <= 0:
+        return None
+    pz, px, py = z - 1, x // 2, y // 2
+    ppath = _tile_path(source, pz, px, py)
+    if ppath.exists():
+        pdata = ppath.read_bytes()
+        return None if _is_placeholder(pdata) else pdata
+    try:
+        pdata = fetch_remote(source_cfg, pz, px, py)
+    except Exception as exc:  # noqa: BLE001 父级抓取失败不阻断主流程
+        logger.debug("父级瓦片抓取失败 %s/%d/%d/%d：%s", source, pz, px, py, exc)
+        return None
+    if _is_placeholder(pdata):
+        return None
+    # 父级真实瓦片顺手落盘（同区域相邻子瓦片后续合成零抓取）
+    try:
+        _write_tile(source, pz, px, py, pdata)
+    except OSError:
+        pass
+    return pdata
+
+
+def _compose_from_parent(source_cfg: dict, source: str, z: int, x: int, y: int) -> bytes | None:
+    """用上一级瓦片裁剪当前坐标对应象限并放大到标准尺寸（无影像层级的降级影像）。
+
+    几何对齐：父级覆盖当前瓦片的 2×2 区域，按 (x%2, y%2) 取对应象限再放大回瓦片尺寸，
+    内容模糊但位置正确。解码/裁剪失败返回 None（调用方按无降级处理）。
+    """
+    pdata = _parent_raw_tile(source_cfg, source, z, x, y)
+    if pdata is None:
+        return None
+    try:
+        import io
+
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(pdata))
+        img.load()
+        w, h = img.size
+        qx, qy = (x % 2) * (w // 2), (y % 2) * (h // 2)
+        quarter = img.convert("RGB").crop((qx, qy, qx + w // 2, qy + h // 2))
+        out = io.BytesIO()
+        quarter.resize((w, h)).save(out, format="PNG")
+        return out.getvalue()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("父级瓦片合成失败 %s/%d/%d/%d：%s", source, z, x, y, exc)
+        return None
+
+
+def remove_placeholder_tiles() -> dict:
+    """全盘扫描删除已落盘的占位空瓦片（png+meta），统计注册表同步注销——存量清洗入口。"""
+    removed = 0
+    freed = 0
+    unregistered: list[tuple[str, int, int, int]] = []
+    if not TILE_CACHE_ROOT.exists():
+        return {"removed": 0, "freed_bytes": 0}
+    with _lock:
+        for p in TILE_CACHE_ROOT.rglob("*.png"):
+            try:
+                if not _is_placeholder(p.read_bytes()):
+                    continue
+                size = p.stat().st_size
+                p.unlink(missing_ok=True)
+                p.with_suffix(".meta.json").unlink(missing_ok=True)
+                removed += 1
+                freed += size
+                key = _parse_tile_path(p)
+                if key is not None:
+                    unregistered.append(key)
+            except OSError as exc:
+                logger.warning("清理占位瓦片失败 %s：%s", p, exc)
+        for key in unregistered:
+            _tile_registry.pop(key, None)
+    logger.info("占位空瓦片清洗完成：删除 %d 个，释放 %d 字节", removed, freed)
+    return {"removed": removed, "freed_bytes": freed}
+
+
+def _download_missing(source_cfg: dict, source: str, z: int, x: int, y: int, path: Path, meta: Path) -> bytes:
+    """缓存未命中的普通下载流程：配额检查 → 抓上游 → 占位图检测/父级回填 → 落盘登记。
+
+    上游返回空瓦片（占位图）时**不落盘占位**：改由上一级真实瓦片裁剪放大合成；
+    连父级也是占位则抛错（代理层报「瓦片获取失败」，前端显示错误瓦片而非占位文字）。
+    """
+    if not _daily_ok(int(source_cfg.get("max_daily", 0))):
+        raise TileQuotaExceeded("今日瓦片下载配额已用尽")
+    data = fetch_remote(source_cfg, z, x, y)
+    if _is_placeholder(data):
+        data = _compose_from_parent(source_cfg, source, z, x, y)
+        if data is None:
+            raise ValueError("上游该区域无影像（返回空瓦片且父级亦不可用）")
+    _write_tile(source, z, x, y, data)
     return data
 
 
@@ -185,6 +294,8 @@ def get_tile(source_cfg: dict, source: str, z: int, x: int, y: int, cache_ttl: i
             return path.read_bytes()
         try:
             data = fetch_remote(source_cfg, z, x, y)
+            if _is_placeholder(data):  # 显式 TTL 刷新拿到占位图：视为失败，保留旧缓存
+                raise ValueError("上游返回空瓦片（占位图）")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
             meta.write_text(json.dumps({"etag": "", "last_modified": "", "fetched_at": int(time.time())}), encoding="utf-8")

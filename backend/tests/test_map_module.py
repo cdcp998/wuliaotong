@@ -491,3 +491,86 @@ def test_ip_locate_payload_parsers():
     assert _parse_geojs({"latitude": "31.5", "longitude": "121.5"}) == (31.5, 121.5)  # 字符串数字兼容
     assert _parse_geojs({"latitude": "x", "longitude": "1"}) is None
     assert _parse_geojs({}) is None
+
+
+# ============================ 上游空瓦片（占位图）识别与父级回填 ============================
+
+def _solid_png(color: tuple[int, int, int], size: int = 64) -> bytes:
+    """生成纯色 PNG（充当真实影像/占位图样本）。"""
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (size, size), color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_placeholder_tile_composes_from_parent(isolated_tile_cache):
+    """上游返回空瓦片（占位图）→ 不落盘占位，改由上一级真实瓦片合成（几何对齐象限放大）。"""
+    tc, root = isolated_tile_cache
+    import hashlib
+
+    placeholder = _solid_png((255, 255, 255))
+    parent = _solid_png((10, 20, 30))
+    # 以测试样本字节指纹注入占位图黑名单（生产指纹为实测 Esri 空瓦片 SHA256）
+    tc._PLACEHOLDER_SHA256 = frozenset({hashlib.sha256(placeholder).hexdigest()})
+    calls: list[tuple[int, int, int]] = []
+
+    def fake_fetch(cfg, z, x, y):
+        calls.append((z, x, y))
+        return parent if z == 9 else placeholder  # z=10 子级=占位图；z=9 父级=真实影像
+
+    tc.fetch_remote = fake_fetch
+    cfg = {"url_template": "https://upstream/{z}/{x}/{y}", "max_daily": 0}
+
+    data = tc.get_tile(cfg, "esri", 10, 5, 7)  # 父级 = (9, 2, 3)
+
+    assert calls == [(10, 5, 7), (9, 2, 3)]  # 先抓子级（占位）再抓父级
+    assert data != placeholder and data.startswith(b"\x89PNG")  # 返回合成 PNG 而非占位
+    assert (root / "esri" / "10" / "5" / "7.png").read_bytes() == data  # 合成结果落盘
+    # 注册表：子级合成瓦片 + 顺手缓存的父级真实瓦片
+    assert sorted(tc.scan_tiles()) == [
+        ("esri", 9, 2, 3, len(parent)),
+        ("esri", 10, 5, 7, len(data)),
+    ]
+
+
+def test_placeholder_with_placeholder_parent_raises(isolated_tile_cache):
+    """连上一级也是占位图 → 抛错走「瓦片获取失败」路径，绝不落盘占位内容。"""
+    tc, root = isolated_tile_cache
+    import hashlib
+
+    placeholder = _solid_png((200, 200, 200))
+    tc._PLACEHOLDER_SHA256 = frozenset({hashlib.sha256(placeholder).hexdigest()})
+    tc.fetch_remote = lambda cfg, z, x, y: placeholder  # 所有层级都是占位
+    cfg = {"url_template": "https://upstream/{z}/{x}/{y}", "max_daily": 0}
+
+    with pytest.raises(ValueError, match="无影像"):
+        tc.get_tile(cfg, "esri", 10, 1, 1)
+    assert not (root / "esri" / "10" / "1" / "1.png").exists()
+    assert tc.scan_tiles() == []
+
+
+def test_remove_placeholder_tiles_sweep(isolated_tile_cache):
+    """存量清洗：按指纹删除已落盘占位瓦片（png+meta），正常瓦片不受影响。"""
+    tc, root = isolated_tile_cache
+    import hashlib
+
+    placeholder = _solid_png((240, 240, 240))
+    normal = b"real-image-bytes"
+    tc._PLACEHOLDER_SHA256 = frozenset({hashlib.sha256(placeholder).hexdigest()})
+
+    ph_file = root / "esri" / "19" / "420944" / "233597.png"
+    ph_file.parent.mkdir(parents=True)
+    ph_file.write_bytes(placeholder)
+    normal_file = root / "esri" / "18" / "0" / "0.png"
+    normal_file.parent.mkdir(parents=True)
+    normal_file.write_bytes(normal)
+
+    result = tc.remove_placeholder_tiles()
+
+    assert result["removed"] == 1
+    assert not ph_file.exists()
+    assert not ph_file.with_suffix(".meta.json").exists()
+    assert normal_file.read_bytes() == normal  # 正常瓦片不受影响
