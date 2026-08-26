@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { Alert, Button, Empty, Skeleton, Switch, Tag, theme } from "antd";
-import { ArrowDownOutlined, ArrowUpOutlined, BarChartOutlined, CheckSquareOutlined, CodeSandboxOutlined, EditOutlined, ExportOutlined, FileTextOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Empty, Skeleton, Tag, theme } from "antd";
+import { ArrowDownOutlined, ArrowUpOutlined, BarChartOutlined, CheckSquareOutlined, CloseOutlined, CodeSandboxOutlined, EditOutlined, ExportOutlined, FileTextOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 
 import { reportApi, useAuthStore, type DashboardData } from "@wlt/shared";
 
@@ -22,9 +22,9 @@ const TASK_COL_META: Record<string, { fg: string; bg: string }> = {
 const TASK_COLUMNS = ["pending", "in_progress", "done"];
 const SOURCE_DOT: Record<string, string> = { cable: "#B45309", device: "#3B5BDB" };
 
-/** 看板区块（自定义布局：编辑模式下可上下移动，顺序 localStorage 记忆）。 */
+/** 看板区块（自定义布局：编辑模式拖拽排序 + 软删除/重新添加；localStorage 记忆）。 */
 type BlockKey = "stats" | "trendTodo" | "taskBoard" | "quickLinks";
-const DASH_ORDER_KEY = "wlt.dash.order";
+const DASH_LAYOUT_KEY = "wlt.dash.layout";
 const DEFAULT_ORDER: BlockKey[] = ["stats", "trendTodo", "taskBoard", "quickLinks"];
 const BLOCK_TITLES: Record<BlockKey, string> = {
   stats: "统计卡",
@@ -32,6 +32,19 @@ const BLOCK_TITLES: Record<BlockKey, string> = {
   taskBoard: "维修任务看板",
   quickLinks: "快捷入口",
 };
+interface DashLayout { order: BlockKey[]; hidden: BlockKey[] }
+
+function loadDashLayout(): DashLayout {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DASH_LAYOUT_KEY) ?? "") as Partial<DashLayout>;
+    const order = Array.isArray(raw?.order) ? DEFAULT_ORDER.filter((k) => raw.order!.includes(k)) : [];
+    if (order.length === DEFAULT_ORDER.length) {
+      const knownHidden = Array.isArray(raw.hidden) ? raw.hidden.filter((k) => DEFAULT_ORDER.includes(k)) : [];
+      return { order, hidden: [...new Set(knownHidden)] };
+    }
+  } catch { /* 解析失败回退默认 */ }
+  return { order: [...DEFAULT_ORDER], hidden: [] };
+}
 
 /** 维修任务看板小组件（任务模块启用且用户开启时显示）：
  *  三活动列（待领取/进行中/待审核）计数与近期任务，点击卡片直达任务看板定位。 */
@@ -173,29 +186,59 @@ export function DashboardPage() {
 
   const [data, setData] = useState<DashboardData | null>(null);
   const [err, setErr] = useState("");
-  // 任务看板显示开关：默认显示；用户关闭后 localStorage 记忆（wlt.dash.taskBoard=0）
-  const [showTaskBoard, setShowTaskBoard] = useState<boolean>(() => localStorage.getItem("wlt.dash.taskBoard") !== "0");
   const [reloadTick, setReloadTick] = useState(0);
-  // 自定义布局：编辑模式下区块可上下移动，顺序即时保存（wlt.dash.order）
+  // 自定义布局：编辑模式拖拽排序 + 软删除/重新添加（删除仅隐藏，可随时加回），即时保存
+  const [layout, setLayout] = useState<DashLayout>(loadDashLayout);
   const [editing, setEditing] = useState(false);
-  const [order, setOrder] = useState<BlockKey[]>(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(DASH_ORDER_KEY) ?? "") as BlockKey[];
-      const clean = DEFAULT_ORDER.filter((k) => raw.includes(k));
-      if (clean.length === DEFAULT_ORDER.length) return clean;
-    } catch { /* 解析失败回退默认 */ }
-    return [...DEFAULT_ORDER];
-  });
+  const [dragKey, setDragKey] = useState<BlockKey | null>(null);
+  const [overKey, setOverKey] = useState<BlockKey | null>(null);
 
+  const persistLayout = (next: DashLayout) => {
+    try { localStorage.setItem(DASH_LAYOUT_KEY, JSON.stringify(next)); } catch { /* 忽略 */ }
+  };
+  /** 拖拽排序：把 dragKey 移动到目标位置。 */
+  const moveTo = (key: BlockKey, target: BlockKey) => {
+    if (key === target) return;
+    setLayout((prev) => {
+      const order = [...prev.order];
+      const from = order.indexOf(key);
+      const to = order.indexOf(target);
+      if (from < 0 || to < 0) return prev;
+      order.splice(from, 1);
+      order.splice(to, 0, key);
+      const next = { ...prev, order };
+      persistLayout(next);
+      return next;
+    });
+  };
+  /** 步进移动（↑/↓ 辅助，键盘可达）。 */
   const moveBlock = (key: BlockKey, dir: -1 | 1) => {
-    setOrder((prev) => {
-      const arr = [...prev];
-      const i = arr.indexOf(key);
+    setLayout((prev) => {
+      const order = [...prev.order];
+      const i = order.indexOf(key);
       const j = i + dir;
-      if (i < 0 || j < 0 || j >= arr.length) return prev;
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-      try { localStorage.setItem(DASH_ORDER_KEY, JSON.stringify(arr)); } catch { /* 忽略 */ }
-      return arr;
+      if (i < 0 || j < 0 || j >= order.length) return prev;
+      [order[i], order[j]] = [order[j], order[i]];
+      const next = { ...prev, order };
+      persistLayout(next);
+      return next;
+    });
+  };
+  /** 软删除：仅隐藏，可从「添加模块」随时恢复。 */
+  const removeBlock = (key: BlockKey) => {
+    setLayout((prev) => {
+      if (prev.hidden.includes(key)) return prev;
+      const next = { ...prev, hidden: [...prev.hidden, key] };
+      persistLayout(next);
+      return next;
+    });
+  };
+  const addBlock = (key: BlockKey) => {
+    setLayout((prev) => {
+      if (!prev.hidden.includes(key)) return prev;
+      const next = { ...prev, hidden: prev.hidden.filter((k) => k !== key) };
+      persistLayout(next);
+      return next;
     });
   };
 
@@ -212,17 +255,12 @@ export function DashboardPage() {
     void load();
   }, [load]);
 
-  const toggleTaskBoard = (v: boolean) => {
-    setShowTaskBoard(v);
-    localStorage.setItem("wlt.dash.taskBoard", v ? "1" : "0");
-  };
-
   /** 页头动作按钮（设计页 13：白底灰描边 + 品牌图标 + 深色文字）。 */
   const headBtn = { borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" };
 
-  /** 区块可见性：维修任务看板需任务模块启用且用户开启；其余恒可见。 */
-  const applicable = (k: BlockKey) => k !== "taskBoard" || (taskEnabled && showTaskBoard);
-  const visibleBlocks = order.filter(applicable);
+  /** 区块可见性（软删除模型）：维修任务看板另需任务模块启用；隐藏模块可从「添加模块」恢复。 */
+  const visibleBlocks = layout.order.filter((k) => !layout.hidden.includes(k) && (k !== "taskBoard" || taskEnabled));
+  const addableBlocks = layout.order.filter((k) => layout.hidden.includes(k) && (k !== "taskBoard" || taskEnabled));
 
   /** 区块渲染（自定义布局）：stats 统计卡 / trendTodo 趋势+待办 / taskBoard 任务看板 / quickLinks 快捷入口。 */
   const renderBlock = (bk: BlockKey) => {
@@ -330,18 +368,11 @@ export function DashboardPage() {
           <Button
             style={headBtn}
             icon={<EditOutlined style={{ color: editing ? "#B45309" : "#5B6478" }} />}
-            onClick={() => setEditing((v) => !v)}
+            onClick={() => { setEditing((v) => !v); setDragKey(null); setOverKey(null); }}
           >{editing ? "完成编辑" : "编辑布局"}</Button>
           <Button style={headBtn} icon={<ReloadOutlined style={{ color: "#5B6478" }} />} onClick={() => { void load(); setReloadTick((t) => t + 1); }} aria-label="刷新" />
         </div>
       </div>
-      {/* 任务模块启用时：任务看板显示开关（用户级偏好，localStorage 记忆） */}
-      {taskEnabled && (
-        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <span style={{ fontSize: 12.5, color: token.colorTextSecondary }}>显示维修任务看板</span>
-          <Switch size="small" checked={showTaskBoard} onChange={toggleTaskBoard} aria-label="显示维修任务看板" />
-        </div>
-      )}
 
       {err && (
         <Alert
@@ -360,26 +391,68 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* 编辑模式提示 */}
+      {/* 编辑模式提示 + 可添加模块（软删除的模块在此恢复） */}
       {data && editing && (
-        <div style={{ marginBottom: 12, fontSize: 12, color: token.colorTextSecondary }}>
-          编辑布局：点击各区块右上角 ↑ / ↓ 调整显示顺序，改动即时保存；「维修任务看板」是否显示由页头上方开关控制。
+        <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12, color: token.colorTextSecondary }}>
+          <span>拖拽区块标题栏排序（或用 ↑/↓ 微调）；点 × 移除模块，下方可重新添加。编辑中区块点击已屏蔽。</span>
+          {addableBlocks.length > 0 && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+              <span>添加模块：</span>
+              {addableBlocks.map((k) => (
+                <Button key={k} size="small" icon={<PlusOutlined />} onClick={() => addBlock(k)}>{BLOCK_TITLES[k]}</Button>
+              ))}
+            </span>
+          )}
         </div>
       )}
 
-      {/* 按用户自定义顺序渲染区块（编辑模式下显示移动控件与虚线框） */}
-      {data && visibleBlocks.map((bk, idx) => (
-        <div key={bk} style={{ position: "relative", ...(editing ? { outline: "1px dashed #5B7FFF66", outlineOffset: 6, borderRadius: 14 } : null) }}>
-          {renderBlock(bk)}
-          {editing && (
-            <div style={{ position: "absolute", top: -10, right: 8, zIndex: 5, display: "flex", alignItems: "center", gap: 2, background: "#FFFFFF", border: "1px solid #CBD6EC", borderRadius: 999, padding: "1px 4px", boxShadow: "0 2px 8px rgba(30,36,51,0.08)" }}>
-              <span style={{ fontSize: 11, color: "#5B6478", padding: "0 4px" }}>{BLOCK_TITLES[bk]}</span>
-              <Button size="small" type="text" disabled={idx === 0} icon={<ArrowUpOutlined />} onClick={() => moveBlock(bk, -1)} aria-label={`上移${BLOCK_TITLES[bk]}`} />
-              <Button size="small" type="text" disabled={idx === visibleBlocks.length - 1} icon={<ArrowDownOutlined />} onClick={() => moveBlock(bk, 1)} aria-label={`下移${BLOCK_TITLES[bk]}`} />
+      {/* 按用户自定义顺序渲染可见区块：拖拽排序；编辑模式屏蔽内容点击、显示移动/移除控件 */}
+      {data && visibleBlocks.map((bk) => {
+        const dragging = dragKey === bk;
+        const dropTarget = overKey === bk && dragKey !== null && dragKey !== bk;
+        return (
+          <div
+            key={bk}
+            draggable={editing}
+            onDragStart={(e) => {
+              if (!editing) return;
+              setDragKey(bk);
+              e.dataTransfer.effectAllowed = "move";
+              try { e.dataTransfer.setData("text/plain", bk); } catch { /* 忽略 */ }
+            }}
+            onDragOver={(e) => {
+              if (!editing || !dragKey || dragKey === bk) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              setOverKey(bk);
+            }}
+            onDragLeave={() => { if (overKey === bk) setOverKey(null); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragKey) moveTo(dragKey, bk);
+              setDragKey(null);
+              setOverKey(null);
+            }}
+            onDragEnd={() => { setDragKey(null); setOverKey(null); }}
+            style={{ position: "relative", opacity: dragging ? 0.45 : 1, transition: "opacity .2s ease",
+              ...(editing ? { outline: dropTarget ? "2px dashed #5B7FFF" : "1px dashed #5B7FFF66", outlineOffset: 6, borderRadius: 14 } : null) }}
+          >
+            {/* 内容包裹层：编辑模式下透明遮罩拦截全部鼠标交互（防误触跳转） */}
+            <div style={{ position: "relative" }}>
+              {renderBlock(bk)}
+              {editing && <div style={{ position: "absolute", inset: 0, zIndex: 4, cursor: "move" }} aria-hidden />}
             </div>
-          )}
-        </div>
-      ))}
+            {editing && (
+              <div style={{ position: "absolute", top: -10, right: 8, zIndex: 5, display: "flex", alignItems: "center", gap: 2, background: "#FFFFFF", border: "1px solid #CBD6EC", borderRadius: 999, padding: "1px 4px", boxShadow: "0 2px 8px rgba(30,36,51,0.08)" }}>
+                <span style={{ fontSize: 11, color: "#5B6478", padding: "0 4px", cursor: dragKey === bk ? "grabbing" : "grab" }}>{BLOCK_TITLES[bk]}</span>
+                <Button size="small" type="text" icon={<ArrowUpOutlined />} onClick={() => moveBlock(bk, -1)} aria-label={`上移${BLOCK_TITLES[bk]}`} />
+                <Button size="small" type="text" icon={<ArrowDownOutlined />} onClick={() => moveBlock(bk, 1)} aria-label={`下移${BLOCK_TITLES[bk]}`} />
+                <Button size="small" type="text" danger icon={<CloseOutlined />} onClick={() => removeBlock(bk)} aria-label={`移除${BLOCK_TITLES[bk]}`} />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
