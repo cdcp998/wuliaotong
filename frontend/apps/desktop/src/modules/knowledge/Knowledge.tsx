@@ -93,7 +93,7 @@ export function KnowledgePage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontWeight: 700, fontSize: 13, flex: 1 }}>{a.title}</span>
                   {a.author_type === "ai" && <Tag color="purple" style={{ marginInlineEnd: 0, borderRadius: 999 }}>AI</Tag>}
-                  <Tag style={{ marginInlineEnd: 0, borderRadius: 999, color: "#64748B", background: "#EFF3FC", borderColor: "transparent" }}>v{a.published_version}</Tag>
+                  <Tag style={{ marginInlineEnd: 0, borderRadius: 999, color: "#475569", background: "#EFF3FC", borderColor: "transparent" }}>v{a.published_version}</Tag>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {a.category && <Tag style={{ marginInlineEnd: 0, borderRadius: 999, color: "#3B5BDB", background: "#EAEFFF", borderColor: "transparent" }}>{a.category}</Tag>}

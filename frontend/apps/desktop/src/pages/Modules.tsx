@@ -22,7 +22,7 @@ const STATE_META: Record<ModuleState, { color: string; label: string; fg?: strin
   INSTALLED: { color: "cyan", label: "已安装(停用)", fg: "#0E7490", bg: "#E0F2FE" },
   ENABLED: { color: "success", label: "已启用", fg: "#15803D", bg: "#E8F9EF" },
   DISABLED: { color: "warning", label: "已停用", fg: "#B45309", bg: "#FEF4E2" },
-  ERROR: { color: "error", label: "异常", fg: "#DC2626", bg: "#FDEBEC" },
+  ERROR: { color: "error", label: "异常", fg: "#B91C1C", bg: "#FDEBEC" },
   UPGRADING: { color: "processing", label: "升级中", fg: "#0E7490", bg: "#E0F2FE" },
 };
 

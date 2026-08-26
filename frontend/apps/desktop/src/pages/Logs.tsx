@@ -16,7 +16,7 @@ const METHOD_LABELS: Record<string, { label: string; bg: string; fg: string }> =
   POST: { label: "新增", bg: "#E8F9EF", fg: "#15803D" },
   PUT: { label: "修改", bg: "#EAEFFF", fg: "#3B5BDB" },
   PATCH: { label: "更新", bg: "#F3E8FF", fg: "#7C3AED" },
-  DELETE: { label: "删除", bg: "#FDEBEC", fg: "#DC2626" },
+  DELETE: { label: "删除", bg: "#FDEBEC", fg: "#B91C1C" },
   GET: { label: "查询", bg: "#EFF3FC", fg: "#5B6478" },
 };
 const METHOD_CN = (m: string) => METHOD_LABELS[m]?.label ?? m;
@@ -31,7 +31,7 @@ function fmtTime(v: string): string {
 function LogField({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-      <span style={{ width: 56, flexShrink: 0, fontSize: 12, color: "#8A93A8" }}>{label}</span>
+      <span style={{ width: 56, flexShrink: 0, fontSize: 12, color: "#6A748A" }}>{label}</span>
       <span style={{ fontSize: 13, color: "#1E2433", fontFamily: mono ? "ui-monospace, SFMono-Regular, Consolas, monospace" : undefined, wordBreak: "break-all" }}>{children}</span>
     </div>
   );
@@ -131,17 +131,17 @@ export function LogsPage() {
       label: (
         <span style={{ fontSize: 13 }}>
           <b>{TABLE_LABELS[row.table] ?? row.table}</b>
-          {row.pk && <span style={{ color: "#8A93A8", marginLeft: 6 }}>#{row.pk}</span>}
-          <Tag style={{ marginLeft: 8, borderRadius: 999, background: row.op === "delete" ? "#FDEBEC" : row.op === "insert" ? "#E8F9EF" : "#EAEFFF", color: row.op === "delete" ? "#DC2626" : row.op === "insert" ? "#15803D" : "#3B5BDB", borderColor: "transparent" }}>
+          {row.pk && <span style={{ color: "#6A748A", marginLeft: 6 }}>#{row.pk}</span>}
+          <Tag style={{ marginLeft: 8, borderRadius: 999, background: row.op === "delete" ? "#FDEBEC" : row.op === "insert" ? "#E8F9EF" : "#EAEFFF", color: row.op === "delete" ? "#B91C1C" : row.op === "insert" ? "#15803D" : "#3B5BDB", borderColor: "transparent" }}>
             {row.op === "insert" ? "新增" : row.op === "delete" ? "删除" : "修改"}
           </Tag>
-          <span style={{ color: "#8A93A8", marginLeft: 8, fontSize: 12 }}>{row.fields.length} 个字段</span>
+          <span style={{ color: "#6A748A", marginLeft: 8, fontSize: 12 }}>{row.fields.length} 个字段</span>
         </span>
       ),
       children: (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {/* 表头 */}
-          <div style={{ display: "flex", gap: 12, fontSize: 11.5, color: "#8A93A8" }}>
+          <div style={{ display: "flex", gap: 12, fontSize: 11.5, color: "#6A748A" }}>
             <span style={{ width: 130 }}>字段</span>
             <span style={{ flex: 1 }}>修改前</span>
             <span style={{ width: 24, textAlign: "center" }} />
@@ -162,14 +162,14 @@ export function LogsPage() {
                   }}
                 >
                   {isNew ? (
-                    <span style={{ color: "#8A93A8", fontStyle: "italic" }}>（新增字段）</span>
+                    <span style={{ color: "#6A748A", fontStyle: "italic" }}>（新增字段）</span>
                   ) : (
                     <span style={{ textDecoration: isRemoved ? undefined : "line-through", color: isRemoved ? "#B45309" : "#9B1C1C", wordBreak: "break-all" }}>
                       {formatDiffValue(f.field, maskValue(f.field, f.old))}
                     </span>
                   )}
                 </div>
-                <div style={{ width: 24, textAlign: "center", alignSelf: "center", color: "#8A93A8" }}>→</div>
+                <div style={{ width: 24, textAlign: "center", alignSelf: "center", color: "#6A748A" }}>→</div>
                 {/* 新值 */}
                 <div
                   style={{
@@ -179,7 +179,7 @@ export function LogsPage() {
                   }}
                 >
                   {isRemoved ? (
-                    <span style={{ color: "#8A93A8", fontStyle: "italic" }}>（已移除）</span>
+                    <span style={{ color: "#6A748A", fontStyle: "italic" }}>（已移除）</span>
                   ) : (
                     <span style={{ fontWeight: 500, color: "#166534", wordBreak: "break-all" }}>
                       {formatDiffValue(f.field, maskValue(f.field, f.new))}
@@ -204,7 +204,7 @@ export function LogsPage() {
   }
 
   const columns: ColumnsType<OperationLog> = [
-    { title: "时间", dataIndex: "created_at", width: 150, render: (v: string) => <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{fmtTime(v)}</span> },
+    { title: "时间", dataIndex: "created_at", width: 150, render: (v: string) => <span style={{ fontSize: 12, color: "#6A748A", fontVariantNumeric: "tabular-nums" }}>{fmtTime(v)}</span> },
     { title: "操作人", dataIndex: "username", width: 100, render: (v: string) => <span style={{ fontSize: 12.5, fontWeight: 500, color: "#1E2433" }}>{v}</span> },
     { title: "模块", dataIndex: "module", width: 120, render: (v: string) => <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>{v}</Tag> },
     { title: "动作", dataIndex: "action", width: 150, render: (v: string) => <span style={{ fontSize: 12.5, fontWeight: 500, color: "#1E2433" }}>{v}</span> },
@@ -217,7 +217,7 @@ export function LogsPage() {
         <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace" }}>{detailSummary(r)}</span>
       </span>
     ) },
-    { title: "IP", dataIndex: "ip", width: 120, render: (v: string) => <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v || "—"}</span> },
+    { title: "IP", dataIndex: "ip", width: 120, render: (v: string) => <span style={{ fontSize: 12, color: "#6A748A", fontVariantNumeric: "tabular-nums" }}>{v || "—"}</span> },
   ];
 
   return (
@@ -238,7 +238,7 @@ export function LogsPage() {
       {/* 筛选条（设计页 37：搜索 + 模块 + 方法 + 日期 + 统计） */}
       <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
         <Input
-          prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+          prefix={<SearchOutlined style={{ color: "#6A748A" }} />}
           placeholder="操作人 / 内容关键词"
           allowClear
           style={{ width: 300, background: "#F6F8FE" }}
@@ -267,7 +267,7 @@ export function LogsPage() {
           onChange={(v) => { setRange(v as [Dayjs | null, Dayjs | null] | null); setPage(1); }}
         />
         <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} onClick={() => void load()}>查询</Button>
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 条</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#6A748A" }}>共 {total} 条</span>
       </div>
 
       {/* 表格（设计列：时间/操作人/模块/动作/详情/IP；点击行查看完整参数） */}
@@ -289,7 +289,7 @@ export function LogsPage() {
             onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } },
           }}
         />
-        <p style={{ margin: "8px 0 0", fontSize: 11, color: "#8A93A8" }}>
+        <p style={{ margin: "8px 0 0", fontSize: 11, color: "#6A748A" }}>
           提示：关键操作（模块启停/地图源/删除审核/短信）单独高亮；日志只增不改不删（保留追溯），点击行查看完整参数。
         </p>
       </div>
@@ -303,7 +303,7 @@ export function LogsPage() {
             <LogField label="动作">{detail.action}</LogField>
             <LogField label="方法">
               <Tag style={{ borderRadius: 999, background: METHOD_LABELS[detail.method]?.bg ?? "#EFF3FC", color: METHOD_LABELS[detail.method]?.fg ?? "#5B6478", borderColor: "transparent", marginInlineEnd: 6 }}>{METHOD_CN(detail.method)}</Tag>
-              <span style={{ fontSize: 12, color: "#8A93A8" }}>{detail.method}</span>
+              <span style={{ fontSize: 12, color: "#6A748A" }}>{detail.method}</span>
             </LogField>
             <LogField label="状态码" mono>{detail.status_code ? String(detail.status_code) : "—"}</LogField>
             <LogField label="IP">{detail.ip}</LogField>
@@ -312,12 +312,12 @@ export function LogsPage() {
             {/* 字段级修改前后对比（优先展示；无 diff 的历史日志回退原始 JSON） */}
             {parseDiff(detail.diff).length > 0 ? (
               <div>
-                <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 6 }}>变更内容（字段级前后对照）</div>
+                <div style={{ fontSize: 12, color: "#6A748A", marginBottom: 6 }}>变更内容（字段级前后对照）</div>
                 <DiffDetail diffText={detail.diff} />
               </div>
             ) : detail.body && detail.body !== "{}" ? (
               <div>
-                <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 6 }}>
+                <div style={{ fontSize: 12, color: "#6A748A", marginBottom: 6 }}>
                   提交内容（具体改动）
                   {detail.method === "PUT" && <span style={{ marginLeft: 6, color: "#B45309" }}>· 修改后各字段值</span>}
                 </div>
@@ -329,16 +329,16 @@ export function LogsPage() {
               items={[
                 {
                   key: "raw",
-                  label: <span style={{ fontSize: 12, color: "#8A93A8" }}>原始数据（查询参数 / 请求体）</span>,
+                  label: <span style={{ fontSize: 12, color: "#6A748A" }}>原始数据（查询参数 / 请求体）</span>,
                   children: (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       <div>
-                        <div style={{ fontSize: 11.5, color: "#8A93A8", marginBottom: 4 }}>查询参数</div>
+                        <div style={{ fontSize: 11.5, color: "#6A748A", marginBottom: 4 }}>查询参数</div>
                         <pre style={{ margin: 0, padding: 8, background: "#F6F8FE", borderRadius: 8, fontSize: 11.5, whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 160, overflowY: "auto" }}>{prettyJson(detail.params) || "—"}</pre>
                       </div>
                       {detail.body ? (
                         <div>
-                          <div style={{ fontSize: 11.5, color: "#8A93A8", marginBottom: 4 }}>请求体（脱敏）</div>
+                          <div style={{ fontSize: 11.5, color: "#6A748A", marginBottom: 4 }}>请求体（脱敏）</div>
                           <pre style={{ margin: 0, padding: 8, background: "#F6F8FE", borderRadius: 8, fontSize: 11.5, whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 200, overflowY: "auto" }}>{prettyJson(detail.body)}</pre>
                         </div>
                       ) : null}

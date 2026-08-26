@@ -175,7 +175,7 @@ export function ExportFormatModal(props: {
       title={
         <div>
           <div style={{ fontSize: 17, fontWeight: 700 }}>导出格式设置</div>
-          <div style={{ fontSize: 12, color: "#8A93A8", fontWeight: 400, marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: "#6A748A", fontWeight: 400, marginTop: 2 }}>
             自定义导出文件的显示方式，避免数据变形或显示不全
           </div>
         </div>
@@ -205,10 +205,10 @@ export function ExportFormatModal(props: {
         {/* 字段列表 */}
         <div style={{ width: 300, flexShrink: 0, background: "#fff", border: "1px solid #EFF3FC", borderRadius: 14, padding: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>选择导出字段</div>
-          <div style={{ fontSize: 11.5, color: "#8A93A8", marginBottom: 8 }}>勾选需要导出的列，可拖动调整顺序</div>
+          <div style={{ fontSize: 11.5, color: "#6A748A", marginBottom: 8 }}>勾选需要导出的列，可拖动调整顺序</div>
           <Input
             size="small"
-            prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+            prefix={<SearchOutlined style={{ color: "#6A748A" }} />}
             placeholder="搜索字段名称"
             allowClear
             value={search}
@@ -243,7 +243,7 @@ export function ExportFormatModal(props: {
                 }}
                 onClick={() => setActiveKey(f.key)}
               >
-                <HolderOutlined style={{ color: "#8A93A8", cursor: "grab" }} />
+                <HolderOutlined style={{ color: "#6A748A", cursor: "grab" }} />
                 <Checkbox checked={selectedSet.has(f.key)} onClick={(e) => e.stopPropagation()} onChange={() => toggleSelect(f.key)} style={{ fontSize: 12.5 }} />
                 <span style={{ flex: 1, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.label}</span>
               </div>
@@ -266,7 +266,7 @@ export function ExportFormatModal(props: {
               字段格式设置{activeField ? <Tag style={{ marginLeft: 8, borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent" }}>{activeField.label}</Tag> : null}
             </div>
             {!activeField ? (
-              <div style={{ fontSize: 12, color: "#8A93A8" }}>← 在左侧点击选择一个字段后，可在此设置其显示格式与列宽</div>
+              <div style={{ fontSize: 12, color: "#6A748A" }}>← 在左侧点击选择一个字段后，可在此设置其显示格式与列宽</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -289,7 +289,7 @@ export function ExportFormatModal(props: {
                       onChange={(v) => setColFmt(activeField.key, { decimals: v ?? 2 })}
                       style={{ width: 120 }}
                     />
-                    <span style={{ fontSize: 11.5, color: "#8A93A8" }}>0 表示整数，2 表示保留两位小数</span>
+                    <span style={{ fontSize: 11.5, color: "#6A748A" }}>0 表示整数，2 表示保留两位小数</span>
                   </div>
                 )}
                 {(colFmt(activeField.key).type === "custom" || colFmt(activeField.key).type === "date") && (
@@ -312,7 +312,7 @@ export function ExportFormatModal(props: {
                   </div>
                 )}
                 {colFmt(activeField.key).type === "custom" && (
-                  <div style={{ fontSize: 11.5, color: "#8A93A8" }}>支持 Excel 格式代码，如 “0.00” 保留两位小数，“@” 强制文本</div>
+                  <div style={{ fontSize: 11.5, color: "#6A748A" }}>支持 Excel 格式代码，如 “0.00” 保留两位小数，“@” 强制文本</div>
                 )}
 
                 {/* 列宽 */}
@@ -345,7 +345,7 @@ export function ExportFormatModal(props: {
                         }}
                         style={{ width: 90 }}
                       />
-                      <span style={{ fontSize: 11.5, color: "#8A93A8" }}>字符宽度</span>
+                      <span style={{ fontSize: 11.5, color: "#6A748A" }}>字符宽度</span>
                     </>
                   ) : null}
                   <Button
@@ -372,7 +372,7 @@ export function ExportFormatModal(props: {
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>全局默认设置</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12.5 }}>
               <Checkbox checked={spec.global.longNumberAsText} onChange={(e) => update({ global: { ...spec.global, longNumberAsText: e.target.checked } })}>
-                将超过 15 位的数字强制转为文本<span style={{ color: "#8A93A8" }}>（避免科学计数法）</span>
+                将超过 15 位的数字强制转为文本<span style={{ color: "#6A748A" }}>（避免科学计数法）</span>
               </Checkbox>
               <Checkbox checked={spec.global.wrapText} onChange={(e) => update({ global: { ...spec.global, wrapText: e.target.checked } })}>
                 开启自动换行
@@ -390,7 +390,7 @@ export function ExportFormatModal(props: {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div>
             <span style={{ fontSize: 13, fontWeight: 700 }}>预览</span>
-            <span style={{ fontSize: 11.5, color: "#8A93A8", marginLeft: 10 }}>预览效果基于前 10 条数据</span>
+            <span style={{ fontSize: 11.5, color: "#6A748A", marginLeft: 10 }}>预览效果基于前 10 条数据</span>
           </div>
           <Button size="small" icon={<ReloadOutlined />} onClick={() => setPreviewTick((t) => t + 1)}>刷新预览</Button>
         </div>
@@ -411,7 +411,7 @@ export function ExportFormatModal(props: {
           }))}
           dataSource={previewRows.map((r) => Object.fromEntries(r.map((v, i) => [String(i), v])))}
         />
-        <div style={{ fontSize: 11, color: "#8A93A8", marginTop: 8 }}>
+        <div style={{ fontSize: 11, color: "#6A748A", marginTop: 8 }}>
           提示：⟨文本⟩ 角标表示该长数字将按文本单元格写入，Excel 中完整显示、不会变成科学计数法。
         </div>
       </div>

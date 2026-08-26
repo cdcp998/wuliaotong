@@ -26,7 +26,7 @@ body {
 a:focus-visible,
 button:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid rgba(91, 127, 255, 0.5);
+  outline: 2px solid #3b5bdb;
   outline-offset: 2px;
 }
 
@@ -369,7 +369,7 @@ button:focus-visible,
   transition: background 0.2s ease, color 0.2s ease;
 }
 .ant-layout-sider .ant-menu-light.ant-menu-inline .ant-menu-submenu-title {
-  color: #8a93a8;
+  color: #6a748a;
   font-size: 11px;
   font-weight: 600;
 }
@@ -514,7 +514,7 @@ button:focus-visible,
 
 /* --- 空状态 / 描述 / 分段 --- */
 .ant-empty .ant-empty-description {
-  color: #8a93a8;
+  color: #6a748a;
 }
 .ant-segmented {
   border-radius: 10px !important;

@@ -133,7 +133,7 @@ export function ChecksPage() {
           { icon: <ProfileOutlined />, label: "待过账", value: stats.pending, color: "#B45309", bg: "#FEF4E2" },
           { icon: <CalendarOutlined />, label: "本月盘点", value: stats.monthCount, color: "#1E2433", bg: "#F6F8FE" },
           { icon: <RiseOutlined />, label: "盘盈", value: stats.gain.toLocaleString("zh-CN", { maximumFractionDigits: 3 }), color: "#15803D", bg: "#E8F9EF" },
-          { icon: <FallOutlined />, label: "盘亏", value: stats.loss.toLocaleString("zh-CN", { maximumFractionDigits: 3 }), color: "#DC2626", bg: "#FDEBEC" },
+          { icon: <FallOutlined />, label: "盘亏", value: stats.loss.toLocaleString("zh-CN", { maximumFractionDigits: 3 }), color: "#B91C1C", bg: "#FDEBEC" },
         ].map((c) => (
           <div key={c.label} className="wlt-glass-sm" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
             <span style={{ width: 38, height: 38, borderRadius: 12, background: c.bg, color: c.color, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>{c.icon}</span>

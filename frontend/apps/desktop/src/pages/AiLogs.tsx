@@ -52,7 +52,7 @@ function LogDetailDrawer({ record, onClose }: { record: LlmLogRow | null; onClos
             <Descriptions.Item label="场景">{record.scene ? `${sceneLabel(record.scene)}（${record.scene}）` : "-"}</Descriptions.Item>
             <Descriptions.Item label="模型">{record.model || "-"}</Descriptions.Item>
             <Descriptions.Item label="状态">
-              <Tag style={{ borderRadius: 999, background: record.status === "ok" ? "#E8F9EF" : "#FDEBEC", color: record.status === "ok" ? "#15803D" : "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>{record.status === "ok" ? "成功" : "失败"}</Tag>
+              <Tag style={{ borderRadius: 999, background: record.status === "ok" ? "#E8F9EF" : "#FDEBEC", color: record.status === "ok" ? "#15803D" : "#B91C1C", borderColor: "transparent", marginInlineEnd: 0 }}>{record.status === "ok" ? "成功" : "失败"}</Tag>
             </Descriptions.Item>
             <Descriptions.Item label="耗时">{record.duration_ms} ms</Descriptions.Item>
           </Descriptions>
@@ -135,7 +135,7 @@ export function AiLogsPage() {
     { title: "模型", dataIndex: "model", width: 100 },
     {
       title: "状态", dataIndex: "status", width: 80,
-      render: (v: string) => <Tag style={{ borderRadius: 999, background: v === "ok" ? "#E8F9EF" : "#FDEBEC", color: v === "ok" ? "#15803D" : "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>{v === "ok" ? "成功" : "失败"}</Tag>,
+      render: (v: string) => <Tag style={{ borderRadius: 999, background: v === "ok" ? "#E8F9EF" : "#FDEBEC", color: v === "ok" ? "#15803D" : "#B91C1C", borderColor: "transparent", marginInlineEnd: 0 }}>{v === "ok" ? "成功" : "失败"}</Tag>,
     },
     { title: "耗时(ms)", dataIndex: "duration_ms", width: 90 },
     {
@@ -191,7 +191,7 @@ export function AiLogsPage() {
           value={status || undefined}
           onChange={(v) => { setStatus(v ?? ""); setPage(1); }}
         />
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 条</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#6A748A" }}>共 {total} 条</span>
       </div>
       <div className="wlt-glass" style={{ padding: 12 }}>
         <DataTable

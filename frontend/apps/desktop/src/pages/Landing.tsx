@@ -146,7 +146,7 @@ export function LandingPage() {
         </div>
         <div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#1E2433", lineHeight: 1.25 }}>物料通</div>
-          <div style={{ fontSize: 12, color: "#8A93A8" }}>企业物资管理平台</div>
+          <div style={{ fontSize: 12, color: "#6A748A" }}>企业物资管理平台</div>
         </div>
       </div>
 
@@ -214,6 +214,15 @@ function EntryCard(props: {
   return (
     <div
       onClick={props.onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          props.onClick();
+        }
+      }}
+      aria-label={props.title}
       style={{
         flex: 1,
         background: "#FFFFFF",
@@ -252,7 +261,7 @@ function EntryCard(props: {
       </div>
       <div style={{ fontSize: 15.5, fontWeight: 700, color: "#1E2433", marginTop: 4 }}>{props.title}</div>
       <div style={{ fontSize: 12, color: "#5B6478" }}>{props.desc}</div>
-      <div style={{ fontSize: 11.5, color: "#8A93A8", lineHeight: 1.7 }}>{props.features}</div>
+      <div style={{ fontSize: 11.5, color: "#6A748A", lineHeight: 1.7 }}>{props.features}</div>
       <button
         type="button"
         onClick={(e) => {

@@ -982,7 +982,7 @@ export function PurchaseInPage() {
               }] : []),
             ].map((f) => (
               <div key={f.label} style={{ display: "flex", flexDirection: "column", gap: 4, width: 200 }}>
-                <span style={{ fontSize: 11, fontWeight: 500, color: "#8A93A8" }}>{f.label}</span>
+                <span style={{ fontSize: 11, fontWeight: 500, color: "#6A748A" }}>{f.label}</span>
                 {f.node}
               </div>
             ))}

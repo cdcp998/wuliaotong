@@ -69,7 +69,7 @@ export function DeviceTaskForm({ onSubmitted, onCancel }: {
             <Radio key={m} value={m} style={{ flex: 1, marginInlineEnd: 0 }}>
               <div style={{ paddingTop: 2, minWidth: 0 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: "#1E2433", whiteSpace: "nowrap" }}>{DISPATCH_MODES[m].label}</div>
-                <div style={{ fontSize: 11, color: "#8A93A8", lineHeight: 1.5 }}>{DISPATCH_MODES[m].desc}</div>
+                <div style={{ fontSize: 11, color: "#6A748A", lineHeight: 1.5 }}>{DISPATCH_MODES[m].desc}</div>
               </div>
             </Radio>
           ))}

@@ -216,7 +216,7 @@ export function RequisitionDetailPage() {
                       >
                         {s.done ? "✓" : i === cur ? "•" : ""}
                       </span>
-                      <span style={{ fontSize: 10.5, marginTop: 4, color: s.done ? "#15803D" : i === cur ? "#5B7FFF" : "#8A93A8", whiteSpace: "nowrap" }}>{s.label}</span>
+                      <span style={{ fontSize: 10.5, marginTop: 4, color: s.done ? "#15803D" : i === cur ? "#5B7FFF" : "#6A748A", whiteSpace: "nowrap" }}>{s.label}</span>
                     </span>
                     {i < steps.length - 1 && <span style={{ flex: 1, height: 2, background: s.done ? "#22C55E" : "#E4EAF6", marginTop: 6 }} />}
                   </Fragment>

@@ -99,7 +99,7 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ fontSize: 12, color: "#8A93A8" }}>
+      <div style={{ fontSize: 12, color: "#6A748A" }}>
         统一管理所有表格导出的样式与数据格式。合并优先级：模块级覆盖 &gt; 全局默认 &gt; 系统内置。
       </div>
 

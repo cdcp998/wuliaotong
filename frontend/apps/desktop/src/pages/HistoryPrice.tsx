@@ -80,10 +80,10 @@ export function HistoryPricePage() {
 
   function renderChange(r: HistoryPriceRow) {
     const c = changeMap.get(list.indexOf(r));
-    if (!c) return <span style={{ color: "#8A93A8", fontSize: 12 }}>首笔 —</span>;
+    if (!c) return <span style={{ color: "#6A748A", fontSize: 12 }}>首笔 —</span>;
     const sign = c.dir === "up" ? "+" : c.dir === "down" ? "-" : "";
     const text = c.dir === "flat" ? "持平" : `${sign}${Math.abs(c.pct).toFixed(1)}%`;
-    const meta = c.dir === "up" ? { fg: "#DC2626", bg: "#FDEBEC" } : c.dir === "down" ? { fg: "#15803D", bg: "#E8F9EF" } : { fg: "#5B6478", bg: "#EFF3FC" };
+    const meta = c.dir === "up" ? { fg: "#B91C1C", bg: "#FDEBEC" } : c.dir === "down" ? { fg: "#15803D", bg: "#E8F9EF" } : { fg: "#5B6478", bg: "#EFF3FC" };
     return <Tag style={{ borderRadius: 999, background: meta.bg, color: meta.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{text}</Tag>;
   }
 
@@ -122,7 +122,7 @@ export function HistoryPricePage() {
       render: (_, r) => (
         <span style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: "#1E2433" }}>{r.product_name}</span>
-          <span style={{ fontSize: 10.5, color: "#8A93A8" }}>{r.material_code || "-"}</span>
+          <span style={{ fontSize: 10.5, color: "#6A748A" }}>{r.material_code || "-"}</span>
         </span>
       ),
     },
@@ -130,7 +130,7 @@ export function HistoryPricePage() {
     { title: "单价", dataIndex: "price", width: 110, render: (v: string) => <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>¥ {Number(v || 0).toFixed(2)}</span> },
     { title: "涨跌", key: "change", width: 100, render: (_, r) => renderChange(r) },
     { title: "单据", dataIndex: "bill_no", width: 170, render: (v: string) => <span style={{ fontSize: 12, color: "#5B6478", fontVariantNumeric: "tabular-nums" }}>{v}</span> },
-    { title: "日期", dataIndex: "bill_date", width: 120, render: (v: string) => <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v?.slice(0, 10)}</span> },
+    { title: "日期", dataIndex: "bill_date", width: 120, render: (v: string) => <span style={{ fontSize: 12, color: "#6A748A", fontVariantNumeric: "tabular-nums" }}>{v?.slice(0, 10)}</span> },
   ];
 
   return (
@@ -149,7 +149,7 @@ export function HistoryPricePage() {
       {/* 筛选条（设计页 21：搜索 + 供应商 + 近 N 天 + 统计） */}
       <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
         <Input
-          prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+          prefix={<SearchOutlined style={{ color: "#6A748A" }} />}
           placeholder="材料 / 供应商"
           allowClear
           style={{ width: 300, background: "#F6F8FE" }}
@@ -172,7 +172,7 @@ export function HistoryPricePage() {
           value={rangeDays}
           onChange={(v) => { setRangeDays(v); setPage(1); }}
         />
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 条记录</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#6A748A" }}>共 {total} 条记录</span>
       </div>
 
       {/* 表格（设计列：材料/供应商/单价/涨跌/单据/日期） */}
@@ -185,7 +185,7 @@ export function HistoryPricePage() {
           locale={{ emptyText: "暂无历史价格记录，完成入库后自动生成" }}
           pagination={{ current: page, pageSize, total, showTotal: (t) => `共 ${t} 条记录`, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
         />
-        <p style={{ margin: "8px 0 0", fontSize: 11, color: "#8A93A8" }}>
+        <p style={{ margin: "8px 0 0", fontSize: 11, color: "#6A748A" }}>
           提示：入库时按供应商自动带出最近价格并标记涨跌；点击可查看该材料价格曲线
         </p>
       </div>

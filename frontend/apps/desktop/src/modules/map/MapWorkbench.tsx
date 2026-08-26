@@ -318,7 +318,7 @@ export function MapWorkbenchPage() {
         <div style={{ ...floatCard, top: 14, left: 16, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 999, cursor: "pointer" }}>
           <GlobalOutlined style={{ fontSize: 14, color: "#3B5BDB" }} />
           <span style={{ fontSize: 12, fontWeight: 500, color: "#1E2433" }}>{sourceName}</span>
-          <DownOutlined style={{ fontSize: 12, color: "#8A93A8" }} />
+          <DownOutlined style={{ fontSize: 12, color: "#6A748A" }} />
         </div>
       </Dropdown>
 
@@ -348,11 +348,11 @@ export function MapWorkbenchPage() {
           </div>
           {drawnLines.length > 0 && (
             <>
-              <span style={{ fontSize: 11.5, color: "#8A93A8" }}>已画 {drawnLines.length} 条线</span>
+              <span style={{ fontSize: 11.5, color: "#6A748A" }}>已画 {drawnLines.length} 条线</span>
               <Button size="small" danger onClick={() => setDrawnLines([])} block>清除全部画线</Button>
             </>
           )}
-          <span style={{ fontSize: 10.5, color: "#8A93A8" }}>再点「画线」按钮退出绘制模式</span>
+          <span style={{ fontSize: 10.5, color: "#6A748A" }}>再点「画线」按钮退出绘制模式</span>
         </div>
       )}
 
@@ -416,7 +416,7 @@ export function MapWorkbenchPage() {
           <span style={{ fontSize: 11.5, fontWeight: 500, color: "#1E2433" }}>
             {navFaultItem ? `#${navFaultItem.id} · ${navFaultItem.fault_type || "故障"} · 导航` : "故障导航"}
           </span>
-          <DownOutlined style={{ fontSize: 11, color: "#8A93A8" }} />
+          <DownOutlined style={{ fontSize: 11, color: "#6A748A" }} />
         </div>
         <div style={{ ...floatCard, position: "static", display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 999, pointerEvents: "none" }}>
           <span style={{ fontSize: 10, color: "#5B6478", whiteSpace: "nowrap" }}>

@@ -167,7 +167,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           colorBgContainer: "#FFFFFF",
           colorText: "#1E2433",
           colorTextSecondary: "#5B6478",
-          colorTextTertiary: "#8A93A8",
+          colorTextTertiary: "#6A748A",
           colorBorder: "#E4EAF6",
           colorBorderSecondary: "#EFF3FC",
           borderRadius: 10,

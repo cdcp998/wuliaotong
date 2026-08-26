@@ -27,7 +27,7 @@ const NEXT_ICON: Record<number, React.ReactNode> = {
 const SEVERITY: Record<number, { label: string; fg: string; bg: string }> = {
   1: { label: "低", fg: "#7C3AED", bg: "#F3E8FF" },
   2: { label: "中", fg: "#B45309", bg: "#FEF4E2" },
-  3: { label: "高", fg: "#DC2626", bg: "#FDEBEC" },
+  3: { label: "高", fg: "#B91C1C", bg: "#FDEBEC" },
 };
 
 /** 手动流转按钮文案（与维修任务联动时由后端自动同步状态）。 */

@@ -105,7 +105,7 @@ export function AboutPanel() {
                 <Tag style={{ borderRadius: 999, background: "#FEF4E2", color: "#B45309", borderColor: "transparent" }}>开发版</Tag>
               )}
             </div>
-            <div style={{ fontSize: 12, color: "#8A93A8", marginTop: 3 }}>企业物资数字化底座：库存 · 领用 · 线缆地图 · 维修 · 知识库</div>
+            <div style={{ fontSize: 12, color: "#6A748A", marginTop: 3 }}>企业物资数字化底座：库存 · 领用 · 线缆地图 · 维修 · 知识库</div>
           </div>
           <Button
             icon={<GithubOutlined />}
@@ -134,7 +134,7 @@ export function AboutPanel() {
             },
           ].map((it) => (
             <div key={it.label} style={{ background: "#F6F8FE", borderRadius: 12, padding: "10px 14px" }}>
-              <div style={{ fontSize: 11.5, color: "#8A93A8" }}>{it.label}</div>
+              <div style={{ fontSize: 11.5, color: "#6A748A" }}>{it.label}</div>
               <div style={{ fontSize: 14, fontWeight: 700, color: it.color, fontVariantNumeric: "tabular-nums", fontFamily: it.mono ? "ui-monospace, SFMono-Regular, Consolas, monospace" : undefined, marginTop: 2 }}>{it.value}</div>
             </div>
           ))}
@@ -147,7 +147,7 @@ export function AboutPanel() {
               { k: "数据库", ok: server.db === "ok" },
               { k: "Redis 缓存", ok: server.redis === "ok" },
             ].map((s) => (
-              <span key={s.k} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "3px 12px", borderRadius: 999, background: s.ok ? "#E8F9EF" : "#FDEBEC", color: s.ok ? "#15803D" : "#DC2626" }}>
+              <span key={s.k} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "3px 12px", borderRadius: 999, background: s.ok ? "#E8F9EF" : "#FDEBEC", color: s.ok ? "#15803D" : "#B91C1C" }}>
                 <span style={{ width: 6, height: 6, borderRadius: 3, background: "currentColor" }} />
                 {s.k} {s.ok ? "运行正常" : "未连接"}
               </span>
@@ -165,7 +165,7 @@ export function AboutPanel() {
           <SafetyCertificateOutlined style={{ color: "#5B7FFF", fontSize: 16 }} />
           <span style={{ fontSize: 15, fontWeight: 700, color: "#1E2433" }}>开源信息</span>
         </div>
-        <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: "#6A748A", marginBottom: 12 }}>
           本系统基于以下优秀开源组件构建。各组件版权归其原作者所有；点击「许可证」可查看完整许可证文本。
         </div>
         <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 12.5 }}>
@@ -198,7 +198,7 @@ export function AboutPanel() {
       </div>
 
       {/* 版权与致谢 */}
-      <div style={{ textAlign: "center", fontSize: 11.5, color: "#8A93A8", lineHeight: 1.9, paddingBottom: 8 }}>
+      <div style={{ textAlign: "center", fontSize: 11.5, color: "#6A748A", lineHeight: 1.9, paddingBottom: 8 }}>
         <GithubOutlined style={{ marginRight: 6 }} />
         版权所有 © 2026 物料通管理系统 · 开源地址{" "}
         <a href={PROJECT_REPO} target="_blank" rel="noreferrer" style={{ color: "#5B7FFF" }}>

@@ -263,7 +263,7 @@ export function SuppliersPage() {
       {/* 筛选条（设计页 15：搜索 + 状态 + 统计） */}
       <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
         <Input
-          prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+          prefix={<SearchOutlined style={{ color: "#6A748A" }} />}
           placeholder="供应商名称 / 编码 / 联系人"
           allowClear
           style={{ width: 300, background: "#F6F8FE" }}
@@ -278,7 +278,7 @@ export function SuppliersPage() {
           onChange={(v) => { setStatus(v); setPage(1); }}
           options={[{ value: 1, label: "启用" }, { value: 0, label: "停用" }]}
         />
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 家 · 启用 {enabledTotal}</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#6A748A" }}>共 {total} 家 · 启用 {enabledTotal}</span>
       </div>
 
       {/* 表格（设计列：供应商/编码/联系人/电话/最近供货/状态/操作） */}

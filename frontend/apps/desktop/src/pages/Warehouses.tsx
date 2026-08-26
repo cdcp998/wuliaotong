@@ -283,17 +283,17 @@ export function WarehousesPage() {
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12.5, fontWeight: active ? 700 : 500, color: active ? "#3B5BDB" : "#1E2433" }}>{w.name}</div>
-                      <div style={{ fontSize: 10.5, color: "#8A93A8", marginTop: 2 }}>
+                      <div style={{ fontSize: 10.5, color: "#6A748A", marginTop: 2 }}>
                         {w.code} · {w.shelf_count ?? 0} 货架 · {w.location_count ?? 0} 库位{w.status === 1 ? "" : " · 停用"}
                       </div>
                     </div>
-                    <span style={{ fontSize: 12, color: active ? "#3B5BDB" : "#8A93A8" }}>▸</span>
+                    <span style={{ fontSize: 12, color: active ? "#3B5BDB" : "#6A748A" }}>▸</span>
                   </div>
                 );
               })}
               {!whs.length && !whLoading && <Empty description="暂无仓库" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
             </Spin>
-            <div style={{ fontSize: 10.5, color: "#8A93A8" }}>选择仓库后右侧显示分层货架图</div>
+            <div style={{ fontSize: 10.5, color: "#6A748A" }}>选择仓库后右侧显示分层货架图</div>
           </div>
         </div>
 
@@ -326,7 +326,7 @@ export function WarehousesPage() {
               {/* 筛选条（设计页 17）：搜索库位/材料 + 汇总胶囊 */}
               <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
                 <Input
-                  prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+                  prefix={<SearchOutlined style={{ color: "#6A748A" }} />}
                   placeholder="搜索库位 / 材料"
                   allowClear
                   style={{ width: 260, background: "#F6F8FE" }}

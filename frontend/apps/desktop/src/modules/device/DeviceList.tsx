@@ -12,8 +12,8 @@ import { deviceApi, type DeviceItem } from "./api";
 const ST: Record<number, { label: string; fg: string; bg: string }> = {
   1: { label: "在用", fg: "#15803D", bg: "#E8F9EF" },
   2: { label: "维修中", fg: "#B45309", bg: "#FEF4E2" },
-  3: { label: "闲置", fg: "#64748B", bg: "#EFF3FC" },
-  4: { label: "报废", fg: "#DC2626", bg: "#FDEBEC" },
+  3: { label: "闲置", fg: "#475569", bg: "#EFF3FC" },
+  4: { label: "报废", fg: "#B91C1C", bg: "#FDEBEC" },
 };
 
 export function DeviceListPage() {

@@ -245,7 +245,7 @@ export function RequisitionApplyPage() {
         <Button type="primary" size="large" loading={submitting} onClick={() => void submit()} style={{ minWidth: 180 }}>
           提交申请
         </Button>
-        <span style={{ color: "#8A93A8", fontSize: 12 }}>
+        <span style={{ color: "#6A748A", fontSize: 12 }}>
           已填 {validCount}/{rows.length} 项材料，合计数量 {totalQty}
         </span>
       </Space>

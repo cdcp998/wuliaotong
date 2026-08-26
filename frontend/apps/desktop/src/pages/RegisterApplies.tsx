@@ -10,7 +10,7 @@ import { DataTable } from "../components/DataTable";
 const STATUS: Record<number, { text: string; bg: string; fg: string }> = {
   0: { text: "待审核", bg: "#FEF4E2", fg: "#B45309" },
   1: { text: "已通过", bg: "#E8F9EF", fg: "#15803D" },
-  2: { text: "已拒绝", bg: "#EFF3FC", fg: "#64748B" },
+  2: { text: "已拒绝", bg: "#EFF3FC", fg: "#475569" },
 };
 
 /** 注册审核（电脑端，超管 sys:user）：审核注册模式下的账号开通申请。 */

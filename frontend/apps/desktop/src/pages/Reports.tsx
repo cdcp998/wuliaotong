@@ -122,7 +122,7 @@ function InventorySummaryTab() {
         />
         <DatePicker.RangePicker value={range} onChange={(v) => { setRange(v as [Dayjs | null, Dayjs | null] | null); setPage(1); }} />
         <Button type="primary" onClick={() => void load()}>查询</Button>
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 行</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#6A748A" }}>共 {total} 行</span>
         <Button
           onClick={() =>
             window.open(
@@ -194,9 +194,9 @@ function StockReportTab() {
       width: 110,
       render: (_, r) =>
         r.dormant_days > 90 ? (
-          <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>呆滞 {r.dormant_days} 天</Tag>
+          <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#B91C1C", borderColor: "transparent", marginInlineEnd: 0 }}>呆滞 {r.dormant_days} 天</Tag>
         ) : (
-          <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#64748B", borderColor: "transparent", marginInlineEnd: 0 }}>正常</Tag>
+          <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#475569", borderColor: "transparent", marginInlineEnd: 0 }}>正常</Tag>
         ),
     },
   ];
@@ -222,7 +222,7 @@ function StockReportTab() {
         <Tooltip title="点击设置导出文件的列格式、列宽等选项">
           <Button icon={<SettingOutlined style={{ color: "#5B7FFF" }} />} onClick={() => setFmtOpen(true)}>导出设置</Button>
         </Tooltip>
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 行</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#6A748A" }}>共 {total} 行</span>
         <Button onClick={() => doExport()}>
           导出 Excel
         </Button>

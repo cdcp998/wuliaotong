@@ -17,8 +17,8 @@ const ST: Record<string, { label: string; fg: string; bg: string }> = {
   in_progress: { label: "进行中", fg: "#0E7490", bg: "#E0F2FE" },
   done: { label: "完成待验", fg: "#7C3AED", bg: "#F3E8FF" },
   verified: { label: "已验证", fg: "#15803D", bg: "#E8F9EF" },
-  closed: { label: "已关闭", fg: "#64748B", bg: "#EFF3FC" },
-  cancelled: { label: "已取消", fg: "#DC2626", bg: "#FDEBEC" },
+  closed: { label: "已关闭", fg: "#475569", bg: "#EFF3FC" },
+  cancelled: { label: "已取消", fg: "#B91C1C", bg: "#FDEBEC" },
 };
 const FLOW_STEPS = ["待派发", "已派发", "进行中", "完成待验", "已验证", "已关闭"];
 
@@ -145,7 +145,7 @@ export function DeviceTasksPage() {
         <div style={{ fontSize: 11, color: token.colorTextTertiary }}>{t.device_code}</div>
       </div>
     ) },
-    { title: "优先级", width: 90, render: (_, t) => (t.priority === 2 ? <Tag color="red" style={{ borderRadius: 999 }}>紧急</Tag> : <Tag style={{ borderRadius: 999, color: "#64748B", background: "#EFF3FC", borderColor: "transparent" }}>普通</Tag>) },
+    { title: "优先级", width: 90, render: (_, t) => (t.priority === 2 ? <Tag color="red" style={{ borderRadius: 999 }}>紧急</Tag> : <Tag style={{ borderRadius: 999, color: "#475569", background: "#EFF3FC", borderColor: "transparent" }}>普通</Tag>) },
     { title: "状态", width: 110, render: (_, t) => {
       const s = ST[t.status];
       // 公开任务单任务的 pending 语义为「待领取」

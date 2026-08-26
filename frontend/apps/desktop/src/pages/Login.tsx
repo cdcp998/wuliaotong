@@ -202,10 +202,10 @@ export function LoginPage() {
           <div style={{ fontSize: 12.5, color: "#5B6478", margin: "6px 0 22px" }}>登录你的物料通账号，继续今天的工作</div>
           <Form layout="vertical" requiredMark={false} onFinish={(v) => void onSubmit(v)}>
             <Form.Item name="username" label={label("登录名")} colon={false} style={{ marginBottom: 16 }} rules={[{ required: true, message: "请输入账号" }]}>
-              <Input placeholder="账号 / 用户名" autoFocus prefix={<UserOutlined style={{ color: "#8A93A8", fontSize: 15 }} />} style={boxStyle} />
+              <Input placeholder="账号 / 用户名" autoFocus prefix={<UserOutlined style={{ color: "#6A748A", fontSize: 15 }} />} style={boxStyle} />
             </Form.Item>
             <Form.Item name="password" label={label("密码")} colon={false} style={{ marginBottom: 16 }} rules={[{ required: true, message: "请输入密码" }]}>
-              <Input.Password placeholder="密码" prefix={<LockOutlined style={{ color: "#8A93A8", fontSize: 15 }} />} style={boxStyle} />
+              <Input.Password placeholder="密码" prefix={<LockOutlined style={{ color: "#6A748A", fontSize: 15 }} />} style={boxStyle} />
             </Form.Item>
             {needCaptcha && (
               <Form.Item name="captcha" label={label("验证码")} colon={false} style={{ marginBottom: 16 }} rules={[{ required: true, message: "请输入验证码" }]}>
@@ -240,22 +240,22 @@ export function LoginPage() {
               登 录
             </Button>
           </Form>
-          <div style={{ marginTop: 16, textAlign: "center", fontSize: 11, color: "#8A93A8" }}>
+          <div style={{ marginTop: 16, textAlign: "center", fontSize: 11, color: "#6A748A" }}>
             {regStatus && regStatus.mode !== "closed" && (
               <>
-                <a onClick={() => setRegisterOpen(true)} style={{ color: "#8A93A8", textDecoration: "underline", textDecorationStyle: "dotted" }}>
+                <a onClick={() => setRegisterOpen(true)} style={{ color: "#6A748A", textDecoration: "underline", textDecorationStyle: "dotted" }}>
                   注册账号{regStatus.mode === "review" ? "（需管理员审核）" : "（开放注册）"}
                 </a>
                 {" · "}
               </>
             )}
-            <a href={otherEndUrl("mobile")} style={{ color: "#8A93A8", textDecoration: "underline", textDecorationStyle: "dotted" }} title="手机版入口">
+            <a href={otherEndUrl("mobile")} style={{ color: "#6A748A", textDecoration: "underline", textDecorationStyle: "dotted" }} title="手机版入口">
               电脑版/手机版互通
             </a>
           </div>
         </div>
         {/* 归属行（设计页 54 右下角元信息） */}
-        <div style={{ marginTop: 18, textAlign: "center", fontSize: 11, color: "#8A93A8" }}>
+        <div style={{ marginTop: 18, textAlign: "center", fontSize: 11, color: "#6A748A" }}>
           {siteName ? `${siteName} · ` : ""}v{__APP_VERSION__}
         </div>
       </div>

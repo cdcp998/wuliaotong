@@ -12,7 +12,7 @@ const STATUS_META: Record<number, { label: string; bg: string; fg: string }> = {
   1: { label: "已提交", bg: "#FEF4E2", fg: "#B45309" },
   2: { label: "部分入库", bg: "#EAEFFF", fg: "#5B7FFF" },
   3: { label: "已完成", bg: "#E8F9EF", fg: "#15803D" },
-  [-1]: { label: "已作废", bg: "#EFF3FC", fg: "#64748B" },
+  [-1]: { label: "已作废", bg: "#EFF3FC", fg: "#475569" },
 };
 
 /** 数量（含单位，设计页 18 单元格：100m）。 */
@@ -210,11 +210,11 @@ export function PurchasePlansPage() {
       title: "材料", key: "mat", width: 260,
       render: (_, r) => {
         const first = r.items?.[0];
-        if (!first) return <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span>;
+        if (!first) return <span style={{ color: "#6A748A", fontSize: 12 }}>—</span>;
         return (
           <span style={{ fontSize: 12.5, color: "#1E2433" }}>
             {first.product_name}
-            {r.items.length > 1 && <span style={{ color: "#8A93A8", fontSize: 11 }}> 等 {r.items.length} 种</span>}
+            {r.items.length > 1 && <span style={{ color: "#6A748A", fontSize: 11 }}> 等 {r.items.length} 种</span>}
           </span>
         );
       },
@@ -227,7 +227,7 @@ export function PurchasePlansPage() {
         return <span style={{ fontSize: 12.5, fontWeight: 600, color: "#15803D", fontVariantNumeric: "tabular-nums" }}>{qtyText(recv, r.items?.[0]?.unit_name)}</span>;
       },
     },
-    { title: "申请日期", dataIndex: "plan_date", width: 140, render: (v: string) => <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v ? dayjs(v).format("MM-DD") : "—"}</span> },
+    { title: "申请日期", dataIndex: "plan_date", width: 140, render: (v: string) => <span style={{ fontSize: 12, color: "#6A748A", fontVariantNumeric: "tabular-nums" }}>{v ? dayjs(v).format("MM-DD") : "—"}</span> },
     {
       title: "状态", dataIndex: "status", width: 110,
       render: (v: number) => { const m = STATUS_META[v] ?? { label: String(v), bg: "#EFF3FC", fg: "#5B6478" }; return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>; },
@@ -305,7 +305,7 @@ export function PurchasePlansPage() {
       {/* 筛选条（设计页 18） */}
       <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
         <Input
-          prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+          prefix={<SearchOutlined style={{ color: "#6A748A" }} />}
           placeholder="计划单号 / 材料"
           allowClear
           style={{ width: 300, background: "#F6F8FE" }}
@@ -320,7 +320,7 @@ export function PurchasePlansPage() {
           onChange={(v) => { setStatus(v); setPage(1); }}
           options={Object.entries(STATUS_META).map(([v, m]) => ({ value: Number(v), label: m.label }))}
         />
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 张</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#6A748A" }}>共 {total} 张</span>
       </div>
 
       {/* 表格（设计列：计划单/编制人/材料/数量/已入库/申请日期/状态/操作） */}

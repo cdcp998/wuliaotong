@@ -608,7 +608,7 @@ export function MaterialsDataPage() {
     { title: "上限", dataIndex: "max_stock", width: 70, align: "right" as const },
     { title: "状态", dataIndex: "status", width: 70, render: (v: number) => (v === 1
       ? <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>启用</Tag>
-      : <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#64748B", borderColor: "transparent", marginInlineEnd: 0 }}>停用</Tag>) },
+      : <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#475569", borderColor: "transparent", marginInlineEnd: 0 }}>停用</Tag>) },
   ];
 
   // 当前选中的展示标题（右侧表格上方）
@@ -759,7 +759,7 @@ export function MaterialsDataPage() {
               <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} loading={dedupeLoading} onClick={() => void runDedupe()}>查重</Button>
             )}
             <span style={{ flex: 1 }} />
-            <span style={{ alignSelf: "center", fontSize: 12, color: "#8A93A8" }}>{selectionTitle} · 共 {total} 种</span>
+            <span style={{ alignSelf: "center", fontSize: 12, color: "#6A748A" }}>{selectionTitle} · 共 {total} 种</span>
           </div>
 
           <DataTable
@@ -1031,7 +1031,7 @@ export function MaterialsDataPage() {
         {dedupeGroups.map((g, gi) => (
           <div key={gi} style={{ border: "1px solid #E4EAF6", borderRadius: 12, padding: 12, marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <Tag style={{ borderRadius: 999, background: g.confidence === "high" ? "#FDEBEC" : "#FEF4E2", color: g.confidence === "high" ? "#DC2626" : "#B45309", borderColor: "transparent", marginInlineEnd: 0 }}>{g.confidence === "high" ? "高置信" : "相似"}</Tag>
+              <Tag style={{ borderRadius: 999, background: g.confidence === "high" ? "#FDEBEC" : "#FEF4E2", color: g.confidence === "high" ? "#B91C1C" : "#B45309", borderColor: "transparent", marginInlineEnd: 0 }}>{g.confidence === "high" ? "高置信" : "相似"}</Tag>
               <Typography.Text>{g.reason}</Typography.Text>
             </div>
             {g.group.map((m) => (

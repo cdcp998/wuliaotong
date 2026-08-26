@@ -128,7 +128,7 @@ export function StockQueryPage() {
                   <Tag color="blue" fill="outline" style={{ fontSize: 10.5, borderRadius: 999, marginRight: 0 }}>
                     合计 {g.total} · {g.whs.size} 仓
                   </Tag>
-                  <span style={{ marginLeft: "auto", fontSize: 11, color: "#8A93A8", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }}>▾</span>
+                  <span style={{ marginLeft: "auto", fontSize: 11, color: "#6A748A", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }}>▾</span>
                 </div>
               </div>
               {open && (

@@ -145,7 +145,7 @@ export function InitPage() {
         </div>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700, color: "#1E2433", lineHeight: 1.3 }}>物料通 · 初始化安装</div>
-          <div style={{ fontSize: 12, color: "#8A93A8" }}>首次部署引导 · 5 分钟完成</div>
+          <div style={{ fontSize: 12, color: "#6A748A" }}>首次部署引导 · 5 分钟完成</div>
         </div>
       </header>
 

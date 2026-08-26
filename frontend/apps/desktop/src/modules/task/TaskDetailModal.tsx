@@ -102,7 +102,7 @@ export function TaskDetailModal({ item, onClose, onChanged }: {
   const timeline = [
     ...(t.creator_name ? [{ color: "#5B7FFF", children: <>创建任务 · {t.creator_name}{t.created_at ? ` · ${t.created_at.slice(0, 16).replace("T", " ")}` : ""}</> }] : []),
     ...(t.assignee_name ? [{ color: "#3B5BDB", children: <>派发给 {t.assignee_name}</> }] : []),
-    ...(t.completed_at ? [{ color: "#8B5CF6", children: <>完成维修 · {t.completed_at.slice(0, 16).replace("T", " ")}</> }] : []),
+    ...(t.completed_at ? [{ color: "#6D28D9", children: <>完成维修 · {t.completed_at.slice(0, 16).replace("T", " ")}</> }] : []),
     ...(t.verdict ? [{ color: "#22C55E", children: <>验收结论：{t.verdict}</> }] : []),
     ...(t.cancel_reason ? [{ color: "#EF4444", children: <>取消原因：{t.cancel_reason}</> }] : []),
   ];

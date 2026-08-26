@@ -115,7 +115,7 @@ export function MenusPage({ embedded = false }: { embedded?: boolean } = {}) {
           {n.perm_code
             ? <Tag style={{ fontSize: 11, marginInlineEnd: 0, color: "#5B6478", background: "#EFF3FC", borderColor: "transparent", borderRadius: 999 }}>{n.perm_code}</Tag>
             : <Tag style={{ fontSize: 11, marginInlineEnd: 0, color: "#15803D", background: "#E8F9EF", borderColor: "transparent", borderRadius: 999 }}>公开</Tag>}
-          {n.visible === 0 && <Tag style={{ fontSize: 11, marginInlineEnd: 0, color: "#DC2626", background: "#FDEBEC", borderColor: "transparent", borderRadius: 999 }}>已隐藏</Tag>}
+          {n.visible === 0 && <Tag style={{ fontSize: 11, marginInlineEnd: 0, color: "#B91C1C", background: "#FDEBEC", borderColor: "transparent", borderRadius: 999 }}>已隐藏</Tag>}
           <span style={{ marginLeft: "auto", opacity: 0.7 }}>
             <Button type="text" size="small" icon={<PlusOutlined style={{ color: "#5B7FFF" }} />} title="新建子菜单" onClick={(e) => { e.stopPropagation(); openCreate(n.id); }} />
             <Button type="text" size="small" icon={<EditOutlined style={{ color: "#5B7FFF" }} />} title="编辑" onClick={(e) => { e.stopPropagation(); openEdit(n); }} />

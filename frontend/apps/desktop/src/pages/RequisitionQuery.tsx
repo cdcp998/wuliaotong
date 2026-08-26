@@ -13,8 +13,8 @@ const STATUS: Record<number, { text: string; bg: string; color: string }> = {
   1: { text: "待完成工作", bg: "#FEF4E2", color: "#B45309" },
   2: { text: "待审计", bg: "#FEF4E2", color: "#B45309" },
   3: { text: "已完成", bg: "#E8F9EF", color: "#15803D" },
-  4: { text: "已驳回", bg: "#FDEBEC", color: "#DC2626" },
-  5: { text: "已取消", bg: "#EFF3FC", color: "#64748B" },
+  4: { text: "已驳回", bg: "#FDEBEC", color: "#B91C1C" },
+  5: { text: "已取消", bg: "#EFF3FC", color: "#475569" },
 };
 
 /** 领用申请单查询（电脑端）：全部领用单多状态查询 + 详情（含完成工作照片/水印下载/私用标注）。 */
@@ -70,7 +70,7 @@ export function RequisitionQueryPage() {
       render: (v: string, r) =>
         r.is_private === 1 ? (
           <Space size={4}>
-            <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginRight: 0 }}>私用</Tag>
+            <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#B91C1C", borderColor: "transparent", marginRight: 0 }}>私用</Tag>
             <span title={v}>{v}</span>
           </Space>
         ) : (
@@ -130,7 +130,7 @@ export function RequisitionQueryPage() {
           }}
           style={{ width: 300 }}
         />
-        <span style={{ marginLeft: "auto", color: "#8A93A8", fontSize: 12 }}>流程：领用申请 → 完成工作拍照（含定位水印）→ 审计 → 完成</span>
+        <span style={{ marginLeft: "auto", color: "#6A748A", fontSize: 12 }}>流程：领用申请 → 完成工作拍照（含定位水印）→ 审计 → 完成</span>
       </div>
       <div className="wlt-glass" style={{ padding: 12 }}>
         <DataTable
@@ -172,7 +172,7 @@ export function RequisitionQueryPage() {
                 <div style={{ fontSize: 12, color: "#5B6478" }}>因何使用</div>
                 <div style={{ fontWeight: 500 }}>
                   {detail.use_reason}
-                  {detail.is_private === 1 && <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginLeft: 8 }}>私用</Tag>}
+                  {detail.is_private === 1 && <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#B91C1C", borderColor: "transparent", marginLeft: 8 }}>私用</Tag>}
                 </div>
               </div>
             </div>

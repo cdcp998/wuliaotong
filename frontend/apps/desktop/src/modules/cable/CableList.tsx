@@ -16,7 +16,7 @@ const TYPE_LABEL: Record<string, { label: string; fg: string; bg: string }> = {
 };
 const STATUS_LABEL: Record<number, { label: string; fg: string; bg: string }> = {
   1: { label: "在用", fg: "#15803D", bg: "#E8F9EF" },
-  0: { label: "停用", fg: "#8A93A8", bg: "#EFF3FC" },
+  0: { label: "停用", fg: "#475569", bg: "#EFF3FC" },
   2: { label: "归档", fg: "#B45309", bg: "#FEF4E2" },
 };
 

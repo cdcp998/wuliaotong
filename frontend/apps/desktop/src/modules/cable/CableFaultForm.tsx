@@ -94,7 +94,7 @@ export function CableFaultForm({ onSubmitted, onCancel }: {
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <Button size="small" icon={<AimOutlined />} onClick={() => setPicking(true)}>地图选点</Button>
         {picked && <span style={{ fontSize: 11.5, color: "#5B6478", fontVariantNumeric: "tabular-nums" }}>已选：{picked.lat.toFixed(6)}, {picked.lng.toFixed(6)}</span>}
-        {!picked && <span style={{ fontSize: 11.5, color: "#8A93A8" }}>尚未选择位置</span>}
+        {!picked && <span style={{ fontSize: 11.5, color: "#6A748A" }}>尚未选择位置</span>}
       </div>
       <Form.Item name="photoFile" label="现场照片（可选）" valuePropName="file" getValueFromEvent={(e) => e?.fileList?.[0]?.originFileObj} style={{ marginBottom: 0 }}>
         <Upload beforeUpload={() => false} maxCount={1} accept="image/*">

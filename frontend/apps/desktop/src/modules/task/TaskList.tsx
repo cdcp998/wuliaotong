@@ -128,7 +128,7 @@ export function TaskListPage() {
     { title: "任务", key: "task", width: 230, render: (_, t) => (
       <div>
         <div style={{ fontWeight: 600, fontSize: 12.5, color: "#1E2433" }}>{t.title}</div>
-        <div style={{ fontSize: 10.5, color: "#8A93A8", marginTop: 2 }}>{t.task_no}</div>
+        <div style={{ fontSize: 10.5, color: "#6A748A", marginTop: 2 }}>{t.task_no}</div>
       </div>
     ) },
     {
@@ -150,11 +150,11 @@ export function TaskListPage() {
     {
       title: "优先", key: "priority", width: 80,
       render: (_, t) => {
-        const m = t.priority === 2 ? { label: "紧急", fg: "#DC2626", bg: "#FDEBEC" } : t.priority === 1 ? { label: "高优", fg: "#B45309", bg: "#FEF4E2" } : { label: "普通", fg: "#64748B", bg: "#EFF3FC" };
+        const m = t.priority === 2 ? { label: "紧急", fg: "#B91C1C", bg: "#FDEBEC" } : t.priority === 1 ? { label: "高优", fg: "#B45309", bg: "#FEF4E2" } : { label: "普通", fg: "#475569", bg: "#EFF3FC" };
         return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>;
       },
     },
-    { title: "负责人", dataIndex: "assignee_name", width: 95, render: (v: string, t) => v || (t.status === "pending" && t.dispatch_mode !== "manual" ? <span style={{ color: "#3B5BDB", fontSize: 12 }}>待领取</span> : <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span>) },
+    { title: "负责人", dataIndex: "assignee_name", width: 95, render: (v: string, t) => v || (t.status === "pending" && t.dispatch_mode !== "manual" ? <span style={{ color: "#3B5BDB", fontSize: 12 }}>待领取</span> : <span style={{ color: "#6A748A", fontSize: 12 }}>—</span>) },
     { title: "状态", key: "status", width: 100, render: (_, t) => { const s = ST[t.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? t.status}</Tag>; } },
     {
       title: "联动状态", key: "link", width: 120,
@@ -164,12 +164,12 @@ export function TaskListPage() {
           return <Tag style={{ borderRadius: 999, background: f?.bg, color: f?.fg, borderColor: "transparent", marginInlineEnd: 0 }} title={`关联故障 #${t.fault_id} 当前状态`}>故障·{f?.label ?? t.fault_status}</Tag>;
         }
         if (t.source === "device") {
-          return <span style={{ fontSize: 12, color: "#8A93A8" }}>{t.device_name}</span>;
+          return <span style={{ fontSize: 12, color: "#6A748A" }}>{t.device_name}</span>;
         }
-        return <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span>;
+        return <span style={{ color: "#6A748A", fontSize: 12 }}>—</span>;
       },
     },
-    { title: "排期", dataIndex: "scheduled_time", width: 115, render: (v: string | null) => v ? <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v.slice(0, 16).replace("T", " ")}</span> : <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span> },
+    { title: "排期", dataIndex: "scheduled_time", width: 115, render: (v: string | null) => v ? <span style={{ fontSize: 12, color: "#6A748A", fontVariantNumeric: "tabular-nums" }}>{v.slice(0, 16).replace("T", " ")}</span> : <span style={{ color: "#6A748A", fontSize: 12 }}>—</span> },
     {
       title: "操作", width: archived ? 90 : 200,
       render: (_, t) => {
@@ -236,7 +236,7 @@ export function TaskListPage() {
           options={[{ value: 0, label: "活动任务" }, { value: 1, label: "已归档" }]}
         />
         <Input
-          prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+          prefix={<SearchOutlined style={{ color: "#6A748A" }} />}
           placeholder="任务单号 / 内容"
           allowClear
           style={{ width: 240, background: "#F6F8FE" }}
@@ -250,7 +250,7 @@ export function TaskListPage() {
             { value: "cable", label: "线缆任务" },
             ...(moduleEnabled("device") ? [{ value: "device", label: "设备任务" }] : []),
           ]} />
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 条</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#6A748A" }}>共 {total} 条</span>
       </div>
 
       <div className="wlt-glass" style={{ padding: 12 }}>
@@ -260,7 +260,7 @@ export function TaskListPage() {
           columns={columns}
           rowClassName={(r) => (r.key === focusedKey ? "wlt-row-focus" : "")}
         />
-        <p style={{ margin: "8px 0 0", fontSize: 11, color: "#8A93A8" }}>
+        <p style={{ margin: "8px 0 0", fontSize: 11, color: "#6A748A" }}>
           提示：「联动状态」列为关联故障/设备的实时状态；已关闭/已取消任务自动进入「已归档」，终态不可回退（重开请重新发布任务并关联原对象）
         </p>
       </div>

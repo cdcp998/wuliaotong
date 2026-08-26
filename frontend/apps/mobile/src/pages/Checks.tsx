@@ -99,7 +99,7 @@ export function ChecksPage() {
                     <div style={{ flex: 1, height: 6, borderRadius: 999, background: "#EFF3FC", overflow: "hidden" }}>
                       <div style={{ width: `${pct}%`, height: "100%", background: c.status === 2 ? "#22C55E" : "#5B7FFF", borderRadius: 999, transition: "width .3s" }} />
                     </div>
-                    <span style={{ fontSize: 10.5, color: "#8A93A8", whiteSpace: "nowrap" }}>{done}/{total}</span>
+                    <span style={{ fontSize: 10.5, color: "#6A748A", whiteSpace: "nowrap" }}>{done}/{total}</span>
                   </div>
                 </div>
               }

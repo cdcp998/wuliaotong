@@ -93,7 +93,7 @@ export function UsersPage() {
     { title: "角色", dataIndex: "role_name", width: 110, render: (v: string) => (v ? <span className="wlt-pill" style={{ background: "#EAEFFF", color: "#3B5BDB" }}>{v}</span> : "-") },
     { title: "所属单位", dataIndex: "department_name", width: 130, render: (v: string, r) => {
       const id = r.department_id ?? 0;
-      if (!v || !id) return <span style={{ color: "#8A93A8", fontSize: 12 }}>未分配</span>;
+      if (!v || !id) return <span style={{ color: "#6A748A", fontSize: 12 }}>未分配</span>;
       return <span className="wlt-pill" style={{ background: "#E0F2FE", color: "#0E7490" }}>{v}</span>;
     } },
     { title: "状态", width: 90, render: (_, r) => (r.status === 1 ? <Tag color="green">启用</Tag> : <Tag color="default">停用</Tag>) },

@@ -240,7 +240,7 @@ export function StockQueryPage() {
           { icon: <AppstoreOutlined />, label: "材料 SKU", value: groups.length, color: "#3B5BDB", bg: "#EAEFFF" },
           { icon: <InboxOutlined />, label: "库存总件数", value: fmt(totalQty), color: "#1E2433", bg: "#F6F8FE" },
           { icon: <ApartmentOutlined />, label: "多仓分布物料", value: multiWh, color: "#B45309", bg: "#FEF4E2" },
-          { icon: <WarningOutlined />, label: "含无库存物料", value: zeroCount, color: "#DC2626", bg: "#FDEBEC" },
+          { icon: <WarningOutlined />, label: "含无库存物料", value: zeroCount, color: "#B91C1C", bg: "#FDEBEC" },
         ].map((c) => (
           <div key={c.label} className="wlt-glass-sm" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
             <span style={{ width: 38, height: 38, borderRadius: 12, background: c.bg, color: c.color, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>{c.icon}</span>

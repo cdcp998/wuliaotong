@@ -229,7 +229,7 @@ export function AiSuggestionsPage() {
       <div className="wlt-glass" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 20px", background: "#F6F8FE", borderBottom: "1px solid #EFF3FC" }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#1E2433" }}>待处理建议</span>
-          <span style={{ fontSize: 12, color: "#8A93A8" }}>勾选可批量忽略；点「详情」查看完整信息</span>
+          <span style={{ fontSize: 12, color: "#6A748A" }}>勾选可批量忽略；点「详情」查看完整信息</span>
         </div>
         <div style={{ padding: "12px 20px 4px" }}>
           <DataTable
@@ -266,10 +266,10 @@ export function AiSuggestionsPage() {
       >
         {selected && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, fontSize: 13 }}>
-            <div><div style={{ color: "#8A93A8", fontSize: 12 }}>规格型号</div><div>{selected.suggestion?.spec || "—"}</div></div>
-            <div><div style={{ color: "#8A93A8", fontSize: 12 }}>建议分类</div><div>{selected.suggestion?.category || "—"}</div></div>
-            <div><div style={{ color: "#8A93A8", fontSize: 12 }}>建议理由</div><div style={{ lineHeight: 1.7 }}>{selected.suggestion?.note || "—"}</div></div>
-            <div><div style={{ color: "#8A93A8", fontSize: 12 }}>识别时间</div><div>{selected.created_at}</div></div>
+            <div><div style={{ color: "#6A748A", fontSize: 12 }}>规格型号</div><div>{selected.suggestion?.spec || "—"}</div></div>
+            <div><div style={{ color: "#6A748A", fontSize: 12 }}>建议分类</div><div>{selected.suggestion?.category || "—"}</div></div>
+            <div><div style={{ color: "#6A748A", fontSize: 12 }}>建议理由</div><div style={{ lineHeight: 1.7 }}>{selected.suggestion?.note || "—"}</div></div>
+            <div><div style={{ color: "#6A748A", fontSize: 12 }}>识别时间</div><div>{selected.created_at}</div></div>
           </div>
         )}
       </Modal>

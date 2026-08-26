@@ -137,7 +137,7 @@ export function DeleteReviewsPage() {
                 <Space size={4} wrap>
                   {r.status === 1
                     ? <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>已删除</Tag>
-                    : <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>已驳回</Tag>}
+                    : <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#B91C1C", borderColor: "transparent", marginInlineEnd: 0 }}>已驳回</Tag>}
                   {r.review_remark ? <Typography.Text type="secondary" style={{ fontSize: 12 }}>{r.review_remark}</Typography.Text> : null}
                 </Space>
               ),

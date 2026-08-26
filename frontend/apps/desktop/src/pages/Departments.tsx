@@ -62,7 +62,7 @@ export function DepartmentsPage() {
     { title: "备注", dataIndex: "remark" },
     { title: "状态", width: 90, render: (_, r) => (r.status === 1
       ? <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent", marginInlineEnd: 0 }}>启用</Tag>
-      : <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#64748B", borderColor: "transparent", marginInlineEnd: 0 }}>停用</Tag>) },
+      : <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#475569", borderColor: "transparent", marginInlineEnd: 0 }}>停用</Tag>) },
     { title: "可用货架", width: 90, render: (_, r) => <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#5B6478", borderColor: "transparent", marginInlineEnd: 0 }}>{r.shelf_ids.length} 个</Tag> },
   ];
 

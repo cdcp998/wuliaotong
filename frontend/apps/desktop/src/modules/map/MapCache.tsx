@@ -49,7 +49,7 @@ function statusCapsule(r: RegionRow) {
     const m = REGION_STATUS[r.status];
     return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>;
   }
-  if ((r.failed ?? 0) > 0) return <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent", marginInlineEnd: 0 }}>失败 ×{r.failed}</Tag>;
+  if ((r.failed ?? 0) > 0) return <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#B91C1C", borderColor: "transparent", marginInlineEnd: 0 }}>失败 ×{r.failed}</Tag>;
   const m = REGION_STATUS[r.status] ?? { label: String(r.status), bg: "#EFF3FC", fg: "#5B6478" };
   return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>;
 }
@@ -376,12 +376,12 @@ export function MapCachePage() {
           { label: "区域", value: regions.length, unit: "个", color: "#3B5BDB", bg: "#EAEFFF" },
           { label: "瓦片", value: regions.reduce((s, r) => s + (r.tile_count || 0), 0).toLocaleString("zh-CN"), unit: "张", color: "#1E2433", bg: "#F6F8FE" },
           { label: "成功+失败", value: (progress.done + progress.failed).toLocaleString("zh-CN"), unit: "张", color: "#15803D", bg: "#E8F9EF" },
-          { label: "失败", value: progress.failed.toLocaleString("zh-CN"), unit: "张", color: "#DC2626", bg: "#FDEBEC" },
+          { label: "失败", value: progress.failed.toLocaleString("zh-CN"), unit: "张", color: "#B91C1C", bg: "#FDEBEC" },
         ].map((c) => (
           <div key={c.label} style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 3px 12px rgba(30,36,51,.05)" }}>
             <div>
               <div style={{ fontSize: 12, color: "#5B6478" }}>{c.label}</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: c.color, fontVariantNumeric: "tabular-nums" }}>{c.value} <span style={{ fontSize: 12, color: "#8A93A8", fontWeight: 400 }}>{c.unit}</span></div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: c.color, fontVariantNumeric: "tabular-nums" }}>{c.value} <span style={{ fontSize: 12, color: "#6A748A", fontWeight: 400 }}>{c.unit}</span></div>
             </div>
           </div>
         ))}
@@ -396,11 +396,11 @@ export function MapCachePage() {
           status={progress.failed > 0 ? "exception" : undefined}
           format={() => `${progress.done + progress.failed} / ${progress.pending + progress.done + progress.failed}`}
         />
-        <span style={{ fontSize: 12, color: "#8A93A8" }}>{globalPercent}% · {runningCount} 个任务运行中</span>
+        <span style={{ fontSize: 12, color: "#6A748A" }}>{globalPercent}% · {runningCount} 个任务运行中</span>
         <span style={{ fontSize: 12 }}>待 <Tag style={{ borderRadius: 999, background: "#EFF3FC", color: "#5B6478", borderColor: "transparent" }}>{progress.pending}</Tag></span>
         <span style={{ fontSize: 12 }}>成功 <Tag style={{ borderRadius: 999, background: "#E8F9EF", color: "#15803D", borderColor: "transparent" }}>{progress.done}</Tag></span>
-        <span style={{ fontSize: 12 }}>失败 <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#DC2626", borderColor: "transparent" }}>{progress.failed}</Tag></span>
-        <span style={{ fontSize: 12, color: "#8A93A8" }}>瓦片经后端代理缓存（磁盘优先命中 → 在线源抓取落盘），可离线使用。</span>
+        <span style={{ fontSize: 12 }}>失败 <Tag style={{ borderRadius: 999, background: "#FDEBEC", color: "#B91C1C", borderColor: "transparent" }}>{progress.failed}</Tag></span>
+        <span style={{ fontSize: 12, color: "#6A748A" }}>瓦片经后端代理缓存（磁盘优先命中 → 在线源抓取落盘），可离线使用。</span>
       </div>
 
       <div className="wlt-glass" style={{ padding: 12 }}>
@@ -412,7 +412,7 @@ export function MapCachePage() {
             render: (_, r) => (
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13.5, color: "#1E2433" }}>{r.name}</div>
-                <div style={{ fontSize: 12, color: "#8A93A8", marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: "#6A748A", marginTop: 2 }}>
                   最后下载：{r.last_download_at ? new Date(r.last_download_at).toLocaleString() : "—"}
                 </div>
               </div>
@@ -434,7 +434,7 @@ export function MapCachePage() {
               return (
                 <div style={{ minWidth: 170 }}>
                   <Progress percent={percent} size="small" status={failed > 0 ? "exception" : undefined} format={() => `${done} / ${total}`} />
-                  <div style={{ fontSize: 12, color: "#8A93A8", marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: "#6A748A", marginTop: 2 }}>
                     待 {r.pending ?? 0} · 成功 {done}
                     {failed > 0 && <span style={{ color: "#DC2626" }}> · 失败 {failed}</span>}
                   </div>
@@ -457,7 +457,7 @@ export function MapCachePage() {
                     )}
                     {r.status === 1 && <Button type="link" size="small" style={{ padding: 0 }} onClick={() => act(r, "pause")}>暂停</Button>}
                     {r.status === 3 && <Button type="link" size="small" style={{ padding: 0, color: "#5B7FFF" }} onClick={() => act(r, "start")}>继续</Button>}
-                    {r.status === 4 && <Button type="link" size="small" disabled style={{ padding: 0, color: "#8A93A8" }}>任务生成中…</Button>}
+                    {r.status === 4 && <Button type="link" size="small" disabled style={{ padding: 0, color: "#6A748A" }}>任务生成中…</Button>}
                     <Button type="link" size="small" style={{ padding: 0, color: "#3B5BDB" }} onClick={() => openEdit(r)}>编辑</Button>
                   </>
                 )}
@@ -474,7 +474,7 @@ export function MapCachePage() {
       />
 
       {canConfig && (
-        <p style={{ marginTop: 12, marginBottom: 0, fontSize: 12, color: "#8A93A8" }}>
+        <p style={{ marginTop: 12, marginBottom: 0, fontSize: 12, color: "#6A748A" }}>
           已配置地图源：{Object.values(sources).map((s) => `${s.name}(${s.coordinate_space})`).join("、") || "无（使用内置默认 Esri）"}（{Object.keys(sources).length} 个）
         </p>
       )}

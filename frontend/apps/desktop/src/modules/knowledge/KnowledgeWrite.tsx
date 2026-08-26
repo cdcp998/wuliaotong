@@ -10,7 +10,7 @@ import { knowledgeApi, type ArticleItem, type GenerateStatus } from "./api";
 const STATUS_META: Record<number, { label: string; fg: string; bg: string }> = {
   0: { label: "草稿", fg: "#B45309", bg: "#FEF4E2" },
   1: { label: "已发布", fg: "#15803D", bg: "#E8F9EF" },
-  2: { label: "已归档", fg: "#64748B", bg: "#EFF3FC" },
+  2: { label: "已归档", fg: "#475569", bg: "#EFF3FC" },
 };
 
 export function KnowledgeWritePage() {

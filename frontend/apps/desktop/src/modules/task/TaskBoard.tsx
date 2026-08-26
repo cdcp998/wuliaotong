@@ -101,7 +101,7 @@ export function TaskBoardPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 4, background: meta.dot }} />
                 <span style={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>{ST[status]?.label ?? status}</span>
-                <span style={{ fontSize: 11, fontWeight: 600, color: "#8A93A8" }}>{items.length}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#6A748A" }}>{items.length}</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {loading && items.length === 0 && <div style={{ color: token.colorTextTertiary, fontSize: 12, textAlign: "center", padding: 12 }}>加载中…</div>}
@@ -122,14 +122,14 @@ export function TaskBoardPage() {
                           {t.source === "device" ? "设备" : "线缆"}
                         </span>
                         <span style={{ flex: 1 }} />
-                        <span style={{ fontSize: 10.5, fontWeight: 600, color: t.priority === 2 ? "#EF4444" : t.priority === 1 ? "#F59E0B" : "#8A93A8" }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 600, color: t.priority === 2 ? "#EF4444" : t.priority === 1 ? "#F59E0B" : "#6A748A" }}>
                           {t.priority === 2 ? "紧急" : t.priority === 1 ? "高优" : "普通"}
                         </span>
                       </div>
                       {/* 行2：标题（单行） */}
                       <span title={t.title} style={{ fontSize: 11.5, fontWeight: 600, color: "#1E2433", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</span>
                       {/* 行3：一行摘要（单行截断） */}
-                      <span title={summary} style={{ fontSize: 10.5, color: "#8A93A8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</span>
+                      <span title={summary} style={{ fontSize: 10.5, color: "#6A748A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</span>
                       {/* 行4：负责人 + 排期（截断 MM-DD HH:mm） */}
                       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#5B6478" }}>
                         <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

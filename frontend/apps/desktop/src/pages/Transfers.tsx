@@ -10,8 +10,8 @@ import { BillDetailDrawer } from "../components/BillDetailDrawer";
 const STATUS_META: Record<string, { label: string; fg: string; bg: string }> = {
   "0": { label: "待审核", fg: "#B45309", bg: "#FEF4E2" },
   "1": { label: "已完成", fg: "#15803D", bg: "#E8F9EF" },
-  "-1": { label: "已作废", fg: "#64748B", bg: "#EFF3FC" },
-  "-2": { label: "已驳回", fg: "#DC2626", bg: "#FDEBEC" },
+  "-1": { label: "已作废", fg: "#475569", bg: "#EFF3FC" },
+  "-2": { label: "已驳回", fg: "#B91C1C", bg: "#FDEBEC" },
 };
 
 interface Row {
@@ -106,11 +106,11 @@ export function TransfersPage() {
       render: (_, r) => {
         const items = r.items ?? [];
         const first = items[0];
-        if (!first) return <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span>;
+        if (!first) return <span style={{ color: "#6A748A", fontSize: 12 }}>—</span>;
         return (
           <span style={{ fontSize: 12.5, color: "#1E2433" }}>
             {first.product_name}
-            {items.length > 1 && <span style={{ color: "#8A93A8", fontSize: 11 }}> 等 {items.length} 种</span>}
+            {items.length > 1 && <span style={{ color: "#6A748A", fontSize: 11 }}> 等 {items.length} 种</span>}
           </span>
         );
       },
@@ -126,7 +126,7 @@ export function TransfersPage() {
       render: (s: number) => { const m = STATUS_META[String(s)] ?? { label: String(s), fg: "#5B6478", bg: "#EFF3FC" }; return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>; },
     },
     { title: "审计人", dataIndex: "audit_name", width: 110, render: (v: string) => <span style={{ fontSize: 12, color: "#5B6478" }}>{v || "—"}</span> },
-    { title: "日期", dataIndex: "created_at", width: 130, render: (v: string) => <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v ? v.slice(5, 16) : "—"}</span> },
+    { title: "日期", dataIndex: "created_at", width: 130, render: (v: string) => <span style={{ fontSize: 12, color: "#6A748A", fontVariantNumeric: "tabular-nums" }}>{v ? v.slice(5, 16) : "—"}</span> },
     {
       title: "操作", key: "op", width: 150,
       render: (_, r) => (
@@ -168,7 +168,7 @@ export function TransfersPage() {
       {/* 筛选条（设计页 22：搜索 + 状态 + 统计） */}
       <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
         <Input
-          prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
+          prefix={<SearchOutlined style={{ color: "#6A748A" }} />}
           placeholder="单号 / 材料 / 仓库"
           allowClear
           style={{ width: 300, background: "#F6F8FE" }}
@@ -183,7 +183,7 @@ export function TransfersPage() {
           onChange={(v) => { setStatus(v); setPage(1); }}
           options={Object.entries(STATUS_META).map(([v, m]) => ({ value: Number(v), label: m.label }))}
         />
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 条</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#6A748A" }}>共 {total} 条</span>
       </div>
 
       {/* 表格（设计列：单号/材料/数量/调出/调入/状态/审计人/日期） */}
@@ -196,7 +196,7 @@ export function TransfersPage() {
           locale={{ emptyText: "暂无调拨单" }}
           pagination={{ current: page, pageSize, total, showTotal: (t) => `共 ${t} 条`, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
         />
-        <p style={{ margin: "8px 0 0", fontSize: 11, color: "#8A93A8" }}>
+        <p style={{ margin: "8px 0 0", fontSize: 11, color: "#6A748A" }}>
           提示：调拨单明细逐条锁定库存；跨仓调拨审核通过后自动扣/增并回写库位
         </p>
       </div>
