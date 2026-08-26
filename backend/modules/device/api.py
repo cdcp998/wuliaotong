@@ -202,8 +202,22 @@ def update_device_status(device_id: int, req: DeviceStatusReq, user: SysUser = D
     if req.status not in _DEVICE_FLOW.get(d.status, set()):
         raise BizError(E_BILL_STATUS, f"设备状态不允许从「{STATUS_LABEL.get(d.status, d.status)}」流转到「{STATUS_LABEL.get(req.status, req.status)}」"
                           + ("（维修中的设备禁止报废）" if d.status == 2 and req.status == 4 else ""))
+    old_status = d.status
     d.status = req.status
     d.updated_by = user.id
+    # 数据变更反向提示（联动视图）：手动流转设备状态 → 通知活跃维修任务的负责人/创建人
+    if req.status != old_status:
+        try:
+            for t in db.scalars(select(DeviceTask).where(
+                DeviceTask.device_id == d.id,
+                DeviceTask.status.notin_(("closed", "cancelled")),
+            )).all():
+                content = (f"设备「{d.name}」（{d.code}）状态已被 {user.real_name} 手动变更为"
+                           f"「{STATUS_LABEL.get(req.status, req.status)}」（原「{STATUS_LABEL.get(old_status, old_status)}」），"
+                           f"任务 {t.task_no}「{t.title}」请关注同步。")
+                _notify(db, t.assignee_id or t.created_by, "关联设备状态已变更", content, "/device/tasks")
+        except Exception:  # noqa: BLE001 提示失败不阻断状态流转
+            logger.warning("设备 %s 状态变更通知失败", device_id, exc_info=True)
     db.commit()
     return ok(_device_out(db, d))
 

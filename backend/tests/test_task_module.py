@@ -80,19 +80,74 @@ def _cleanup_file(file_id: int) -> None:
 
 # ============================ 依赖校验（模块机制） ============================
 
-def test_task_soft_dependency_on_cable() -> None:
-    """task 软依赖 cable：cable 停用时 task 仍可独立启用（无硬依赖）；
-    关联故障的运行期操作经 _cable_guard 兜底 403（依赖模块未启用）。"""
+def test_task_or_dependency_on_business_modules() -> None:
+    """v1.3 业务依赖门禁：task 以 cable/device 为数据入口——两者均未启用时拒绝启用（软「或」依赖）；
+    任一恢复后可启用。关联故障的运行期操作仍经 _cable_guard 兜底 403。"""
     _login("admin", "admin123")
+    # 记录 device 原状态（收尾还原，避免影响其他用例）
+    mods = {m["code"]: m["state"] for m in client.get("/api/v1/modules").json()["data"]}
+    device_was_enabled = mods.get("device") == "ENABLED"
     assert client.post("/api/v1/modules/cable/disable").json()["code"] == 0
+    client.post("/api/v1/modules/device/disable")  # 未安装时静默失败即可
     assert client.post("/api/v1/modules/task/disable").json()["code"] == 0
+    # 无任何业务模块 → 启用被拒（业务依赖门禁）
     r = client.post("/api/v1/modules/task/enable")
-    assert r.json()["code"] == 0, r.text  # 软依赖：cable 停用不阻塞 task 启用
-    # 运行期兜底：创建关联故障的任务 → 403（cable 未启用）
-    r = client.post("/api/v1/tasks", json={"fault_id": 999999, "title": "T-停缆期任务"})
-    assert r.status_code == 403 and r.json()["code"] == 4009
-    # 恢复 cable
+    assert r.json()["code"] == 4002, r.text
+    # 恢复 cable → 可启用；不存在的故障关联仍被业务校验拦截（404）
     assert client.post("/api/v1/modules/cable/enable").json()["code"] == 0
+    r = client.post("/api/v1/modules/task/enable")
+    assert r.json()["code"] == 0, r.text
+    r = client.post("/api/v1/tasks", json={"fault_id": 999999, "title": "T-停缆期任务"})
+    assert r.status_code == 404 and r.json()["code"] == 4003
+    if device_was_enabled:
+        client.post("/api/v1/modules/device/enable")
+
+
+def test_task_archived_filter_and_auto_link() -> None:
+    """已关闭自动归档（archived 参数过滤终态）+ 历史未关联任务自动关联（同线缆补挂故障）。"""
+    _login("admin", "admin123")
+    # 准备：线缆（故障挂靠载体）
+    code = f"T-C{_TAG}{uuid.uuid4().hex[:4]}"
+    r = client.post("/api/v1/cables", json={
+        "code": code, "name": "T-归档线缆", "type": "wire", "status": 1,
+        "points": [{"lat": 30.06, "lng": 120.06}, {"lat": 30.061, "lng": 120.061}],
+    })
+    assert r.json()["code"] == 0, r.text
+    cable_id = r.json()["data"]["id"]
+
+    # 孤儿任务：仅关联线缆、无故障（历史未关联形态）
+    t2 = client.post("/api/v1/tasks", json={"cable_id": cable_id, "title": "T-待自动关联任务", "priority": 2})
+    assert t2.json()["code"] == 0, t2.text
+    orphan_id = t2.json()["data"]["id"]
+
+    # 活动池可见；归档池不可见
+    active_ids = [x["key"] for x in client.get("/api/v1/tasks/pool").json()["data"]["items"]]
+    assert f"c{orphan_id}" in active_ids
+    arch_ids = [x["key"] for x in client.get("/api/v1/tasks/pool", params={"archived": 1}).json()["data"]["items"]]
+    assert f"c{orphan_id}" not in arch_ids
+
+    # 同线缆上报故障（晚于任务创建）→ 自动关联命中
+    f = client.post("/api/v1/faults", json={
+        "cable_id": cable_id, "lat": 30.0605, "lng": 120.0605,
+        "fault_type": "T-断芯", "severity": 2, "description": "T-自动关联故障",
+    })
+    assert f.json()["code"] == 0
+    fault_id = f.json()["data"]["id"]
+    r = client.post("/api/v1/tasks/auto-link")
+    assert r.json()["code"] == 0, r.text
+    detail = client.get(f"/api/v1/tasks/{orphan_id}").json()["data"]
+    assert detail["fault_id"] == fault_id, detail
+
+    # 取消 → 终态进入归档视图，活动视图移除；终态不可再流转（无重开）
+    r = client.post(f"/api/v1/tasks/{orphan_id}/status", json={"action": "cancel", "reason": "T-归档验证"})
+    assert r.json()["code"] == 0 and r.json()["data"]["status"] == "cancelled"
+    active_ids = [x["key"] for x in client.get("/api/v1/tasks/pool").json()["data"]["items"]]
+    arch_items = client.get("/api/v1/tasks/pool", params={"archived": 1}).json()["data"]["items"]
+    assert f"c{orphan_id}" not in active_ids
+    assert any(x["key"] == f"c{orphan_id}" for x in arch_items)
+    # 终态不可回退：任意动作被状态机拒绝
+    r = client.post(f"/api/v1/tasks/{orphan_id}/status", json={"action": "close"})
+    assert r.json()["code"] != 0
 
 
 # ============================ 状态机全链路 ============================

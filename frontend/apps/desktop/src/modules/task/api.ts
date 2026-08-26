@@ -89,16 +89,28 @@ export const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   cancelled: { label: "已取消", color: "error" },
 };
 
+/** 任务状态元数据（看板列头/卡片/详情弹窗共用配色）。 */
+export const ST: Record<string, { label: string; fg: string; bg: string }> = {
+  pending: { label: "待派发", fg: "#B45309", bg: "#FEF4E2" },
+  assigned: { label: "已派发", fg: "#3B5BDB", bg: "#EAEFFF" },
+  in_progress: { label: "进行中", fg: "#0E7490", bg: "#E0F2FE" },
+  done: { label: "完成待验", fg: "#7C3AED", bg: "#F3E8FF" },
+  verified: { label: "已验证", fg: "#15803D", bg: "#E8F9EF" },
+  closed: { label: "已关闭", fg: "#64748B", bg: "#EFF3FC" },
+  cancelled: { label: "已取消", fg: "#DC2626", bg: "#FDEBEC" },
+};
+
 export const taskApi = {
-  list: (params: { status?: string; keyword?: string; page?: number; page_size?: number } = {}) => {
+  list: (params: { status?: string; keyword?: string; archived?: number; page?: number; page_size?: number } = {}) => {
     const p = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== "") p.set(k, String(v));
     });
     return http.get<Page<TaskItem>>(`/tasks?${p.toString()}`);
   },
-  /** 统一任务池：线缆 + 设备维修任务合并（device 模块启用时后端自动合并）。 */
-  pool: (params: { status?: string; keyword?: string; source?: "" | "cable" | "device"; page?: number; page_size?: number } = {}) => {
+  /** 统一任务池：线缆 + 设备维修任务合并（device 模块启用时后端自动合并）。
+   *  archived：0=仅活动任务（默认），1=仅归档（closed/cancelled，已关闭自动归档视图）。 */
+  pool: (params: { status?: string; keyword?: string; source?: "" | "cable" | "device"; archived?: number; page?: number; page_size?: number } = {}) => {
     const p = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== "") p.set(k, String(v));

@@ -157,6 +157,14 @@ def _rebuild_points(db: Session, cable: Cable, coords: list[tuple[float, float]]
     return points
 
 
+def _notify(db: Session, user_id: int, title: str, content: str, link: str, biz_type: str = "提醒") -> None:
+    if not user_id:
+        return
+    from app.models import SysNotification
+
+    db.add(SysNotification(user_id=user_id, title=title, content=content, biz_type=biz_type, link=link))
+
+
 def _cable_or_404(db: Session, cable_id: int) -> Cable:
     c = db.get(Cable, cable_id)
     if c is None:
@@ -435,13 +443,31 @@ def update_fault(fault_id: int, req: FaultUpdate, db: Session = Depends(get_db))
 
 
 @router.put("/faults/{fault_id}/status", dependencies=[Depends(require_permission("fault:manage"))])
-def update_fault_status(fault_id: int, req: FaultStatusUpdate, db: Session = Depends(get_db)) -> dict:
+def update_fault_status(fault_id: int, req: FaultStatusUpdate, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
     f = db.get(CableFault, fault_id)
     if f is None:
         raise BizError(E_NOT_FOUND, "故障不存在")
     if req.status not in FAULT_STATUS_LABELS:
         raise BizError(E_PARAM, "状态取值 0-5（待派发/已派发/进行中/完成待验/已验证/已关闭）")
+    old_status = f.status
     f.status = req.status
+    # 数据变更反向提示（联动视图）：手动流转故障状态 → 通知关联任务的负责人/创建人
+    if req.status != old_status:
+        try:
+            from app.core.modules import module_enabled
+            from app.modules.task.models import MaintenanceTask
+
+            if module_enabled(db, "task"):
+                for t in db.scalars(select(MaintenanceTask).where(
+                    MaintenanceTask.fault_id == f.id,
+                    MaintenanceTask.status.notin_(("closed", "cancelled")),
+                )).all():
+                    content = (f"关联故障 #{f.id} 状态已被 {user.real_name} 手动变更为"
+                               f"「{FAULT_STATUS_LABELS[req.status]}」（原「{FAULT_STATUS_LABELS.get(old_status, old_status)}」），"
+                               f"任务 {t.task_no}「{t.title}」请关注同步。")
+                    _notify(db, t.assignee_id or t.created_by, "关联故障状态已变更", content, "/task/list")
+        except Exception:  # noqa: BLE001 提示失败不阻断状态流转
+            logger.warning("故障 %s 状态变更通知失败", fault_id, exc_info=True)
     db.commit()
     return ok(_fault_out(f))
 

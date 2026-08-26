@@ -1,16 +1,17 @@
-/** cable 模块：故障管理（/cable/faults，fault:manage / fault:report）——上报、状态流转、照片、删除审核。
- *  v4 联动视图：六态状态流转（待派发›已派发›进行中›完成待验›已验证›已关闭，与维修任务态同步）；
+/** cable 模块：故障管理（/cable/faults，fault:manage / fault:report）——上报（复用 CableFaultForm）、状态流转、照片、删除审核。
+ *  v5 联动视图：六态状态流转（待派发›已派发›进行中›完成待验›已验证›已关闭，与维修任务态同步）；
  *  详情抽屉展示反向关联的维修任务（可跳转任务列表/看板），支持一键转维修任务；
  *  支持 ?focus={fault_id} 跨页定位（看板/列表跳转入口）。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { App, Button, Drawer, Form, Image, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Tooltip, theme, Upload } from "antd";
+import { App, Button, Drawer, Image, Input, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, theme, Upload } from "antd";
 import { AimOutlined, CameraOutlined, CheckCircleOutlined, CheckOutlined, DeleteOutlined, LockOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, fileApi, useAuthStore } from "@wlt/shared";
 
-import { cableApi, FAULT_FLOW_STEPS, FAULT_STATUS, type CableItem, type FaultItem } from "./api";
+import { cableApi, FAULT_FLOW_STEPS, FAULT_STATUS, type FaultItem } from "./api";
+import { CableFaultForm } from "./CableFaultForm";
 import { taskApi } from "../task/api";
 import { mapApi, type MapSourceInfo } from "../map/api";
 import { MapView } from "../map/MapView";
@@ -56,11 +57,7 @@ export function CableFaultsPage() {
   const [filterSeverity, setFilterSeverity] = useState("");
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [picking, setPicking] = useState(false);
-  const [picked, setPicked] = useState<{ lat: number; lng: number } | null>(null);
   const [sources, setSources] = useState<Record<string, MapSourceInfo>>({});
-  const [cables, setCables] = useState<CableItem[]>([]);
   const [detail, setDetail] = useState<FaultItem | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [creatingTask, setCreatingTask] = useState(false);
@@ -68,7 +65,6 @@ export function CableFaultsPage() {
   const [delFault, setDelFault] = useState<FaultItem | null>(null);
   const [delReason, setDelReason] = useState("");
   const [delSubmitting, setDelSubmitting] = useState(false);
-  const [form] = Form.useForm();
   const focusedId = searchParams.get("focus");
 
   const load = useCallback(async () => {
@@ -87,7 +83,6 @@ export function CableFaultsPage() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     mapApi.mapSources().then((s) => setSources(s.map_sources)).catch(() => undefined);
-    cableApi.listCables({ page_size: 100 }).then((r) => setCables(r.items)).catch(() => undefined);
     // 六态计数（含全部）；逐态拉取 total（page_size=1 仅取计数）
     Promise.all([["", "全部"], ...Object.entries(FAULT_STATUS).map(([k, v]) => [k, v.label])].map(async ([st]) => {
       try {
@@ -106,44 +101,7 @@ export function CableFaultsPage() {
   }, [rows, loading]);
 
   const openCreate = () => {
-    setPicked(null);
-    form.resetFields();
-    form.setFieldsValue({ severity: 2 });
     setOpen(true);
-  };
-
-  const save = async () => {
-    const values = await form.validateFields();
-    if (!picked) {
-      message.warning("请在地图上点击选择故障位置");
-      return;
-    }
-    setSaving(true);
-    try {
-      const r = await cableApi.createFault({
-        cable_id: values.cable_id ?? null,
-        lat: picked.lat,
-        lng: picked.lng,
-        fault_type: values.fault_type ?? "",
-        severity: values.severity,
-        description: values.description ?? "",
-      });
-      message.success("故障已上报");
-      setOpen(false);
-      void load();
-      if (values.photoFile) {
-        try {
-          const up = await fileApi.upload(values.photoFile, "fault");
-          await cableApi.addFaultPhoto(r.id, up.file_id, "现场");
-        } catch {
-          message.warning("照片上传失败（故障已上报，可稍后补充）");
-        }
-      }
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "上报失败");
-    } finally {
-      setSaving(false);
-    }
   };
 
   const nextStatus = async (f: FaultItem) => {
@@ -357,7 +315,7 @@ export function CableFaultsPage() {
           </div>
         </div>
 
-      {/* 故障上报弹窗 */}
+      {/* 故障上报弹窗（复用 CableFaultForm：发布任务弹窗的线缆任务页签嵌入同一表单） */}
       <Modal
         open={open}
         onCancel={() => setOpen(false)}
@@ -366,43 +324,13 @@ export function CableFaultsPage() {
         destroyOnHidden
         footer={null}
       >
-        <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
-          <Form.Item name="cable_id" label="关联线缆（可选）" style={{ marginBottom: 12 }}>
-            <Select allowClear showSearch optionFilterProp="label"
-              options={cables.filter((c) => c.status === 1).map((c) => ({ value: c.id, label: `${c.name}（${c.code}）` }))} />
-          </Form.Item>
-          <Form.Item name="fault_type" label="故障类型" style={{ marginBottom: 12 }}>
-            <Input maxLength={30} placeholder="如 断芯 / 接头进水 / 外破" />
-          </Form.Item>
-          <Form.Item name="severity" label="严重度" rules={[{ required: true }]} style={{ marginBottom: 12 }}>
-            <Radio.Group optionType="button" buttonStyle="solid" style={{ display: "flex" }}>
-              {Object.entries(SEVERITY).map(([k, v]) => <Radio.Button key={k} value={Number(k)} style={{ flex: 1, textAlign: "center", borderRadius: 10 }}>{v.label}</Radio.Button>)}
-            </Radio.Group>
-          </Form.Item>
-          <Form.Item name="description" label="描述" style={{ marginBottom: 12 }}>
-            <Input.TextArea rows={3} maxLength={500} placeholder="故障现象、影响范围、现场情况…" />
-          </Form.Item>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: token.colorTextSecondary, marginBottom: 6 }}>故障位置（点击地图选点）</div>
-          <div style={{ height: 220, borderRadius: 12, overflow: "hidden", border: `1px solid ${token.colorBorder}`, marginBottom: 8 }}>
-            <MapView sources={sources} overlays={{ cables: [], faults: [], markersByCable: {} }}
-              onPick={(lat, lng) => { setPicked({ lat, lng }); setPicking(false); }}
-              picking={picking ? "点击地图选择故障位置（自动转换为 WGS84）" : undefined} height="220px" />
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <Button size="small" icon={<AimOutlined />} onClick={() => setPicking(true)}>地图选点</Button>
-            {picked && <span style={{ fontSize: 11.5, color: token.colorTextSecondary, fontVariantNumeric: "tabular-nums" }}>已选：{picked.lat.toFixed(6)}, {picked.lng.toFixed(6)}</span>}
-            {!picked && <span style={{ fontSize: 11.5, color: token.colorTextTertiary }}>尚未选择位置</span>}
-          </div>
-          <Form.Item name="photoFile" label="现场照片（可选）" valuePropName="file" getValueFromEvent={(e) => e?.fileList?.[0]?.originFileObj} style={{ marginBottom: 0 }}>
-            <Upload beforeUpload={() => false} maxCount={1} accept="image/*">
-              <Button icon={<UploadOutlined />} block>选择照片</Button>
-            </Upload>
-          </Form.Item>
-          <div style={{ display: "flex", gap: 10, marginTop: 14, borderTop: `1px solid ${token.colorBorder}`, paddingTop: 12 }}>
-            <Button style={{ width: 120 }} onClick={() => setOpen(false)}>取消</Button>
-            <Button type="primary" loading={saving} style={{ flex: 1 }} onClick={() => void save()}>提交上报</Button>
-          </div>
-        </Form>
+        <CableFaultForm
+          onCancel={() => setOpen(false)}
+          onSubmitted={() => {
+            setOpen(false);
+            void load();
+          }}
+        />
       </Modal>
 
       {/* 定位到故障点（内嵌地图） */}

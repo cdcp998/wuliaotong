@@ -1,27 +1,19 @@
 /** task 模块：维修任务列表（/task/list，task:dispatch/process）——统一任务池合并视图。
- *  v3 界面：线缆 + 设备维修任务合并显示（/tasks/pool），来源列可跳转关联模块；
- *  支持 ?focus_task=c12|d3 跨页定位（故障管理反向关联入口）。 */
+ *  v4：活动任务 / 已归档（已关闭自动归档，只读可查详情）两个视图；发布任务走标签式弹窗；
+ *  来源列可跳转关联模块（故障管理 / 设备维修任务）；支持 ?focus_task=c12|d3 跨页定位。 */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, theme, Upload } from "antd";
+import { App, Button, Drawer, Input, Popconfirm, Segmented, Select, Space, Table, Tag, theme, Upload } from "antd";
 import { PlusOutlined, UploadOutlined, AppstoreOutlined, RobotOutlined, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { fileApi, useAuthStore } from "@wlt/shared";
 
-import { cableApi, FAULT_STATUS } from "../cable/api";
+import { FAULT_STATUS } from "../cable/api";
 import { deviceApi } from "../device/api";
-import { taskApi, type PoolItem } from "./api";
-
-const ST: Record<string, { label: string; fg: string; bg: string }> = {
-  pending: { label: "待派发", fg: "#B45309", bg: "#FEF4E2" },
-  assigned: { label: "已派发", fg: "#3B5BDB", bg: "#EAEFFF" },
-  in_progress: { label: "进行中", fg: "#0E7490", bg: "#E0F2FE" },
-  done: { label: "完成待验", fg: "#7C3AED", bg: "#F3E8FF" },
-  verified: { label: "已验证", fg: "#15803D", bg: "#E8F9EF" },
-  closed: { label: "已关闭", fg: "#64748B", bg: "#EFF3FC" },
-  cancelled: { label: "已取消", fg: "#DC2626", bg: "#FDEBEC" },
-};
+import { taskApi, ST, type PoolItem } from "./api";
+import { PublishTaskModal } from "./PublishTaskModal";
+import { TaskDetailModal } from "./TaskDetailModal";
 
 export function TaskListPage() {
   const { message } = App.useApp();
@@ -35,28 +27,26 @@ export function TaskListPage() {
   const [status, setStatus] = useState("");
   const [keyword, setKeyword] = useState("");
   const [source, setSource] = useState<"" | "cable" | "device">("");
+  const [archived, setArchived] = useState<0 | 1>(0); // 0 活动任务 / 1 已归档（需求 3）
   const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [faults, setFaults] = useState<{ id: number; label: string }[]>([]);
-  // 详情抽屉仅服务线缆任务（设备任务的记录在「设备维修任务」页，跨模块跳转）
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [detail, setDetail] = useState<PoolItem | null>(null);
+  // 记录抽屉仅服务活动线缆任务（设备任务记录跨模块跳转查看）
   const [current, setCurrent] = useState<PoolItem | null>(null);
   const [records, setRecords] = useState<Awaited<ReturnType<typeof taskApi.records>>>([]);
   const [recContent, setRecContent] = useState("");
   const [recFile, setRecFile] = useState<File | null>(null);
   const [recSaving, setRecSaving] = useState(false);
   const [recommend, setRecommend] = useState<{ id: number; title: string; snippet: string }[]>([]);
-  const [form] = Form.useForm();
   const moduleEnabled = useAuthStore((s) => s.moduleEnabled);
   const cableEnabled = moduleEnabled("cable");
-  const deviceEnabled = moduleEnabled("device");
   const focusedKey = searchParams.get("focus_task") || "";
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // 统一任务池：线缆 + 设备维修任务合并
-      const r = await taskApi.pool({ status, keyword, source, page, page_size: pageSize });
+      // 统一任务池：archived 切换活动/归档视图（后端过滤终态）
+      const r = await taskApi.pool({ status, keyword, source, archived, page, page_size: pageSize });
       setRows(r.items);
       setTotal(r.total);
     } catch (e) {
@@ -64,16 +54,9 @@ export function TaskListPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, keyword, source, page, pageSize, message]);
+  }, [status, keyword, source, archived, page, pageSize, message]);
 
   useEffect(() => { void load(); }, [load]);
-  // cable 未启用时「关联故障」字段隐藏，无需拉取故障下拉
-  useEffect(() => {
-    if (!cableEnabled) return;
-    cableApi.listFaults({ page_size: 100 }).then((r) => {
-      setFaults(r.items.map((f) => ({ id: f.id, label: `#${f.id} ${f.fault_type || "故障"}（${FAULT_STATUS[f.status]?.label ?? f.status}）` })));
-    }).catch(() => undefined);
-  }, [cableEnabled]);
 
   /** 统一状态流转：按来源路由到对应模块接口。 */
   const act = async (t: PoolItem, action: string, extra?: object) => {
@@ -96,7 +79,6 @@ export function TaskListPage() {
 
   const openRecords = async (t: PoolItem) => {
     if (t.source === "device") {
-      // 设备任务记录跨模块查看：跳转设备维修任务页并定位该任务
       navigate(`/device/tasks?focus=d${t.id}`);
       return;
     }
@@ -143,14 +125,14 @@ export function TaskListPage() {
   };
 
   const columns: ColumnsType<PoolItem> = [
-    { title: "任务", key: "task", width: 240, render: (_, t) => (
+    { title: "任务", key: "task", width: 230, render: (_, t) => (
       <div>
         <div style={{ fontWeight: 600, fontSize: 12.5, color: "#1E2433" }}>{t.title}</div>
         <div style={{ fontSize: 10.5, color: "#8A93A8", marginTop: 2 }}>{t.task_no}</div>
       </div>
     ) },
     {
-      title: "来源", key: "src", width: 200,
+      title: "来源", key: "src", width: 190,
       render: (_, t) => t.source === "device" ? (
         <Space size={6}>
           <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>设备</Tag>
@@ -166,18 +148,17 @@ export function TaskListPage() {
       ),
     },
     {
-      title: "优先", key: "priority", width: 90,
+      title: "优先", key: "priority", width: 80,
       render: (_, t) => {
         const m = t.priority === 2 ? { label: "紧急", fg: "#DC2626", bg: "#FDEBEC" } : t.priority === 1 ? { label: "高优", fg: "#B45309", bg: "#FEF4E2" } : { label: "普通", fg: "#64748B", bg: "#EFF3FC" };
         return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>;
       },
     },
-    { title: "负责人", dataIndex: "assignee_name", width: 100, render: (v: string, t) => v || (t.status === "pending" && t.dispatch_mode !== "manual" ? <span style={{ color: "#3B5BDB", fontSize: 12 }}>待领取</span> : <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span>) },
-    { title: "状态", key: "status", width: 110, render: (_, t) => { const s = ST[t.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? t.status}</Tag>; } },
+    { title: "负责人", dataIndex: "assignee_name", width: 95, render: (v: string, t) => v || (t.status === "pending" && t.dispatch_mode !== "manual" ? <span style={{ color: "#3B5BDB", fontSize: 12 }}>待领取</span> : <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span>) },
+    { title: "状态", key: "status", width: 100, render: (_, t) => { const s = ST[t.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? t.status}</Tag>; } },
     {
-      title: "联动状态", key: "link", width: 130,
+      title: "联动状态", key: "link", width: 120,
       render: (_, t) => {
-        // 线缆任务展示关联故障实时状态（故障管理同步展示，形成统一联动视图）
         if (t.source === "cable" && t.fault_id && t.fault_status != null) {
           const f = FAULT_STATUS[t.fault_status];
           return <Tag style={{ borderRadius: 999, background: f?.bg, color: f?.fg, borderColor: "transparent", marginInlineEnd: 0 }} title={`关联故障 #${t.fault_id} 当前状态`}>故障·{f?.label ?? t.fault_status}</Tag>;
@@ -188,16 +169,25 @@ export function TaskListPage() {
         return <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span>;
       },
     },
-    { title: "排期", dataIndex: "scheduled_time", width: 120, render: (v: string | null) => v ? <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v.slice(0, 16)}</span> : <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span> },
+    { title: "排期", dataIndex: "scheduled_time", width: 115, render: (v: string | null) => v ? <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v.slice(0, 16).replace("T", " ")}</span> : <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span> },
     {
-      title: "操作", width: 210,
+      title: "操作", width: archived ? 90 : 200,
       render: (_, t) => {
+        if (archived) {
+          // 归档视图：仅可查看完整详情（不可再流转/回退，重开请重新发布任务）
+          return (
+            <Space size={10} style={{ padding: "0 10px" }}>
+              <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B6478" }} onClick={() => setDetail(t)}>详情</Button>
+            </Space>
+          );
+        }
         const claimHint = t.source === "device" && t.status === "pending" && t.dispatch_mode !== "manual" && !t.assignee_id;
         return (
           <Space size={10} style={{ padding: "0 10px", flexWrap: "wrap" }}>
             <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B6478" }} onClick={() => openRecords(t)}>
               {t.source === "device" ? "详情 ›" : "记录"}
             </Button>
+            <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B6478" }} onClick={() => setDetail(t)}>详情</Button>
             {claimHint && (
               <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#3B5BDB" }} onClick={() => navigate(`/device/tasks?focus=d${t.id}`)}>领取 ›</Button>
             )}
@@ -229,70 +219,61 @@ export function TaskListPage() {
         <div>
           <h2 style={{ margin: 0 }}>维修任务列表</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
-            统一任务池{deviceEnabled ? "（线缆 + 设备合并显示）" : ""}：状态筛选 / 来源筛选；联动状态同步展示，可跳转故障管理与设备维修任务
+            统一任务池{archived ? " · 已归档（已关闭/已取消，仅可查看详情）" : ""}：联动状态同步展示，可跳转故障管理与设备维修任务
           </p>
         </div>
         <Space>
           <Button style={{ borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" }} icon={<AppstoreOutlined style={{ color: "#5B7FFF" }} />} onClick={() => navigate("/task/board")}>切换看板视图</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>新建任务</Button>
+          {!archived && <Button type="primary" icon={<PlusOutlined />} onClick={() => setPublishOpen(true)}>发布任务</Button>}
         </Space>
       </div>
 
       {/* 筛选条 */}
       <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <Segmented
+          value={archived}
+          onChange={(v) => { setArchived(v as 0 | 1); setPage(1); }}
+          options={[{ value: 0, label: "活动任务" }, { value: 1, label: "已归档" }]}
+        />
         <Input
           prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
           placeholder="任务单号 / 内容"
           allowClear
-          style={{ width: 280, background: "#F6F8FE" }}
+          style={{ width: 240, background: "#F6F8FE" }}
           onChange={(e) => { if (!e.target.value) { setKeyword(""); setPage(1); } }}
           onPressEnter={(e) => { setKeyword((e.target as HTMLInputElement).value.trim()); setPage(1); }}
         />
-        <Select placeholder="全部状态" allowClear style={{ width: 150 }} value={status || undefined} onChange={(v) => { setStatus(v ?? ""); setPage(1); }}
+        <Select placeholder="全部状态" allowClear style={{ width: 140 }} value={status || undefined} onChange={(v) => { setStatus(v ?? ""); setPage(1); }}
           options={Object.entries(ST).map(([k, v]) => ({ value: k, label: v.label }))} />
-        <Select placeholder="全部来源" allowClear style={{ width: 150 }} value={source || undefined} onChange={(v) => { setSource(v ?? ""); setPage(1); }}
+        <Select placeholder="全部来源" allowClear style={{ width: 140 }} value={source || undefined} onChange={(v) => { setSource(v ?? ""); setPage(1); }}
           options={[
-            ...(cableEnabled ? [{ value: "cable", label: "线缆任务" }] : []),
-            ...(deviceEnabled ? [{ value: "device", label: "设备任务" }] : []),
+            { value: "cable", label: "线缆任务" },
+            ...(moduleEnabled("device") ? [{ value: "device", label: "设备任务" }] : []),
           ]} />
         <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 条</span>
       </div>
 
       <div className="wlt-glass" style={{ padding: 12 }}>
         <Table<PoolItem>
-          rowKey="key" loading={loading} dataSource={rows} locale={{ emptyText: "暂无任务" }}
+          rowKey="key" loading={loading} dataSource={rows} locale={{ emptyText: archived ? "暂无归档任务" : "暂无任务" }}
           pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else setPage(p); } }}
           columns={columns}
           rowClassName={(r) => (r.key === focusedKey ? "wlt-row-focus" : "")}
         />
         <p style={{ margin: "8px 0 0", fontSize: 11, color: "#8A93A8" }}>
-          提示：「联动状态」列为关联故障/设备的实时状态（与对应模块同步）；知识推荐在任务记录抽屉内；完成需填写记录并上传现场照片
+          提示：「联动状态」列为关联故障/设备的实时状态；已关闭/已取消任务自动进入「已归档」，终态不可回退（重开请重新发布任务并关联原对象）
         </p>
       </div>
 
-      {/* 新建任务 */}
-      <Modal open={open} onCancel={() => setOpen(false)} onOk={save} confirmLoading={saving} title="新建维修任务" width={560} destroyOnHidden>
-        <Form form={form} layout="vertical">
-          <Form.Item name="title" label="标题" rules={[{ required: true, message: "请输入标题" }]}>
-            <Input maxLength={100} />
-          </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea rows={3} maxLength={500} />
-          </Form.Item>
-          <Space>
-            <Form.Item name="priority" label="优先级" initialValue={1}>
-              <Select style={{ width: 140 }} options={[{ value: 1, label: "普通" }, { value: 2, label: "紧急" }]} />
-            </Form.Item>
-            {cableEnabled && (
-              <Form.Item name="fault_id" label="关联故障（可选）">
-                <Select style={{ width: 280 }} allowClear options={faults} showSearch optionFilterProp="label" />
-              </Form.Item>
-            )}
-          </Space>
-        </Form>
-      </Modal>
+      {/* 发布任务（标签式弹窗） */}
+      <PublishTaskModal open={publishOpen} onClose={() => { setPublishOpen(false); void load(); }} />
 
-      {/* 维修记录抽屉（线缆任务） */}
+      {/* 详情弹窗 */}
+      <TaskDetailModal item={detail} onClose={() => setDetail(null)} onChanged={() => void load()} />
+
+      {/* 新建纯任务（无关联快速建单入口保留在详情/看板；此处不再提供独立表单） */}
+
+      {/* 维修记录抽屉（活动线缆任务） */}
       <Drawer open={!!current} onClose={() => setCurrent(null)} width={560} title={current ? `维修记录：${current.title}` : ""}>
         {current && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -307,8 +288,7 @@ export function TaskListPage() {
                 <div style={{ fontSize: 11.5, color: token.colorTextTertiary }}>{new Date(r.created_at).toLocaleString()}</div>
               </div>
             ))}
-            {!(current.status === "in_progress" || current.status === "assigned") && <div style={{ color: token.colorTextTertiary, textAlign: "center", padding: 12 }}>该任务当前状态不可追加维修记录</div>}
-            {(current.status === "in_progress" || current.status === "assigned") && (
+            {(current.status === "in_progress" || current.status === "assigned") ? (
               <>
                 <Input.TextArea rows={3} value={recContent} onChange={(e) => setRecContent(e.target.value)} placeholder="维修内容" />
                 <Upload beforeUpload={(f) => { setRecFile(f); return false; }} maxCount={1} accept="image/*" showUploadList={false}>
@@ -323,26 +303,12 @@ export function TaskListPage() {
                   </div>
                 )}
               </>
+            ) : (
+              <div style={{ color: token.colorTextTertiary, textAlign: "center", padding: 12 }}>该任务当前状态不可追加维修记录</div>
             )}
           </div>
         )}
       </Drawer>
     </div>
   );
-
-  async function save() {
-    const v = await form.validateFields();
-    setSaving(true);
-    try {
-      await taskApi.create({ title: v.title, description: v.description ?? "", priority: v.priority ?? 1, fault_id: v.fault_id ?? null });
-      message.success("任务已创建");
-      setOpen(false);
-      form.resetFields();
-      void load();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "创建失败");
-    } finally {
-      setSaving(false);
-    }
-  }
 }

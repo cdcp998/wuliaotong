@@ -1,14 +1,15 @@
-/** device 模块：设备维修任务（/device/tasks，device:task）——创建/派发（手动·公开任务单·组合三模式）/接单/完成/验收/取消 + 维修记录。
- *  v3 界面：状态胶囊 Tabs + 玻璃表格 + 三种派发模式。 */
+/** device 模块：设备维修任务（/device/tasks，device:task）——创建（复用 DeviceTaskForm）/派发（手动·公开任务单·组合三模式）/接单/完成/验收/取消 + 维修记录。
+ *  v4 界面：状态胶囊 Tabs + 玻璃表格 + 跨页定位（?focus=d{id}）。 */
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, theme, Tooltip, Upload } from "antd";
+import { App, Button, Drawer, Input, Modal, Popconfirm, Select, Space, Table, Tag, theme, Tooltip, Upload } from "antd";
 import { CheckCircleOutlined, CheckOutlined, DeleteOutlined, FileDoneOutlined, FileImageOutlined, LockOutlined, PlusOutlined, ReloadOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, fileApi, useAuthStore } from "@wlt/shared";
 
-import { DEVICE_STATUS, DISPATCH_MODES, deviceApi, type DeviceItem, type DeviceTaskItem } from "./api";
+import { DEVICE_STATUS, DISPATCH_MODES, deviceApi, type DeviceTaskItem } from "./api";
+import { DeviceTaskForm } from "./DeviceTaskForm";
 
 const ST: Record<string, { label: string; fg: string; bg: string }> = {
   pending: { label: "待派发", fg: "#B45309", bg: "#FEF4E2" },
@@ -34,19 +35,15 @@ export function DeviceTasksPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [devices, setDevices] = useState<DeviceItem[]>([]);
   const [workers, setWorkers] = useState<{ id: number; name: string }[]>([]);
   const [current, setCurrent] = useState<DeviceTaskItem | null>(null);
   const [assignee, setAssignee] = useState<number | undefined>();
   const [verdict, setVerdict] = useState("");
   const [records, setRecords] = useState<Awaited<ReturnType<typeof deviceApi.records>>>([]);
-  const [dispatchMode, setDispatchMode] = useState<keyof typeof DISPATCH_MODES>("manual");
   const isManager = ["super_admin", "manager", "dispatcher"].includes(me?.role?.code ?? "");
   const [recContent, setRecContent] = useState("");
   const [recFile, setRecFile] = useState<File | null>(null);
   const [recSaving, setRecSaving] = useState(false);
-  const [form] = Form.useForm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,31 +68,11 @@ export function DeviceTasksPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, loading]);
   useEffect(() => {
-    // 设备/维修人员下拉数据源：page_size 上限为后端 le=100，超出会被 422 拒绝（此前 200 静默失败致下拉为空）
-    deviceApi
-      .list({ page_size: 100 })
-      .then((r) => setDevices(r.items))
-      .catch((e) => message.error(e instanceof Error ? `设备列表加载失败：${e.message}` : "设备列表加载失败"));
+    // 维修人员下拉数据源：page_size 上限为后端 le=100，超出会被 422 拒绝（此前 200 静默失败致下拉为空）
     adminApi.users({ role_id: 6, status: 1, page_size: 100 })
       .then((r) => setWorkers(r.list.map((u) => ({ id: u.id, name: u.real_name || u.username }))))
       .catch(() => undefined);
   }, []);
-
-  const create = async () => {
-    const v = await form.validateFields();
-    setCreating(true);
-    try {
-      await deviceApi.createTask({ device_id: v.device_id, title: v.title, description: v.description ?? "", priority: v.priority ?? 1, dispatch_mode: dispatchMode });
-      message.success(v.dispatch_mode === "manual" ? "任务已创建（设备自动置维修中），请在列表中派发维修人员" : "任务已发布到任务池（设备自动置维修中）");
-      setOpen(false);
-      form.resetFields();
-      void load();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "创建失败");
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const act = async (t: DeviceTaskItem, action: string, extra?: object) => {
     try {
@@ -220,7 +197,7 @@ export function DeviceTasksPage() {
         </div>
         <Space>
           <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setDispatchMode("manual"); setOpen(true); }}>新建设备维修</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>新建设备维修</Button>
         </Space>
       </div>
 
@@ -257,39 +234,15 @@ export function DeviceTasksPage() {
         </div>
       </div>
 
-      {/* 新建任务 */}
-      <Modal open={open} onCancel={() => setOpen(false)} onOk={create} confirmLoading={creating} title="新建设备维修任务" width={560} destroyOnHidden>
-        <Form form={form} layout="vertical">
-          <Form.Item name="device_id" label="设备" rules={[{ required: true, message: "请选择设备" }]}>
-            <Select showSearch optionFilterProp="label" options={devices.filter((d) => d.status !== 4).map((d) => ({ value: d.id, label: `${d.name}（${d.code}，${DEVICE_STATUS[d.status]?.label}）` }))} />
-          </Form.Item>
-          <Form.Item name="title" label="标题" rules={[{ required: true, message: "请输入标题" }]}>
-            <Input maxLength={100} />
-          </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea rows={3} maxLength={500} />
-          </Form.Item>
-          <Form.Item name="priority" label="优先级" initialValue={1}>
-            <Select style={{ width: 140 }} options={[{ value: 1, label: "普通" }, { value: 2, label: "紧急" }]} />
-          </Form.Item>
-          {/* 派发方式（三种模式）：手动派发 / 公开任务单 / 公开+可派发 */}
-          <Form.Item label="派发方式" initialValue="manual">
-            <Radio.Group
-              value={dispatchMode}
-              onChange={(e) => setDispatchMode(e.target.value)}
-              style={{ display: "flex", gap: 8, width: "100%" }}
-            >
-              {(Object.keys(DISPATCH_MODES) as (keyof typeof DISPATCH_MODES)[]).map((m) => (
-                <Radio key={m} value={m} style={{ flex: 1, marginInlineEnd: 0 }}>
-                  <div style={{ paddingTop: 2, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: "#1E2433", whiteSpace: "nowrap" }}>{DISPATCH_MODES[m].label}</div>
-                    <div style={{ fontSize: 11, color: "#8A93A8", lineHeight: 1.5 }}>{DISPATCH_MODES[m].desc}</div>
-                  </div>
-                </Radio>
-              ))}
-            </Radio.Group>
-          </Form.Item>
-        </Form>
+      {/* 新建任务（复用 DeviceTaskForm：发布任务弹窗的设备任务页签嵌入同一表单） */}
+      <Modal open={open} onCancel={() => setOpen(false)} title="新建设备维修任务" width={560} destroyOnHidden footer={null}>
+        <DeviceTaskForm
+          onCancel={() => setOpen(false)}
+          onSubmitted={() => {
+            setOpen(false);
+            void load();
+          }}
+        />
       </Modal>
 
       {/* 派发/验收/记录抽屉 */}

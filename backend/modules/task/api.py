@@ -137,10 +137,20 @@ def _gen_task_no(db: Session) -> str:
 
 # ============================ 任务 CRUD ============================
 
+def _archived_filter(stmt, archived: int):
+    """归档过滤（已关闭自动归档）：archived=1 仅终态（closed/cancelled）；=0 排除终态。
+
+    显式指定单个 status 时不过滤（前端状态下拉可直达）。"""
+    if archived:
+        return stmt.where(MaintenanceTask.status.in_(TERMINAL_STATUS))
+    return stmt.where(MaintenanceTask.status.notin_(TERMINAL_STATUS))
+
+
 @router.get("/tasks", dependencies=[Depends(require_any_permission("task:dispatch", "task:process"))])
 def list_tasks(
     status: str = "",
     keyword: str = "",
+    archived: int = Query(0, ge=0, le=1),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user: SysUser = Depends(get_current_user),
@@ -151,6 +161,8 @@ def list_tasks(
         stmt = stmt.where(MaintenanceTask.assignee_id == user.id)
     if status:
         stmt = stmt.where(MaintenanceTask.status == status)
+    else:
+        stmt = _archived_filter(stmt, archived)
     if keyword:
         like = f"%{keyword}%"
         stmt = stmt.where(MaintenanceTask.task_no.like(like) | MaintenanceTask.title.like(like))
@@ -200,7 +212,7 @@ def create_task(req: TaskCreate, user: SysUser = Depends(get_current_user), db: 
 
 # ============================ 统一任务池（联动视图） ============================
 
-def _device_pool_items(db: Session, user: SysUser, status: str, keyword: str) -> list[dict]:
+def _device_pool_items(db: Session, user: SysUser, status: str, keyword: str, archived: int = 0) -> list[dict]:
     """设备维修任务池条目（device 模块启用时；跨模块经模型懒加载 + 启用门控）。"""
     if not module_enabled(db, "device"):
         return []
@@ -209,11 +221,14 @@ def _device_pool_items(db: Session, user: SysUser, status: str, keyword: str) ->
     except ImportError:
         return []
     stmt = select(DeviceTask)
-    scope_all = _scope_all(db, user)
-    if not scope_all:
+    if not _scope_all(db, user):
         stmt = stmt.where(DeviceTask.assignee_id == user.id)
     if status:
         stmt = stmt.where(DeviceTask.status == status)
+    elif archived:
+        stmt = stmt.where(DeviceTask.status.in_(TERMINAL_STATUS))
+    else:
+        stmt = stmt.where(DeviceTask.status.notin_(TERMINAL_STATUS))
     rows = db.scalars(stmt.order_by(DeviceTask.id.desc()).limit(500)).all()
     items = []
     for t in rows:
@@ -258,6 +273,7 @@ def task_pool(
     status: str = "",
     keyword: str = "",
     source: str = "",
+    archived: int = Query(0, ge=0, le=1),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user: SysUser = Depends(get_current_user),
@@ -267,7 +283,8 @@ def task_pool(
 
     - device 模块启用时合并设备维修任务（「添加设备管理到任务池系统」）；
     - 每条目携带关联信息：线缆任务带故障摘要（类型/状态/严重度/线缆名），设备任务带设备摘要；
-    - source 过滤：cable=仅线缆任务，device=仅设备任务，空=全部。
+    - source 过滤：cable=仅线缆任务，device=仅设备任务，空=全部；
+    - archived：0=仅活动任务（默认，已关闭自动归档），1=仅归档（closed/cancelled）。
     """
     kw = keyword.strip()
     cable_rows: list[MaintenanceTask] = []
@@ -277,6 +294,8 @@ def task_pool(
             stmt = stmt.where(MaintenanceTask.assignee_id == user.id)
         if status:
             stmt = stmt.where(MaintenanceTask.status == status)
+        else:
+            stmt = _archived_filter(stmt, archived)
         cable_rows = list(db.scalars(stmt.order_by(MaintenanceTask.id.desc()).limit(500)).all())
 
     # 批量取故障摘要（一次查询；cable 未启用时保持空壳关联信息）
@@ -332,7 +351,7 @@ def task_pool(
         })
 
     if source in ("", "device"):
-        items.extend(_device_pool_items(db, user, status, kw))
+        items.extend(_device_pool_items(db, user, status, kw, archived))
 
     items.sort(key=lambda x: (x.get("created_at") or "", x.get("id") or 0), reverse=True)
     total = len(items)
@@ -344,6 +363,20 @@ def task_pool(
 def get_task(task_id: int, db: Session = Depends(get_db)) -> dict:
     t = _task_or_404(db, task_id)
     return ok(_task_out(db, t))
+
+
+@router.post("/tasks/auto-link", dependencies=[Depends(require_permission("task:dispatch"))])
+def auto_link_tasks(user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """历史未关联任务自动关联：孤儿任务（fault_id 空 + cable_id 非空）按确定性规则补挂同线缆故障。
+
+    规则：候选故障须同线缆/未关闭/未被占用且上报时间晚于任务创建时间；挂接后通知创建人核实。
+    模块启用时（on_enable 钩子）自动执行一次；本端点供手动补跑。幂等：无孤儿即空结果。
+    """
+    from app.modules.task.services.auto_link import auto_link_orphan_tasks
+
+    linked = auto_link_orphan_tasks(db, notify=_notify)
+    db.commit()
+    return ok({"linked": len(linked), "items": linked})
 
 
 @router.put("/tasks/{task_id}", dependencies=[Depends(require_permission("task:dispatch"))])
