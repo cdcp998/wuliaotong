@@ -735,6 +735,7 @@ export function SettingsPage() {
           confirmLoading={storageSaving}
           onCancel={() => setStorageModalOpen(false)}
           destroyOnHidden
+          forceRender
         >
           <Form form={storageForm} layout="vertical" style={{ marginTop: 8 }}>
             <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}>

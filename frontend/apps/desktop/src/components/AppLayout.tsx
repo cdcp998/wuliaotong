@@ -903,7 +903,7 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
         }
       }}
       onCancel={() => setPwdOpen(false)}
-      destroyOnHidden
+      destroyOnHidden forceRender
     >
       <Form form={pwdForm} layout="vertical">
         <Form.Item name="old_password" label="原密码" rules={[{ required: true, message: "请输入原密码" }]}>

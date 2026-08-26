@@ -4,7 +4,7 @@ import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type Department, type SysRole, type SysUser } from "@wlt/shared";
 
-import { DataTable } from "../components/DataTable";
+import { DataTable, runBatchEach } from "../components/DataTable";
 
 /** 用户管理（电脑端，超管 sys:user）：账号/角色/所属单位维护（单位控制可货架架与组织归属）。 */
 export function UsersPage() {
@@ -168,7 +168,7 @@ export function UsersPage() {
         </Space>
       </div>
       <div className="wlt-glass" style={{ padding: 12 }}>
-        <DataTable rowKey="id" loading={loading} locale={{ emptyText: "暂无数据" }} size="middle" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 个用户`, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }} rowSelection onBatchDelete={async (keys) => { for (const k of keys) await adminApi.deleteUser(Number(k)); message.success(`已停用 ${keys.length} 个账号`); void load(); }} />
+        <DataTable rowKey="id" loading={loading} locale={{ emptyText: "暂无数据" }} size="middle" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 个用户`, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }} rowSelection onBatchDelete={async (keys) => { const r = await runBatchEach(keys, (id) => adminApi.deleteUser(id)); void load(); if (r.ok) message.success(`已停用 ${r.ok} 个账号`); if (r.fail.length) message.error(`${r.fail.length} 个账号停用失败：${r.fail[0]}${r.fail.length > 1 ? " 等" : ""}`); }} />
       </div>
 
       <Modal
@@ -176,7 +176,7 @@ export function UsersPage() {
         open={creating || Boolean(editing)}
         onOk={() => void submit()}
         onCancel={() => { setCreating(false); setEditing(null); }}
-        destroyOnHidden
+        destroyOnHidden forceRender
         afterOpenChange={(o) => {
           if (!o) return;
           if (editing) {

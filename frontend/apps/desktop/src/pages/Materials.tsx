@@ -1,11 +1,11 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { App, Button, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Tag, Typography } from "antd";
 import { CameraOutlined, PictureOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, fileApi, ocrApi, type CategoryNode, type Product, type ProductInput } from "@wlt/shared";
 
-import { DataTable } from "../components/DataTable";
+import { DataTable, runBatchEach } from "../components/DataTable";
 
 /** 材料挂载分类候选（三级体系）：二级 + 三级分类，显示完整路径；顶级分类只作分组。 */
 function leafCats(nodes: CategoryNode[]): { id: number; name: string }[] {
@@ -284,9 +284,10 @@ export function MaterialsPage() {
         pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
         rowSelection
         onBatchDelete={async (keys) => {
-          for (const k of keys) await baseApi.deleteProduct(Number(k));
-          message.success(`已停用 ${keys.length} 个材料`);
+          const r = await runBatchEach(keys, (id) => baseApi.deleteProduct(id));
           void load();
+          if (r.ok) message.success(`已停用 ${r.ok} 个材料`);
+          if (r.fail.length) message.error(`${r.fail.length} 个材料停用失败：${r.fail[0]}${r.fail.length > 1 ? " 等" : ""}`);
         }}
         actionsWidth={140}
         actions={(r) => (

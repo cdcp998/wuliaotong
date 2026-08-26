@@ -196,7 +196,7 @@ export function ExportFormatModal(props: {
             <Button onClick={onClose}>取消</Button>
             <Button type="primary" onClick={save}>保存设置</Button>
             {!hideExportAction && (
-              <Button type="primary" ghost onClick={exportNow} icon={<PlusOutlined style={{ color: "#5B7FFF" }} />}>
+              <Button type="primary" ghost onClick={exportNow} icon={<PlusOutlined />}>
                 按此格式导出
               </Button>
             )}
@@ -400,7 +400,7 @@ export function ExportFormatModal(props: {
         </div>
         <Table
           size="small"
-          rowKey={(_, i) => String(i)}
+          rowKey="__key"
           pagination={false}
           scroll={{ x: "max-content" }}
           columns={previewHeaders.map((h, i) => ({
@@ -413,7 +413,7 @@ export function ExportFormatModal(props: {
               return est * 9;
             })(),
           }))}
-          dataSource={previewRows.map((r) => Object.fromEntries(r.map((v, i) => [String(i), v])))}
+          dataSource={previewRows.map((r, key) => ({ __key: String(key), ...Object.fromEntries(r.map((v, i) => [String(i), v])) }))}
         />
         <div style={{ fontSize: 11, color: "#6A748A", marginTop: 8 }}>
           提示：⟨文本⟩ 角标表示该长数字将按文本单元格写入，Excel 中完整显示、不会变成科学计数法。

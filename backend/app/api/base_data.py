@@ -629,7 +629,7 @@ def list_products(
     barcode: str = Query("", max_length=50),
     status: int = Query(1, description="1 启用（默认） / 0 停用；全部数据见导出接口"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500, description="上限 500：采购入库等页面的材料下拉一次拉取前 500 条"),
     ai: int = Query(0, description="1 无结果时用大模型改写关键词重试（语义搜索）"),
     db: Session = Depends(get_db),
 ) -> dict:

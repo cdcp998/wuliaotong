@@ -1,4 +1,4 @@
-﻿import { useState, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
+import { useState, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
 import { App, Button, Checkbox, Popover, Table, Tooltip } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
 import { DeleteOutlined, SettingOutlined } from "@ant-design/icons";
@@ -82,8 +82,27 @@ function colKey<T extends object>(c: ColumnsType<T>[number], index: number): str
   return typeof k === "string" || typeof k === "number" ? String(k) : `col-${index}`;
 }
 
+/** 批量逐条执行（onBatchDelete / batchActions 回调专用）：单条失败不中断后续，
+ * 返回成功条数与失败原因列表（后端业务提示），由调用方统一刷新列表并提示部分失败。 */
+export async function runBatchEach(
+  keys: React.Key[],
+  run: (id: number) => Promise<unknown>
+): Promise<{ ok: number; fail: string[] }> {
+  let ok = 0;
+  const fail: string[] = [];
+  for (const k of keys) {
+    try {
+      await run(Number(k));
+      ok++;
+    } catch (e) {
+      fail.push(e instanceof Error ? e.message : `行 ${String(k)}`);
+    }
+  }
+  return { ok, fail };
+}
+
 export function DataTable<T extends object>(props: DataTableProps<T>) {
-  const { modal } = App.useApp();
+  const { modal, message } = App.useApp();
   const {
     rowKey,
     columns,
@@ -148,7 +167,13 @@ export function DataTable<T extends object>(props: DataTableProps<T>) {
 
   function runBatch(label: string, danger: boolean | undefined, confirm: string | undefined, run: () => Promise<void> | void) {
     const doRun = async () => {
-      await run();
+      try {
+        await run();
+      } catch (e) {
+        // 兜底：回调内部未捕获的业务异常必须提示用户（禁止静默失败）；保留选中便于重试
+        message.error(e instanceof Error ? e.message : `${label}失败`);
+        return;
+      }
       setSelectedKeys([]);
     };
     if (confirm) {

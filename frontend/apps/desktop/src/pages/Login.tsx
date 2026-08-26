@@ -266,7 +266,7 @@ export function LoginPage() {
         open={forgotOpen}
         footer={null}
         onCancel={() => setForgotOpen(false)}
-        destroyOnHidden
+        destroyOnHidden forceRender
         afterOpenChange={(o) => { if (o) forgotForm.resetFields(); }}
       >
         {forgotStep === "ask" && (
@@ -311,7 +311,7 @@ export function LoginPage() {
         open={registerOpen}
         onOk={() => void doRegister()}
         onCancel={() => setRegisterOpen(false)}
-        destroyOnHidden
+        destroyOnHidden forceRender
         afterOpenChange={(o) => { if (o) registerForm.resetFields(); }}
       >
         <Form form={registerForm} layout="vertical">

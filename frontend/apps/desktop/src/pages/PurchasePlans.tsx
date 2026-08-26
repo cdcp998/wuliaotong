@@ -358,7 +358,7 @@ export function PurchasePlansPage() {
         onCancel={() => setOpen(false)}
         confirmLoading={saving}
         width={860}
-        destroyOnHidden
+        destroyOnHidden forceRender
         footer={
           <Space style={{ display: "flex", justifyContent: "flex-end" }}>
             <Button onClick={() => setOpen(false)}>取消</Button>

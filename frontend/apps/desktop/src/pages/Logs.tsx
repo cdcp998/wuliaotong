@@ -7,7 +7,7 @@ import dayjs from "dayjs";
 
 import { adminApi, type OperationLog } from "@wlt/shared";
 
-import { formatDiffValue, maskValue, parseDiff, summarizeDiff, TABLE_LABELS } from "./logFieldMeta";
+import { fieldLabel, formatDiffValue, localizeJson, maskValue, parseDiff, queryParamText, summarizeDiff, urlTailLabel } from "./logFieldMeta";
 import { ExportFormatModal, type ExportFormatSpec } from "../components/ExportFormatModal";
 import { LOGS_FIELDS } from "./exportFields";
 
@@ -95,37 +95,40 @@ export function LogsPage() {
   /** 导出预览：后端 preview=1 返回前 10 条真实数据（源列全序）。 */
   const previewRows = () => adminApi.logsExportPreview(exportParams).then((r) => r.rows);
 
-  /** 详情列摘要：优先字段级 diff（「修改了 用户状态、手机号」），无 diff 回退路径+参数摘录。 */
+  /** 详情列摘要：优先字段级 diff（「修改了 用户状态、手机号」）；
+   *  无 diff 依次回退：body 字段（汉化）→ 查询参数（仅可识别项）→ URL 尾段动作词。
+   *  所有回退均为 fail-closed：翻译不了的内容一律省略，英文词不上屏。 */
   function detailSummary(r: OperationLog): string {
     const s = summarizeDiff(r.diff, r.method);
     if (s) return s;
-    const seg = (r.url || "").split("/").filter(Boolean).pop() ?? "";
     const parts: string[] = [];
     if ((r.method === "PUT" || r.method === "POST" || r.method === "PATCH") && r.body) {
       try {
         const obj = JSON.parse(r.body) as Record<string, unknown>;
         const keys = Object.keys(obj).filter((k) => obj[k] !== "" && obj[k] !== null && obj[k] !== undefined);
-        if (keys.length) parts.push(`${keys.slice(0, 3).join("、")}${keys.length > 3 ? ` 等${keys.length}项` : ""}`);
+        if (keys.length) {
+          // 字段名汉化后去重，不显示英文原始字段
+          const labels = [...new Set(keys.map((k) => fieldLabel("", k)))];
+          parts.push(`${labels.slice(0, 3).join("、")}${labels.length > 3 ? ` 等${labels.length}项` : ""}`);
+        }
       } catch { /* 非JSON忽略 */ }
     }
-    if (r.params && r.params !== "{}") {
-      try {
-        const q = JSON.parse(r.params) as Record<string, unknown>;
-        const kv = Object.entries(q).slice(0, 2).map(([k, v]) => `${k}=${String(v)}`).join(" ");
-        if (kv) parts.push(kv);
-      } catch { /* 忽略 */ }
+    const qp = queryParamText(r.params);
+    if (qp) parts.push(qp);
+    if (!parts.length) {
+      const tail = urlTailLabel(r.url); // install→安装、enable→启用…；未识别返回 null 省略
+      if (tail) parts.push(tail);
     }
-    if (!parts.length && seg) parts.push(seg);
     return parts.join(" · ") || "—";
   }
 
-  /** 解析 body/params 为美化 JSON 文本（失败原样返回）。 */
-  function prettyJson(v: string | undefined): string {
+  /** 解析 body 为「字段名汉化 + 敏感值脱敏」的美化 JSON（失败提示占位，不回退原始内容）。 */
+  function prettyLocalized(v: string | undefined): string {
     if (!v) return "";
     try {
-      return JSON.stringify(JSON.parse(v), null, 2);
+      return JSON.stringify(localizeJson(JSON.parse(v)), null, 2);
     } catch {
-      return v;
+      return "（非 JSON 内容，已省略）";
     }
   }
 
@@ -137,7 +140,7 @@ export function LogsPage() {
       key: String(i),
       label: (
         <span style={{ fontSize: 13 }}>
-          <b>{TABLE_LABELS[row.table] ?? row.table}</b>
+          <b>{row.tableLabel}</b>
           {row.pk && <span style={{ color: "#6A748A", marginLeft: 6 }}>#{row.pk}</span>}
           <Tag style={{ marginLeft: 8, borderRadius: 999, background: row.op === "delete" ? "#FDEBEC" : row.op === "insert" ? "#E8F9EF" : "#EAEFFF", color: row.op === "delete" ? "#B91C1C" : row.op === "insert" ? "#15803D" : "#3B5BDB", borderColor: "transparent" }}>
             {row.op === "insert" ? "新增" : row.op === "delete" ? "删除" : "修改"}
@@ -159,7 +162,7 @@ export function LogsPage() {
             const isRemoved = f.new === null && f.old !== null;
             return (
               <div key={f.field} style={{ display: "flex", alignItems: "stretch", gap: 12 }}>
-                <div style={{ width: 130, fontSize: 12.5, fontWeight: 600, color: "#1E2433", paddingTop: 5 }} title={f.field}>{f.label}</div>
+                <div style={{ width: 130, fontSize: 12.5, fontWeight: 600, color: "#1E2433", paddingTop: 5 }}>{f.label}</div>
                 {/* 旧值 */}
                 <div
                   style={{
@@ -316,20 +319,19 @@ export function LogsPage() {
 
       <Drawer title="日志详情" open={Boolean(detail)} onClose={() => setDetail(null)} size={560}>
         {detail && (
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={12} style={{ width: "100%" }}>
             <LogField label="时间">{detail.created_at}</LogField>
             <LogField label="操作人">{detail.username}</LogField>
             <LogField label="模块">{detail.module}</LogField>
             <LogField label="动作">{detail.action}</LogField>
             <LogField label="方法">
-              <Tag style={{ borderRadius: 999, background: METHOD_LABELS[detail.method]?.bg ?? "#EFF3FC", color: METHOD_LABELS[detail.method]?.fg ?? "#5B6478", borderColor: "transparent", marginInlineEnd: 6 }}>{METHOD_CN(detail.method)}</Tag>
-              <span style={{ fontSize: 12, color: "#6A748A" }}>{detail.method}</span>
+              <Tag style={{ borderRadius: 999, background: METHOD_LABELS[detail.method]?.bg ?? "#EFF3FC", color: METHOD_LABELS[detail.method]?.fg ?? "#5B6478", borderColor: "transparent" }}>{METHOD_CN(detail.method)}</Tag>
             </LogField>
             <LogField label="状态码" mono>{detail.status_code ? String(detail.status_code) : "—"}</LogField>
             <LogField label="IP">{detail.ip}</LogField>
             <LogField label="耗时">{detail.duration_ms} ms</LogField>
             <LogField label="URL" mono>{detail.url || "—"}</LogField>
-            {/* 字段级修改前后对比（优先展示；无 diff 的历史日志回退原始 JSON） */}
+            {/* 字段级修改前后对比（优先展示；无 diff 的历史日志回退汉化后的提交内容 JSON） */}
             {parseDiff(detail.diff).length > 0 ? (
               <div>
                 <div style={{ fontSize: 12, color: "#6A748A", marginBottom: 6 }}>变更内容（字段级前后对照）</div>
@@ -338,37 +340,12 @@ export function LogsPage() {
             ) : detail.body && detail.body !== "{}" ? (
               <div>
                 <div style={{ fontSize: 12, color: "#6A748A", marginBottom: 6 }}>
-                  提交内容（具体改动）
+                  提交内容（具体改动 · 字段已汉化）
                   {detail.method === "PUT" && <span style={{ marginLeft: 6, color: "#B45309" }}>· 修改后各字段值</span>}
                 </div>
-                <pre style={{ margin: 0, padding: 10, background: "#F0F5FF", border: "1px solid #D9E3FF", borderRadius: 8, fontSize: 12, color: "#1E2433", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 320, overflowY: "auto" }}>{prettyJson(detail.body)}</pre>
+                <pre style={{ margin: 0, padding: 10, background: "#F0F5FF", border: "1px solid #D9E3FF", borderRadius: 8, fontSize: 12, color: "#1E2433", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 320, overflowY: "auto" }}>{prettyLocalized(detail.body)}</pre>
               </div>
             ) : null}
-            <Collapse
-              size="small"
-              items={[
-                {
-                  key: "raw",
-                  label: <span style={{ fontSize: 12, color: "#6A748A" }}>原始数据（查询参数 / 请求体）</span>,
-                  children: (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div>
-                        <div style={{ fontSize: 11.5, color: "#6A748A", marginBottom: 4 }}>查询参数</div>
-                        <pre style={{ margin: 0, padding: 8, background: "#F6F8FE", borderRadius: 8, fontSize: 11.5, whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 160, overflowY: "auto" }}>{prettyJson(detail.params) || "—"}</pre>
-                      </div>
-                      {detail.body ? (
-                        <div>
-                          <div style={{ fontSize: 11.5, color: "#6A748A", marginBottom: 4 }}>请求体（脱敏）</div>
-                          <pre style={{ margin: 0, padding: 8, background: "#F6F8FE", borderRadius: 8, fontSize: 11.5, whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 200, overflowY: "auto" }}>{prettyJson(detail.body)}</pre>
-                        </div>
-                      ) : null}
-                    </div>
-                  ),
-                },
-              ]}
-              bordered={false}
-              style={{ background: "#F6F8FE", borderRadius: 10 }}
-            />
           </Space>
         )}
       </Drawer>

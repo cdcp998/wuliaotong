@@ -7,7 +7,7 @@ import { useNavigate, useSearchParams } from "react-router";
 
 import { baseApi, fileApi, fileUrl, ocrApi, purchaseApi, purchaseIn, purchasePlanApi, resolveByBarcode, type CategoryNode, type HistoryPriceRow, type Product, type PurchaseInBill, type PurchaseInDetail, type Shelf, type Supplier } from "@wlt/shared";
 
-import { DataTable } from "../components/DataTable";
+import { DataTable, runBatchEach } from "../components/DataTable";
 
 import { BillDetailDrawer } from "../components/BillDetailDrawer";
 
@@ -880,9 +880,10 @@ export function PurchaseInPage() {
         pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
         rowSelection
         onBatchDelete={async (keys) => {
-          for (const k of keys) await purchaseApi.void(Number(k));
-          message.success(`已作废 ${keys.length} 张入库单`);
+          const r = await runBatchEach(keys, (id) => purchaseApi.void(id));
           void load();
+          if (r.ok) message.success(`已作废 ${r.ok} 张入库单`);
+          if (r.fail.length) message.error(`${r.fail.length} 张作废失败：${r.fail[0]}${r.fail.length > 1 ? " 等" : ""}`);
         }}
       />
       </div>
@@ -935,6 +936,7 @@ export function PurchaseInPage() {
         onCancel={() => setOpen(false)}
         width="min(1760px, 97vw)"
         destroyOnHidden
+        forceRender
         styles={{
           body: {
             maxHeight: "calc(100dvh - 240px)",
@@ -1038,7 +1040,7 @@ export function PurchaseInPage() {
         confirmLoading={locSaving}
         onCancel={() => { setLocModal(null); locForm.resetFields(); }}
         width={440}
-        destroyOnHidden
+        destroyOnHidden forceRender
       >
         <p style={{ color: "#5B6478", fontSize: 12, marginTop: 0 }}>
           新仓位将立即保存并选中当前明细行；编码自动生成（仓库编码-货架编码-层号）。
@@ -1061,7 +1063,7 @@ export function PurchaseInPage() {
       </Modal>
 
       {/* 无材料新增（条码/OCR 未匹配） */}
-      <Modal title="材料不存在，是否新增材料？" open={materialModal.open} onOk={() => void createMaterial()} onCancel={() => setMaterialModal((s) => ({ ...s, open: false }))} width={480} destroyOnHidden>
+      <Modal title="材料不存在，是否新增材料？" open={materialModal.open} onOk={() => void createMaterial()} onCancel={() => setMaterialModal((s) => ({ ...s, open: false }))} width={480} destroyOnHidden forceRender>
         <p style={{ color: "#5B6478", fontSize: 12, marginTop: 0 }}>系统未匹配到该条码/名称对应的材料，确认信息后新增（条码可选），保存后自动带入当前明细行。</p>
         <Form form={materialForm} layout="vertical">
           <Form.Item name="name" label="材料名称" rules={[{ required: true, message: "请输入材料名称" }]} initialValue={materialModal.name}>

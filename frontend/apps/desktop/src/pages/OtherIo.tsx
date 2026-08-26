@@ -277,7 +277,7 @@ export function OtherIoPage() {
                 const b = borrows.find((x) => x.id === v);
                 setForm((f) => ({ ...f, remark: b ? `借出单号:${b.bill_no}` : "" }));
               }}
-              onDropdownVisibleChange={(o) => { if (o) void loadBorrows(); }}
+              onOpenChange={(o) => { if (o) void loadBorrows(); }}
             />
             <span style={{ fontSize: 11.5, color: "#6A748A", marginLeft: 8 }}>归还时关联原借出单，实现借出/归还配对</span>
           </div>

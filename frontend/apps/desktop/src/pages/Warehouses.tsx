@@ -383,7 +383,7 @@ export function WarehousesPage() {
       </div>
 
       {/* 仓库 Modal */}
-      <Modal title={whModal.editing ? "编辑仓库" : "新建仓库"} open={whModal.open} onOk={() => void saveWarehouse()} onCancel={() => setWhModal({ open: false, editing: null })} confirmLoading={busy} destroyOnHidden
+      <Modal title={whModal.editing ? "编辑仓库" : "新建仓库"} open={whModal.open} onOk={() => void saveWarehouse()} onCancel={() => setWhModal({ open: false, editing: null })} confirmLoading={busy} destroyOnHidden forceRender
         afterOpenChange={(o) => { if (!o) return; if (whModal.editing) whForm.setFieldsValue(whModal.editing); else whForm.resetFields(); }}>
         <Form form={whForm} layout="vertical">
           <Form.Item name="name" label="仓库名称" rules={[{ required: true, message: "请输入名称" }]}>
@@ -395,7 +395,7 @@ export function WarehousesPage() {
       </Modal>
 
       {/* 货架 Modal（新建支持批量生成库位） */}
-      <Modal title={shelfModal.editing ? "编辑货架" : "新建货架（按层×行×列批量生成库位）"} open={shelfModal.open} onOk={() => void saveShelf()} onCancel={() => setShelfModal({ open: false, editing: null })} confirmLoading={busy} destroyOnHidden
+      <Modal title={shelfModal.editing ? "编辑货架" : "新建货架（按层×行×列批量生成库位）"} open={shelfModal.open} onOk={() => void saveShelf()} onCancel={() => setShelfModal({ open: false, editing: null })} confirmLoading={busy} destroyOnHidden forceRender
         afterOpenChange={(o) => { if (!o) return; if (shelfModal.editing) shelfForm.setFieldsValue(shelfModal.editing); else shelfForm.resetFields(); }}>
         <Form form={shelfForm} layout="vertical">
           {!shelfModal.editing && (
@@ -422,7 +422,7 @@ export function WarehousesPage() {
       </Modal>
 
       {/* 库位 Modal（单格：层行列） */}
-      <Modal title={`新建库位（${locModal.shelf?.code || ""}）`} open={locModal.open} onOk={() => void saveLocation()} onCancel={() => setLocModal({ open: false, shelf: null })} confirmLoading={busy} destroyOnHidden
+      <Modal title={`新建库位（${locModal.shelf?.code || ""}）`} open={locModal.open} onOk={() => void saveLocation()} onCancel={() => setLocModal({ open: false, shelf: null })} confirmLoading={busy} destroyOnHidden forceRender
         afterOpenChange={(o) => { if (o) locForm.resetFields(); }}>
         <Form form={locForm} layout="vertical">
           <Space wrap>

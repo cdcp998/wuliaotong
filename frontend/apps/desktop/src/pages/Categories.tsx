@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   App,
@@ -370,7 +370,7 @@ export function CategoriesPage() {
         <Alert
           type="error"
           showIcon
-          message="分类数据加载失败"
+          title="分类数据加载失败"
           description={err}
           action={<Button size="small" danger onClick={() => void load()}>重试</Button>}
           style={{ marginBottom: 16 }}
@@ -618,7 +618,7 @@ export function CategoriesPage() {
         onOk={() => void save()}
         onCancel={() => setOpen(false)}
         width={420}
-        destroyOnHidden
+        destroyOnHidden forceRender
         afterOpenChange={(o) => {
           if (!o) return;
           if (editing) {

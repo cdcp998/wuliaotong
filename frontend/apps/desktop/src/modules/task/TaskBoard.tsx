@@ -1,5 +1,5 @@
-/** task 模块：维修任务看板（/task/board，task:dispatch）——统一任务池合并视图（v6 简略卡片）。
- *  · v2 无锁协作三活动列（待领取›进行中›待审核）；过程不锁人、人员留痕；审核通过即归档进历史；
+/** task 模块：任务看板（/task/board，task:dispatch）——统一任务池合并视图（v6 简略卡片）。
+ *  · v2 无锁协作三活动列（待领取›进行中›待审核）；
  *  · 卡片简略展示：类型/优先级/标题/一行摘要/参与人/排期；点击弹出详情 Modal（完整信息+操作）；
  *  · 「发布任务」走标签式弹窗（设备任务/线缆任务，嵌入对应模块表单）；
  *  · 支持 ?focus_task=c12|d3 跨页定位。 */
@@ -68,7 +68,7 @@ export function TaskBoardPage() {
       {/* 页头 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0 }}>维修任务看板</h2>
+          <h2 style={{ margin: 0 }}>任务看板</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
             统一任务池{deviceEnabled ? "（线缆 + 设备合并显示）" : ""} · 无锁协作：维修人员均可领取/接力处理，人员留痕；审核通过即归档
           </p>

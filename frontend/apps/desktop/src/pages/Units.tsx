@@ -5,7 +5,7 @@ import { ImportOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons"
 
 import { baseApi, type Unit } from "@wlt/shared";
 
-import { DataTable } from "../components/DataTable";
+import { DataTable, runBatchEach } from "../components/DataTable";
 
 /** 国标常用计量单位（设计页 16：国标 51 项）——材料/入库场景常用 SI 单位 + 计数单位。 */
 const GB_UNITS: { name: string; remark: string }[] = [
@@ -183,9 +183,10 @@ export function UnitsPage() {
           pagination={false}
           rowSelection
           onBatchDelete={async (keys) => {
-            for (const k of keys) await baseApi.deleteUnit(Number(k));
-            message.success(`已删除 ${keys.length} 个单位`);
+            const r = await runBatchEach(keys, (id) => baseApi.deleteUnit(id));
             void load();
+            if (r.ok) message.success(`已删除 ${r.ok} 个单位`);
+            if (r.fail.length) message.error(`${r.fail.length} 个单位删除失败：${r.fail[0]}${r.fail.length > 1 ? " 等" : ""}`);
           }}
         />
       </div>
@@ -196,7 +197,7 @@ export function UnitsPage() {
         onOk={() => void save()}
         onCancel={() => setOpen(false)}
         width={420}
-        destroyOnHidden
+        destroyOnHidden forceRender
         afterOpenChange={(o) => {
           if (!o) return;
           if (editing) form.setFieldsValue({ name: editing.name, remark: editing.remark ?? "" });

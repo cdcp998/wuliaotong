@@ -299,7 +299,7 @@ export function SuppliersPage() {
         onOk={() => void save()}
         onCancel={() => setOpen(false)}
         width={520}
-        destroyOnHidden
+        destroyOnHidden forceRender
         afterOpenChange={(o) => {
           if (!o) return;
           if (editing) form.setFieldsValue({ code: editing.code, name: editing.name, contact: editing.contact, phone: editing.phone, address: editing.address, remark: editing.remark });
@@ -333,7 +333,7 @@ export function SuppliersPage() {
       >
         {detail && (
           <>
-            <Space style={{ marginBottom: 16 }} size={4} direction="vertical">
+            <Space style={{ marginBottom: 16 }} size={4} orientation="vertical">
               <div>编码：{detail.code}　联系人：{detail.contact || "-"}　电话：{detail.phone || "-"}</div>
               <div>地址：{detail.address || "-"}</div>
               <div>备注：{detail.remark || "-"}</div>

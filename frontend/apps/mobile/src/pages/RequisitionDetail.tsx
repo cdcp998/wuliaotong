@@ -1,4 +1,4 @@
-﻿import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Button, Dialog, NavBar, Popup, Tag, Toast } from "antd-mobile";
 import { useNavigate, useParams } from "react-router";
 
@@ -302,12 +302,8 @@ export function RequisitionDetailPage() {
         )}
 
         {/* 操作按钮 */}
-        {detail.status === 1 && isOwner && (
-          <Button block fill="outline" color="danger" style={{ height: 40, borderRadius: 9, marginBottom: 8 }} onClick={cancelBill}>
-            取消申请（回补库存）
-          </Button>
-        )}
-        {detail.status === 2 && isOwner && (
+        {/* 取消申请：本人或管理员均可；管理员可代为取消（测试导入等申请人无法操作的卡单解卡入口） */}
+        {(detail.status === 1 || detail.status === 2) && (isOwner || isAdmin) && (
           <Button block fill="outline" color="danger" style={{ height: 40, borderRadius: 9, marginBottom: 8 }} onClick={cancelBill}>
             取消申请（回补库存）
           </Button>

@@ -120,7 +120,8 @@ export function RolesPage() {
       map.get(gk)!.push(p);
     }
     const out: { key: string; title: string; meta: { color: string; bg: string }; items: SysPermission[] }[] = [];
-    for (const k of [...GROUP_ORDER, ...map.keys()]) {
+    // 去重合并：GROUP_ORDER 与权限前缀派生的分组键可能重叠（如 device），重复会导致 React 同名 key 告警
+    for (const k of new Set([...GROUP_ORDER, ...map.keys()])) {
       if (k === "other") continue;
       const items = map.get(k);
       if (items?.length) out.push({ key: k, title: GROUP_META[k]?.title ?? "其他", meta: GROUP_META[k] ?? { color: "#5B6478", bg: "#F6F8FE" }, items });
@@ -192,18 +193,22 @@ export function RolesPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 560, overflowY: "auto" }}>
             {filteredRoles.map((r) => {
               const active = editingPerms?.id === r.id;
+              // 卡片内含复制/删除按钮：HTML 禁止 <button> 嵌套，外层改用 div[role=button] + 键盘可达性
+              const selectRole = () => {
+                if (r.code === "super_admin") {
+                  message.info("超级管理员拥有全部权限，无需分配");
+                  return;
+                }
+                setEditingPerms(r);
+                setChecked(r.permission_ids);
+              };
               return (
-                <button
+                <div
                   key={r.id}
-                  type="button"
-                  onClick={() => {
-                    if (r.code === "super_admin") {
-                      message.info("超级管理员拥有全部权限，无需分配");
-                      return;
-                    }
-                    setEditingPerms(r);
-                    setChecked(r.permission_ids);
-                  }}
+                  role="button"
+                  tabIndex={0}
+                  onClick={selectRole}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectRole(); } }}
                   style={{
                     textAlign: "left",
                     cursor: "pointer",
@@ -249,7 +254,7 @@ export function RolesPage() {
                     <Tag style={{ marginInlineEnd: 0, borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent" }}>{r.code === "super_admin" ? "全部权限" : `${r.permission_ids.length} 项权限`}</Tag>
                     {r.department_name && <Tag style={{ marginInlineEnd: 0, borderRadius: 999 }}>{r.department_name}</Tag>}
                   </span>
-                </button>
+                </div>
               );
             })}
             {!filteredRoles.length && !loading && <div style={{ textAlign: "center", color: token.colorTextTertiary, padding: 24 }}>暂无角色</div>}
@@ -343,7 +348,7 @@ export function RolesPage() {
         open={creating}
         onOk={() => void createRole()}
         onCancel={() => setCreating(false)}
-        destroyOnHidden
+        destroyOnHidden forceRender
         afterOpenChange={(o) => { if (o) form.resetFields(); }}
       >
         <Form form={form} layout="vertical">
@@ -368,7 +373,7 @@ export function RolesPage() {
         onOk={() => void doCopyRole()}
         okText="复制"
         onCancel={() => setCopyTarget(null)}
-        destroyOnHidden
+        destroyOnHidden forceRender
       >
         <p style={{ color: "#5B6478", fontSize: 12, marginTop: 0 }}>新角色将复制「{copyTarget?.name}」的全部权限（{copyTarget?.permission_ids.length ?? 0} 项）。</p>
         <Form form={copyForm} layout="vertical">

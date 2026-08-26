@@ -317,19 +317,22 @@ def test_ai_suggestion_flow(monkeypatch):
     record_id = recs[0]["id"]
     monkeypatch.setattr(
         "app.api.ocr.get_llm",
-        lambda db, name: _FakeMMLLM('{"name": "新型密封圈", "spec": "30x15", "category": "密封件", "note": ""}'),
+        lambda db, name: _FakeMMLLM('{"name": "新型密封圈", "spec": "30x15", "barcode": "6901234567890", "category": "密封件", "note": ""}'),
     )
     r = client.post(f"/api/v1/ocr/match?record_id={record_id}")
     assert r.json()["code"] == 0, r.text
     sug_id = r.json()["data"]["suggestion_id"]
     assert r.json()["data"]["product_name"] == "新型密封圈"
 
-    # 确认新增商品
-    r = client.post(f"/api/v1/ai-suggestions/{sug_id}/accept?name=新型密封圈&purchase_price=3.50")
+    # 确认新增商品（显式传 spec 覆盖建议值；条码未传 → 回填建议条码）
+    r = client.post(f"/api/v1/ai-suggestions/{sug_id}/accept?name=新型密封圈&spec=30x15mm&purchase_price=3.50")
     assert r.json()["code"] == 0, r.text
     pid = r.json()["data"]["product_id"]
     assert client.get(f"/api/v1/products/{pid}").json()["data"]["name"] == "新型密封圈"
     assert client.get(f"/api/v1/products/{pid}").json()["data"]["purchase_price"] == "3.50"
+    detail = client.get(f"/api/v1/products/{pid}").json()["data"]
+    assert detail["spec"] == "30x15mm"          # 显式参数优先
+    assert detail["barcode"] == "6901234567890"  # 未传时回填 AI 建议条码
 
     # 重复处理 → 4002
     assert client.post(f"/api/v1/ai-suggestions/{sug_id}/accept").json()["code"] == 4002

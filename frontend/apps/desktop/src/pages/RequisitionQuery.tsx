@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Drawer, Input, Modal, Space, Tabs, Tag } from "antd";
-import { ExclamationCircleFilled } from "@ant-design/icons";
+import { App, Button, Drawer, Input, Modal, Popconfirm, Space, Tabs, Tag } from "antd";
+import { DeleteOutlined, ExclamationCircleFilled } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { FileImage, requisitionApi, type RequisitionBill, type RequisitionDetail } from "@wlt/shared";
 
-import { DataTable } from "../components/DataTable";
+import { DataTable, runBatchEach } from "../components/DataTable";
 
 import { GeoAddressPanel } from "../components/GeoAddressPanel";
 
@@ -58,6 +58,17 @@ export function RequisitionQueryPage() {
     }
   }
 
+  /** 删除已取消的领用单（连同明细，不可恢复）。 */
+  async function removeBill(r: RequisitionBill) {
+    try {
+      await requisitionApi.remove(r.id);
+      message.success(`已删除 ${r.bill_no}`);
+      void load(status, keyword, page);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "删除失败");
+    }
+  }
+
   const columns: ColumnsType<RequisitionBill> = [
     { title: "单号", dataIndex: "bill_no", width: 150, render: (v: string, r) => <a onClick={() => void openDetail(r)}><b style={{ color: "#3B5BDB" }}>{v}</b></a> },
     { title: "申请人", dataIndex: "applicant_name", width: 100 },
@@ -87,9 +98,22 @@ export function RequisitionQueryPage() {
     { title: "申请时间", dataIndex: "created_at", width: 150, render: (v?: string) => (v ? v.slice(0, 16) : "-") },
     {
       title: "操作",
-      width: 90,
+      width: 150,
       render: (_, r) => (
-        <Button type="link" size="small" onClick={() => void openDetail(r)}>查看详情</Button>
+        <Space size={0}>
+          <Button type="link" size="small" onClick={() => void openDetail(r)}>查看详情</Button>
+          {r.status === 5 && (
+            <Popconfirm
+              title="删除该已取消的申请？"
+              description="将连同明细一起删除，不可恢复。"
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void removeBill(r)}
+            >
+              <Button type="link" size="small" danger icon={<DeleteOutlined />} aria-label="删除" />
+            </Popconfirm>
+          )}
+        </Space>
       ),
     },
   ];
@@ -141,7 +165,28 @@ export function RequisitionQueryPage() {
           size="middle"
           locale={{ emptyText: "暂无领用单" }}
           pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } }, showTotal: (t) => `共 ${t} 条` }}
-          rowSelection onBatchDelete={async (keys) => { for (const k of keys) await requisitionApi.cancel(Number(k)); message.success(`已取消 ${keys.length} 张申请`); void load(status, keyword, page); }}
+          rowSelection
+          batchActions={[
+            {
+              label: "批量清理",
+              danger: true,
+              confirm: "待完成工作 / 待审计的申请将自动取消并回补库存；已取消的申请将被彻底删除（不可恢复）；已完成 / 已驳回的无法处理。",
+              onClick: async (keys) => {
+                // 按行状态路由：仅已取消(5)走删除，其余交给取消接口（后端会对终态给出明确原因）
+                const byId = new Map<number, RequisitionBill>(list.map((x) => [x.id, x]));
+                const del = keys.filter((k) => byId.get(Number(k))?.status === 5);
+                const can = keys.filter((k) => byId.get(Number(k))?.status !== 5);
+                const empty = { ok: 0, fail: [] as string[] };
+                const rd = del.length ? await runBatchEach(del, (id) => requisitionApi.remove(id)) : empty;
+                const rc = can.length ? await runBatchEach(can, (id) => requisitionApi.cancel(id)) : empty;
+                void load(status, keyword, page);
+                if (rc.ok) message.success(`已取消 ${rc.ok} 张申请`);
+                if (rd.ok) message.success(`已删除 ${rd.ok} 张已取消申请`);
+                const fails = [...rc.fail, ...rd.fail];
+                if (fails.length) message.error(`${fails.length} 张处理失败：${fails[0]}${fails.length > 1 ? " 等" : ""}`);
+              },
+            },
+          ]}
         />
       </div>
 

@@ -3,47 +3,31 @@
 统一 `OCRClient` 接口；`RapidOCREngine`（Windows，RapidOCR-json **单次进程**：每次识别新建进程，结果返回即销毁）。
 引擎选择存 sys_config（ocr.engine = rapidocr/paddle），由 `get_ocr_engine()` 工厂创建；
 切换引擎只影响本层，结构化/匹配/大模型链路不变。
+
+依赖方向：rapidocr_api / paddleocr_api → base（共享契约）← client（工厂）。
+client 对外 re-export 契约符号（OCRInitError/OcrLine/OCRClient）以兼容既有调用方。
+PaddleOCREngine 仍为惰性导入：未选 paddle 引擎时不承担 PIL 等导入成本（解环后已无循环风险）。
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.sys import SysConfig
+from app.services.ocr.base import OCRClient, OCRInitError, OcrLine
 from app.services.ocr.rapidocr_api import OcrAPI
 
-
-class OCRInitError(RuntimeError):
-    """OCR 引擎初始化/识别失败（对应错误码 5001）。"""
-
-
-class OcrLine:
-    """与引擎无关的结构化识别结果（一行文字）。"""
-
-    __slots__ = ("text", "score", "box")
-
-    def __init__(self, text: str, score: float, box: list) -> None:
-        self.text = text
-        self.score = score
-        self.box = box
-
-
-class OCRClient(Protocol):
-    """所有 OCR 引擎必须实现的统一接口。"""
-
-    name: str
-
-    def recognize(self, image_bytes: bytes) -> list[OcrLine]:
-        """识别图片字节流，返回按行排列的文字结果。"""
-        ...
-
-    def health(self) -> bool:
-        """引擎是否可用。"""
-        ...
+__all__ = [
+    "OCRClient",
+    "OCRInitError",
+    "OcrLine",
+    "RapidOCREngine",
+    "get_ocr_engine",
+    "ocr_engine_available",
+]
 
 
 class RapidOCREngine:
@@ -80,6 +64,7 @@ class RapidOCREngine:
 
 # PaddleOCREngine：PP-OCR（paddleocr 3.x，Windows/Linux CPU 均可用）
 # 模型版本由 sys_config ocr.model_version 配置（PP-OCRv4/v5/v6，默认 PP-OCRv6）
+# 实现见 paddleocr_api.py（依赖方向：paddleocr_api → base，与本文件无环）
 
 
 def get_ocr_engine(db: Session | None = None, engine: str | None = None) -> OCRClient:
@@ -104,7 +89,7 @@ def get_ocr_engine(db: Session | None = None, engine: str | None = None) -> OCRC
             cfg = db.scalar(select(SysConfig).where(SysConfig.config_key == "ocr.model_version"))
             if cfg and cfg.config_value:
                 model_version = cfg.config_value
-        from app.services.ocr.paddleocr_api import PaddleOCREngine
+        from app.services.ocr.paddleocr_api import PaddleOCREngine  # noqa: PLC0415
 
         return PaddleOCREngine(model_version=model_version)
     raise ValueError(f"未知 OCR 引擎: {engine}")

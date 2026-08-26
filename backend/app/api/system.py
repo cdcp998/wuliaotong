@@ -8,7 +8,7 @@ from io import BytesIO
 
 import httpx
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
@@ -484,8 +484,10 @@ def watermark_preview(req: WatermarkPreviewReq, db: Session = Depends(get_db)):
     )
     buf = BytesIO()
     img.save(buf, format="PNG")
-    buf.seek(0)
-    return StreamingResponse(buf, media_type="image/png")
+    # 整包 Response 而非 StreamingResponse：POST 带请求体时，限流中间件(BaseHTTPMiddleware)
+    # 与流式响应的断开监听冲突会抛 "Unexpected message received: http.request"（starlette 已知问题）；
+    # 预览图仅数十 KB，直接整包返回无此问题。
+    return Response(content=buf.getvalue(), media_type="image/png")
 
 
 @router.get("/llm-logs", dependencies=[Depends(require_permission("sys:llm-log"))])

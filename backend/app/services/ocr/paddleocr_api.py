@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from app.services.ocr.client import OCRInitError, OcrLine
+from app.services.ocr.base import OCRInitError, OcrLine
 
 # PP-OCR/PaddleX 模型缓存根目录：backend/model（下载与加载均使用该目录）
 MODEL_DIR = Path(__file__).resolve().parents[3] / "model"

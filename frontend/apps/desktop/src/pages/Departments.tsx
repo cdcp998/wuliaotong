@@ -5,7 +5,7 @@ import { PlusOutlined } from "@ant-design/icons";
 
 import { adminApi, baseApi, type Department, type Shelf } from "@wlt/shared";
 
-import { DataTable } from "../components/DataTable";
+import { DataTable, runBatchEach } from "../components/DataTable";
 
 /** 单位管理（电脑端，超管 dept:manage）：组织单位 + 可用货架关联；角色所属单位下的用户仅显示本单位货架。 */
 export function DepartmentsPage() {
@@ -87,9 +87,10 @@ export function DepartmentsPage() {
           pagination={false}
           rowSelection
           onBatchDelete={async (keys) => {
-            for (const k of keys) await adminApi.deleteDepartment(Number(k));
-            message.success(`已删除 ${keys.length} 个单位`);
+            const r = await runBatchEach(keys, (id) => adminApi.deleteDepartment(id));
             void load();
+            if (r.ok) message.success(`已删除 ${r.ok} 个单位`);
+            if (r.fail.length) message.error(`${r.fail.length} 个单位删除失败：${r.fail[0]}${r.fail.length > 1 ? " 等" : ""}`);
           }}
           actionsWidth={220}
           actions={(r) => (
@@ -121,7 +122,7 @@ export function DepartmentsPage() {
         open={creating}
         onOk={() => void create()}
         onCancel={() => setCreating(false)}
-        destroyOnHidden
+        destroyOnHidden forceRender
         afterOpenChange={(o) => { if (o) form.resetFields(); }}
       >
         <Form form={form} layout="vertical">

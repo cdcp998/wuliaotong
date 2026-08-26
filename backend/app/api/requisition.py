@@ -530,14 +530,37 @@ def cancel_requisition(
     r = db.get(OutRequisition, req_id)
     if r is None:
         raise BizError(E_NOT_FOUND, "领用单不存在")
-    if r.applicant_id != user.id:
-        raise BizError(E_NO_PERMISSION, "只能取消自己的申请", http_status=403)
+    # 本人可取消；管理员（超管/有审计权限）可代为取消——测试导入等申请人无法操作的卡单由此解卡
+    if r.applicant_id != user.id and not _is_admin_user(db, user):
+        raise BizError(E_NO_PERMISSION, "只能取消自己的申请（管理员可代为取消）", http_status=403)
     if r.status not in (REQ_STATUS_WORKING, REQ_STATUS_PENDING):
         raise BizError(E_BILL_STATUS, "仅待完成工作/待审计的申请可取消")
     # 取消回补库存（提交时已自动出库）
     _restock_items(db, r, user.id, "领用取消回补")
     r.status = REQ_STATUS_CANCELED
     _clear_requisition_todo(db, r.id)  # 已取消：管理员们的「待审计」待办自动已读
+    if r.applicant_id != user.id:
+        _notify(db, r.applicant_id, "领用申请已被取消", f"{r.bill_no} 已由管理员代为取消，库存已回补", "审批", link=f"/requisitions/{r.id}")
+    db.commit()
+    return ok()
+
+
+@router.delete("/requisitions/{req_id}", dependencies=[Depends(require_permission("req:audit"))])
+def delete_requisition(
+    req_id: int,
+    db: Session = Depends(get_db),
+) -> dict:
+    """删除领用单：仅已取消的单可删（测试导入等无效单据清理），连同明细一并移除。
+
+    已取消单的库存已在取消时回补，删除不再影响库存账；出入库流水按单号保留作历史追溯。
+    """
+    r = db.get(OutRequisition, req_id)
+    if r is None:
+        raise BizError(E_NOT_FOUND, "领用单不存在")
+    if r.status != REQ_STATUS_CANCELED:
+        raise BizError(E_BILL_STATUS, "仅已取消的申请可删除")
+    db.execute(OutRequisitionItem.__table__.delete().where(OutRequisitionItem.requisition_id == req_id))
+    db.delete(r)
     db.commit()
     return ok()
 

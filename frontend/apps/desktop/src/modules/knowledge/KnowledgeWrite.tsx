@@ -178,7 +178,7 @@ export function KnowledgeWritePage() {
       </div>
 
       <Alert style={{ marginBottom: 14 }} type="info" showIcon
-        message="AI 生成结果一律为草稿，必须人工审核发布后才对维修人员可见（方案 §5.7）。" />
+        title="AI 生成结果一律为草稿，必须人工审核发布后才对维修人员可见。" />
 
       {/* 状态 Tabs */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
@@ -202,7 +202,7 @@ export function KnowledgeWritePage() {
       </div>
 
       {/* 新建/编辑 */}
-      <Modal open={open} onCancel={() => setOpen(false)} onOk={save} confirmLoading={saving} title={editing ? "编辑知识" : "新建知识"} width={760} destroyOnHidden>
+      <Modal open={open} onCancel={() => setOpen(false)} onOk={save} confirmLoading={saving} title={editing ? "编辑知识" : "新建知识"} width={760} destroyOnHidden forceRender>
         <Form form={form} layout="vertical">
           <Form.Item name="title" label="标题" rules={[{ required: true, message: "请输入标题" }]}>
             <Input maxLength={200} />
@@ -222,7 +222,7 @@ export function KnowledgeWritePage() {
       </Modal>
 
       {/* AI 生成 */}
-      <Modal open={genOpen} onCancel={() => { if (!genRunning) setGenOpen(false); }} onOk={startGenerate} confirmLoading={genRunning} title="AI 生成知识（草稿）" width={560} destroyOnHidden>
+      <Modal open={genOpen} onCancel={() => { if (!genRunning) setGenOpen(false); }} onOk={startGenerate} confirmLoading={genRunning} title="AI 生成知识（草稿）" width={560} destroyOnHidden forceRender>
         <Form form={genForm} layout="vertical">
           <Form.Item name="topic" label="生成主题（故障/场景）" rules={[{ required: true, message: "请输入主题" }]}>
             <Input placeholder="如：光缆接线盒进水处理" />
@@ -235,7 +235,7 @@ export function KnowledgeWritePage() {
           </Form.Item>
         </Form>
         {genTask?.status === "failed" && genTask.last_error && (
-          <Alert type="error" showIcon message={`生成失败：${genTask.last_error}（可修改输入后重试）`} />
+          <Alert type="error" showIcon title={`生成失败：${genTask.last_error}（可修改输入后重试）`} />
         )}
       </Modal>
     </div>

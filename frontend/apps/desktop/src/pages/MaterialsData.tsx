@@ -849,7 +849,7 @@ export function MaterialsDataPage() {
         onOk={() => void saveCategory()}
         onCancel={() => setCatOpen(false)}
         width={420}
-        destroyOnHidden
+        destroyOnHidden forceRender
         afterOpenChange={(o) => {
           if (!o) return;
           if (catEditing) {

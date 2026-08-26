@@ -512,6 +512,25 @@ button:focus-visible,
   box-shadow: 0 4px 12px rgba(91, 127, 255, 0.3) !important;
 }
 
+/* --- Ghost 按钮兜底：antd v6 起 ghost 主按钮 = 白字 + 透明底 + 白描边（为深色背景设计），
+ *    放在浅色玻璃页面上文字必然与背景相融（如「仓库与货架·新建货架」）。
+ *    全站统一改为品牌浅蓝胶囊（§2.1 状态胶囊同族）：浅蓝底 + 品牌蓝字，任何浅色位置可读；
+ *    禁用态不套用本规则，交还 antd 默认灰字样式。 */
+.ant-btn.ant-btn-background-ghost:not(:disabled):not(.ant-btn-disabled) {
+  background: #eaefff !important;
+  border-color: #b9c8ff !important;
+  color: #3b5bdb !important;
+  box-shadow: none !important;
+}
+.ant-btn.ant-btn-background-ghost:not(:disabled):not(.ant-btn-disabled):hover {
+  background: #dde6ff !important;
+  border-color: #5b7fff !important;
+}
+.ant-btn.ant-btn-background-ghost:not(:disabled):not(.ant-btn-disabled):active {
+  background: #cfdcff !important;
+  border-color: #475fe8 !important;
+}
+
 /* --- 空状态 / 描述 / 分段 --- */
 .ant-empty .ant-empty-description {
   color: #6a748a;

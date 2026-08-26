@@ -149,7 +149,7 @@ export function CategorySelect({ value, onChange, tree, onReload, placeholder = 
           const c = catFlat.find((x) => x.id === v);
           onChange?.(v, c?.name ?? "");
         }}
-        dropdownRender={(menu) => (
+        popupRender={(menu) => (
           <>
             {menu}
             <Divider style={{ margin: "8px 0" }} />
@@ -173,6 +173,7 @@ export function CategorySelect({ value, onChange, tree, onReload, placeholder = 
         onCancel={() => setCatOpen(false)}
         width={420}
         destroyOnHidden
+        forceRender
         afterOpenChange={(o) => {
           if (!o) return;
           if (catIsEdit && catTarget) {

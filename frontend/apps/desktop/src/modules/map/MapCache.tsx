@@ -495,7 +495,7 @@ export function MapCachePage() {
         destroyOnHidden
         styles={{ body: { maxHeight: "70vh", overflow: "auto" } }}
       >
-        <Space direction="vertical" style={{ width: "100%" }} size={12}>
+        <Space orientation="vertical" style={{ width: "100%" }} size={12}>
           <Space align="center" style={{ width: "100%", justifyContent: "space-between" }}>
             <Typography.Text type="secondary">
               数据一律 WGS84 存储；仅显示层按源 coordinate_space 转换（gcj02/bd09 可配）。密钥加密存储、回读脱敏。「内置」为系统自带图源，已写入配置库，可测试/编辑/停用。
@@ -549,7 +549,7 @@ export function MapCachePage() {
         </Space>
       </Modal>
 
-      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); }} onOk={saveRegion} confirmLoading={saving} title={editing ? `编辑缓存区域：${editing.name}` : "新建缓存下载区域"} width={720} destroyOnHidden>
+      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); }} onOk={saveRegion} confirmLoading={saving} title={editing ? `编辑缓存区域：${editing.name}` : "新建缓存下载区域"} width={720} destroyOnHidden forceRender>
         <Form form={form} layout="vertical">
           <Form.Item name="name" label="区域名称" rules={[{ required: true, message: "请输入名称" }]}>
             <Input maxLength={100} placeholder="如 城东机房片区" />
@@ -587,7 +587,7 @@ export function MapCachePage() {
         </Form>
       </Modal>
 
-      <Modal open={srcModalOpen} onCancel={() => setSrcModalOpen(false)} onOk={saveSources} confirmLoading={srcSaving} title={srcEditKey ? `编辑图源：${srcEditKey}` : "新增图源（密钥加密入库，回读脱敏）"} width={560} destroyOnHidden>
+      <Modal open={srcModalOpen} onCancel={() => setSrcModalOpen(false)} onOk={saveSources} confirmLoading={srcSaving} title={srcEditKey ? `编辑图源：${srcEditKey}` : "新增图源（密钥加密入库，回读脱敏）"} width={560} destroyOnHidden forceRender>
         <Form form={srcForm} layout="vertical">
           <Space>
             <Form.Item name="key" label="源标识" rules={[{ required: true }]}>

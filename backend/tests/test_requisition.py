@@ -486,3 +486,75 @@ def test_requisition_edit_work_location():
     # 坐标范围校验（geo/reverse 参数非法 → 业务码 4006）
     assert client.get("/api/v1/geo/reverse?lat=999&lng=0").json()["code"] == 4006
     assert client.get("/api/v1/geo/reverse").json()["code"] == 4006
+
+
+def test_requisition_admin_cancel_and_delete():
+    """管理员代为取消（解卡测试导入等申请人无法操作的卡单）+ 仅已取消单可删除（连同明细）。"""
+    _login_admin()
+    wh_id, loc_id, pid = _setup_stock("10")
+    c = _login_tester()
+    r = c.post("/api/v1/requisitions", json={
+        "warehouse_id": wh_id, "use_location": "代取消车间", "use_reason": "卡单解卡",
+        "items": [{"product_id": pid, "qty": "4", "location_id": loc_id}],
+    })
+    assert r.json()["code"] == 0, r.text
+    req_id = r.json()["data"]["id"]
+    assert _stock_qty(pid) == "6.000"  # 提交即出库
+
+    # 未取消前不可删除 → 4002
+    assert client.delete(f"/api/v1/requisitions/{req_id}").json()["code"] == 4002
+
+    # 管理员代为取消（非申请人）→ 成功 + 库存回补 + 申请人收到通知
+    assert client.post(f"/api/v1/requisitions/{req_id}/cancel").json()["code"] == 0
+    assert client.get(f"/api/v1/requisitions/{req_id}").json()["data"]["status"] == 5
+    assert _stock_qty(pid) == "10.000"
+    notif = c.get("/api/v1/notifications").json()["data"]
+    assert any("代为取消" in n["content"] for n in notif["list"])
+
+    # 普通使用者无审计权限不能删除 → 403
+    assert c.delete(f"/api/v1/requisitions/{req_id}").status_code == 403
+
+    # 管理员删除已取消单 → 明细一并移除，详情 404
+    assert client.delete(f"/api/v1/requisitions/{req_id}").json()["code"] == 0
+    d = client.get(f"/api/v1/requisitions/{req_id}")
+    assert d.status_code == 404 and d.json()["code"] == 4003
+    # 再次删除 → 不存在
+    assert client.delete(f"/api/v1/requisitions/{req_id}").json()["code"] == 4003
+
+
+def test_requisition_cancel_zero_after_stock():
+    """回归：库存行恰为 -qty（测试导入的无入库直接出库数据）时取消回补落在 after=0，
+    不得触发移动加权成本除零（此前 500），应正常取消并归零。"""
+    _login_admin()
+    wh_id, loc_id, pid = _setup_stock("10")
+    c = _login_tester()
+    r = c.post("/api/v1/requisitions", json={
+        "warehouse_id": wh_id, "use_location": "零点车间", "use_reason": "除零回归",
+        "items": [{"product_id": pid, "qty": "10", "location_id": loc_id}],
+    })
+    assert r.json()["code"] == 0, r.text
+    req_id = r.json()["data"]["id"]
+
+    # 直接把库存行改成 -qty，复现导入数据的坏状态（正常流程到不了这里）
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models.stock import StkStock
+
+    db = SessionLocal()
+    try:
+        s = db.scalar(select(StkStock).where(
+            StkStock.product_id == pid,
+            StkStock.warehouse_id == wh_id,
+            StkStock.location_id == loc_id,
+        ))
+        assert s is not None
+        s.qty = -10
+        db.commit()
+    finally:
+        db.close()
+
+    # 取消回补：-10 + 10 = 0，不再除零
+    assert client.post(f"/api/v1/requisitions/{req_id}/cancel").json()["code"] == 0
+    assert client.get(f"/api/v1/requisitions/{req_id}").json()["data"]["status"] == 5
+    assert _stock_qty(pid) == "0.000"

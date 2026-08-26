@@ -6,7 +6,7 @@ from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response
 from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -130,5 +130,6 @@ def file_watermark_preview(
     )
     buf = BytesIO()
     img.save(buf, format="PNG")
-    buf.seek(0)
-    return StreamingResponse(buf, media_type="image/png")
+    # 整包 Response：POST 带请求体时 StreamingResponse 会与限流中间件(BaseHTTPMiddleware)
+    # 的断开监听冲突（starlette 已知问题，见 /watermark/preview 同款修复）。
+    return Response(content=buf.getvalue(), media_type="image/png")

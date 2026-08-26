@@ -140,7 +140,7 @@ export function TaskDetailModal({ item, onClose, onChanged }: {
         {timeline.length > 0 && (
           <div>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: token.colorTextSecondary, marginBottom: 6 }}>
-              过程留痕（过程不锁人，接力处理均记录到人）
+              过程留痕
             </div>
             <Timeline items={timeline} />
           </div>
@@ -174,7 +174,7 @@ export function TaskDetailModal({ item, onClose, onChanged }: {
         {!terminal && (
           <div style={{ borderTop: `1px solid ${token.colorBorder}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
             {t.status === "pending" && canProcess && (
-              <Popconfirm title="领取并处理该任务？过程不锁人，其他维修人员仍可接续。" onConfirm={() => act("claim")}>
+              <Popconfirm title="领取并处理该任务？" onConfirm={() => act("claim")}>
                 <Button type="primary">领取并处理</Button>
               </Popconfirm>
             )}
@@ -184,7 +184,7 @@ export function TaskDetailModal({ item, onClose, onChanged }: {
               </Popconfirm>
             )}
             {t.status === "done" && isManager && (
-              <Space direction="vertical" style={{ width: "100%" }} >
+              <Space orientation="vertical" style={{ width: "100%" }} >
                 <Input value={verdict} onChange={(e) => setVerdict(e.target.value)} placeholder="审核结论 / 驳回理由（必填）" />
                 <Space wrap>
                   <Popconfirm title="审核通过？任务将归档进入任务历史。" onConfirm={() => act("verify", { verdict })}>
@@ -204,7 +204,7 @@ export function TaskDetailModal({ item, onClose, onChanged }: {
             )}
             {t.source === "cable" && isManager && (
               editing ? (
-                <Space direction="vertical" style={{ width: "100%" }}>
+                <Space orientation="vertical" style={{ width: "100%" }}>
                   <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="标题" maxLength={100} />
                   <Input.TextArea rows={2} value={editDesc} onChange={(e) => setEditDesc(e.target.value)} placeholder="描述" maxLength={500} />
                   <Space>

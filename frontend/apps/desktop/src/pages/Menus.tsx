@@ -315,7 +315,7 @@ export function MenusPage({ embedded = false }: { embedded?: boolean } = {}) {
         okButtonProps={{ icon: <CheckOutlined /> }}
         cancelButtonProps={{ icon: <CloseOutlined /> }}
         width={440}
-        destroyOnHidden
+        destroyOnHidden forceRender
       >
         <Form form={form} layout="vertical" style={{ marginTop: 4 }}>
           <Form.Item name="parent_id" label="上级" rules={[{ required: true, message: "请选择上级" }]} extra="顶级分组=一级；菜单挂到分组下，可再嵌套">

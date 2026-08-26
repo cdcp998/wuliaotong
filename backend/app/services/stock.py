@@ -91,8 +91,10 @@ def post_stock_change(
         )
         db.add(stock)
     else:
-        if qty_delta > 0:
-            # 移动加权平均成本：new = (old_qty*old_cost + in_qty*in_price) / new_qty
+        # 移动加权平均成本仅在回补后库存为正时重算：测试导入等无入库直接出库的数据
+        # 库存行可能停在 -qty，回补后 after=0 会除零；after<=0 时成本无意义，
+        # 保持原值即可（下次入库 old_qty*old_cost 项为 0，会自然重新起算）。
+        if qty_delta > 0 and after > 0:
             total = stock.cost_price * before + cost_price * qty_delta
             stock.cost_price = (total / after).quantize(_DEC2, rounding=ROUND_HALF_UP)
         stock.qty = after

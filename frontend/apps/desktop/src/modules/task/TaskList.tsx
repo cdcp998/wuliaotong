@@ -1,4 +1,4 @@
-/** task 模块：维修任务列表（/task/list，task:dispatch/process）——统一任务池合并视图。
+/** task 模块：任务列表（/task/list，task:dispatch/process）——统一任务池合并视图。
  *  v4：活动任务 / 已归档（已关闭自动归档，只读可查详情）两个视图；发布任务走标签式弹窗；
  *  来源列可跳转关联模块（故障管理 / 设备维修任务）；支持 ?focus_task=c12|d3 跨页定位。 */
 import { useCallback, useEffect, useState } from "react";
@@ -190,7 +190,7 @@ export function TaskListPage() {
             </Button>
             <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B6478" }} onClick={() => setDetail(t)}>详情</Button>
             {t.status === "pending" && (
-              <Popconfirm title="领取并处理该任务？过程不锁人，其他维修人员仍可接续。" onConfirm={() => void act(t, "claim")}>
+              <Popconfirm title="领取并处理该任务？" onConfirm={() => void act(t, "claim")}>
                 <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#B45309" }}>领取处理</Button>
               </Popconfirm>
             )}
@@ -225,7 +225,7 @@ export function TaskListPage() {
       {/* 页头 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0 }}>维修任务列表</h2>
+          <h2 style={{ margin: 0 }}>任务列表</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
             统一任务池{archived ? " · 已归档（已关闭/已取消，仅可查看详情）" : ""}：联动状态同步展示，可跳转线路故障管理与设备故障管理
           </p>
@@ -282,7 +282,7 @@ export function TaskListPage() {
       {/* 新建纯任务（无关联快速建单入口保留在详情/看板；此处不再提供独立表单） */}
 
       {/* 维修记录抽屉（活动线缆任务） */}
-      <Drawer open={!!current} onClose={() => setCurrent(null)} width={560} title={current ? `维修记录：${current.title}` : ""}>
+      <Drawer open={!!current} onClose={() => setCurrent(null)} size={560} title={current ? `维修记录：${current.title}` : ""}>
         {current && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {records.map((r) => (

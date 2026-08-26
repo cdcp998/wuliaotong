@@ -130,7 +130,7 @@ export function ModulesPage({ embedded = false }: { embedded?: boolean } = {}) {
         style={{ marginBottom: 16 }}
         type="info"
         showIcon
-        message="模块卡片墙：上方为模块状态胶囊（已启用/已停用/未安装/异常），依赖不满足时启用会被拒（4002）；「可升级」标注源码已更新。"
+        title="模块卡片墙：上方为模块状态胶囊（已启用/已停用/未安装/异常），依赖不满足时启用会被拒（4002）；「可升级」标注源码已更新。"
       />
 
       <div className="wlt-grid" style={{ gap: 14 }}>

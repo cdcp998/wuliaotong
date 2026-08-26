@@ -198,11 +198,11 @@ export function DeviceTasksPage() {
       </Modal>
 
       {/* 领取/审核/记录抽屉 */}
-      <Drawer open={!!current} onClose={() => setCurrent(null)} width={560} title={current ? `设备任务：${current.title}` : ""}>
+      <Drawer open={!!current} onClose={() => setCurrent(null)} size={560} title={current ? `设备任务：${current.title}` : ""}>
         {current && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {current.status === "pending" && (
-              <Popconfirm title="领取并处理该任务？过程不锁人，其他维修人员仍可接续。" onConfirm={() => act(current, "claim")}>
+              <Popconfirm title="领取并处理该任务？" onConfirm={() => act(current, "claim")}>
                 <Button type="primary">领取并处理</Button>
               </Popconfirm>
             )}

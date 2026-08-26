@@ -414,7 +414,7 @@ export function DeliveryOcrModal({ open, onClose, onConfirmed }: Props) {
         type="info"
         showIcon
         style={{ marginBottom: 8 }}
-        message="视觉识别：调用视觉大模型分析送货单，通常需等待 20-60 秒；识别后逐项确认再生成入库单。"
+        title="视觉识别：调用视觉大模型分析送货单，通常需等待 20-60 秒；识别后逐项确认再生成入库单。"
       />
 
       {polling && (
@@ -424,7 +424,7 @@ export function DeliveryOcrModal({ open, onClose, onConfirmed }: Props) {
       )}
 
       {task?.status === "failed" && (
-        <Alert type="error" showIcon style={{ marginTop: 16 }} message="识别失败" description={task.error ?? "未知错误，请检查图片清晰度后重新上传"} />
+        <Alert type="error" showIcon style={{ marginTop: 16 }} title="识别失败" description={task.error ?? "未知错误，请检查图片清晰度后重新上传"} />
       )}
 
       {(uploadUrl || lines.length > 0) && (

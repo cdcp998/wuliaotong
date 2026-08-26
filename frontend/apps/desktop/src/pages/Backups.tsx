@@ -4,7 +4,7 @@ import type { ColumnsType } from "antd/es/table";
 
 import { adminApi, type BackupRecord } from "@wlt/shared";
 
-import { DataTable } from "../components/DataTable";
+import { DataTable, runBatchEach } from "../components/DataTable";
 
 function fmtSize(n: number): string {
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
@@ -163,7 +163,7 @@ export function BackupsPage({ embedded = false }: { embedded?: boolean } = {}) {
       </div>
       {/* 表格卡 */}
       <div className="wlt-glass" style={{ padding: 12 }}>
-        <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }} rowSelection onBatchDelete={async (keys) => { for (const k of keys) await adminApi.deleteBackup(Number(k)); message.success(`已删除 ${keys.length} 个备份`); void load(); }} />
+        <DataTable rowKey="id" loading={loading} size="small" columns={columns} dataSource={list} pagination={{ current: page, pageSize, total, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }} rowSelection onBatchDelete={async (keys) => { const r = await runBatchEach(keys, (id) => adminApi.deleteBackup(id)); void load(); if (r.ok) message.success(`已删除 ${r.ok} 个备份`); if (r.fail.length) message.error(`${r.fail.length} 个备份删除失败：${r.fail[0]}${r.fail.length > 1 ? " 等" : ""}`); }} />
       </div>
     </div>
   );

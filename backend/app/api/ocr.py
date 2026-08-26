@@ -946,6 +946,7 @@ def ocr_match(
         raise BizError(5002, "大模型分析不可用：多模态大模型与视觉模型均未配置或未启用（系统设置 → OCR 与大模型）")
     prompt = (
         "识别图片中的商品/物料，输出JSON：{\"name\": 商品名称, \"spec\": 规格型号, "
+        "\"barcode\": 条码(可空), \"unit\": 计量单位(如 个/箱/米，可空), "
         "\"category\": 类别, \"note\": 其他可识别信息}。无法识别时 name 给最可能的名称。只输出JSON。"
     )
     try:
@@ -963,6 +964,8 @@ def ocr_match(
         ocr_record_id=record.id, product_name=name, model=llm.name,
         suggestion={
             "spec": str(parsed.get("spec") or "")[:100],
+            "barcode": str(parsed.get("barcode") or "")[:50],
+            "unit": str(parsed.get("unit") or "")[:20],
             "category": str(parsed.get("category") or "")[:50],
             "note": str(parsed.get("note") or "")[:200],
         },
@@ -1002,6 +1005,8 @@ def ai_suggestion_accept(
     sug_id: int,
     code: str = Query("", max_length=50, description="商品编码，缺省自动生成"),
     name: str = Query("", max_length=100, description="商品名，缺省用 AI 建议名"),
+    spec: str = Query("", max_length=100, description="规格型号，留空用 AI 建议值"),
+    barcode: str = Query("", max_length=50, description="条码，留空不设置；填写时查重"),
     category_id: int = Query(0),
     unit_id: int = Query(0, description="基本单位，缺省取第一个单位"),
     purchase_price: str = Query("0", max_length=20),
@@ -1023,11 +1028,17 @@ def ai_suggestion_accept(
     unit_id = unit_id or db.scalar(select(BaseUnit.id).order_by(BaseUnit.id).limit(1)) or 0
     if not unit_id:
         raise BizError(E_PARAM, "请先创建计量单位")
-    spec = str(sug.suggestion.get("spec") or "") if isinstance(sug.suggestion, dict) else ""
+    sug_spec = str(sug.suggestion.get("spec") or "") if isinstance(sug.suggestion, dict) else ""
+    sug_barcode = str(sug.suggestion.get("barcode") or "") if isinstance(sug.suggestion, dict) else ""
+    spec = (spec or sug_spec).strip()
+    barcode = (barcode or sug_barcode).strip()
+    if barcode and db.scalar(select(BaseProduct.id).where(BaseProduct.barcode == barcode)):
+        raise BizError(E_PARAM, f"条码 {barcode} 已存在于其他商品")
     product = BaseProduct(
         code=code,
         name=name or sug.product_name,
         spec=spec,
+        barcode=barcode,
         category_id=category_id,
         unit_id=unit_id,
         purchase_price=_parse_price(purchase_price),

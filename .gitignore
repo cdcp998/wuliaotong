@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -47,6 +47,10 @@ backend/tests/_tmp/
 
 # DSH 会话使用记录（本机助手环境数据，不属于项目）
 dsh-usage/
+
+# 本机运行产物与助手插件本地数据（不入库）
+/logs/
+/.mnemon/
 
 # Windows 本地开发启动脚本（不入库，属本机便利文件；部署见 README Docker 或手动启动）
 /一键启动全部.bat

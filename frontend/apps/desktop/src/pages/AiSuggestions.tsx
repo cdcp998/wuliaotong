@@ -6,7 +6,7 @@ import type { ColumnsType } from "antd/es/table";
 
 import { aiApi, baseApi, type AiSuggestion, type CategoryNode } from "@wlt/shared";
 
-import { DataTable } from "../components/DataTable";
+import { DataTable, runBatchEach } from "../components/DataTable";
 
 /** 分类树拍平（保留完整节点，parent_id 用于上级查询）。 */
 function flattenCats(nodes: CategoryNode[]): CategoryNode[] {
@@ -40,7 +40,7 @@ export function AiSuggestionsPage() {
   const [selected, setSelected] = useState<AiSuggestion | null>(null); // 右侧详情选中的建议（设计页30：左列表+右详情）
   const [units, setUnits] = useState<{ id: number; name: string }[]>([]);
   const [catTree, setCatTree] = useState<CategoryNode[]>([]);
-  const [form, setForm] = useState({ code: "", name: "", category_id: 0, unit_id: 0, purchase_price: "0" });
+  const [form, setForm] = useState({ code: "", name: "", spec: "", barcode: "", category_id: 0, unit_id: 0, purchase_price: "0" });
   // 分类内联维护（确认新增材料弹窗内新增/编辑分类）
   const [catSelOpen, setCatSelOpen] = useState(false);
   const [catOpen, setCatOpen] = useState(false);
@@ -107,7 +107,16 @@ export function AiSuggestionsPage() {
 
   function openAccept(sug: AiSuggestion) {
     setAccepting(sug);
-    setForm({ code: "", name: sug.product_name, category_id: 0, unit_id: units[0]?.id ?? 0, purchase_price: "0" });
+    // 回填 AI 建议：名称/规格/条码预填可改；单位缺省第一个
+    setForm({
+      code: "",
+      name: sug.product_name,
+      spec: sug.suggestion?.spec ?? "",
+      barcode: sug.suggestion?.barcode ?? "",
+      category_id: 0,
+      unit_id: units[0]?.id ?? 0,
+      purchase_price: "0",
+    });
   }
 
   async function doAccept() {
@@ -116,6 +125,8 @@ export function AiSuggestionsPage() {
       await aiApi.accept(accepting.id, {
         code: form.code,
         name: form.name,
+        spec: form.spec,
+        barcode: form.barcode,
         category_id: form.category_id || undefined,
         unit_id: form.unit_id || undefined,
         purchase_price: form.purchase_price,
@@ -131,7 +142,12 @@ export function AiSuggestionsPage() {
   /** 一键转采购计划（设计页 30）：先用建议数据确认新增商品，再跳转采购计划页带入该商品。 */
   async function toPlan(sug: AiSuggestion) {
     try {
-      const res = await aiApi.accept(sug.id, { name: sug.product_name });
+      // 规格/条码一并带入，避免转计划建出的材料缺字段
+      const res = await aiApi.accept(sug.id, {
+        name: sug.product_name,
+        spec: sug.suggestion?.spec || undefined,
+        barcode: sug.suggestion?.barcode || undefined,
+      });
       message.success("已新增商品，请在采购计划中确认数量/供应商");
       navigate(`/purchase-plans?product_id=${res.product_id}`);
     } catch (e) {
@@ -239,7 +255,7 @@ export function AiSuggestionsPage() {
             pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p: number, ps: number) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else { setPage(p); } } }}
             rowSelection
             locale={{ emptyText: "暂无待处理建议" }}
-            onBatchDelete={async (keys) => { for (const k of keys) await aiApi.ignore(Number(k)); message.success(`已忽略 ${keys.length} 条建议`); void load(); }}
+            onBatchDelete={async (keys) => { const r = await runBatchEach(keys, (id) => aiApi.ignore(id)); void load(); if (r.ok) message.success(`已忽略 ${r.ok} 条建议`); if (r.fail.length) message.error(`${r.fail.length} 条忽略失败：${r.fail[0]}${r.fail.length > 1 ? " 等" : ""}`); }}
           />
         </div>
       </div>
@@ -303,8 +319,8 @@ export function AiSuggestionsPage() {
               optionFilterProp="label"
               popupMatchSelectWidth={false}
               open={catSelOpen}
-              onDropdownVisibleChange={(o) => setCatSelOpen(o)}
-              dropdownRender={(menu) => (
+              onOpenChange={(o) => setCatSelOpen(o)}
+              popupRender={(menu) => (
                 <>
                   {menu}
                   <Divider style={{ margin: "8px 0" }} />
@@ -317,6 +333,14 @@ export function AiSuggestionsPage() {
             />
           </Form.Item>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Form.Item label="规格型号" style={{ marginBottom: 0 }} extra={accepting?.suggestion?.spec ? undefined : "AI 未识别到规格，可手动填写"}>
+              <Input placeholder="规格型号（可空）" maxLength={100} value={form.spec} onChange={(e) => setForm((f) => ({ ...f, spec: e.target.value }))} />
+            </Form.Item>
+            <Form.Item label="条码" style={{ marginBottom: 0 }} extra="留空不设置；填写后可用于扫码匹配">
+              <Input placeholder="商品条码（可空）" maxLength={50} value={form.barcode} onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))} />
+            </Form.Item>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
             <Form.Item label="单位" style={{ marginBottom: 0 }}>
               <Select style={{ width: "100%" }} placeholder="选择单位" options={units} fieldNames={{ label: "name", value: "id" }} value={form.unit_id || undefined} onChange={(v) => setForm((f) => ({ ...f, unit_id: v }))} />
             </Form.Item>
@@ -336,6 +360,7 @@ export function AiSuggestionsPage() {
         onCancel={() => setCatOpen(false)}
         width={420}
         destroyOnHidden
+        forceRender
         afterOpenChange={(o) => {
           if (!o) return;
           if (catIsEdit && catTarget) {

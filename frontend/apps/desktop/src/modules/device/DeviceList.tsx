@@ -162,7 +162,7 @@ export function DeviceListPage() {
     ) },
     { title: "型号", dataIndex: "model", width: 130, render: (v: string) => v || <span style={{ color: token.colorTextTertiary }}>—</span> },
     { title: "类别", dataIndex: "category", width: 110, render: (v: string) => v || <span style={{ color: token.colorTextTertiary }}>—</span> },
-    { title: "物理位置", width: 180, ellipsis: true, render: (v: string, d) => v || (d.lat ? `${d.lat?.toFixed(5)}, ${d.lng?.toFixed(5)}` : <span style={{ color: token.colorTextTertiary }}>—</span>) },
+    { title: "物理位置", width: 180, ellipsis: true, render: (_, d) => d.location || (d.lat != null ? `${d.lat.toFixed(5)}, ${d.lng?.toFixed(5)}` : <span style={{ color: token.colorTextTertiary }}>—</span>) },
     { title: "状态", width: 100, render: (_, d) => { const s = ST[d.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? d.status}</Tag>; } },
     { title: "更新时间", dataIndex: "updated_at", width: 150, render: (v: string | null) => (v ? <span style={{ fontSize: 12 }}>{new Date(v).toLocaleString()}</span> : <span style={{ color: token.colorTextTertiary }}>—</span>) },
     {
@@ -238,7 +238,7 @@ export function DeviceListPage() {
       </div>
 
       {/* 新增/编辑（保留原逻辑） */}
-      <Modal open={open} onCancel={() => setOpen(false)} onOk={save} confirmLoading={saving} title={editing ? "编辑设备" : "新增设备"} width={620} destroyOnHidden>
+      <Modal open={open} onCancel={() => setOpen(false)} onOk={save} confirmLoading={saving} title={editing ? "编辑设备" : "新增设备"} width={620} destroyOnHidden forceRender>
         <Form form={form} layout="vertical">
           {!editing && (
             <Form.Item name="code" label="设备编码" rules={[{ required: true, message: "请输入编码" }]}>
