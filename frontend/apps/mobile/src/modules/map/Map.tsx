@@ -251,13 +251,25 @@ export function MobileMapPage() {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  /** 「我的位置」：定位降级链（GPS→IP 兜底，静默降级不弹提示）+ 平移地图到当前点。
-   * 只 pan 不动 zoom（保持用户当前缩放级别，避免猛跳层级）。 */
+  // 滚轮选择器「双击直接确定」：dblclick 落在 .adm-picker 内时，代点其内置「确定」按钮
+  // （antd-mobile v5 Picker 未提供该交互；双击目标即当前居中项，无需读取内部值）
+  useEffect(() => {
+    const onDbl = (e: MouseEvent) => {
+      const picker = (e.target as HTMLElement | null)?.closest?.(".adm-picker");
+      if (!picker) return;
+      const btns = picker.querySelectorAll<HTMLElement>(".adm-picker-header-button");
+      btns[btns.length - 1]?.click();
+    };
+    document.addEventListener("dblclick", onDbl);
+    return () => document.removeEventListener("dblclick", onDbl);
+  }, []);
+
+  /** 「我的位置」：定位降级链（GPS→IP 兜底，静默降级不弹提示）+ 飞行到当前点（17 级）。 */
   const locateMe = async () => {
     try {
       const first = await getCurrentPositionWithFallback();
       setMyPos([first.lat, first.lng]);
-      mapRef.current?.panTo(disp([first.lat, first.lng]));
+      mapRef.current?.flyTo(disp([first.lat, first.lng]), 17);
     } catch {
       Toast.show("定位失败，请检查定位权限");
     }
@@ -611,6 +623,7 @@ export function MobileMapPage() {
           <div style={{ display: "flex", gap: 8 }}>
             {/* antd-mobile v5 Picker 不向子元素注入点击事件：须经 render-prop 第二参 actions 开关 */}
             <Picker
+              title="选择线缆（双击选项可直接确定）"
               columns={[cables.filter((c) => c.status === 1).map((c) => ({ label: `${c.name}（${Math.round(c.total_length)}m）`, value: c.id }))]}
               value={selCableId ? [selCableId] : undefined}
               onConfirm={(v) => setSelCableId(v[0] as number)}
@@ -643,6 +656,7 @@ export function MobileMapPage() {
           <div style={{ display: "flex", gap: 8 }}>
             {/* 同测距：Picker 需经 actions.open() 打开 */}
             <Picker
+              title="选择故障点（双击选项可直接确定）"
               columns={[faults.map((f) => ({ label: `#${f.id} ${f.fault_type || "故障"}（${f.description?.slice(0, 10) || ""}）`, value: f.id }))]}
               value={selFaultId ? [selFaultId] : undefined}
               onConfirm={(v) => setSelFaultId(v[0] as number)}
