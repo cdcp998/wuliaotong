@@ -24,6 +24,8 @@ import { MapView, type DrawnLine } from "./MapView";
 const TYPE_LABEL: Record<string, string> = { wire: "电线", fiber: "光缆", network: "网线" };
 /** 地图初始视图（指北回正 / 无数据时的视图）。 */
 const DEFAULT_VIEW: { center: LatLng; zoom: number } = { center: [30.2741, 120.1551], zoom: 12 };
+/** 「回到我的定位」目标缩放级别（街道级）。 */
+const MY_LOCATE_ZOOM = 16;
 
 /** 工具栏小按钮（设计稿：40px 图标 + 8.5px 文字，激活=品牌蓝）。 */
 function ToolbarBtn({ active, tip, icon, label, onClick }: { active?: boolean; tip: string; icon: React.ReactNode; label: string; onClick: () => void }) {
@@ -172,12 +174,12 @@ export function MapWorkbenchPage() {
   );
 
   /** 定位到我的位置（浏览器 GPS → IP 兜底降级链，修复手机端 HTTP 环境无法定位）。
-   *  成功后更新「我的位置」标识点并居中；同时作为导航起点复用。 */
+   *  成功后更新「我的位置」标识点并飞到 16 级居中；同时作为导航起点复用。 */
   const locateMe = useCallback(async () => {
     if (myPos) {
-      // 已有定位：直接回到我的位置
+      // 已有定位：直接回到我的位置（16 级街道视图）
       setNavStart(myPos);
-      flyToWgs84(myPos);
+      flyToWgs84(myPos, MY_LOCATE_ZOOM);
       return;
     }
     setLocating(true);
@@ -186,7 +188,7 @@ export function MapWorkbenchPage() {
       const pos: LatLng = [p.lat, p.lng];
       setMyPos(pos);
       setNavStart(pos);
-      flyToWgs84(pos);
+      flyToWgs84(pos, MY_LOCATE_ZOOM);
       if (p.source === "gps") {
         message.success("已定位到当前位置");
       } else {
