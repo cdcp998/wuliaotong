@@ -20,7 +20,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 
 from app.db import SessionLocal
 from app.modules.map.models import MapCacheRegion, MapDownloadTask
@@ -68,6 +68,60 @@ def _fetch_one(src_cfg: dict, source_key: str, z: int, x: int, y: int) -> tuple[
         return "fail", exc
 
 
+def _complete_region(db, region_id: int, done: int) -> None:
+    """区域收尾：置「完成」+ 按注册表如实统计磁盘占用（正常完成与孤儿自愈共用）。
+
+    仅对「下载中(1)」生效：生成中(4)的分批插入窗口内 pending 可能短暂为 0，
+    若不判状态会把还没插完的区域误标完成；暂停(3)同样不被触碰。
+    """
+    region = db.get(MapCacheRegion, region_id)
+    if region is None or region.status != 1:
+        return
+    region.status = 2
+    region.last_download_at = datetime.now()
+    # 完成时如实统计磁盘占用：无法下载的瓦片按实际落盘计 0（不虚报、不再阻塞完成）
+    pieces = db.execute(
+        select(MapDownloadTask.source, MapDownloadTask.z, MapDownloadTask.x, MapDownloadTask.y)
+        .where(MapDownloadTask.region_id == region_id)
+    ).all()
+    region.cache_size = tile_cache.total_size_for(
+        [(s or "", int(z), int(x), int(y)) for s, z, x, y in pieces]
+    )
+    failed_cnt = db.scalar(select(func.count()).select_from(MapDownloadTask).where(
+        MapDownloadTask.region_id == region_id, MapDownloadTask.status == 2)) or 0
+    logger.info(
+        "区域 %s 下载完毕：成功 %d · 无法下载 %d · 磁盘占用 %s",
+        region_id, done, failed_cnt,
+        f"{region.cache_size / 1024 / 1024:.1f}MB" if region.cache_size else "0B",
+    )
+
+
+def _finalize_finished_regions(db) -> int:
+    """自愈兜底：「下载中(1)」但已无任何待下载任务的孤儿区域收尾置完成。
+
+    覆盖 worker 不再选中其任务的历史遗留场景（旧版崩溃/重启残留导致全部任务已是终态）——
+    否则进度 100% 但区域永远显示运行中。
+    """
+    stale_ids = db.scalars(
+        select(MapCacheRegion.id).where(
+            MapCacheRegion.status == 1,
+            ~exists(
+                select(MapDownloadTask.id).where(
+                    MapDownloadTask.region_id == MapCacheRegion.id,
+                    MapDownloadTask.status == 0,
+                )
+            ),
+        )
+    ).all()
+    for rid in stale_ids:
+        done = db.scalar(select(func.count()).select_from(MapDownloadTask).where(
+            MapDownloadTask.region_id == rid, MapDownloadTask.status == 1)) or 0
+        _complete_region(db, rid, done)
+    if stale_ids:
+        db.commit()
+    return len(stale_ids)
+
+
 def download_worker_tick() -> None:
     """批量下载一轮（自适应并发，≤并发×5 个任务；异常隔离：单任务失败仅标失败/重试）。
 
@@ -95,6 +149,7 @@ def download_worker_tick() -> None:
         default_key = next((k for k, s in sources.items() if s.get("enabled")), None)
         if default_key is None:
             return
+        _finalize_finished_regions(db)  # 孤儿「下载中」区域自愈收尾（进度100%但卡运行中的历史残留）
         limit = _concurrency * _BATCHES_PER_TICK
         rows = db.execute(
             select(MapDownloadTask, MapCacheRegion)
@@ -163,25 +218,8 @@ def download_worker_tick() -> None:
             if region is None:
                 continue
             region.tile_count = done
-            # 完成判定收紧为仅「下载中(1)」：生成中(4)的分批插入窗口内 pending 可能短暂为 0，
-            # 若不判状态会把还没插完的区域误标完成；暂停(3)同样不被触碰。
-            if pending == 0 and region.status == 1:
-                region.status = 2
-                region.last_download_at = datetime.now()
-                # 完成时如实统计磁盘占用：无法下载的瓦片按实际落盘计 0（不虚报、不再阻塞完成）
-                pieces = db.execute(
-                    select(MapDownloadTask.source, MapDownloadTask.z, MapDownloadTask.x, MapDownloadTask.y)
-                    .where(MapDownloadTask.region_id == region_id)
-                ).all()
-                region.cache_size = tile_cache.total_size_for(
-                    [(s or "", int(z), int(x), int(y)) for s, z, x, y in pieces]
-                )
-                failed_cnt = db.scalar(select(func.count()).select_from(MapDownloadTask).where(
-                    MapDownloadTask.region_id == region_id, MapDownloadTask.status == 2)) or 0
-                logger.info(
-                    "区域 %s 下载完毕：成功 %d · 无法下载 %d · 磁盘占用 %s",
-                    region_id, done, failed_cnt, f"{region.cache_size / 1024 / 1024:.1f}MB" if region.cache_size else "0B",
-                )
+            if pending == 0:
+                _complete_region(db, region_id, done)  # 内部仅对「下载中(1)」生效
         db.commit()
 
         if quota_hit:

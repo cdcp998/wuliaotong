@@ -205,13 +205,25 @@ def test_tile_batch_download_flow() -> None:
     assert st == 1, f"生成完毕应翻转为下载中(1)，实际 {st}"
     assert n and n > 0
 
-    # worker 消费（离线源抓取失败 → 标失败/重试；不抛异常）
-    for _ in range(4):
+    # worker 消费（离线源抓取失败 → 重试至终态；全部任务终态后区域必须报告「下载完毕」）
+    st = None
+    for _ in range(10):
         download_worker_tick()
+        db = SessionLocal()
+        try:
+            st = db.scalar(text("SELECT status FROM map_cache_region WHERE id = :r"), {"r": region_id})
+        finally:
+            db.close()
+        if st == 2:
+            break
+    assert st == 2, f"待下载清零后区域应置「已完成(2)」，实际 {st}（孤儿自愈/完成判定失效）"
     r = client.get("/api/v1/map/downloads")
     assert r.json()["code"] == 0
     prog = r.json()["data"]
-    assert prog["pending"] + prog["done"] + prog["failed"] >= 0
+    assert prog["pending"] == 0
+    mine = next(x for x in prog["regions"] if x["id"] == region_id)
+    # 磁盘缓存命中的环境全部成功、离线环境部分失败——两者都属正常完成；关键是不再有待下载且已收尾
+    assert mine["status"] == 2 and (mine["done"] + mine["failed"]) > 0
 
     # 暂停区域 → 再次 start 允许重新评估续跑（差集幂等，重新进入生成中(4)）
     assert client.post(f"/api/v1/map/cache/regions/{region_id}/pause").json()["code"] == 0
