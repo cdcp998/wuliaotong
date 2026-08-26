@@ -66,3 +66,9 @@ backend/app/modules/
 # 本地草稿（AI 开发阶段临时文件）
 AI开发文档/**/New *.txt
 AI开发文档/New *.txt
+
+# 设计源稿与开发过程资产（本地保留，不入库）
+AI开发文档/OpenPencil设计稿/
+AI开发文档/screenshots/
+AI开发文档/design-ref/
+AI开发文档/会话交接*.md
