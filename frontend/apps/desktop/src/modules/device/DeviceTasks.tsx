@@ -22,7 +22,6 @@ const ST: Record<string, { label: string; fg: string; bg: string }> = {
   closed: { label: "已关闭", fg: "#475569", bg: "#EFF3FC" },
   cancelled: { label: "已取消", fg: "#B91C1C", bg: "#FDEBEC" },
 };
-const FLOW_STEPS = ["待领取", "进行中", "待审核", "已归档"];
 
 export function DeviceTasksPage() {
   const { message } = App.useApp();
@@ -185,17 +184,6 @@ export function DeviceTasksPage() {
           columns={columns}
           rowClassName={(r) => (`d${r.id}` === focusedKey ? "wlt-row-focus" : "")}
         />
-        {/* 状态流转说明 */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "12px 10px 4px", borderTop: `1px solid ${token.colorBorder}`, marginTop: 4 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: token.colorTextSecondary }}>状态流转</span>
-          {FLOW_STEPS.map((s, i) => (
-            <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontSize: 11.5, padding: "3px 10px", borderRadius: 999, background: i === 3 ? "#F3E8FF" : "#F6F8FE", color: i === 3 ? "#7C3AED" : token.colorTextSecondary, fontWeight: i === 3 ? 700 : 400 }}>{s}</span>
-              {i < FLOW_STEPS.length - 1 && <span style={{ color: token.colorTextTertiary }}>›</span>}
-            </span>
-          ))}
-          <span style={{ fontSize: 11, color: token.colorTextTertiary, marginLeft: 8 }}>任务完成 → 设备自动回退上一状态（快照前一状态）</span>
-        </div>
       </div>
 
       {/* 新建任务（复用 DeviceTaskForm：发布任务弹窗的设备任务页签嵌入同一表单） */}
