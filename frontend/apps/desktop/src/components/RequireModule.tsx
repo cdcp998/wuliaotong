@@ -19,7 +19,7 @@ export function RequireModule({ code, children }: { code: string; children: Reac
   if (modulesStatus === "idle" || modulesStatus === "loading") {
     return (
       <div style={{ minHeight: "40dvh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Spin tip="正在加载模块状态…" />
+        <Spin description="正在加载模块状态…" />
       </div>
     );
   }
