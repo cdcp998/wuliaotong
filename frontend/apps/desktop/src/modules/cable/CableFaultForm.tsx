@@ -4,7 +4,7 @@
  *  调用方可在 onSubmitted(faultId) 中追加联动（如自动生成维修任务）。 */
 import { useEffect, useState } from "react";
 import { App, Button, Form, Input, Radio, Select, Upload } from "antd";
-import { AimOutlined, UploadOutlined } from "@ant-design/icons";
+import { UploadOutlined } from "@ant-design/icons";
 
 import { fileApi } from "@wlt/shared";
 
@@ -15,14 +15,13 @@ import { MapView } from "../map/MapView";
 const SEVERITY: Record<number, { label: string }> = { 1: { label: "低" }, 2: { label: "中" }, 3: { label: "高" } };
 
 export function CableFaultForm({ onSubmitted, onCancel }: {
-  /** 上报成功回调（参数为新建 fault id；父级负责关弹窗/后续联动）。 */
-  onSubmitted?: (faultId: number) => void;
+  /** 上报成功回调（参数为新建 fault id 与关键字段；父级负责关弹窗/后续联动）。 */
+  onSubmitted?: (faultId: number, info: { fault_type: string; severity: number; description: string }) => void;
   onCancel?: () => void;
 }) {
   const { message } = App.useApp();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
-  const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<{ lat: number; lng: number } | null>(null);
   const [sources, setSources] = useState<Record<string, MapSourceInfo>>({});
   const [cables, setCables] = useState<CableItem[]>([]);
@@ -60,7 +59,11 @@ export function CableFaultForm({ onSubmitted, onCancel }: {
       message.success("故障已上报");
       form.resetFields();
       setPicked(null);
-      onSubmitted?.(r.id);
+      onSubmitted?.(r.id, {
+        fault_type: values.fault_type ?? "",
+        severity: values.severity,
+        description: values.description ?? "",
+      });
     } catch (e) {
       message.error(e instanceof Error ? e.message : "上报失败");
     } finally {
@@ -87,12 +90,15 @@ export function CableFaultForm({ onSubmitted, onCancel }: {
       </Form.Item>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#5B6478", marginBottom: 6 }}>故障位置（点击地图选点）</div>
       <div style={{ height: 220, borderRadius: 12, overflow: "hidden", border: "1px solid #E4EAF6", marginBottom: 8 }}>
-        <MapView sources={sources} overlays={{ cables: [], faults: [], markersByCable: {} }}
-          onPick={(lat, lng) => { setPicked({ lat, lng }); setPicking(false); }}
-          picking={picking ? "点击地图选择故障位置（自动转换为 WGS84）" : undefined} height="220px" />
+        <MapView sources={sources} overlays={{ cables, faults: [], markersByCable: {} }}
+          highlight={picked ? [picked.lat, picked.lng] : null}
+          clusterFaults={false} autoFit={false}
+          onPick={(lat, lng) => setPicked({ lat, lng })}
+          picking="在地图上单击即可选择故障位置"
+          height="220px" />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <Button size="small" icon={<AimOutlined />} onClick={() => setPicking(true)}>地图选点</Button>
+        <span style={{ fontSize: 11.5, color: "#5B6478" }}>地图可直接点击选点</span>
         {picked && <span style={{ fontSize: 11.5, color: "#5B6478", fontVariantNumeric: "tabular-nums" }}>已选：{picked.lat.toFixed(6)}, {picked.lng.toFixed(6)}</span>}
         {!picked && <span style={{ fontSize: 11.5, color: "#6A748A" }}>尚未选择位置</span>}
       </div>

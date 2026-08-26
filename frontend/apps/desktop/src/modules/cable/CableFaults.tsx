@@ -10,7 +10,7 @@ import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, fileApi, useAuthStore } from "@wlt/shared";
 
-import { cableApi, FAULT_FLOW_STEPS, FAULT_STATUS, type FaultItem } from "./api";
+import { cableApi, type CableItem, FAULT_FLOW_STEPS, FAULT_STATUS, type FaultItem } from "./api";
 import { CableFaultForm } from "./CableFaultForm";
 import { taskApi } from "../task/api";
 import { mapApi, type MapSourceInfo } from "../map/api";
@@ -44,6 +44,7 @@ export function CableFaultsPage() {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [sources, setSources] = useState<Record<string, MapSourceInfo>>({});
+  const [cables, setCables] = useState<CableItem[]>([]); // 地图叠层：线缆上下文
   const [detail, setDetail] = useState<FaultItem | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [creatingTask, setCreatingTask] = useState(false);
@@ -71,6 +72,8 @@ export function CableFaultsPage() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     mapApi.mapSources().then((s) => setSources(s.map_sources)).catch(() => undefined);
+    // 地图叠层上下文：线缆（上限 100 条，与上报表单同源）
+    cableApi.listCables({ page_size: 100 }).then((r) => setCables(r.items)).catch(() => undefined);
     // 状态计数（含全部）；逐态拉取 total（page_size=1 仅取计数）
     Promise.all([["", "全部"], ...Object.entries(FAULT_STATUS).map(([k, v]) => [k, v.label])].map(async ([st]) => {
       try {
@@ -113,16 +116,18 @@ export function CableFaultsPage() {
   };
 
   /** 故障上报成功 → 自动发布关联任务入任务池（v2 流程第一步）；失败仅提示不阻断上报。 */
-  const onReportSubmitted = async (faultId: number) => {
+  const onReportSubmitted = async (
+    faultId: number,
+    info?: { fault_type: string; severity: number; description: string },
+  ) => {
     setOpen(false);
-    const f = rows.find((x) => x.id === faultId);
     if (!taskEnabled) { void load(); return; }
     try {
       await taskApi.create({
         fault_id: faultId,
-        title: `${(f?.fault_type) || "线路故障"}维修 #${faultId}`.slice(0, 100),
-        description: f?.description || "",
-        priority: (f?.severity ?? 1) >= 3 ? 2 : 1,
+        title: `${info?.fault_type || "线路故障"}维修 #${faultId}`.slice(0, 100),
+        description: info?.description || "",
+        priority: (info?.severity ?? 1) >= 3 ? 2 : 1,
       });
       message.success(`故障 #${faultId} 已上报，任务已发布到任务池`);
     } catch (e) {
@@ -346,7 +351,9 @@ export function CableFaultsPage() {
               {locFault.fault_type || "未分类"} · 状态：{FAULT_STATUS[locFault.status]?.label} · {locFault.lat.toFixed(6)}, {locFault.lng.toFixed(6)}
             </p>
             <div style={{ height: 420, border: `1px solid ${token.colorBorder}`, borderRadius: 12, overflow: "hidden" }}>
-              <MapView sources={sources} center={[locFault.lat, locFault.lng]} zoom={16} overlays={{ cables: [], faults: [locFault], markersByCable: {} }} height="420px" />
+              <MapView sources={sources} center={[locFault.lat, locFault.lng]} zoom={16}
+                overlays={{ cables, faults: [locFault], markersByCable: {} }}
+                clusterFaults={false} autoFit={false} height="420px" />
             </div>
           </>
         )}
@@ -365,14 +372,17 @@ export function CableFaultsPage() {
         {markTarget && (
           <>
             <p style={{ marginBottom: 8, color: token.colorTextSecondary, fontSize: 12.5 }}>
-              在地图上点击选择新位置（维修人员现场寻找故障点后，可由后台修正标记）；当前 {markTarget.fault.lat.toFixed(6)}, {markTarget.fault.lng.toFixed(6)} → 新位置 <b>{markTarget.lat.toFixed(6)}, {markTarget.lng.toFixed(6)}</b>
+              在地图上点击选择新位置（红色高亮点为当前选定位置，蓝色圆点为原故障点）；当前 {markTarget.fault.lat.toFixed(6)}, {markTarget.fault.lng.toFixed(6)} → 新位置 <b>{markTarget.lat.toFixed(6)}, {markTarget.lng.toFixed(6)}</b>
             </p>
             <div style={{ height: 400, border: `1px solid ${token.colorBorder}`, borderRadius: 12, overflow: "hidden" }}>
               <MapView
                 sources={sources}
                 center={[markTarget.lat, markTarget.lng]}
                 zoom={16}
-                overlays={{ cables: [], faults: [], markersByCable: {} }}
+                overlays={{ cables, faults: [markTarget.fault], markersByCable: {} }}
+                highlight={[markTarget.lat, markTarget.lng]}
+                clusterFaults={false} autoFit={false}
+                picking="在地图上单击选择新的故障点位置"
                 height="400px"
                 onPick={(lat, lng) => setMarkTarget((m) => (m ? { ...m, lat, lng } : m))}
               />
