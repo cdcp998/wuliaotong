@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, require_any_permission, require_permission
 from app.core.modules import require_module_enabled
 from app.core.response import BizError, E_NOT_FOUND, E_PARAM, ok
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.modules.map.models import MapCacheRegion, MapDownloadTask
 from app.modules.map.schemas import MapSourceIn, RegionCreate, RegionUpdate
 from app.modules.map.services import config_store, tile_cache
@@ -72,17 +72,31 @@ def tile_source_updated(source: str, db: Session = Depends(get_db)) -> dict:
     })
 
 
-@router.get("/map/tile/{source}/{z}/{x}/{y}", dependencies=[Depends(require_permission("cable:view"))])
-def tile_proxy(source: str, z: int, x: int, y: int, db: Session = Depends(get_db)) -> Response:
-    """瓦片代理：缓存优先 → 在线源抓取落盘（方案 §5.4）。"""
-    if not (0 <= z <= TILE_MAX_ZOOM) or x < 0 or y < 0 or x >= 2 ** z or y >= 2 ** z:
-        raise BizError(E_PARAM, "瓦片坐标越界")
+def _read_source_config(db: Session, source: str) -> dict:
+    """读取该图源配置（含 enabled 校验）；仅在调用方提供的短会话内执行。"""
     config = config_store.effective_config(db)
     src = (config.get("map_sources") or {}).get(source)
     if src is None or not src.get("enabled", False):
         raise BizError(E_NOT_FOUND, f"地图源 {source} 未配置")
+    return src
+
+
+@router.get("/map/tile/{source}/{z}/{x}/{y}", dependencies=[Depends(require_permission("cable:view"))])
+def tile_proxy(source: str, z: int, x: int, y: int) -> Response:
+    """瓦片代理：缓存优先 → 在线源抓取落盘（方案 §5.4）。
+
+    多用户并发加固：短生命周期会话**只做一件事**——读配置并取出该源配置 dict，随即关闭；
+    之后的慢 IO（tile_cache 磁盘/上游抓取，最长 15s）绝不持有任何 DB 会话/连接，
+    避免多用户同时浏览未缓存区域时慢请求占满连接池与线程池、拖垮全站业务接口。
+    保持同步 def（urllib 阻塞抓取由 anyio 线程池承载；路由级鉴权依赖为快路径，不动）。
+    """
+    if not (0 <= z <= TILE_MAX_ZOOM) or x < 0 or y < 0 or x >= 2 ** z or y >= 2 ** z:
+        raise BizError(E_PARAM, "瓦片坐标越界")
+    with SessionLocal() as db:  # 短会话：配置读出即结束
+        src_cfg = _read_source_config(db, source)
+    # ↑ 会话已关闭；以下为纯网络/磁盘 IO（无任何打开的 SQLAlchemy 会话）
     try:
-        data = tile_cache.get_tile(src, source, z, x, y)
+        data = tile_cache.get_tile(src_cfg, source, z, x, y)
     except Exception as exc:  # noqa: BLE001
         logger.warning("瓦片抓取失败 %s/%d/%d/%d：%s", source, z, x, y, exc)
         raise BizError(E_PARAM, "瓦片获取失败，请检查地图源配置或网络") from exc

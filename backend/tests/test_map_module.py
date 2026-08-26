@@ -3,11 +3,15 @@
 - 下载 worker 自适应并发 AIMD 调整边界；
 - TileQuotaExceeded 异常类型（worker 据此免烧重试次数）；
 - 瓦片统计**增量注册表**语义：写入自动登记 / 清理自动注销 / 对账自愈外部改动
-  （隔离临时目录，不触碰真实 tile_cache）。
+  （隔离临时目录，不触碰真实 tile_cache）；
+- 同瓦片 singleflight：并发未命中去重 / leader 失败等待者自愈；
+- 进程内配置 TTL 缓存：命中/深拷贝/失效语义；
+- tile_proxy 无 db 参数回归：配置经短会话读取，慢 IO 阶段无打开会话。
 """
 from __future__ import annotations
 
 import importlib
+import threading
 import time
 
 import pytest
@@ -159,3 +163,172 @@ def test_cold_start_loads_from_disk_once(isolated_tile_cache):
     assert not tc._registry_ready
     assert tc.scan_tiles() == [("esri", 3, 0, 0, 5)]
     assert tc._registry_ready
+
+
+# ============================ 同瓦片 singleflight ============================
+
+def test_singleflight_dedupes_concurrent_misses(isolated_tile_cache):
+    """双线程并发请求同一未缓存瓦片：上游只被抓取 1 次，双方都拿到数据（总超时防挂死）。"""
+    tc, _root = isolated_tile_cache
+    calls: list[int] = []
+    gate = threading.Event()
+    entered = threading.Event()
+
+    def gated_fetch(cfg, z, x, y):
+        calls.append(1)
+        entered.set()
+        assert gate.wait(timeout=10), "测试门未放行"
+        return b"same-tile"
+
+    tc.fetch_remote = gated_fetch
+    cfg = {"url_template": "https://upstream/{z}/{x}/{y}", "max_daily": 0}
+    results: list[bytes] = []
+
+    def worker():
+        results.append(tc.get_tile(cfg, "esri", 9, 0, 0))
+
+    t1 = threading.Thread(target=worker)
+    t1.start()
+    assert entered.wait(5)  # leader 已进入抓取段（阻塞在 gate 上）
+    t2 = threading.Thread(target=worker)
+    t2.start()
+    deadline = time.time() + 5  # 确认 t2 已登记为等待者（而非竞速成第二个 leader）
+    while tc._sf_waiters(("esri", 9, 0, 0)) < 1 and time.time() < deadline:
+        time.sleep(0.01)
+    assert tc._sf_waiters(("esri", 9, 0, 0)) >= 1
+    gate.set()  # 放行 leader
+    t1.join(10)
+    t2.join(10)
+    assert not t1.is_alive() and not t2.is_alive()
+    assert len(calls) == 1  # 上游只被调用 1 次
+    assert results == [b"same-tile", b"same-tile"]
+
+
+def test_singleflight_follower_retries_after_leader_failure(isolated_tile_cache):
+    """leader 抓取失败 → 等待者重查磁盘未命中后自行按普通未命中流程重试成功。"""
+    tc, root = isolated_tile_cache
+    state = {"n": 0}
+    lk = threading.Lock()
+    first_entered = threading.Event()
+    release_first = threading.Event()
+
+    def flaky_fetch(cfg, z, x, y):
+        with lk:
+            state["n"] += 1
+            n = state["n"]
+        if n == 1:
+            first_entered.set()
+            assert release_first.wait(timeout=10)
+            raise RuntimeError("upstream boom")
+        return b"recovered"
+
+    tc.fetch_remote = flaky_fetch
+    cfg = {"url_template": "https://upstream/{z}/{x}/{y}", "max_daily": 0}
+    out: dict = {}
+
+    def leader():
+        try:
+            out["leader"] = tc.get_tile(cfg, "esri", 8, 1, 1)
+        except Exception as exc:  # noqa: BLE001
+            out["leader_err"] = exc
+
+    def follower():
+        try:
+            out["follower"] = tc.get_tile(cfg, "esri", 8, 1, 1)
+        except Exception as exc:  # noqa: BLE001
+            out["follower_err"] = exc
+
+    t1 = threading.Thread(target=leader)
+    t1.start()
+    assert first_entered.wait(5)
+    t2 = threading.Thread(target=follower)
+    t2.start()
+    deadline = time.time() + 5
+    while tc._sf_waiters(("esri", 8, 1, 1)) < 1 and time.time() < deadline:
+        time.sleep(0.01)
+    release_first.set()
+    t1.join(10)
+    t2.join(10)
+    assert not t1.is_alive() and not t2.is_alive()
+    assert isinstance(out.get("leader_err"), RuntimeError)  # leader 失败原样抛出
+    assert out.get("follower") == b"recovered"  # 等待者自行重试成功
+    assert (root / "esri" / "8" / "1" / "1.png").read_bytes() == b"recovered"  # 最终落盘
+    assert state["n"] == 2  # 上游共被调用 2 次（leader 失败 + follower 重试）
+
+
+# ============================ 进程内配置 TTL 缓存 ============================
+
+def test_config_ttl_cache_hit_deepcopy_and_invalidate():
+    """假 loader 注入可测包装器：TTL 内只加载一次；返回值互为深拷贝；失效后重新加载。"""
+    from app.modules.map.services import config_store as cs
+
+    calls: list[int] = []
+    now = [100.0]
+
+    cache = cs._TtlCache(ttl=5.0, clock=lambda: now[0])
+
+    def loader() -> dict:
+        calls.append(1)
+        return {"map_sources": {"esri": {"enabled": True}}, "n": len(calls)}
+
+    a = cache.get(loader)
+    b = cache.get(loader)
+    assert len(calls) == 1  # TTL 内只调 loader 一次
+    assert a == b and a is not b  # 返回对象互为深拷贝
+    a["map_sources"]["esri"]["enabled"] = False  # 模拟调用方原地修改
+    a["n"] = 999
+    c = cache.get(loader)
+    assert c == {"map_sources": {"esri": {"enabled": True}}, "n": 1}  # 缓存未被污染
+    now[0] += 6.0  # 越过 TTL → 重新加载
+    d = cache.get(loader)
+    assert len(calls) == 2 and d["n"] == 2
+    cache.invalidate()  # 显式失效（save_config 写入路径语义）→ 立即重新加载
+    e = cache.get(loader)
+    assert len(calls) == 3 and e["n"] == 3
+
+
+# ============================ tile_proxy 无 db 参数回归 ============================
+
+def test_tile_proxy_reads_config_via_short_session(monkeypatch):
+    """tile_proxy 不再声明 db 依赖；get_tile 收到的配置来自**已关闭**的短会话读取。"""
+    from app.modules.map import api as map_api
+
+    events: list[str] = []
+    captured: dict = {}
+
+    class FakeSession:
+        def __enter__(self):
+            events.append("open")
+            return self
+
+        def __exit__(self, *args):
+            events.append("close")
+            return False
+
+    class FakeSessionLocal:
+        def __call__(self):
+            return FakeSession()
+
+    fake_cfg = {"map_sources": {"esri": {"enabled": True, "url_template": "u/{z}/{x}/{y}"}}}
+
+    def fake_effective_config(db):
+        captured["db_is_fake_session"] = isinstance(db, FakeSession)
+        return fake_cfg
+
+    def fake_get_tile(src_cfg, source, z, x, y, cache_ttl=None):
+        events.append("get_tile")
+        captured["src_cfg"] = src_cfg
+        return b"\x89PNG-fake"
+
+    monkeypatch.setattr(map_api, "SessionLocal", FakeSessionLocal())
+    monkeypatch.setattr(map_api.config_store, "effective_config", fake_effective_config)
+    monkeypatch.setattr(map_api.tile_cache, "get_tile", fake_get_tile)
+
+    resp = map_api.tile_proxy("esri", 10, 1, 2)
+
+    assert resp.body == b"\x89PNG-fake"
+    assert resp.media_type == "image/png"
+    assert captured["db_is_fake_session"] is True
+    assert captured["src_cfg"]["enabled"] is True  # 配置来自短会话读取
+    # 关键时序：会话在 get_tile（慢 IO）之前已关闭——慢 IO 阶段无打开的 SQLAlchemy 会话
+    assert events == ["open", "close", "get_tile"]

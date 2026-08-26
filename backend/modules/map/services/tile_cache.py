@@ -141,18 +141,48 @@ def fetch_remote(source_cfg: dict, z: int, x: int, y: int) -> bytes:
     return data
 
 
+# ============================ 同瓦片 singleflight（进程内去重） ============================
+# 多用户并发加固：仅作用于「缓存未命中 → 抓上游」段，磁盘命中快速路径完全不经过本机制。
+# 首到者注册条目后在锁外执行抓取与落盘；后来者发现已有条目 → **不持锁**等待 event
+# （超时 = _HTTP_TIMEOUT + 5s 缓冲），醒来后重查磁盘：命中读盘返回；未命中（leader 失败/
+# 超时）自行按普通未命中流程再试一次（退化为原行为，无异常对象共享问题）。
+# 条目在 leader 的 finally 中清理 → 天然有界；下载 worker 线程池同样经 get_tile 受益。
+_inflight: dict[tuple[str, int, int, int], dict] = {}
+_sf_lock = threading.Lock()
+
+
+def _sf_waiters(key: tuple[str, int, int, int]) -> int:
+    """调试/测试用：该瓦片当前 singleflight 等待者数量。"""
+    with _sf_lock:
+        entry = _inflight.get(key)
+        return int(entry["waiters"]) if entry else 0
+
+
+def _download_missing(source_cfg: dict, source: str, z: int, x: int, y: int, path: Path, meta: Path) -> bytes:
+    """缓存未命中的普通下载流程：配额检查 → 抓上游 → 落盘 → 登记统计（leader 与等待者重试共用）。"""
+    if not _daily_ok(int(source_cfg.get("max_daily", 0))):
+        raise TileQuotaExceeded("今日瓦片下载配额已用尽")
+    data = fetch_remote(source_cfg, z, x, y)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    meta.write_text(json.dumps({"etag": "", "last_modified": "", "fetched_at": int(time.time())}), encoding="utf-8")
+    _write_source_meta(source, int(time.time()))
+    _register_tile(source, z, x, y, len(data))
+    return data
+
+
 def get_tile(source_cfg: dict, source: str, z: int, x: int, y: int, cache_ttl: int | None = None) -> bytes:
-    """代理读取瓦片：磁盘缓存命中即返回（**永不自动过期**）；未命中 → 抓在线源落盘并登记统计。
+    """代理读取瓦片：磁盘缓存命中即返回（**永不自动过期**）；未命中 → 同瓦片去重后抓在线源落盘并登记统计。
 
     cache_ttl 仅为兼容保留；传 None（默认）= 永久缓存，传正整数秒则该瓦片超过时效会刷新。
     """
     path = _tile_path(source, z, x, y)
     meta = _meta_path(source, z, x, y)
+    # 快速路径：磁盘命中即返回（显式 TTL 场景才尝试刷新，失败回退旧缓存），不进 singleflight
     if path.exists():
         expired = cache_ttl is not None and (time.time() - path.stat().st_mtime) > cache_ttl
         if not expired:
             return path.read_bytes()
-        # 显式 TTL 场景才尝试刷新，失败时回退旧缓存（离线可用）
         try:
             data = fetch_remote(source_cfg, z, x, y)
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -164,15 +194,38 @@ def get_tile(source_cfg: dict, source: str, z: int, x: int, y: int, cache_ttl: i
         except Exception as exc:  # noqa: BLE001
             logger.warning("瓦片刷新失败，回退缓存 %s/%d/%d/%d：%s", source, z, x, y, exc)
             return path.read_bytes()
-    if not _daily_ok(int(source_cfg.get("max_daily", 0))):
-        raise TileQuotaExceeded("今日瓦片下载配额已用尽")
-    data = fetch_remote(source_cfg, z, x, y)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
-    meta.write_text(json.dumps({"etag": "", "last_modified": "", "fetched_at": int(time.time())}), encoding="utf-8")
-    _write_source_meta(source, int(time.time()))
-    _register_tile(source, z, x, y, len(data))
-    return data
+
+    key = (source, z, x, y)
+    with _sf_lock:
+        entry = _inflight.get(key)
+        if entry is None:
+            entry = {"event": threading.Event(), "waiters": 0}
+            _inflight[key] = entry
+            is_leader = True
+        else:
+            is_leader = False
+
+    if not is_leader:
+        # 后来者：锁外等待 leader 完成（防死锁）；超时留有缓冲
+        with _sf_lock:
+            entry["waiters"] += 1
+        try:
+            entry["event"].wait(timeout=_HTTP_TIMEOUT + 5)
+        finally:
+            with _sf_lock:
+                entry["waiters"] -= 1
+        if path.exists():  # leader 成功落盘 → 重查磁盘直接读盘
+            return path.read_bytes()
+        # leader 失败/超时：自己按普通未命中流程再试一次
+        return _download_missing(source_cfg, source, z, x, y, path, meta)
+
+    # 首到者（leader）：锁外执行抓取与落盘，完成后唤醒等待者并清理条目
+    try:
+        return _download_missing(source_cfg, source, z, x, y, path, meta)
+    finally:
+        entry["event"].set()
+        with _sf_lock:
+            _inflight.pop(key, None)
 
 
 def clear_tiles(source: str | None = None, before_ts: float | None = None) -> dict:

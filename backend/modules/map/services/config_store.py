@@ -10,9 +10,12 @@
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
+import threading
+import time
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -129,6 +132,7 @@ def save_config(db: Session, config: dict) -> None:
         raise ValueError("map 模块未登记")
     row.config = json.dumps(config, ensure_ascii=False)
     db.commit()
+    _config_cache.invalidate()  # 写入后立即失效进程内 TTL 缓存（删除图源等接口经此生效）
     from app.core.modules import invalidate_module_cache
 
     invalidate_module_cache(MODULE_CODE)
@@ -139,7 +143,16 @@ def effective_config(db: Session) -> dict:
 
     系统自带图源（默认 Esri）在安装/启用或首次访问时即落库（ensure_seeded），
     成为可测试/可编辑/可停用的真实配置；仅当源被全部删除时才再次回退内置默认。
+
+    进程内 5 秒 TTL 缓存：瓦片代理每瓦片请求不再重复 SELECT+JSON+Fernet 解密；
+    load_config 的 cable 兜底路径（_legacy_from_cable）同样被缓存覆盖。
+    返回值为深拷贝，调用方可安全原地修改。
     """
+    return _config_cache.get(lambda: _load_effective_uncached(db))
+
+
+def _load_effective_uncached(db: Session) -> dict:
+    """effective_config 的原逻辑（未缓存路径）。"""
     config = load_config(db)
     if not config.get("map_sources"):
         return ensure_seeded(db)
@@ -160,14 +173,53 @@ def ensure_seeded(db: Session) -> dict:
     if row is not None:
         row.config = json.dumps(default, ensure_ascii=False)
         db.commit()
+        _config_cache.invalidate()
     return default
 
 
 def mask_config(config: dict) -> dict:
     """接口脱敏视图（不修改原对象）。"""
-    import copy
-
     return _mask_sensitive(copy.deepcopy(config))
+
+
+# ============================ 进程内配置 TTL 缓存 ============================
+# 多用户并发加固：瓦片代理等热点接口原先每个请求都执行 SELECT sys_module + JSON 解析 +
+# Fernet 解密；现以 5 秒 TTL 缓存消除该隐性小查询（单进程部署语义；写路径即时失效）。
+# 缓存命中/回填均返回**深拷贝**——调用方会原地修改返回 dict
+# （如 save_map_sources 直接写 config["map_sources"][key]，浅拷贝会污染缓存）。
+_CONFIG_TTL_SECONDS = 5.0
+
+
+class _TtlCache:
+    """极简进程内 TTL 缓存（loader 与时钟可注入，便于不连 DB 单测；线程安全）。
+
+    - get(loader)：命中且未过期 → 返回缓存值深拷贝；未命中执行 loader 回填后返回深拷贝。
+      持锁执行 loader：既防击穿，也符合「loader 为毫秒级小查询」的定位。
+    - invalidate()：写入路径调用（save_config / ensure_seeded），立即失效。
+    """
+
+    def __init__(self, ttl: float = _CONFIG_TTL_SECONDS, clock=time.monotonic):
+        self._ttl = ttl
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._value: dict | None = None
+        self._expires_at = 0.0
+
+    def get(self, loader) -> dict:
+        with self._lock:
+            now = self._clock()
+            if self._value is None or now >= self._expires_at:
+                self._value = loader()
+                self._expires_at = now + self._ttl
+            return copy.deepcopy(self._value)
+
+    def invalidate(self) -> None:
+        with self._lock:
+            self._value = None
+            self._expires_at = 0.0
+
+
+_config_cache = _TtlCache()
 
 
 def default_config() -> dict:
