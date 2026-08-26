@@ -1468,7 +1468,7 @@ def create_delete_review(req: DeleteReviewReq, user: SysUser = Depends(get_curre
         f = db.get(CableFault, req.target_id)
         if f is None or f.deleted:
             raise BizError(E_NOT_FOUND, "故障不存在")
-        if f.status != 4:
+        if f.status != 5:  # 5 已关闭（v1.1 六态：待派发/已派发/进行中/完成待验/已验证/已关闭）
             raise BizError(E_PARAM, "仅已关闭的故障需要审核删除")
         name = f"故障 #{f.id}"
         desc = f"{f.fault_type or '未分类'} · {float(f.lat):.6f},{float(f.lng):.6f}"

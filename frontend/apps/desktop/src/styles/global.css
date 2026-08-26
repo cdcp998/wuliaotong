@@ -283,6 +283,11 @@ button:focus-visible,
   box-shadow: 0 3px 12px rgba(30, 36, 51, 0.05);
 }
 
+/* 跨页定位高亮行（?focus_task= / ?focus= 跳转入口：任务列表/故障管理联动视图） */
+.wlt-row-focus > td {
+  background: #eaefff !important;
+}
+
 /* 状态徽标（胶囊）基础外观：页面内 Tag 统一走 Antd，自定义徽标用 class 复用 */
 .wlt-pill {
   display: inline-flex;

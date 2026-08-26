@@ -93,7 +93,7 @@ class FaultUpdate(BaseModel):
 
 
 class FaultStatusUpdate(BaseModel):
-    status: int  # 0-4
+    status: int  # 0-5（0待派发/1已派发/2进行中/3完成待验/4已验证/5已关闭）
 
 
 class FaultPhotoIn(BaseModel):

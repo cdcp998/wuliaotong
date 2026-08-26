@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS cable_fault (
   fault_type          VARCHAR(30) NOT NULL DEFAULT '',
   severity            TINYINT NOT NULL DEFAULT 1 COMMENT '1 低 / 2 中 / 3 高',
   description         VARCHAR(500) NOT NULL DEFAULT '',
-  status              TINYINT NOT NULL DEFAULT 0 COMMENT '0 待处理 / 1 处理中 / 2 待验证 / 3 已修复 / 4 已关闭',
+  status              TINYINT NOT NULL DEFAULT 0 COMMENT '0 待派发 / 1 已派发 / 2 进行中 / 3 完成待验 / 4 已验证 / 5 已关闭（与维修任务态联动）',
    deleted             TINYINT NOT NULL DEFAULT 0 COMMENT '软删除标记（错误标点）',
   reported_by         BIGINT NOT NULL DEFAULT 0 COMMENT '上报人 → sys_user.id',
   reported_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

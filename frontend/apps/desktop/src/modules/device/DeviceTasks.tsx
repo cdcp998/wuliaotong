@@ -1,6 +1,7 @@
 /** device 模块：设备维修任务（/device/tasks，device:task）——创建/派发（手动·公开任务单·组合三模式）/接单/完成/验收/取消 + 维修记录。
  *  v3 界面：状态胶囊 Tabs + 玻璃表格 + 三种派发模式。 */
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, theme, Tooltip, Upload } from "antd";
 import { CheckCircleOutlined, CheckOutlined, DeleteOutlined, FileDoneOutlined, FileImageOutlined, LockOutlined, PlusOutlined, ReloadOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -24,6 +25,8 @@ export function DeviceTasksPage() {
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const me = useAuthStore((s) => s.user);
+  const [searchParams] = useSearchParams();
+  const focusedKey = searchParams.get("focus") || ""; // 跨页定位（任务看板/列表跳转入口）：d{task_id}
   const [rows, setRows] = useState<DeviceTaskItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -59,6 +62,14 @@ export function DeviceTasksPage() {
   }, [filterStatus, page, pageSize, message]);
 
   useEffect(() => { void load(); }, [load]);
+  // 跨页定位：?focus=d{id} → 自动打开对应任务抽屉（统一任务池联动入口）
+  useEffect(() => {
+    if (!focusedKey || loading || rows.length === 0) return;
+    const id = Number(focusedKey.replace(/^d/, ""));
+    const t = rows.find((x) => x.id === id);
+    if (t) { setCurrent(t); setRecords([]); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, loading]);
   useEffect(() => {
     // 设备/维修人员下拉数据源：page_size 上限为后端 le=100，超出会被 422 拒绝（此前 200 静默失败致下拉为空）
     deviceApi
@@ -88,8 +99,11 @@ export function DeviceTasksPage() {
 
   const act = async (t: DeviceTaskItem, action: string, extra?: object) => {
     try {
-      await deviceApi.taskStatus(t.id, { action, ...extra });
+      const r = await deviceApi.taskStatus(t.id, { action, ...extra });
       message.success("已更新");
+      // 回退文本提示词（v1.1）：验收/取消自动按快照回退设备状态时后端生成
+      const prompt = (r as { rollback_prompt?: string }).rollback_prompt;
+      if (prompt) message.info(prompt, 5);
       setCurrent(null);
       void load();
     } catch (e) {
@@ -228,6 +242,7 @@ export function DeviceTasksPage() {
           rowKey="id" loading={loading} dataSource={rows} locale={{ emptyText: "暂无设备维修任务" }}
           pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else setPage(p); } }}
           columns={columns}
+          rowClassName={(r) => (`d${r.id}` === focusedKey ? "wlt-row-focus" : "")}
         />
         {/* 状态流转说明 */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "12px 10px 4px", borderTop: `1px solid ${token.colorBorder}`, marginTop: 4 }}>

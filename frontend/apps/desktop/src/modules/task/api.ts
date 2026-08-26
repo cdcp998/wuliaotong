@@ -19,6 +19,12 @@ export interface TaskItem {
   created_by: number;
   creator_name: string;
   created_at: string;
+  /* —— 联动视图关联信息（v1.2，后端 _link_info 注入）—— */
+  fault_type?: string;
+  fault_status?: number | null;
+  fault_status_label?: string;
+  severity?: number | null;
+  cable_name?: string;
 }
 
 export interface Page<T> {
@@ -26,6 +32,41 @@ export interface Page<T> {
   page: number;
   page_size: number;
   items: T[];
+}
+
+/** 统一任务池条目（/tasks/pool）：线缆维修任务 + 设备维修任务合并视图。 */
+export interface PoolItem {
+  source: "cable" | "device";
+  /** 前端行 key / 跨页定位符：cable → `c{id}`，device → `d{id}` */
+  key: string;
+  id: number;
+  task_no: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: number;
+  assignee_id: number;
+  assignee_name: string;
+  scheduled_time: string | null;
+  completed_at: string | null;
+  verdict: string;
+  cancel_reason: string;
+  creator_name: string;
+  created_at: string;
+  dispatch_mode: string;
+  /* 线缆故障关联信息 */
+  fault_id: number | null;
+  fault_type: string;
+  fault_status: number | null;
+  severity: number | null;
+  cable_id: number | null;
+  cable_name: string;
+  /* 设备关联信息 */
+  device_id: number | null;
+  device_name: string;
+  device_code: string;
+  device_status: number | null;
+  previous_status: number | null;
 }
 
 export interface TaskRecordItem {
@@ -55,6 +96,14 @@ export const taskApi = {
       if (v !== undefined && v !== "") p.set(k, String(v));
     });
     return http.get<Page<TaskItem>>(`/tasks?${p.toString()}`);
+  },
+  /** 统一任务池：线缆 + 设备维修任务合并（device 模块启用时后端自动合并）。 */
+  pool: (params: { status?: string; keyword?: string; source?: "" | "cable" | "device"; page?: number; page_size?: number } = {}) => {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== "") p.set(k, String(v));
+    });
+    return http.get<Page<PoolItem>>(`/tasks/pool?${p.toString()}`);
   },
   create: (body: { cable_id?: number | null; fault_id?: number | null; title: string; description?: string; priority?: number }) =>
     http.post<TaskItem>("/tasks", body),

@@ -1,21 +1,26 @@
 /** cable 模块：故障管理（/cable/faults，fault:manage / fault:report）——上报、状态流转、照片、删除审核。
- *  v3 界面：状态角标 Tabs + 玻璃表格（满宽）+「故障上报」弹窗（原右侧面板移入 Modal）。 */
+ *  v4 联动视图：六态状态流转（待派发›已派发›进行中›完成待验›已验证›已关闭，与维修任务态同步）；
+ *  详情抽屉展示反向关联的维修任务（可跳转任务列表/看板），支持一键转维修任务；
+ *  支持 ?focus={fault_id} 跨页定位（看板/列表跳转入口）。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { App, Button, Drawer, Form, Image, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Tooltip, theme, Upload } from "antd";
-import { AimOutlined, CameraOutlined, CheckCircleOutlined, CheckOutlined, DeleteOutlined, LockOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from "@ant-design/icons";
+import { AimOutlined, CameraOutlined, CheckCircleOutlined, CheckOutlined, DeleteOutlined, LockOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
-import { baseApi, fileApi } from "@wlt/shared";
+import { baseApi, fileApi, useAuthStore } from "@wlt/shared";
 
-import { cableApi, type CableItem, type FaultItem } from "./api";
+import { cableApi, FAULT_FLOW_STEPS, FAULT_STATUS, type CableItem, type FaultItem } from "./api";
+import { taskApi } from "../task/api";
 import { mapApi, type MapSourceInfo } from "../map/api";
 import { MapView } from "../map/MapView";
 
 const NEXT_ICON: Record<number, React.ReactNode> = {
-  1: <PlayCircleOutlined />,
-  2: <CheckCircleOutlined />,
-  3: <CheckOutlined />,
-  4: <LockOutlined />,
+  1: <SendOutlined />,
+  2: <PlayCircleOutlined />,
+  3: <CheckCircleOutlined />,
+  4: <CheckOutlined />,
+  5: <LockOutlined />,
 };
 
 const SEVERITY: Record<number, { label: string; fg: string; bg: string }> = {
@@ -23,12 +28,14 @@ const SEVERITY: Record<number, { label: string; fg: string; bg: string }> = {
   2: { label: "中", fg: "#B45309", bg: "#FEF4E2" },
   3: { label: "高", fg: "#DC2626", bg: "#FDEBEC" },
 };
-const STATUS: Record<number, { label: string; fg: string; bg: string; next?: { to: number; label: string } }> = {
-  0: { label: "待处理", fg: "#DC2626", bg: "#FDEBEC", next: { to: 1, label: "开始处理" } },
-  1: { label: "处理中", fg: "#3B5BDB", bg: "#EAEFFF", next: { to: 2, label: "提交验证" } },
-  2: { label: "待验证", fg: "#B45309", bg: "#FEF4E2", next: { to: 3, label: "修复完成" } },
-  3: { label: "已修复", fg: "#15803D", bg: "#E8F9EF", next: { to: 4, label: "关闭" } },
-  4: { label: "已关闭", fg: "#8A93A8", bg: "#EFF3FC" },
+
+/** 手动流转按钮文案（与维修任务联动时由后端自动同步状态）。 */
+const NEXT_LABEL: Record<number, string> = {
+  1: "标记已派发",
+  2: "开始处理",
+  3: "提交验证",
+  4: "验证通过",
+  5: "关闭",
 };
 
 interface PhotoItem { id: number; file_id: number; category: string; remark: string; url: string }
@@ -36,6 +43,10 @@ interface PhotoItem { id: number; file_id: number; category: string; remark: str
 export function CableFaultsPage() {
   const { message } = App.useApp();
   const { token } = theme.useToken();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const moduleEnabled = useAuthStore((s) => s.moduleEnabled);
+  const taskEnabled = moduleEnabled("task");
   const [rows, setRows] = useState<FaultItem[]>([]);
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -52,11 +63,13 @@ export function CableFaultsPage() {
   const [cables, setCables] = useState<CableItem[]>([]);
   const [detail, setDetail] = useState<FaultItem | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [creatingTask, setCreatingTask] = useState(false);
   const [locFault, setLocFault] = useState<FaultItem | null>(null);
   const [delFault, setDelFault] = useState<FaultItem | null>(null);
   const [delReason, setDelReason] = useState("");
   const [delSubmitting, setDelSubmitting] = useState(false);
   const [form] = Form.useForm();
+  const focusedId = searchParams.get("focus");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,13 +88,22 @@ export function CableFaultsPage() {
   useEffect(() => {
     mapApi.mapSources().then((s) => setSources(s.map_sources)).catch(() => undefined);
     cableApi.listCables({ page_size: 100 }).then((r) => setCables(r.items)).catch(() => undefined);
-    Promise.all([["", "全部"], ["0", "待处理"], ["1", "处理中"], ["2", "待验证"], ["3", "已修复"], ["4", "已关闭"]].map(async ([st]) => {
+    // 六态计数（含全部）；逐态拉取 total（page_size=1 仅取计数）
+    Promise.all([["", "全部"], ...Object.entries(FAULT_STATUS).map(([k, v]) => [k, v.label])].map(async ([st]) => {
       try {
         const r = await cableApi.listFaults({ status: st, page: 1, page_size: 1 });
         return [st, r.total] as const;
       } catch { return [st, 0] as const; }
     })).then((cs) => setCounts(Object.fromEntries(cs)));
   }, []);
+
+  /** 跨页定位：?focus={fault_id} → 自动打开详情抽屉（看板/列表跳转入口）。 */
+  useEffect(() => {
+    if (!focusedId || loading || rows.length === 0) return;
+    const f = rows.find((x) => String(x.id) === focusedId);
+    if (f) void openDetail(f);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, loading]);
 
   const openCreate = () => {
     setPicked(null);
@@ -125,14 +147,34 @@ export function CableFaultsPage() {
   };
 
   const nextStatus = async (f: FaultItem) => {
-    const meta = STATUS[f.status];
+    const meta = FAULT_STATUS[f.status];
     if (!meta?.next) return;
     try {
-      await cableApi.updateFaultStatus(f.id, meta.next.to);
-      message.success(`状态已更新为「${STATUS[meta.next.to].label}」`);
+      await cableApi.updateFaultStatus(f.id, meta.next);
+      message.success(`状态已更新为「${FAULT_STATUS[meta.next].label}」`);
       void load();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "操作失败");
+    }
+  };
+
+  /** 一键转维修任务（反向关联）：创建关联本故障的任务，随后可在看板/列表派发。 */
+  const createLinkedTask = async (f: FaultItem) => {
+    setCreatingTask(true);
+    try {
+      await taskApi.create({
+        fault_id: f.id,
+        title: `${f.fault_type || "线缆故障"}维修 #${f.id}`.slice(0, 100),
+        description: f.description || "",
+        priority: f.severity >= 3 ? 2 : 1,
+      });
+      message.success("维修任务已创建并关联本故障，可在「任务看板/列表」派发");
+      setDetail(null);
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "创建失败");
+    } finally {
+      setCreatingTask(false);
     }
   };
 
@@ -176,7 +218,7 @@ export function CableFaultsPage() {
   };
 
   const uploadPhoto = async (file: File) => {
-    if (!detail) return;
+    if (!detail) return false;
     try {
       const up = await fileApi.upload(file, "fault");
       await cableApi.addFaultPhoto(detail.id, up.file_id, "维修后");
@@ -190,28 +232,52 @@ export function CableFaultsPage() {
 
   const columns = useMemo<ColumnsType<FaultItem>>(
     () => [
-      { title: "故障 / 类型", width: 300, render: (_, f) => (
+      { title: "故障 / 类型", width: 280, render: (_, f) => (
         <div>
           <div style={{ fontWeight: 700, fontSize: 13.5 }}>{f.description || "未填写描述"}</div>
           <div style={{ fontSize: 11, color: token.colorTextTertiary, marginTop: 2 }}>{f.fault_type || "未分类"} · #{f.id} {f.cumulative_distance > 0 ? `· 距起点 ${f.cumulative_distance.toFixed(0)} m` : ""}</div>
         </div>
       ) },
-      { title: "严重度", width: 100, render: (_, f) => { const s = SEVERITY[f.severity]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? f.severity}</Tag>; } },
-      { title: "位置", width: 200, render: (_, f) => <span style={{ fontSize: 12, color: token.colorTextSecondary, fontVariantNumeric: "tabular-nums" }}>{f.lat.toFixed(6)}, {f.lng.toFixed(6)}</span> },
-      { title: "状态", width: 110, render: (_, f) => { const s = STATUS[f.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? f.status}</Tag>; } },
-      { title: "上报时间", dataIndex: "reported_at", width: 150, render: (v: string) => (v ? <span style={{ fontSize: 12 }}>{new Date(v).toLocaleString()}</span> : <span style={{ color: token.colorTextTertiary }}>—</span>) },
+      { title: "严重度", width: 90, render: (_, f) => { const s = SEVERITY[f.severity]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? f.severity}</Tag>; } },
+      { title: "位置", width: 180, render: (_, f) => <span style={{ fontSize: 12, color: token.colorTextSecondary, fontVariantNumeric: "tabular-nums" }}>{f.lat.toFixed(6)}, {f.lng.toFixed(6)}</span> },
+      { title: "状态", width: 110, render: (_, f) => { const s = FAULT_STATUS[f.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? f.status}</Tag>; } },
       {
-        title: "操作", width: 190,
+        title: "关联维修任务", key: "linked", width: 190,
+        render: (_, f) => {
+          const linked = f.linked_tasks ?? [];
+          if (linked.length === 0) {
+            return taskEnabled ? (
+              <Button type="link" size="small" icon={<PlusOutlined />} style={{ padding: 0, fontSize: 12 }} onClick={() => createLinkedTask(f)}>转维修任务</Button>
+            ) : <span style={{ color: token.colorTextTertiary, fontSize: 12 }}>—</span>;
+          }
+          return (
+            <Space size={4} wrap>
+              {linked.slice(0, 2).map((t) => (
+                <Tooltip key={t.id} title={`${t.task_no} · ${t.title}（点击查看任务）`}>
+                  <Tag style={{ borderRadius: 999, cursor: "pointer", background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}
+                    onClick={() => navigate(`/task/list?focus_task=c${t.id}`)}>
+                    {t.task_no}
+                  </Tag>
+                </Tooltip>
+              ))}
+              {linked.length > 2 && <span style={{ fontSize: 11, color: token.colorTextTertiary }}>+{linked.length - 2}</span>}
+            </Space>
+          );
+        },
+      },
+      { title: "上报时间", dataIndex: "reported_at", width: 140, render: (v: string) => (v ? <span style={{ fontSize: 12 }}>{new Date(v).toLocaleString()}</span> : <span style={{ color: token.colorTextTertiary }}>—</span>) },
+      {
+        title: "操作", width: 170,
         render: (_, f) => (
           <Space size={2}>
-            {STATUS[f.status]?.next && (
-              <Tooltip title={STATUS[f.status]!.next!.label}>
-                <Button size="small" type="primary" icon={NEXT_ICON[STATUS[f.status]!.next!.to]} onClick={() => nextStatus(f)} />
+            {FAULT_STATUS[f.status]?.next && (
+              <Tooltip title={NEXT_LABEL[FAULT_STATUS[f.status]!.next!] ?? "下一状态"}>
+                <Button size="small" type="primary" ghost icon={NEXT_ICON[FAULT_STATUS[f.status]!.next!]} onClick={() => nextStatus(f)} />
               </Tooltip>
             )}
             <Tooltip title="定位到故障点"><Button size="small" icon={<AimOutlined />} onClick={() => setLocFault(f)} /></Tooltip>
             <Tooltip title="照片/详情"><Button size="small" icon={<CameraOutlined />} onClick={() => openDetail(f)} /></Tooltip>
-            {f.status === 4 ? (
+            {f.status === 5 ? (
               <Tooltip title="删除（已关闭故障，需管理员审核）">
                 <Button size="small" danger icon={<DeleteOutlined />} onClick={() => { setDelFault(f); setDelReason(""); }} />
               </Tooltip>
@@ -224,7 +290,8 @@ export function CableFaultsPage() {
         ),
       },
     ],
-    [token]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [token, taskEnabled],
   );
 
   return (
@@ -233,7 +300,9 @@ export function CableFaultsPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>故障管理</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>故障全生命周期：上报 → 派单 → 修复 → 验收；高严重度自动通知并在地图标红</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
+            故障全生命周期与维修任务联动：待派发 › 已派发 › 进行中 › 完成待验 › 已验证 › 已关闭；任务派发/验收自动同步故障状态
+          </p>
         </div>
         <Space>
           <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
@@ -243,7 +312,7 @@ export function CableFaultsPage() {
 
       {/* 状态 Tabs + 严重度 */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
-        {[["", "全部"], ["0", "待处理"], ["1", "处理中"], ["2", "待验证"], ["3", "已修复"], ["4", "已关闭"]].map(([st, label]) => {
+        {[["", "全部"], ...Object.entries(FAULT_STATUS).map(([k, v]) => [k, v.label] as [string, string])].map(([st, label]) => {
           const active = filterStatus === st;
           return (
             <button key={st} type="button" onClick={() => { setFilterStatus(st); setPage(1); }}
@@ -271,10 +340,24 @@ export function CableFaultsPage() {
             locale={{ emptyText: "暂无故障" }}
             pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else setPage(p); } }}
             columns={columns}
+            rowClassName={(r) => (String(r.id) === focusedId ? "wlt-row-focus" : "")}
           />
+          {/* 状态流转说明（与设备维修任务页同款：统一六态联动） */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "12px 10px 4px", borderTop: `1px solid ${token.colorBorder}`, marginTop: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: token.colorTextSecondary }}>状态流转</span>
+            {FAULT_FLOW_STEPS.map((s, i) => (
+              <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 11.5, padding: "3px 10px", borderRadius: 999, background: i === 3 ? "#F3E8FF" : "#F6F8FE", color: i === 3 ? "#7C3AED" : token.colorTextSecondary, fontWeight: i === 3 ? 700 : 400 }}>{s}</span>
+                {i < FAULT_FLOW_STEPS.length - 1 && <span style={{ color: token.colorTextTertiary }}>›</span>}
+              </span>
+            ))}
+            <span style={{ fontSize: 11, color: token.colorTextTertiary, marginLeft: 8 }}>
+              关联任务的派发/接单/完成/验收自动同步以上状态{taskEnabled ? "；设备维修任务完成后设备自动回退快照状态并生成文本提示词" : ""}
+            </span>
+          </div>
         </div>
 
-      {/* 故障上报弹窗（原右侧常驻面板 → Modal） */}
+      {/* 故障上报弹窗 */}
       <Modal
         open={open}
         onCancel={() => setOpen(false)}
@@ -327,7 +410,7 @@ export function CableFaultsPage() {
         {locFault && (
           <>
             <p style={{ marginBottom: 8, color: token.colorTextSecondary, fontSize: 12.5 }}>
-              {locFault.fault_type || "未分类"} · 状态：{STATUS[locFault.status]?.label} · {locFault.lat.toFixed(6)}, {locFault.lng.toFixed(6)}
+              {locFault.fault_type || "未分类"} · 状态：{FAULT_STATUS[locFault.status]?.label} · {locFault.lat.toFixed(6)}, {locFault.lng.toFixed(6)}
             </p>
             <div style={{ height: 420, border: `1px solid ${token.colorBorder}`, borderRadius: 12, overflow: "hidden" }}>
               <MapView sources={sources} center={[locFault.lat, locFault.lng]} zoom={16} overlays={{ cables: [], faults: [locFault], markersByCable: {} }} height="420px" />
@@ -352,7 +435,7 @@ export function CableFaultsPage() {
         <Input.TextArea rows={3} maxLength={500} placeholder="请填写删除原因（必填）" value={delReason} onChange={(e) => setDelReason(e.target.value)} />
       </Modal>
 
-      {/* 详情抽屉 */}
+      {/* 详情抽屉（含反向关联维修任务） */}
       <Drawer open={!!detail} onClose={() => setDetail(null)} width={520} title={detail ? `故障 #${detail.id}` : ""}>
         {detail && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -360,10 +443,33 @@ export function CableFaultsPage() {
               类型：{detail.fault_type || "—"}　严重度：
               <Tag style={{ borderRadius: 999, background: SEVERITY[detail.severity]?.bg, color: SEVERITY[detail.severity]?.fg, borderColor: "transparent" }}>{SEVERITY[detail.severity]?.label}</Tag>
               　状态：
-              <Tag style={{ borderRadius: 999, background: STATUS[detail.status]?.bg, color: STATUS[detail.status]?.fg, borderColor: "transparent" }}>{STATUS[detail.status]?.label}</Tag>
+              <Tag style={{ borderRadius: 999, background: FAULT_STATUS[detail.status]?.bg, color: FAULT_STATUS[detail.status]?.fg, borderColor: "transparent" }}>{FAULT_STATUS[detail.status]?.label}</Tag>
             </div>
             <div style={{ color: token.colorTextSecondary, fontSize: 12.5 }}>位置：{detail.lat.toFixed(6)}, {detail.lng.toFixed(6)}（累计 {detail.cumulative_distance.toFixed(1)} m）</div>
             <div style={{ fontSize: 13 }}>描述：{detail.description || "—"}</div>
+            {/* 反向关联维修任务：跳转任务列表定位；无关联时可一键转维修任务 */}
+            <div style={{ border: `1px solid ${token.colorBorder}`, borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: token.colorTextSecondary }}>关联维修任务</div>
+              {(detail.linked_tasks ?? []).length === 0 ? (
+                <Space>
+                  <span style={{ fontSize: 12, color: token.colorTextTertiary }}>暂无关联任务</span>
+                  {taskEnabled && (
+                    <Button size="small" type="primary" ghost loading={creatingTask} onClick={() => createLinkedTask(detail)}>转维修任务</Button>
+                  )}
+                  {!taskEnabled && <span style={{ fontSize: 11, color: token.colorTextTertiary }}>(安装启用「任务管理」后可将故障转为维修任务)</span>}
+                </Space>
+              ) : (
+                <Space size={6} wrap>
+                  {(detail.linked_tasks ?? []).map((t) => (
+                    <Tag key={t.id} style={{ borderRadius: 999, cursor: "pointer", background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent" }}
+                      onClick={() => navigate(`/task/list?focus_task=c${t.id}`)}>
+                      {t.task_no} · {t.title}
+                    </Tag>
+                  ))}
+                  <Button size="small" type="link" style={{ padding: 0 }} onClick={() => navigate(`/task/board?focus_task=${detail.linked_tasks?.[0] ? `c${detail.linked_tasks[0].id}` : ""}`)}>在看板中查看 ›</Button>
+                </Space>
+              )}
+            </div>
             <div style={{ fontWeight: 700, fontSize: 13.5 }}>照片（{photos.length}）</div>
             <Space wrap>
               {photos.map((p) => (

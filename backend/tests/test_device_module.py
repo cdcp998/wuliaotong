@@ -77,16 +77,28 @@ def _cleanup_file(file_id: int) -> None:
 
 # ============================ 模块依赖 ============================
 
-def test_device_dependency_on_task() -> None:
-    """device 依赖 task：task 停用 → device 启用被拒；恢复后成功。"""
+def test_device_no_hard_dependency_on_task() -> None:
+    """v1.1 起设备管理不依赖 task（增强模块）：task 停用时 device 仍可独立启用。
+
+    领用关联等增强接口运行期经 module_enabled("task") 守卫（403），不影响本体功能。
+    """
     _login("admin", "admin123")
     assert client.post("/api/v1/modules/task/disable").json()["code"] == 0
     assert client.post("/api/v1/modules/device/disable").json()["code"] == 0
     r = client.post("/api/v1/modules/device/enable")
-    assert r.json()["code"] == 4002  # 依赖不满足
+    assert r.json()["code"] == 0, r.text  # 无硬依赖 → task 停用仍可启用
+    # 增强功能守卫：task 未启用时领用关联接口 403
+    d = _mk_device()
+    r = client.post("/api/v1/device-tasks", json={"device_id": d["id"], "title": "T-无依赖领用"})
+    tid = r.json()["data"]["id"]
+    r = client.get(f"/api/v1/device-tasks/{tid}/requisitions")
+    assert r.status_code == 403 and r.json()["code"] == 4009
+    # 恢复 task → 守卫解除
     assert client.post("/api/v1/modules/task/enable").json()["code"] == 0
-    r = client.post("/api/v1/modules/device/enable")
-    assert r.json()["code"] == 0, r.text
+    r = client.get(f"/api/v1/device-tasks/{tid}/requisitions")
+    assert r.json()["code"] == 0
+    # 清理：取消任务回退设备状态
+    assert client.post(f"/api/v1/device-tasks/{tid}/status", json={"action": "cancel", "reason": "T-清理"}).json()["code"] == 0
 
 
 # ============================ 台账与生命周期 ============================
@@ -148,13 +160,21 @@ def test_device_task_full_flow_and_snapshot_rollback() -> None:
     dev = client.get(f"/api/v1/devices/{did}").json()["data"]
     assert dev["status"] == 2  # 完成未验收 → 仍维修中
 
-    # 验收 → 设备按快照回退到在用(1)
+    # 验收 → 设备按快照回退到在用(1)，并生成回退文本提示词（响应 rollback_prompt）
     _login("admin", "admin123")
     r = client.post(f"/api/v1/device-tasks/{tid}/status", json={"action": "verify", "verdict": "T-验收合格"})
-    assert r.json()["code"] == 0 and r.json()["data"]["status"] == "verified"
+    data = r.json()["data"]
+    assert r.json()["code"] == 0 and data["status"] == "verified"
+    assert "rollback_prompt" in data and "维修中" in data["rollback_prompt"] and "在用" in data["rollback_prompt"], data
     dev = client.get(f"/api/v1/devices/{did}").json()["data"]
     assert dev["status"] == 1
     assert client.post(f"/api/v1/device-tasks/{tid}/status", json={"action": "close"}).json()["code"] == 0
+
+    # 回退通知已生成（创建者收到「设备状态已自动回退」文本提示词）
+    r = client.get("/api/v1/notifications", params={"page_size": 50})
+    if r.json().get("code") == 0:
+        titles = [n.get("title", "") for n in r.json()["data"].get("list", r.json()["data"])]
+        assert any("自动回退" in t for t in titles)
     _cleanup_file(file_id)
 
 

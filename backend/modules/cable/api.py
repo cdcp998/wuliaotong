@@ -36,6 +36,11 @@ from app.modules.cable.schemas import (
     StatusUpdate,
 )
 from app.modules.cable.services import geo_math
+from app.modules.cable.services.fault_sync import (
+    FAULT_ACTIVE_STATUSES,
+    FAULT_CLOSED,
+    FAULT_STATUS_LABELS,
+)
 
 logger = logging.getLogger("app.cable")
 
@@ -84,8 +89,36 @@ def _cable_out(c: Cable, points: list[CablePoint] | None = None) -> dict:
     return out
 
 
-def _fault_out(f: CableFault) -> dict:
-    return {
+def _linked_tasks_by_fault(db: Session, fault_ids: list[int]) -> dict[int, list[dict]]:
+    """故障 → 反向关联的维修任务列表（task 模块启用时；统一联动视图用）。
+
+    task 模块未安装/未启用时返回空映射（线缆管理独立运行，不依赖任务管理）。
+    """
+    ids = [int(i) for i in fault_ids if i]
+    if not ids:
+        return {}
+    from app.core.modules import module_enabled
+
+    if not module_enabled(db, "task"):
+        return {}
+    try:  # 懒加载 task 模块模型（模块未部署时不影响 cable 独立运行）
+        from app.modules.task.models import MaintenanceTask
+    except ImportError:
+        return {}
+    rows = db.scalars(select(MaintenanceTask).where(MaintenanceTask.fault_id.in_(ids)).order_by(MaintenanceTask.id.desc())).all()
+    out: dict[int, list[dict]] = {}
+    for t in rows:
+        if t.fault_id is None:
+            continue
+        out.setdefault(t.fault_id, []).append({
+            "id": t.id, "task_no": t.task_no, "title": t.title,
+            "status": t.status, "assignee_id": t.assignee_id,
+        })
+    return out
+
+
+def _fault_out(f: CableFault, linked_tasks: list[dict] | None = None) -> dict:
+    out = {
         "id": f.id,
         "cable_id": f.cable_id,
         "lat": float(f.lat),
@@ -95,10 +128,14 @@ def _fault_out(f: CableFault) -> dict:
         "severity": f.severity,
         "description": f.description,
         "status": f.status,
+        "status_label": FAULT_STATUS_LABELS.get(f.status, str(f.status)),
         "reported_by": f.reported_by,
         "reported_at": f.reported_at.isoformat() if f.reported_at else None,
         "photos_note": f.photos_note,
+        # 反向关联：该故障对应的维修任务（看板/列表跳转源；task 未启用时为空数组）
+        "linked_tasks": linked_tasks or [],
     }
+    return out
 
 
 def _rebuild_points(db: Session, cable: Cable, coords: list[tuple[float, float]]) -> list[CablePoint]:
@@ -323,8 +360,8 @@ def list_faults(
     scope, _ids = _user_scope(db, user)
     stmt = select(CableFault).where(CableFault.deleted == 0)
     if exclude_closed:
-        # 地图层使用：已关闭（status=4）故障不再显示
-        stmt = stmt.where(CableFault.status != 4)
+        # 地图层使用：已关闭（status=5）故障不再显示
+        stmt = stmt.where(CableFault.status != FAULT_CLOSED)
     if scope == "OWN":
         stmt = stmt.where(CableFault.reported_by == user.id)
     if status:
@@ -340,11 +377,15 @@ def list_faults(
             raise BizError(E_PARAM, "near 格式应为 lat,lng,radius_m") from None
         filtered = [f for f in rows if geo_math.haversine(lat, lng, float(f.lat), float(f.lng)) <= radius]
         filtered.sort(key=lambda f: geo_math.haversine(lat, lng, float(f.lat), float(f.lng)))
+        page_rows = filtered[(page - 1) * page_size: page * page_size]
+        linked = _linked_tasks_by_fault(db, [f.id for f in page_rows])
         return ok({"total": len(filtered), "page": page, "page_size": page_size,
-                   "items": [_fault_out(f) for f in filtered[(page - 1) * page_size: page * page_size]]})
+                   "items": [_fault_out(f, linked.get(f.id)) for f in page_rows]})
     total = len(rows)
     paged = rows[(page - 1) * page_size: page * page_size]
-    return ok({"total": total, "page": page, "page_size": page_size, "items": [_fault_out(f) for f in paged]})
+    linked = _linked_tasks_by_fault(db, [f.id for f in paged])
+    return ok({"total": total, "page": page, "page_size": page_size,
+               "items": [_fault_out(f, linked.get(f.id)) for f in paged]})
 
 
 @router.post("/faults", dependencies=[Depends(require_permission("fault:report"))])
@@ -398,8 +439,8 @@ def update_fault_status(fault_id: int, req: FaultStatusUpdate, db: Session = Dep
     f = db.get(CableFault, fault_id)
     if f is None:
         raise BizError(E_NOT_FOUND, "故障不存在")
-    if req.status not in (0, 1, 2, 3, 4):
-        raise BizError(E_PARAM, "状态取值 0-4")
+    if req.status not in FAULT_STATUS_LABELS:
+        raise BizError(E_PARAM, "状态取值 0-5（待派发/已派发/进行中/完成待验/已验证/已关闭）")
     f.status = req.status
     db.commit()
     return ok(_fault_out(f))
@@ -548,7 +589,7 @@ def geo_navigate(req: NavigateReq, db: Session = Depends(get_db)) -> dict:
 
 @router.get("/geo/nearby-faults", dependencies=[Depends(require_permission("cable:view"))])
 def nearby_faults(lat: float = Query(...), lng: float = Query(...), radius: float = Query(500, gt=0, le=50000), db: Session = Depends(get_db)) -> dict:
-    all_rows = db.scalars(select(CableFault).where(CableFault.deleted == 0, CableFault.status.in_([0, 1, 2]))).all()
+    all_rows = db.scalars(select(CableFault).where(CableFault.deleted == 0, CableFault.status.in_(FAULT_ACTIVE_STATUSES))).all()
     items = []
     for f in all_rows:
         d = geo_math.haversine(lat, lng, float(f.lat), float(f.lng))

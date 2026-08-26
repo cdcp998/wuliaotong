@@ -21,6 +21,14 @@ export interface CableItem {
   points?: CablePointItem[];
 }
 
+export interface FaultLinkedTask {
+  id: number;
+  task_no: string;
+  title: string;
+  status: string;
+  assignee_id: number;
+}
+
 export interface FaultItem {
   id: number;
   cable_id: number | null;
@@ -30,11 +38,15 @@ export interface FaultItem {
   fault_type: string;
   severity: number; // 1低/2中/3高
   description: string;
-  status: number; // 0待处理/1处理中/2待验证/3已修复/4已关闭
+  /** v1.1 六态：0待派发/1已派发/2进行中/3完成待验/4已验证/5已关闭（与维修任务态联动） */
+  status: number;
+  status_label?: string;
   reported_by: number;
   reported_at: string;
   photos_note: string;
   distance?: number;
+  /** 反向关联的维修任务（task 模块启用时后端返回；联动视图跳转用） */
+  linked_tasks?: FaultLinkedTask[];
 }
 
 export interface MarkerItem {
@@ -53,6 +65,20 @@ export interface Page<T> {
   page_size?: number;
   items: T[];
 }
+
+/** 故障状态六态（v1.1 与维修任务态一一对应，统一联动视图）：
+ *  待派发 › 已派发 › 进行中 › 完成待验 › 已验证 › 已关闭 */
+export const FAULT_STATUS: Record<number, { label: string; fg: string; bg: string; next?: number }> = {
+  0: { label: "待派发", fg: "#DC2626", bg: "#FDEBEC", next: 1 },
+  1: { label: "已派发", fg: "#3B5BDB", bg: "#EAEFFF", next: 2 },
+  2: { label: "进行中", fg: "#0E7490", bg: "#E0F2FE", next: 3 },
+  3: { label: "完成待验", fg: "#B45309", bg: "#FEF4E2", next: 4 },
+  4: { label: "已验证", fg: "#15803D", bg: "#E8F9EF", next: 5 },
+  5: { label: "已关闭", fg: "#8A93A8", bg: "#EFF3FC" },
+};
+
+/** 状态流转步骤（与 DeviceTasks 状态流转条同款文案）。 */
+export const FAULT_FLOW_STEPS = ["待派发", "已派发", "进行中", "完成待验", "已验证", "已关闭"];
 
 export interface MeasureResult {
   lat: number;

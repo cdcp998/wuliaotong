@@ -1,15 +1,17 @@
-/** task 模块：任务列表（/task/list，task:dispatch/process）——创建/筛选/维修记录/知识推荐。
- *  v2 界面：玻璃表格 + 看板⇄列表切换 + 玻璃化弹窗/抽屉。 */
+/** task 模块：维修任务列表（/task/list，task:dispatch/process）——统一任务池合并视图。
+ *  v3 界面：线缆 + 设备维修任务合并显示（/tasks/pool），来源列可跳转关联模块；
+ *  支持 ?focus_task=c12|d3 跨页定位（故障管理反向关联入口）。 */
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, theme, Upload } from "antd";
 import { PlusOutlined, UploadOutlined, AppstoreOutlined, RobotOutlined, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
 import { fileApi, useAuthStore } from "@wlt/shared";
 
-import { cableApi } from "../cable/api";
-import { taskApi, type TaskItem } from "./api";
+import { cableApi, FAULT_STATUS } from "../cable/api";
+import { deviceApi } from "../device/api";
+import { taskApi, type PoolItem } from "./api";
 
 const ST: Record<string, { label: string; fg: string; bg: string }> = {
   pending: { label: "待派发", fg: "#B45309", bg: "#FEF4E2" },
@@ -25,28 +27,36 @@ export function TaskListPage() {
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const navigate = useNavigate();
-  const [rows, setRows] = useState<TaskItem[]>([]);
+  const [searchParams] = useSearchParams();
+  const [rows, setRows] = useState<PoolItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [status, setStatus] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [source, setSource] = useState<"" | "cable" | "device">("");
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [faults, setFaults] = useState<{ id: number; label: string }[]>([]);
-  const [current, setCurrent] = useState<TaskItem | null>(null);
+  // 详情抽屉仅服务线缆任务（设备任务的记录在「设备维修任务」页，跨模块跳转）
+  const [current, setCurrent] = useState<PoolItem | null>(null);
   const [records, setRecords] = useState<Awaited<ReturnType<typeof taskApi.records>>>([]);
   const [recContent, setRecContent] = useState("");
   const [recFile, setRecFile] = useState<File | null>(null);
   const [recSaving, setRecSaving] = useState(false);
   const [recommend, setRecommend] = useState<{ id: number; title: string; snippet: string }[]>([]);
   const [form] = Form.useForm();
+  const moduleEnabled = useAuthStore((s) => s.moduleEnabled);
+  const cableEnabled = moduleEnabled("cable");
+  const deviceEnabled = moduleEnabled("device");
+  const focusedKey = searchParams.get("focus_task") || "";
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await taskApi.list({ status, keyword, page, page_size: pageSize });
+      // 统一任务池：线缆 + 设备维修任务合并
+      const r = await taskApi.pool({ status, keyword, source, page, page_size: pageSize });
       setRows(r.items);
       setTotal(r.total);
     } catch (e) {
@@ -54,46 +64,42 @@ export function TaskListPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, keyword, page, pageSize, message]);
+  }, [status, keyword, source, page, pageSize, message]);
 
   useEffect(() => { void load(); }, [load]);
   // cable 未启用时「关联故障」字段隐藏，无需拉取故障下拉
-  const moduleEnabled = useAuthStore((s) => s.moduleEnabled);
-  const cableEnabled = moduleEnabled("cable");
   useEffect(() => {
     if (!cableEnabled) return;
     cableApi.listFaults({ page_size: 100 }).then((r) => {
-      setFaults(r.items.map((f) => ({ id: f.id, label: `#${f.id} ${f.fault_type || "故障"}（${["待处理", "处理中", "待验证", "已修复", "已关闭"][f.status] ?? f.status}）` })));
+      setFaults(r.items.map((f) => ({ id: f.id, label: `#${f.id} ${f.fault_type || "故障"}（${FAULT_STATUS[f.status]?.label ?? f.status}）` })));
     }).catch(() => undefined);
   }, [cableEnabled]);
 
-  const save = async () => {
-    const v = await form.validateFields();
-    setSaving(true);
+  /** 统一状态流转：按来源路由到对应模块接口。 */
+  const act = async (t: PoolItem, action: string, extra?: object) => {
     try {
-      await taskApi.create({ title: v.title, description: v.description ?? "", priority: v.priority ?? 1, fault_id: v.fault_id ?? null });
-      message.success("任务已创建");
-      setOpen(false);
-      form.resetFields();
+      const r = t.source === "device"
+        ? await deviceApi.taskStatus(t.id, { action, ...extra })
+        : await taskApi.status(t.id, { action, ...extra });
+      message.success("已更新");
+      const prompt = (r as { rollback_prompt?: string }).rollback_prompt;
+      if (prompt) message.info(prompt, 5);
       void load();
     } catch (e) {
-      message.error(e instanceof Error ? e.message : "创建失败");
-    } finally {
-      setSaving(false);
+      message.error(e instanceof Error ? e.message : "操作失败");
     }
   };
 
-  const cancel = async (t: TaskItem) => {
-    try {
-      await taskApi.status(t.id, { action: "cancel", reason: "人工取消" });
-      message.success("已取消");
-      void load();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "取消失败");
-    }
+  const cancel = async (t: PoolItem) => {
+    await act(t, "cancel", { reason: "人工取消" });
   };
 
-  const openRecords = async (t: TaskItem) => {
+  const openRecords = async (t: PoolItem) => {
+    if (t.source === "device") {
+      // 设备任务记录跨模块查看：跳转设备维修任务页并定位该任务
+      navigate(`/device/tasks?focus=d${t.id}`);
+      return;
+    }
     setCurrent(t);
     setRecContent("");
     setRecFile(null);
@@ -136,68 +142,94 @@ export function TaskListPage() {
     }
   };
 
-  const columns: ColumnsType<TaskItem> = [
-    { title: "任务", key: "task", width: 260, render: (_, t) => (
+  const columns: ColumnsType<PoolItem> = [
+    { title: "任务", key: "task", width: 240, render: (_, t) => (
       <div>
         <div style={{ fontWeight: 600, fontSize: 12.5, color: "#1E2433" }}>{t.title}</div>
         <div style={{ fontSize: 10.5, color: "#8A93A8", marginTop: 2 }}>{t.task_no}</div>
       </div>
     ) },
     {
-      title: "优先", key: "priority", width: 100,
+      title: "来源", key: "src", width: 200,
+      render: (_, t) => t.source === "device" ? (
+        <Space size={6}>
+          <Tag style={{ borderRadius: 999, background: "#EAEFFF", color: "#3B5BDB", borderColor: "transparent", marginInlineEnd: 0 }}>设备</Tag>
+          <Button type="link" size="small" style={{ padding: 0, fontSize: 12 }} onClick={() => navigate(`/device/tasks?focus=d${t.id}`)}>{t.device_name}{t.device_code ? ` · ${t.device_code}` : ""} ›</Button>
+        </Space>
+      ) : (
+        <Space size={6}>
+          <Tag style={{ borderRadius: 999, background: "#FEF4E2", color: "#B45309", borderColor: "transparent", marginInlineEnd: 0 }}>线缆</Tag>
+          {t.fault_id && cableEnabled
+            ? <Button type="link" size="small" style={{ padding: 0, fontSize: 12 }} onClick={() => navigate(`/cable/faults?focus=${t.fault_id}`)}>故障 #{t.fault_id} ›</Button>
+            : <span style={{ fontSize: 12, color: "#5B6478" }}>{t.fault_id ? `故障 #${t.fault_id}` : "人工派单"}</span>}
+        </Space>
+      ),
+    },
+    {
+      title: "优先", key: "priority", width: 90,
       render: (_, t) => {
         const m = t.priority === 2 ? { label: "紧急", fg: "#DC2626", bg: "#FDEBEC" } : t.priority === 1 ? { label: "高优", fg: "#B45309", bg: "#FEF4E2" } : { label: "普通", fg: "#64748B", bg: "#EFF3FC" };
         return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>;
       },
     },
-    { title: "负责人", dataIndex: "assignee_name", width: 110, render: (v: string) => v || <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span> },
+    { title: "负责人", dataIndex: "assignee_name", width: 100, render: (v: string, t) => v || (t.status === "pending" && t.dispatch_mode !== "manual" ? <span style={{ color: "#3B5BDB", fontSize: 12 }}>待领取</span> : <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span>) },
     { title: "状态", key: "status", width: 110, render: (_, t) => { const s = ST[t.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? t.status}</Tag>; } },
-    { title: "排期", dataIndex: "scheduled_time", width: 130, render: (v: string | null) => v ? <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v.slice(0, 16)}</span> : <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span> },
-    { title: "来源", key: "src", width: 120, render: (_, t) => <span style={{ fontSize: 12, color: "#5B6478" }}>{t.fault_id ? `故障 #${t.fault_id}` : "人工派单"}</span> },
     {
-      title: "操作", width: 180,
-      render: (_, t) => (
-        <Space size={10} style={{ padding: "0 10px" }}>
-          <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B6478" }} onClick={() => openRecords(t)}>记录</Button>
-          {t.status === "done" && (
-            <>
-              <Popconfirm title="验收通过该任务？" onConfirm={() => void act(t, "verify", { verdict: "验收通过" })}>
-                <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#15803D" }}>验收</Button>
+      title: "联动状态", key: "link", width: 130,
+      render: (_, t) => {
+        // 线缆任务展示关联故障实时状态（故障管理同步展示，形成统一联动视图）
+        if (t.source === "cable" && t.fault_id && t.fault_status != null) {
+          const f = FAULT_STATUS[t.fault_status];
+          return <Tag style={{ borderRadius: 999, background: f?.bg, color: f?.fg, borderColor: "transparent", marginInlineEnd: 0 }} title={`关联故障 #${t.fault_id} 当前状态`}>故障·{f?.label ?? t.fault_status}</Tag>;
+        }
+        if (t.source === "device") {
+          return <span style={{ fontSize: 12, color: "#8A93A8" }}>{t.device_name}</span>;
+        }
+        return <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span>;
+      },
+    },
+    { title: "排期", dataIndex: "scheduled_time", width: 120, render: (v: string | null) => v ? <span style={{ fontSize: 12, color: "#8A93A8", fontVariantNumeric: "tabular-nums" }}>{v.slice(0, 16)}</span> : <span style={{ color: "#8A93A8", fontSize: 12 }}>—</span> },
+    {
+      title: "操作", width: 210,
+      render: (_, t) => {
+        const claimHint = t.source === "device" && t.status === "pending" && t.dispatch_mode !== "manual" && !t.assignee_id;
+        return (
+          <Space size={10} style={{ padding: "0 10px", flexWrap: "wrap" }}>
+            <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B6478" }} onClick={() => openRecords(t)}>
+              {t.source === "device" ? "详情 ›" : "记录"}
+            </Button>
+            {claimHint && (
+              <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#3B5BDB" }} onClick={() => navigate(`/device/tasks?focus=d${t.id}`)}>领取 ›</Button>
+            )}
+            {t.status === "done" && (
+              <>
+                <Popconfirm title="验收通过该任务？" onConfirm={() => void act(t, "verify", { verdict: "验收通过" })}>
+                  <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#15803D" }}>验收</Button>
+                </Popconfirm>
+                <Popconfirm title="驳回该任务？" onConfirm={() => void act(t, "reject", { verdict: "驳回重做" })}>
+                  <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#DC2626" }}>驳回</Button>
+                </Popconfirm>
+              </>
+            )}
+            {(t.status === "pending" || t.status === "assigned") && !claimHint && (
+              <Popconfirm title="取消该任务（需填写原因）？" onConfirm={() => cancel(t)}>
+                <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#DC2626" }}>取消</Button>
               </Popconfirm>
-              <Popconfirm title="驳回该任务？" onConfirm={() => void act(t, "reject", { verdict: "驳回重做" })}>
-                <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#DC2626" }}>驳回</Button>
-              </Popconfirm>
-            </>
-          )}
-          {(t.status === "pending" || t.status === "assigned") && (
-            <Popconfirm title="取消该任务（需填写原因）？" onConfirm={() => cancel(t)}>
-              <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#DC2626" }}>取消</Button>
-            </Popconfirm>
-          )}
-        </Space>
-      ),
+            )}
+          </Space>
+        );
+      },
     },
   ];
 
-  /** 统一状态操作（验收/驳回等）。 */
-  const act = async (t: TaskItem, action: string, extra?: object) => {
-    try {
-      await taskApi.status(t.id, { action, ...extra });
-      message.success("已更新");
-      void load();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "操作失败");
-    }
-  };
-
   return (
     <div style={{ padding: 24 }}>
-      {/* 页头（设计页 45） */}
+      {/* 页头 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>维修任务列表</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
-            全量任务：状态筛选 / 优先 / 负责人 / 排期；记录、知识推荐、验收与关闭
+            统一任务池{deviceEnabled ? "（线缆 + 设备合并显示）" : ""}：状态筛选 / 来源筛选；联动状态同步展示，可跳转故障管理与设备维修任务
           </p>
         </div>
         <Space>
@@ -206,29 +238,35 @@ export function TaskListPage() {
         </Space>
       </div>
 
-      {/* 筛选条（设计页 45） */}
+      {/* 筛选条 */}
       <div className="wlt-glass" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
         <Input
           prefix={<SearchOutlined style={{ color: "#8A93A8" }} />}
           placeholder="任务单号 / 内容"
           allowClear
-          style={{ width: 300, background: "#F6F8FE" }}
+          style={{ width: 280, background: "#F6F8FE" }}
           onChange={(e) => { if (!e.target.value) { setKeyword(""); setPage(1); } }}
           onPressEnter={(e) => { setKeyword((e.target as HTMLInputElement).value.trim()); setPage(1); }}
         />
-        <Select placeholder="全部状态" allowClear style={{ width: 160 }} value={status || undefined} onChange={(v) => { setStatus(v ?? ""); setPage(1); }}
+        <Select placeholder="全部状态" allowClear style={{ width: 150 }} value={status || undefined} onChange={(v) => { setStatus(v ?? ""); setPage(1); }}
           options={Object.entries(ST).map(([k, v]) => ({ value: k, label: v.label }))} />
+        <Select placeholder="全部来源" allowClear style={{ width: 150 }} value={source || undefined} onChange={(v) => { setSource(v ?? ""); setPage(1); }}
+          options={[
+            ...(cableEnabled ? [{ value: "cable", label: "线缆任务" }] : []),
+            ...(deviceEnabled ? [{ value: "device", label: "设备任务" }] : []),
+          ]} />
         <span style={{ marginLeft: "auto", fontSize: 12, color: "#8A93A8" }}>共 {total} 条</span>
       </div>
 
       <div className="wlt-glass" style={{ padding: 12 }}>
-        <Table<TaskItem>
-          rowKey="id" loading={loading} dataSource={rows} locale={{ emptyText: "暂无任务" }}
+        <Table<PoolItem>
+          rowKey="key" loading={loading} dataSource={rows} locale={{ emptyText: "暂无任务" }}
           pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else setPage(p); } }}
           columns={columns}
+          rowClassName={(r) => (r.key === focusedKey ? "wlt-row-focus" : "")}
         />
         <p style={{ margin: "8px 0 0", fontSize: 11, color: "#8A93A8" }}>
-          提示：知识推荐在任务记录抽屉内；完成需填写记录并上传现场照片（GPS+水印）
+          提示：「联动状态」列为关联故障/设备的实时状态（与对应模块同步）；知识推荐在任务记录抽屉内；完成需填写记录并上传现场照片
         </p>
       </div>
 
@@ -254,7 +292,7 @@ export function TaskListPage() {
         </Form>
       </Modal>
 
-      {/* 维修记录抽屉 */}
+      {/* 维修记录抽屉（线缆任务） */}
       <Drawer open={!!current} onClose={() => setCurrent(null)} width={560} title={current ? `维修记录：${current.title}` : ""}>
         {current && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -291,4 +329,20 @@ export function TaskListPage() {
       </Drawer>
     </div>
   );
+
+  async function save() {
+    const v = await form.validateFields();
+    setSaving(true);
+    try {
+      await taskApi.create({ title: v.title, description: v.description ?? "", priority: v.priority ?? 1, fault_id: v.fault_id ?? null });
+      message.success("任务已创建");
+      setOpen(false);
+      form.resetFields();
+      void load();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "创建失败");
+    } finally {
+      setSaving(false);
+    }
+  }
 }

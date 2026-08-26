@@ -1,8 +1,13 @@
-"""task 模块接口（维修任务/派发/看板/维修记录/领用关联/知识推荐，方案 §6.3）。
+"""task 模块接口（维修任务/派发/看板/维修记录/领用关联/知识推荐/统一任务池，方案 §6.3）。
 
 router 级依赖：require_module_enabled("task")；依赖 cable 模块（启用时校验，运行期 cable 操作
 再经 require_module_enabled("cable") 兜底 403）。
 数据范围（§8.3）：调度员/超管/管理者 ALL；维修人员 ASSIGNED（仅被指派任务）。
+
+v1.2 统一任务池联动视图：
+- GET /tasks/pool 合并「线缆维修任务 + 设备维修任务（device 模块启用时）」，供看板/列表合并显示；
+- 故障状态与任务态全程联动：待派发›已派发›进行中›完成待验›已验证›已关闭；
+- 任务条目携带关联信息（故障摘要/设备摘要），前端可直接查看、跳转对应模块。
 """
 from __future__ import annotations
 
@@ -22,11 +27,12 @@ from app.core.task_engine import ACTIVE_STATUSES, TERMINAL_STATUS, transition
 from app.db import get_db
 from app.models import SysNotification, SysRole, SysUser
 from app.modules.cable.services.fault_sync import (
-    FAULT_CLOSED,
-    FAULT_FIXED,
+    FAULT_DISPATCHED,
     FAULT_PENDING,
     FAULT_PROCESSING,
     FAULT_TO_VERIFY,
+    FAULT_VERIFIED,
+    fault_briefs,
     set_fault_status,
 )
 from app.modules.task.models import MaintenanceTask, TaskRecord, TaskRecordFile, TaskRequisition
@@ -63,10 +69,39 @@ def _notify(db: Session, user_id: int, title: str, content: str, link: str, biz_
     db.add(SysNotification(user_id=user_id, title=title, content=content, biz_type=biz_type, link=link))
 
 
+def _link_info(db: Session, t: MaintenanceTask) -> dict:
+    """任务关联信息（联动视图）：故障摘要 + 线缆名称；cable 模块不可用时为空壳。"""
+    info = {"fault_type": "", "fault_status": None, "severity": None, "cable_id": t.cable_id, "cable_name": ""}
+    if not (t.fault_id or t.cable_id) or not module_enabled(db, "cable"):
+        return info
+    try:
+        from app.modules.cable.models import Cable
+        from app.modules.cable.services.fault_sync import FAULT_STATUS_LABELS
+
+        if t.fault_id:
+            brief = fault_briefs(db, [t.fault_id]).get(t.fault_id)
+            if brief:
+                info.update({
+                    "fault_type": brief["fault_type"],
+                    "fault_status": brief["status"],
+                    "fault_status_label": FAULT_STATUS_LABELS.get(brief["status"], str(brief["status"])),
+                    "severity": brief["severity"],
+                })
+                if brief.get("cable_id") and not t.cable_id:
+                    info["cable_id"] = brief["cable_id"]
+        if info["cable_id"]:
+            c = db.get(Cable, info["cable_id"])
+            if c is not None:
+                info["cable_name"] = c.name
+    except Exception:  # noqa: BLE001 关联信息失败不阻断任务主数据
+        logger.warning("任务 %s 关联信息读取失败", t.id, exc_info=True)
+    return info
+
+
 def _task_out(db: Session, t: MaintenanceTask) -> dict:
     assignee = db.get(SysUser, t.assignee_id) if t.assignee_id else None
     creator = db.get(SysUser, t.created_by) if t.created_by else None
-    return {
+    out = {
         "id": t.id,
         "task_no": t.task_no,
         "cable_id": t.cable_id,
@@ -85,6 +120,8 @@ def _task_out(db: Session, t: MaintenanceTask) -> dict:
         "creator_name": creator.real_name if creator else "",
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }
+    out.update(_link_info(db, t))
+    return out
 
 
 def _gen_task_no(db: Session) -> str:
@@ -161,6 +198,148 @@ def create_task(req: TaskCreate, user: SysUser = Depends(get_current_user), db: 
     raise BizError(E_BILL_STATUS, "任务单号生成失败，请重试")
 
 
+# ============================ 统一任务池（联动视图） ============================
+
+def _device_pool_items(db: Session, user: SysUser, status: str, keyword: str) -> list[dict]:
+    """设备维修任务池条目（device 模块启用时；跨模块经模型懒加载 + 启用门控）。"""
+    if not module_enabled(db, "device"):
+        return []
+    try:  # 懒加载 device 模块模型（未部署时任务池自动降级为纯线缆任务）
+        from app.modules.device.models import Device, DeviceTask
+    except ImportError:
+        return []
+    stmt = select(DeviceTask)
+    scope_all = _scope_all(db, user)
+    if not scope_all:
+        stmt = stmt.where(DeviceTask.assignee_id == user.id)
+    if status:
+        stmt = stmt.where(DeviceTask.status == status)
+    rows = db.scalars(stmt.order_by(DeviceTask.id.desc()).limit(500)).all()
+    items = []
+    for t in rows:
+        d = db.get(Device, t.device_id)
+        if keyword and keyword not in (t.task_no or "") and keyword not in (t.title or "") \
+                and (d is None or (keyword not in (d.name or "") and keyword not in (d.code or ""))):
+            continue
+        assignee = db.get(SysUser, t.assignee_id) if t.assignee_id else None
+        creator = db.get(SysUser, t.created_by) if t.created_by else None
+        items.append({
+            "source": "device",
+            "key": f"d{t.id}",
+            "id": t.id,
+            "task_no": t.task_no,
+            "title": t.title,
+            "description": t.description,
+            "status": t.status,
+            "priority": t.priority,
+            "assignee_id": t.assignee_id,
+            "assignee_name": assignee.real_name if assignee else "",
+            "scheduled_time": t.scheduled_time.isoformat() if t.scheduled_time else None,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "verdict": t.verdict,
+            "cancel_reason": t.cancel_reason,
+            "creator_name": creator.real_name if creator else "",
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "dispatch_mode": getattr(t, "dispatch_mode", "manual") or "manual",
+            # 设备关联信息（直接查看/跳转设备维修任务）
+            "fault_id": None, "fault_type": "", "fault_status": None, "severity": None,
+            "cable_id": None, "cable_name": "",
+            "device_id": t.device_id,
+            "device_name": d.name if d else "",
+            "device_code": d.code if d else "",
+            "device_status": d.status if d else None,
+            "previous_status": t.previous_status,
+        })
+    return items
+
+
+@router.get("/tasks/pool", dependencies=[Depends(require_any_permission("task:dispatch", "task:process"))])
+def task_pool(
+    status: str = "",
+    keyword: str = "",
+    source: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """统一维修任务池：线缆维修任务 + 设备维修任务合并视图（联动视图数据源）。
+
+    - device 模块启用时合并设备维修任务（「添加设备管理到任务池系统」）；
+    - 每条目携带关联信息：线缆任务带故障摘要（类型/状态/严重度/线缆名），设备任务带设备摘要；
+    - source 过滤：cable=仅线缆任务，device=仅设备任务，空=全部。
+    """
+    kw = keyword.strip()
+    cable_rows: list[MaintenanceTask] = []
+    if source in ("", "cable"):
+        stmt = select(MaintenanceTask)
+        if not _scope_all(db, user):
+            stmt = stmt.where(MaintenanceTask.assignee_id == user.id)
+        if status:
+            stmt = stmt.where(MaintenanceTask.status == status)
+        cable_rows = list(db.scalars(stmt.order_by(MaintenanceTask.id.desc()).limit(500)).all())
+
+    # 批量取故障摘要（一次查询；cable 未启用时保持空壳关联信息）
+    fault_ids = [t.fault_id for t in cable_rows if t.fault_id]
+    briefs = fault_briefs(db, fault_ids) if (fault_ids and module_enabled(db, "cable")) else {}
+    cable_names: dict[int, str] = {}
+    if module_enabled(db, "cable"):
+        try:
+            from app.modules.cable.models import Cable
+
+            cable_ids = {t.cable_id for t in cable_rows if t.cable_id} | {b["cable_id"] for b in briefs.values() if b.get("cable_id")}
+            cable_ids.discard(None)
+            if cable_ids:
+                cable_names = {c.id: c.name for c in db.scalars(select(Cable).where(Cable.id.in_(cable_ids))).all()}
+        except Exception:  # noqa: BLE001 关联信息失败不阻断任务主数据
+            logger.warning("任务池线缆名称批量读取失败", exc_info=True)
+
+    items: list[dict] = []
+    for t in cable_rows:
+        if kw and kw not in (t.task_no or "") and kw not in (t.title or ""):
+            continue
+        assignee = db.get(SysUser, t.assignee_id) if t.assignee_id else None
+        creator = db.get(SysUser, t.created_by) if t.created_by else None
+        brief = briefs.get(t.fault_id or 0)
+        cid = t.cable_id or (brief or {}).get("cable_id")
+        items.append({
+            "source": "cable",
+            "key": f"c{t.id}",
+            "id": t.id,
+            "task_no": t.task_no,
+            "title": t.title,
+            "description": t.description,
+            "status": t.status,
+            "priority": t.priority,
+            "assignee_id": t.assignee_id,
+            "assignee_name": assignee.real_name if assignee else "",
+            "scheduled_time": t.scheduled_time.isoformat() if t.scheduled_time else None,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "verdict": t.verdict,
+            "cancel_reason": t.cancel_reason,
+            "creator_name": creator.real_name if creator else "",
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "dispatch_mode": "manual",
+            # 线缆故障关联信息（直接查看/跳转故障管理）
+            "fault_id": t.fault_id,
+            "fault_type": (brief or {}).get("fault_type", ""),
+            "fault_status": (brief or {}).get("status"),
+            "severity": (brief or {}).get("severity"),
+            "cable_id": cid,
+            "cable_name": cable_names.get(cid, "") if cid else "",
+            "device_id": None, "device_name": "", "device_code": "", "device_status": None,
+            "previous_status": None,
+        })
+
+    if source in ("", "device"):
+        items.extend(_device_pool_items(db, user, status, kw))
+
+    items.sort(key=lambda x: (x.get("created_at") or "", x.get("id") or 0), reverse=True)
+    total = len(items)
+    paged = items[(page - 1) * page_size: page * page_size]
+    return ok({"total": total, "page": page, "page_size": page_size, "items": paged})
+
+
 @router.get("/tasks/{task_id}", dependencies=[Depends(require_permission("task:dispatch"))])
 def get_task(task_id: int, db: Session = Depends(get_db)) -> dict:
     t = _task_or_404(db, task_id)
@@ -189,6 +368,8 @@ def assign_task(task_id: int, req: AssignReq, user: SysUser = Depends(get_curren
 
     def _cb(db: Session, task, action, actor_id, actor_name):
         if action == "assign":
+            # 故障联动：待派发(0) → 已派发(1)（看板/列表/故障管理三处同步展示）
+            set_fault_status(db, task.fault_id, FAULT_DISPATCHED)
             _notify(db, task.assignee_id, "新维修任务",
                     f"任务 {task.task_no}「{task.title}」已派发给你，请及时处理。",
                     f"/task/board", biz_type="待办")
@@ -215,7 +396,10 @@ def task_status(
         raise BizError(4005, "仅被指派人员可执行该操作", http_status=403)
 
     def _cb(db: Session, task, action, actor_id, actor_name):
-        if action == "complete":
+        if action == "accept":
+            # 故障联动：已派发(1) → 进行中(2)
+            set_fault_status(db, task.fault_id, FAULT_PROCESSING)
+        elif action == "complete":
             # cable 依赖兜底：故障联动需要 cable 模块可用
             if task.fault_id and not module_enabled(db, "cable"):
                 raise BizError(4009, "依赖模块 cable 未启用，无法联动故障状态", http_status=403)
@@ -232,7 +416,7 @@ def task_status(
             _notify(db, task.assigned_by, "任务待验收",
                     f"任务 {task.task_no}「{task.title}」已完成，等待验收。", f"/task/board")
         elif action == "verify":
-            set_fault_status(db, task.fault_id, FAULT_FIXED)
+            set_fault_status(db, task.fault_id, FAULT_VERIFIED)
         elif action == "reject":
             set_fault_status(db, task.fault_id, FAULT_PROCESSING)
         elif action == "cancel":

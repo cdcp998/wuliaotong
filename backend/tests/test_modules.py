@@ -373,8 +373,8 @@ def test_closed_fault_delete_review() -> None:
     fid = r.json()["data"]["id"]
     r = client.post("/api/v1/delete-reviews", json={"biz_type": "fault", "target_id": fid, "reason": "T-测试原因"})
     assert r.json()["code"] != 0  # 仅已关闭故障可申请
-    # 关闭故障 → 提交删除申请
-    assert client.put(f"/api/v1/faults/{fid}/status", json={"status": 4}).json()["code"] == 0
+    # 关闭故障（v1.1 六态：5 已关闭）→ 提交删除申请
+    assert client.put(f"/api/v1/faults/{fid}/status", json={"status": 5}).json()["code"] == 0
     r = client.post("/api/v1/delete-reviews", json={"biz_type": "fault", "target_id": fid, "reason": "T-测试原因"})
     assert r.json()["code"] == 0, r.text
     review_id = r.json()["data"]["id"]

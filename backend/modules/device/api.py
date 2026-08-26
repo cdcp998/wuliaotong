@@ -1,12 +1,13 @@
 """device 模块接口（设备台账 CRUD/生命周期/设备维修任务（复用 task_engine）/领用关联，方案 §6.5）。
 
 router 级依赖：require_module_enabled("device")。
-架构说明：设备维修任务复用核心 task_engine；任务→物料领用链接复用 task 模块的 task_requisition
-表（task_type='device'）——因此 device 模块声明依赖 task>=1.0.0,<2.0.0（方案 §3「无依赖」的例外，
-领用链接表为共享基础设施，避免并行领用体系）。
+架构说明（v1.1）：设备维修任务复用核心 task_engine，**不依赖 task 模块**独立运行；
+「任务→物料领用链接」复用 task 模块的 task_requisition 表，属增强功能——运行期经
+module_enabled("task") 守卫（task 未启用时领用关联接口 403，其余不受影响）。
 
 设备生命周期（§5.8）：1 在用 ⇄ 2 维修中 ⇄ 3 闲置 → 4 报废；2 维修中禁止报废；
-创建设备维修任务自动置维修中（previous_status 快照）；任务 verify/cancel 按快照回退。
+创建设备维修任务自动置维修中（previous_status 快照）；任务 verify/cancel 按快照回退，
+并生成回退文本提示词（通知 + 响应 rollback_prompt 字段）。
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.api import requisition as req_api
 from app.core.deps import SUPER_ADMIN_ROLE_CODE, get_current_user, require_any_permission, require_permission
-from app.core.modules import require_module_enabled
+from app.core.modules import module_enabled, require_module_enabled
 from app.core.response import BizError, E_BILL_STATUS, E_NOT_FOUND, E_PARAM, ok
 from app.core.task_engine import ACTIVE_STATUSES, TERMINAL_STATUS, transition
 from app.db import get_db
@@ -73,6 +74,15 @@ def _notify(db: Session, user_id: int, title: str, content: str, link: str, biz_
     db.add(SysNotification(user_id=user_id, title=title, content=content, biz_type=biz_type, link=link))
 
 
+def _task_module_guard(db: Session) -> None:
+    """领用关联为增强功能（task_requisition 表属 task 模块）：task 未启用时 403。
+
+    设备维修任务本体不依赖 task 模块；仅此增强接口需要 task 已安装并启用。
+    """
+    if not module_enabled(db, "task"):
+        raise BizError(4009, "依赖模块 task 未启用（任务领用关联为增强功能）", http_status=403)
+
+
 def _device_cover(db: Session, device_id: int) -> int | None:
     """设备首图 file_id（列表缩略用；无图返回 None）。"""
     from app.modules.device.models import DeviceFile
@@ -99,13 +109,14 @@ def _device_out(db: Session, d: Device) -> dict:
     }
 
 
-def _task_out(db: Session, t: DeviceTask) -> dict:
+def _task_out(db: Session, t: DeviceTask, rollback_prompt: str = "") -> dict:
     assignee = db.get(SysUser, t.assignee_id) if t.assignee_id else None
     creator = db.get(SysUser, t.created_by) if t.created_by else None
     d = db.get(Device, t.device_id)
-    return {
+    out = {
         "id": t.id, "task_no": t.task_no, "device_id": t.device_id,
         "device_name": d.name if d else "", "device_code": d.code if d else "",
+        "device_status": d.status if d else None,
         "title": t.title, "description": t.description,
         "assignee_id": t.assignee_id, "assignee_name": assignee.real_name if assignee else "",
         "status": t.status,
@@ -118,6 +129,10 @@ def _task_out(db: Session, t: DeviceTask) -> dict:
         "created_by": t.created_by, "creator_name": creator.real_name if creator else "",
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }
+    if rollback_prompt:
+        # 回退文本提示词（验收/取消自动回退设备状态时生成，前端直接展示）
+        out["rollback_prompt"] = rollback_prompt
+    return out
 
 
 def _gen_task_no(db: Session) -> str:
@@ -353,7 +368,10 @@ def device_task_status(
     if req.action in ("accept", "complete") and not _scope_all(db, user) and t.assignee_id != user.id:
         raise BizError(4005, "仅被指派人员可执行该操作", http_status=403)
 
+    rollback_prompt = ""  # 回退文本提示词（verify/cancel 自动回退设备状态时生成）
+
     def _cb(db: Session, task, action, actor_id, actor_name):
+        nonlocal rollback_prompt
         d = db.get(Device, task.device_id)
         if d is None:
             return
@@ -368,16 +386,28 @@ def device_task_status(
                 raise BizError(E_BILL_STATUS, "完成任务前必须填写维修记录并上传维修照片")
             _notify(db, task.assigned_by, "设备任务待验收",
                     f"设备任务 {task.task_no}「{task.title}」已完成，等待验收。", "/device/tasks")
-        elif action == "verify":
-            # 验收通过：按快照回退（无快照回退在用）
-            d.status = task.previous_status if task.previous_status in (1, 3) else 1
-        elif action == "cancel":
-            d.status = task.previous_status if task.previous_status in (1, 3) else 1
-            _notify(db, task.assignee_id, "设备任务已取消",
-                    f"设备任务 {task.task_no}「{task.title}」已被取消：{task.cancel_reason}", "/device/tasks")
+        elif action in ("verify", "cancel"):
+            # 验收通过/取消：按快照回退（无快照/快照异常回退在用）
+            old_status, new_status = d.status, (task.previous_status if task.previous_status in (1, 3) else 1)
+            d.status = new_status
+            # 生成回退文本提示词：说明「维修中 → 快照前一状态」的自动回退
+            rollback_prompt = (
+                f"任务 {task.task_no}{'验收通过' if action == 'verify' else '已取消'}，"
+                f"设备「{d.name}」（{d.code}）状态已自动回退："
+                f"{STATUS_LABEL.get(old_status, old_status)} → {STATUS_LABEL.get(new_status, new_status)}"
+                f"（快照前一状态：{STATUS_LABEL.get(task.previous_status, task.previous_status) if task.previous_status else '未知'}）"
+            )
+            if action == "verify":
+                _notify(db, task.created_by or task.assigned_by, "设备状态已自动回退", rollback_prompt, "/device/tasks")
+            else:
+                _notify(db, task.assignee_id, "设备任务已取消",
+                        f"设备任务 {task.task_no}「{task.title}」已被取消：{task.cancel_reason}", "/device/tasks")
+                _notify(db, task.created_by, "设备状态已自动回退", rollback_prompt, "/device/tasks")
         # reject：保持维修中
 
-    if req.action == "cancel":
+    if req.action == "cancel" and module_enabled(db, "task"):
+        # 已关联领用单的任务：需先取消/冲销领用（task_requisition 为 task 模块表；
+        # task 模块未启用时设备任务不可能存在领用关联，直接跳过检查——无硬依赖）
         from app.modules.task.models import TaskRequisition
 
         link_cnt = db.scalar(select(func.count()).select_from(TaskRequisition).where(TaskRequisition.task_type == "device", TaskRequisition.task_id == t.id)) or 0
@@ -386,7 +416,7 @@ def device_task_status(
     transition(db, t, req.action, user.id, user.real_name, callbacks=[_cb],
                assignee_id=req.assignee_id or None, verdict=req.verdict, reason=req.reason)
     db.commit()
-    return ok(_task_out(db, t))
+    return ok(_task_out(db, t, rollback_prompt=rollback_prompt))
 
 
 # ============================ 设备维修记录 ============================
@@ -434,6 +464,7 @@ def create_device_record(task_id: int, req: DeviceRecordCreate, user: SysUser = 
 @router.get("/device-tasks/{task_id}/requisitions", dependencies=[Depends(require_permission("device:task"))])
 def device_task_requisitions(task_id: int, db: Session = Depends(get_db)) -> dict:
     _task_or_404(db, task_id)
+    _task_module_guard(db)
     from app.modules.task.models import TaskRequisition
 
     links = db.scalars(select(TaskRequisition).where(TaskRequisition.task_type == "device", TaskRequisition.task_id == task_id)).all()
@@ -449,10 +480,14 @@ def device_task_requisitions(task_id: int, db: Session = Depends(get_db)) -> dic
 
 @router.post("/device-tasks/{task_id}/requisitions", dependencies=[Depends(require_permission("device:task"))])
 def create_device_requisition(task_id: int, req: DeviceRequisitionReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
-    """设备任务领用：复用领用流程 + task_requisition(task_type='device') 链接（同事务）。"""
+    """设备任务领用：复用领用流程 + task_requisition(task_type='device') 链接（同事务）。
+
+    增强功能：需 task 模块已启用（task_requisition 链接表属 task 模块）。
+    """
     t = _task_or_404(db, task_id)
     if t.status in TERMINAL_STATUS:
         raise BizError(E_BILL_STATUS, "终态任务不可发起领用")
+    _task_module_guard(db)
     if not req.items:
         raise BizError(E_PARAM, "至少选择一项物料")
     if len(req.items) > 50:

@@ -19,7 +19,8 @@ interface MeasureResult {
   nearest_marker: { label: string; distance: number } | null;
 }
 
-const FAULT_STATUS = ["待处理", "处理中", "待验证", "已修复", "已关闭"];
+// v1.1 六态（与维修任务态联动）：0待派发/1已派发/2进行中/3完成待验/4已验证/5已关闭
+const FAULT_STATUS = ["待派发", "已派发", "进行中", "完成待验", "已验证", "已关闭"];
 
 const warnIcon = L.divIcon({
   className: "wlt-m",
