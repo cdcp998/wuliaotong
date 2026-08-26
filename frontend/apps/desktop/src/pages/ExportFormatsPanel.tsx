@@ -10,7 +10,7 @@
  * 权限：查看=登录；修改=sys:config（超管/管理者）。
  */
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { App, Button, ColorPicker, Grid, InputNumber, Segmented, Select, Space, Switch, Tag, Tooltip } from "antd";
+import { App, Button, ColorPicker, InputNumber, Segmented, Select, Space, Switch, Tag, Tooltip } from "antd";
 import { DatabaseOutlined, FileExcelOutlined, FileSearchOutlined, GlobalOutlined, ProfileOutlined, SaveOutlined, SettingOutlined, SwapOutlined, UndoOutlined } from "@ant-design/icons";
 
 import { adminApi, checkApi, exportReportPreview, systemApi } from "@wlt/shared";
@@ -75,6 +75,19 @@ function deepMerge(base: Format, override?: Format | null): Format {
       : v;
   }
   return out;
+}
+
+/** 响应式断点（按视口宽）：≥1024 桌面 / 768~1023 平板 / <768 移动端。 */
+export type ViewportTier = "mobile" | "tablet" | "desktop";
+
+export function useViewportTier(): ViewportTier {
+  const [w, setW] = useState(() => (typeof window === "undefined" ? 1024 : window.innerWidth));
+  useEffect(() => {
+    const onResize = () => setW(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return w >= 1024 ? "desktop" : w >= 768 ? "tablet" : "mobile";
 }
 
 /** 表单字段：统一标签（上方）+ 控件（下方）的纵向节奏。 */
@@ -174,47 +187,49 @@ function ExcelPreview({ draft }: { draft: Format }) {
 
   return (
     <div>
-      <div style={{ border: `1px solid ${C.borderStrong}`, borderRadius: 10, overflow: "hidden", background: "#fff", maxWidth: 720 }}>
-        {/* 表头行 */}
-        <div style={{ display: "flex", background: `#${String(h.bg ?? "F6F8FE").replace("#", "")}`, borderBottom: "1px solid #C9D4EE" }}>
-          {PREVIEW_COLS.map((c) => (
-            <div
-              key={c.title}
-              style={{
-                ...(c.width ? { width: c.width, flexShrink: 0 } : { flex: 1, minWidth: 0 }),
-                padding: "7px 12px", textAlign: headAlign, color: "#1F2937",
-                borderRight: "1px solid rgba(30, 36, 51, 0.08)", whiteSpace: "nowrap", ...headFont,
-              }}
-            >
-              {c.title}
+      <div style={{ overflowX: "auto", paddingBottom: 2 }}>
+        <div style={{ border: `1px solid ${C.borderStrong}`, borderRadius: 10, background: "#fff", minWidth: 560, maxWidth: 720, overflow: "hidden" }}>
+          {/* 表头行 */}
+          <div style={{ display: "flex", background: `#${String(h.bg ?? "F6F8FE").replace("#", "")}`, borderBottom: "1px solid #C9D4EE" }}>
+            {PREVIEW_COLS.map((c) => (
+              <div
+                key={c.title}
+                style={{
+                  ...(c.width ? { width: c.width, flexShrink: 0 } : { flex: 1, minWidth: 0 }),
+                  padding: "7px 12px", textAlign: headAlign, color: "#1F2937",
+                  borderRight: "1px solid rgba(30, 36, 51, 0.08)", whiteSpace: "nowrap", ...headFont,
+                }}
+              >
+                {c.title}
+              </div>
+            ))}
+          </div>
+          {/* 数据行 */}
+          {rows.map((r, ri) => (
+            <div key={ri} style={{ display: "flex", height: rowH, borderBottom: op.gridlines ? "1px solid #E4EAF6" : ri < rows.length - 1 ? "1px solid rgba(30,36,51,0.04)" : undefined }}>
+              {r.map((v, ci) => {
+                const c = PREVIEW_COLS[ci];
+                const numeric = c.kind === "num";
+                return (
+                  <div
+                    key={ci}
+                    style={{
+                      ...(c.width ? { width: c.width, flexShrink: 0 } : { flex: 1, minWidth: 0 }),
+                      padding: "4px 12px", lineHeight: `${rowH - 10}px`,
+                      textAlign: numeric ? "right" : "left",
+                      color: c.kind === "longtext" && /^\d{15,}$/.test(v) && (draft.longNumberAsText ?? true) ? C.sub : C.text,
+                      borderRight: ci < r.length - 1 && op.gridlines ? "1px solid #E4EAF6" : undefined,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...bodyFont,
+                    }}
+                    title={v}
+                  >
+                    {v}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
-        {/* 数据行 */}
-        {rows.map((r, ri) => (
-          <div key={ri} style={{ display: "flex", height: rowH, borderBottom: op.gridlines ? "1px solid #E4EAF6" : ri < rows.length - 1 ? "1px solid rgba(30,36,51,0.04)" : undefined }}>
-            {r.map((v, ci) => {
-              const c = PREVIEW_COLS[ci];
-              const numeric = c.kind === "num";
-              return (
-                <div
-                  key={ci}
-                  style={{
-                    ...(c.width ? { width: c.width, flexShrink: 0 } : { flex: 1, minWidth: 0 }),
-                    padding: "4px 12px", lineHeight: `${rowH - 10}px`,
-                    textAlign: numeric ? "right" : "left",
-                    color: c.kind === "longtext" && /^\d{15,}$/.test(v) && (draft.longNumberAsText ?? true) ? C.sub : C.text,
-                    borderRight: ci < r.length - 1 && op.gridlines ? "1px solid #E4EAF6" : undefined,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...bodyFont,
-                  }}
-                  title={v}
-                >
-                  {v}
-                </div>
-              );
-            })}
-          </div>
-        ))}
       </div>
       <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 3, fontSize: 11.5 }}>
         {(draft.longNumberAsText ?? true) ? (
@@ -230,8 +245,9 @@ function ExcelPreview({ draft }: { draft: Format }) {
 
 export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
   const { message } = App.useApp();
-  const bp = Grid.useBreakpoint();
-  const md = bp.md !== false; // 窄屏时左栏折叠为横向滚动条带
+  // 断点：<768 移动端（左栏横向滑动条带）、768~1023 平板（左栏自动换行卡片）、≥1024 桌面（左右主从）
+  const tier = useViewportTier();
+  const railVertical = tier === "desktop";
 
   const [scope, setScope] = useState<string>("global"); // global | moduleKey
   const [overrides, setOverrides] = useState<Record<string, Format | null>>({});
@@ -316,16 +332,20 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: md ? "row" : "column", gap: 16, alignItems: "stretch" }}>
+    <div style={{ display: "flex", flexDirection: railVertical ? "row" : "column", gap: 16, alignItems: "stretch" }}>
       {/* ── 左栏：作用域导航 + 优先级图例 ─────────────────────────── */}
-      <aside style={{ width: md ? 232 : undefined, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+      <aside style={{ width: railVertical ? 232 : undefined, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
         <div style={{ fontSize: 12, color: C.sub, padding: "0 2px" }}>配置范围</div>
         <div
           role="radiogroup"
           aria-label="配置范围"
           style={{
-            display: "flex", flexDirection: md ? "column" : "row", gap: 6,
-            overflowX: md ? undefined : "auto", paddingBottom: md ? 0 : 4,
+            display: "flex",
+            flexDirection: railVertical ? "column" : "row",
+            flexWrap: tier === "tablet" ? "wrap" : undefined,
+            gap: 6,
+            overflowX: tier === "mobile" ? "auto" : undefined,
+            paddingBottom: tier === "mobile" ? 4 : undefined,
           }}
         >
           {scopeItems.map((m) => {
@@ -339,9 +359,11 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
                 onClick={() => setScope(m.key)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setScope(m.key); } }}
                 style={{
-                  flexShrink: 0, display: "flex", alignItems: "center", gap: 9,
+                  flexShrink: tier === "mobile" ? 0 : undefined,
+                  display: "flex", alignItems: "center", gap: 9,
                   padding: "8px 8px 8px 12px", borderRadius: 12, cursor: "pointer", userSelect: "none",
-                  minWidth: md ? undefined : 176,
+                  minWidth: tier === "mobile" ? 176 : undefined,
+                  maxWidth: "100%",
                   background: active ? C.selectedBg : "#FFFFFF",
                   border: `1.5px solid ${active ? C.primary : C.border}`,
                   boxShadow: active ? "0 2px 10px rgba(91,127,255,.14)" : "none",
@@ -488,7 +510,7 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
 
           <section>
             <SectionHead icon={<GlobalOutlined />} title="其他" hint="通用行为开关" />
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               {([
                 ["冻结首行", op.freezeHeader ?? true, (v: boolean) => set(["options", "freezeHeader"], v)],
                 ["自动筛选", op.autoFilter ?? true, (v: boolean) => set(["options", "autoFilter"], v)],
@@ -496,8 +518,15 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
                 ["长号码强制文本", draft.longNumberAsText ?? true, (v: boolean) => set(["longNumberAsText"], v)],
                 ["自动换行", draft.wrapText ?? true, (v: boolean) => set(["wrapText"], v)],
               ] as [string, boolean, (v: boolean) => void][]).map(([label, checked, onChange]) => (
-                <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: C.sectionBg, borderRadius: 10, padding: "7px 12px" }}>
-                  <span style={{ fontSize: 12.5, color: C.text }}>{label}</span>
+                <div
+                  key={label}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 9,
+                    background: C.sectionBg, borderRadius: 10, padding: "8px 14px",
+                    fontSize: 13.5, color: C.text,
+                  }}
+                >
+                  <span>{label}</span>
                   <Switch size="small" checked={checked} onChange={onChange} disabled={!canEdit} />
                 </div>
               ))}
