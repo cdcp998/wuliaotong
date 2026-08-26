@@ -89,7 +89,7 @@ export function MyTasksPage() {
           <div style={{ fontWeight: 600, marginBottom: 8 }}>{current.title}</div>
           <TextArea placeholder="维修内容（完成必填）" value={content} onChange={setContent} rows={3} />
           <input type="file" accept="image/*" id="task-photo" style={{ display: "none" }} onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />
-          <label htmlFor="task-photo" style={{ display: "inline-block", margin: "8px 0", color: "#5B7FFF" }}>{photo ? "已选照片（点击更换）" : "+ 维修照片（完成必填）"}</label>
+          <label htmlFor="task-photo" style={{ display: "inline-block", margin: "8px 0", color: "#475FE8" }}>{photo ? "已选照片（点击更换）" : "+ 维修照片（完成必填）"}</label>
           <div style={{ display: "flex", gap: 8 }}>
             {current.status === "in_progress" && <Button block color="primary" loading={busy} onClick={complete}>完成任务</Button>}
             <Button block fill="outline" onClick={() => {

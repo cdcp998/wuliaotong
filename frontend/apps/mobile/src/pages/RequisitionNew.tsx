@@ -233,7 +233,7 @@ export function RequisitionNewPage() {
             height: 40,
             border: "1px dashed #c9cdd4",
             borderRadius: 10,
-            color: "#5B7FFF",
+            color: "#475FE8",
             fontSize: 13.5,
             cursor: "pointer",
             background: "#fafbfd",

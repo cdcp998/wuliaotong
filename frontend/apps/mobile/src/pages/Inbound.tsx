@@ -410,7 +410,7 @@ export function InboundPage() {
           </div>
         )}
         {deliveryFiles.length < 10 && (
-          <div onClick={() => deliveryFileRef.current?.click()} style={{ padding: 12, textAlign: "center", color: "#5B7FFF", fontSize: 13, cursor: "pointer" }}>
+          <div onClick={() => deliveryFileRef.current?.click()} style={{ padding: 12, textAlign: "center", color: "#475FE8", fontSize: 13, cursor: "pointer" }}>
             ＋ 添加上传送货单图片
           </div>
         )}

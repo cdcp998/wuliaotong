@@ -55,7 +55,7 @@ export function MinePage() {
             width: 48,
             height: 48,
             borderRadius: 14,
-            background: "#5B7FFF",
+            background: "#475FE8",
             color: "#fff",
             display: "flex",
             alignItems: "center",
@@ -119,7 +119,7 @@ export function MinePage() {
           <NavBar
             onBack={() => setPwdVisible(false)}
             right={
-              <span onClick={() => setPwdVisible(false)} style={{ fontSize: 14, color: "#5B7FFF", padding: "0 12px" }}>
+              <span onClick={() => setPwdVisible(false)} style={{ fontSize: 14, color: "#475FE8", padding: "0 12px" }}>
                 关闭
               </span>
             }
@@ -147,7 +147,7 @@ export function MinePage() {
             <div style={{ background: "#fff", borderRadius: 12, padding: "4px 16px 16px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0 4px" }}>
                 <span style={{ fontSize: 13, color: "#4e5969" }}>输入新密码</span>
-                <span onClick={() => setShowPwd((v) => !v)} style={{ fontSize: 13, color: "#5B7FFF", padding: 4 }}>
+                <span onClick={() => setShowPwd((v) => !v)} style={{ fontSize: 13, color: "#475FE8", padding: 4 }}>
                   {showPwd ? "隐藏密码" : "显示密码"}
                 </span>
               </div>

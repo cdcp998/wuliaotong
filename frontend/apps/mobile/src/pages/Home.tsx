@@ -66,7 +66,7 @@ export function HomePage() {
       <div
         className="wlt-hero"
         style={{
-          background: "#5B7FFF",
+          background: "#475FE8",
           borderRadius: 16,
           padding: 16,
           color: "#fff",
@@ -118,7 +118,7 @@ export function HomePage() {
       <div className="wlt-home-section-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <span style={{ fontSize: 13.5, fontWeight: 600, color: "#1E2433" }}>快捷操作</span>
         <span
-          style={{ fontSize: 12, color: editMode ? "#5B7FFF" : "#5B6478", cursor: "pointer", padding: "4px 2px" }}
+          style={{ fontSize: 12, color: editMode ? "#475FE8" : "#5B6478", cursor: "pointer", padding: "4px 2px" }}
           onClick={() => setEditMode((v) => !v)}
         >
           {editMode ? "完成" : "编辑"}
@@ -181,7 +181,7 @@ export function HomePage() {
                 >
                   {isHidden ? "+" : "−"}
                 </span>
-                <span style={{ color: "#5B7FFF" }}>{a.icon}</span>
+                <span style={{ color: "#475FE8" }}>{a.icon}</span>
                 <span style={{ fontSize: 11.5, color: "#1E2433", fontWeight: 500 }}>{a.title}</span>
                 <span style={{ fontSize: 9.5, color: "var(--adm-color-weak)" }}>{isHidden ? "已隐藏" : a.sub}</span>
               </div>
@@ -214,7 +214,7 @@ export function HomePage() {
                 minHeight: 76,
               }}
             >
-              <span style={{ color: "#5B7FFF" }}>{a.icon}</span>
+              <span style={{ color: "#475FE8" }}>{a.icon}</span>
               <span style={{ fontSize: 11.5, color: "#1E2433", fontWeight: 500 }}>{a.title}</span>
               <span style={{ fontSize: 9.5, color: "var(--adm-color-weak)" }}>{a.sub}</span>
             </div>
@@ -226,7 +226,7 @@ export function HomePage() {
       <div className="wlt-section" style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, overflow: "hidden", marginBottom: 12, boxShadow: "0 6px 20px rgba(30,36,51,.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", borderBottom: "1px solid #F2F5FB", fontSize: 13.5, fontWeight: 600 }}>
           <span>我的申请</span>
-          <span style={{ fontSize: 11.5, color: "#5B7FFF", fontWeight: 400, cursor: "pointer" }} onClick={() => navigate("/requisitions/list")}>全部 ›</span>
+          <span style={{ fontSize: 11.5, color: "#475FE8", fontWeight: 400, cursor: "pointer" }} onClick={() => navigate("/requisitions/list")}>全部 ›</span>
         </div>
         {reqs.length === 0 && <div style={{ padding: "20px 14px", color: "var(--adm-color-weak)", fontSize: 12.5, textAlign: "center" }}>暂无申请记录，点右上角「领用申请」开单</div>}
         {reqs.map((r) => (
@@ -249,10 +249,10 @@ export function HomePage() {
       <div className="wlt-section" style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, overflow: "hidden", boxShadow: "0 6px 20px rgba(30,36,51,.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", borderBottom: "1px solid #F2F5FB", fontSize: 13.5, fontWeight: 600 }}>
           <span>通知</span>
-          <span style={{ fontSize: 11.5, color: "#5B7FFF", fontWeight: 400, cursor: "pointer" }} onClick={() => navigate("/notifications")}>全部 ›</span>
+          <span style={{ fontSize: 11.5, color: "#475FE8", fontWeight: 400, cursor: "pointer" }} onClick={() => navigate("/notifications")}>全部 ›</span>
         </div>
         <div style={{ padding: "14px 14px", color: "#5B6478", fontSize: 12.5, lineHeight: 1.7 }}>
-          {unread > 0 ? <>有 <b style={{ color: "#5B7FFF" }}>{unread}</b> 条未读通知：领用审计结果、库存预警、OCR 完成提醒均在此查看。</> : "暂无未读通知，预警与审批结果将在此提醒。"}
+          {unread > 0 ? <>有 <b style={{ color: "#475FE8" }}>{unread}</b> 条未读通知：领用审计结果、库存预警、OCR 完成提醒均在此查看。</> : "暂无未读通知，预警与审批结果将在此提醒。"}
         </div>
       </div>
     </div>

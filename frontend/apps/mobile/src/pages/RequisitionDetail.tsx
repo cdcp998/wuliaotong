@@ -209,14 +209,14 @@ export function RequisitionDetailPage() {
                       <span
                         style={{
                           width: 14, height: 14, borderRadius: "50%", flexShrink: 0,
-                          background: s.done ? "#22C55E" : i === cur ? "#5B7FFF" : "#E4EAF6",
+                          background: s.done ? "#22C55E" : i === cur ? "#475FE8" : "#E4EAF6",
                           boxShadow: s.done ? "0 0 0 3px #E8F9EF" : i === cur ? "0 0 0 3px #EAEFFF" : "none",
                           display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, lineHeight: 1,
                         }}
                       >
                         {s.done ? "✓" : i === cur ? "•" : ""}
                       </span>
-                      <span style={{ fontSize: 10.5, marginTop: 4, color: s.done ? "#15803D" : i === cur ? "#5B7FFF" : "#6A748A", whiteSpace: "nowrap" }}>{s.label}</span>
+                      <span style={{ fontSize: 10.5, marginTop: 4, color: s.done ? "#15803D" : i === cur ? "#475FE8" : "#6A748A", whiteSpace: "nowrap" }}>{s.label}</span>
                     </span>
                     {i < steps.length - 1 && <span style={{ flex: 1, height: 2, background: s.done ? "#22C55E" : "#E4EAF6", marginTop: 6 }} />}
                   </Fragment>
@@ -229,7 +229,7 @@ export function RequisitionDetailPage() {
         {/* 完成工作（拍照留痕 + 定位水印）—— 待完成工作状态、本人操作 */}
         {detail.status === 1 && isOwner && (
           <div style={{ background: "#fff", border: "1px solid #EAEFFF", borderRadius: 12, padding: 14, marginBottom: 10 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: "#5B7FFF", marginBottom: 6 }}>完成工作（拍照留痕）</div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: "#475FE8", marginBottom: 6 }}>完成工作（拍照留痕）</div>
             <div style={{ fontSize: 12, color: "#5B6478", lineHeight: 1.7, marginBottom: 10 }}>
               材料已领用，请在工作完成后于工作地点拍照。系统读取手机定位，下载照片时自动添加地点/时间/坐标水印（原始照片不保存水印）。
             </div>

@@ -325,7 +325,7 @@ export function TransfersPage() {
                         <div style={{ fontSize: 11, color: "#5B6478", marginTop: 1 }}>{r.product.code}</div>
                       </>
                     ) : (
-                      <span style={{ color: "#5B7FFF", fontSize: 13 }} onClick={() => setPickerOpen(true)}>选择材料</span>
+                      <span style={{ color: "#475FE8", fontSize: 13 }} onClick={() => setPickerOpen(true)}>选择材料</span>
                     )}
                   </div>
                   <span style={{ color: "#EF4444", fontSize: 12, cursor: "pointer" }} onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}>
@@ -348,7 +348,7 @@ export function TransfersPage() {
             <div
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 6, height: 40,
-                border: "1px dashed #c9cdd4", borderRadius: 10, color: "#5B7FFF", fontSize: 13.5, cursor: "pointer",
+                border: "1px dashed #c9cdd4", borderRadius: 10, color: "#475FE8", fontSize: 13.5, cursor: "pointer",
                 background: "#fafbfd", marginBottom: 12,
               }}
               onClick={() => setPickerOpen(true)}

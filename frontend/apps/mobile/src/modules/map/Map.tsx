@@ -75,7 +75,7 @@ type PanelKey = "report" | "faults" | "measure" | "nav" | "layers" | null;
 const TOOLS: { key: Exclude<PanelKey, null>; label: string; color: string }[] = [
   { key: "report", label: "上报", color: "#EF4444" },
   { key: "faults", label: "故障", color: "#fa8c16" },
-  { key: "measure", label: "测距", color: "#5B7FFF" },
+  { key: "measure", label: "测距", color: "#475FE8" },
   { key: "nav", label: "导航", color: "#EF4444" },
 ];
 
@@ -240,7 +240,7 @@ export function MobileMapPage() {
           }} />
           {layers.cables && cables.filter((c) => c.geometry).map((c) => (
             <Polyline key={c.id} positions={(c.geometry!.coordinates as [number, number][]).map(([lng, lat]) => disp([lat, lng]))}
-              pathOptions={{ color: "#5B7FFF", weight: 4 }} />
+              pathOptions={{ color: "#475FE8", weight: 4 }} />
           ))}
           {layers.faults && faults.map((f) => <Marker key={f.id} position={disp([f.lat, f.lng])} icon={warnIcon} />)}
           {myPos && <Marker position={disp(myPos)} icon={myLocationIcon} />}
@@ -258,7 +258,7 @@ export function MobileMapPage() {
             justifyContent: "center", cursor: "pointer",
           }}
         >
-          <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke={panel === "layers" ? "#5B7FFF" : "#555"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke={panel === "layers" ? "#475FE8" : "#555"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 3l9 5-9 5-9-5 9-5z" />
             <path d="M3 13l9 5 9-5" />
           </svg>
@@ -291,7 +291,7 @@ export function MobileMapPage() {
             <span style={{ color: "var(--adm-color-weak)", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
           {[
-            { key: "cables" as const, label: "线缆", color: "#5B7FFF" },
+            { key: "cables" as const, label: "线缆", color: "#475FE8" },
             { key: "faults" as const, label: "故障点", color: "#EF4444" },
           ].map((l) => (
             <div key={l.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F2F5FB" }}>
@@ -319,7 +319,7 @@ export function MobileMapPage() {
           <Selector options={[{ label: "低", value: 1 }, { label: "中", value: 2 }, { label: "高", value: 3 }]} value={[sev]} onChange={(v) => setSev(v[0] ?? 1)} style={{ marginBottom: 8 }} />
           <TextArea placeholder="故障描述（可选）" value={desc} onChange={setDesc} rows={2} maxLength={500} style={{ marginBottom: 8 }} />
           <input type="file" accept="image/*" style={{ display: "none" }} id="fault-photo" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />
-          <label htmlFor="fault-photo" style={{ display: "inline-block", marginBottom: 8, color: "#5B7FFF", fontSize: 14 }}>{photo ? "已选照片（点击更换）" : "+ 拍照/选择现场照片"}</label>
+          <label htmlFor="fault-photo" style={{ display: "inline-block", marginBottom: 8, color: "#475FE8", fontSize: 14 }}>{photo ? "已选照片（点击更换）" : "+ 拍照/选择现场照片"}</label>
           <Button block color="danger" loading={reporting} disabled={!pick} onClick={submitFault}>提交故障上报</Button>
         </div>
       </Popup>
@@ -328,7 +328,7 @@ export function MobileMapPage() {
         <div style={{ padding: 16, paddingBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontWeight: 600 }}>故障管理（共 {faults.length} 条）</span>
-            <span style={{ color: "#5B7FFF", fontSize: 13 }} onClick={() => void load()}>刷新</span>
+            <span style={{ color: "#475FE8", fontSize: 13 }} onClick={() => void load()}>刷新</span>
           </div>
           {faults.map((f) => (
             <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #F2F5FB" }}>

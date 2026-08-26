@@ -145,12 +145,12 @@ export function NotificationsPage() {
               marking ? (
                 <SpinLoading style={{ "--size": "18px" } as React.CSSProperties} />
               ) : (
-                <span style={{ fontSize: 12, color: "#5B7FFF" }} onClick={() => void markAllRead()}>
+                <span style={{ fontSize: 12, color: "#475FE8" }} onClick={() => void markAllRead()}>
                   全部已读
                 </span>
               )
             )}
-            <span style={{ fontSize: 12, color: manage ? "#EF4444" : "#5B7FFF" }} onClick={toggleManage}>
+            <span style={{ fontSize: 12, color: manage ? "#EF4444" : "#475FE8" }} onClick={toggleManage}>
               {manage ? "完成" : "管理"}
             </span>
           </span>
@@ -176,7 +176,7 @@ export function NotificationsPage() {
           </div>
           <span style={{ fontSize: 12, color: "#5B6478", display: "flex", alignItems: "center" }}>
             已选 {selected.size} 条
-            <span style={{ color: "#5B7FFF", marginLeft: 12 }} onClick={() => void clearAll()}>
+            <span style={{ color: "#475FE8", marginLeft: 12 }} onClick={() => void clearAll()}>
               清空全部
             </span>
           </span>
@@ -206,7 +206,7 @@ export function NotificationsPage() {
                       justifyContent: "center",
                     }}
                   >
-                    {!n.is_read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#5B7FFF" }} />}
+                    {!n.is_read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#475FE8" }} />}
                   </span>
                 )
               }

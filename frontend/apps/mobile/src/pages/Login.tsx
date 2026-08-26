@@ -114,7 +114,7 @@ export function LoginPage() {
             width: 58,
             height: 58,
             borderRadius: 15,
-            background: "linear-gradient(135deg,#5B7FFF 0%,#7C93FF 100%)",
+            background: "linear-gradient(135deg,#475FE8 0%,#7C93FF 100%)",
             color: "#fff",
             display: "flex",
             alignItems: "center",
@@ -198,7 +198,7 @@ export function LoginPage() {
             }
           >
             {forgotInfo?.method === "phone" && forgotInfo.contact_phone && (
-              <div style={{ fontSize: 14, color: "#5B7FFF", textAlign: "center", marginBottom: 12 }}>
+              <div style={{ fontSize: 14, color: "#475FE8", textAlign: "center", marginBottom: 12 }}>
                 管理员联系电话：{forgotInfo.contact_phone}
               </div>
             )}
@@ -250,7 +250,7 @@ export function LoginPage() {
 
         {mode === "login" && (
           <div style={{ textAlign: "center", fontSize: 12, color: "#5B6478", marginTop: 18 }}>
-            大屏操作请前往 <a href={otherEndUrl("desktop")} style={{ color: "#5B7FFF" }}>电脑版入口</a>
+            大屏操作请前往 <a href={otherEndUrl("desktop")} style={{ color: "#475FE8" }}>电脑版入口</a>
           </div>
         )}
 

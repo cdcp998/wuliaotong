@@ -72,7 +72,7 @@ export function WarehousesPage() {
                   </div>
                   {locs.map((loc) => (
                     <div key={loc.location_id} style={{ padding: "10px 14px", borderBottom: "1px solid #F2F5FB" }}>
-                      <div style={{ fontSize: 12, color: "#5B7FFF", fontWeight: 500 }}>{loc.location_code}</div>
+                      <div style={{ fontSize: 12, color: "#475FE8", fontWeight: 500 }}>{loc.location_code}</div>
                       {loc.items.length === 0 && <div style={{ fontSize: 11.5, color: "var(--adm-color-weak)", marginTop: 2 }}>空库位</div>}
                       {loc.items.map((it, i) => (
                         <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontSize: 12.5 }}>
@@ -97,7 +97,7 @@ export function WarehousesPage() {
     <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate("/")}>仓库与货架</NavBar>
       {/* 手机端只读提示：编辑/新增在电脑端 */}
-      <div style={{ background: "#EAEFFF", borderBottom: "1px solid #D9E3FF", color: "#5B7FFF", fontSize: 12, lineHeight: 1.6, padding: "8px 14px" }}>
+      <div style={{ background: "#EAEFFF", borderBottom: "1px solid #D9E3FF", color: "#475FE8", fontSize: 12, lineHeight: 1.6, padding: "8px 14px" }}>
         手机端仅可查看库存；新增/编辑仓库、货架、库位请到电脑端「仓库与货架」操作。
       </div>
       <List style={{ "--border-top": "0" } as React.CSSProperties}>
