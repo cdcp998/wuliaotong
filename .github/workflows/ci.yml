@@ -150,6 +150,9 @@ jobs:
           conn.close()
           print("init.sql imported to wuliaotong + wuliaotong_test")
           EOF
+      - name: 构建模块运行时（build_modules.py，app/modules 为生成产物不入库）
+        shell: bash
+        run: cd backend && PYTHONPATH=. python scripts/build_modules.py
       - name: 前端依赖
         shell: bash
         run: cd frontend && npm ci
