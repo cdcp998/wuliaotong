@@ -104,8 +104,11 @@ async function main() {
   await sleep(3000);
 
   mkdirSync(OUT, { recursive: true });
-  // 登录页（M20 重构）截图
+  // 登录页（M20 重构）截图 + 溢出检测（滚动条回归守卫：文档超出视口即为异常）
   await cdp.shot(join(OUT, "mobile_390_login.png"));
+  console.log("overflow(login):", await cdp.eval(
+    `JSON.stringify({ w: document.documentElement.scrollWidth - window.innerWidth, h: document.documentElement.scrollHeight - window.innerHeight })`,
+  ));
 
   // 登录 admin/admin123：优先走真实 UI（受控输入 + 点登录钮），端到端验证登录链路；
   // 若无头环境输入注入仍不生效，回退同源 API 登录（仅建会话截图用）。
@@ -160,6 +163,10 @@ async function main() {
     await loaded;
     await sleep(3500);
     await cdp.shot(join(OUT, `mobile_390_${p.replaceAll("/", "_").replace(/^_/, "")}.png`));
+    console.log(
+      `overflow(${p}):`,
+      await cdp.eval(`JSON.stringify({ w: document.documentElement.scrollWidth - window.innerWidth, h: document.documentElement.scrollHeight - window.innerHeight })`),
+    );
   }
   // 平板断点抽检：768px 下「我的」窗口化居中
   await cdp.send("Emulation.setDeviceMetricsOverride", { width: 768, height: 1024, deviceScaleFactor: 2, mobile: true });

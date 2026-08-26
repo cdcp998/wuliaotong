@@ -106,7 +106,7 @@ export function MyTasksPage() {
 
   return (
     <ModuleGate code="task" title="我的任务">
-    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: 24 }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: 24, boxSizing: "border-box" }}>
       <NavBar onBack={() => navigate(-1)}>我的任务</NavBar>
 
       {/* 任务卡流（OP Wrap p12 gap10） */}

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Dialog, List, NavBar, Popup, Stepper, Tabs, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -242,7 +242,7 @@ export function TransfersPage() {
 
   // ===== 列表视图 =====
   return (
-    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: 72 }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: 72, boxSizing: "border-box" }}>
       <NavBar onBack={() => navigate("/")}>库存调拨</NavBar>
       <Tabs activeKey={tab} onChange={setTab}>
         <Tabs.Tab title="全部" key="all" />

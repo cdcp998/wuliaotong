@@ -141,7 +141,7 @@ export function NotificationsPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: manage ? 76 : 0 }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: manage ? 76 : 0, boxSizing: "border-box" }}>
       {/* NavBar（OP：‹ 通知 · 右侧「管理」） */}
       <div
         style={{

@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, Input, List, NavBar, Popup, Stepper, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -168,7 +168,7 @@ export function RequisitionNewPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: "calc(84px + env(safe-area-inset-bottom))" }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: "calc(84px + env(safe-area-inset-bottom))", boxSizing: "border-box" }}>
       <NavBar onBack={() => navigate("/")}>领用申请</NavBar>
       <div style={{ padding: 12 }}>
         {/* 出库仓库 */}

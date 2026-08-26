@@ -58,7 +58,7 @@ export function WarehousesPage() {
   }, [stocks]);
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: 24 }}>
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: 24, boxSizing: "border-box" }}>
       <NavBar onBack={() => navigate("/")}>仓库与货架</NavBar>
 
       <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
