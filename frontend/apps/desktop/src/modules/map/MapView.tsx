@@ -5,7 +5,7 @@
  * - 坐标：数据与接口一律 WGS84，仅本组件做显示层转换：非 WGS84 底图按源原生空间对齐，
  *   WGS84 底图按全局偏好显示（默认 GCJ-02 加密显示，中国大陆场景）——共享 geo.ts
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -51,6 +51,8 @@ interface MapViewProps {
   draftLine?: LatLng[] | null;
   /** 全局显示坐标系偏好（地图缓存管理设置；缺省按源空间 → 默认 GCJ-02） */
   displaySpace?: string | null;
+  /** 故障点以网格聚合渲染（近距离折叠为计数簇，点击展开）；默认逐点渲染 */
+  clusterFaults?: boolean;
   /** 地图点击回调（已转换为 WGS84 lat/lng） */
   onPick?: (lat: number, lng: number) => void;
   /** 初始中心 [lat, lng] 与缩放 */
@@ -145,6 +147,87 @@ function FitCables({ cables, previewPath }: { cables: CableItem[]; previewPath?:
   return null;
 }
 
+/** 故障点网格聚合层：近距离故障折叠为计数簇，点击簇放大展开；单点直接渲染标记。 */
+function FaultClusterLayer({ faults, space }: { faults: FaultItem[]; space: string }) {
+  const map = useMap();
+  const [view, setView] = useState(() => ({ zoom: map.getZoom(), version: 0 }));
+
+  useEffect(() => {
+    const bump = () => setView((v) => ({ zoom: map.getZoom(), version: v.version + 1 }));
+    map.on("zoomend", bump);
+    map.on("moveend", bump);
+    return () => {
+      map.off("zoomend", bump);
+      map.off("moveend", bump);
+    };
+  }, [map]);
+
+  // 视口内按屏幕网格（64px）聚合，随缩放/平移重算
+  const groups = useMemo(() => {
+    void view.version;
+    const CELL = 64;
+    const padded = map.getBounds().pad(0.25);
+    const byCell = new Map<string, { dlat: number; dlng: number; items: FaultItem[] }>();
+    for (const f of faults) {
+      const [dlng, dlat] = toDisplaySpace(f.lng, f.lat, space);
+      if (!padded.contains([dlat, dlng])) continue;
+      const p = map.project([dlat, dlng], view.zoom);
+      const key = `${Math.floor(p.x / CELL)}:${Math.floor(p.y / CELL)}`;
+      const g = byCell.get(key);
+      if (g) {
+        g.items.push(f);
+        g.dlat = (g.dlat * (g.items.length - 1) + dlat) / g.items.length; // 质心
+        g.dlng = (g.dlng * (g.items.length - 1) + dlng) / g.items.length;
+      } else {
+        byCell.set(key, { dlat, dlng, items: [f] });
+      }
+    }
+    return [...byCell.values()];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [faults, space, view, map]);
+
+  return (
+    <>
+      {groups.map((g) => {
+        if (g.items.length === 1) {
+          const f = g.items[0];
+          return (
+            <Marker key={`fc${f.id}`} position={[g.dlat, g.dlng]} icon={defaultIcon}>
+              <Popup>
+                <div>
+                  <b>故障 #{f.id}</b>
+                  <div>{f.fault_type || "未分类"}（{["低", "中", "高"][f.severity - 1] ?? f.severity}）</div>
+                  <div>{f.description || "—"}</div>
+                  <div>状态：{["待处理", "处理中", "待验证", "已修复", "已关闭"][f.status] ?? f.status}</div>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        }
+        const boundsList = g.items.map((f) => {
+          const [dlng, dlat] = toDisplaySpace(f.lng, f.lat, space);
+          return [dlat, dlng] as L.LatLngTuple;
+        });
+        return (
+          <Marker
+            key={`cl${g.items.map((i) => i.id).join("_")}`}
+            position={[g.dlat, g.dlng]}
+            icon={L.divIcon({
+              className: "wlt-map-marker",
+              html: `<div style="width:34px;height:34px;border-radius:50%;background:rgba(220,38,38,.92);border:2px solid #fff;color:#fff;font:700 13px/30px ui-sans-serif,system-ui;text-align:center;box-shadow:0 0 6px rgba(0,0,0,.35)">${g.items.length}</div>`,
+              iconSize: [34, 34],
+              iconAnchor: [17, 17],
+            })}
+            eventHandlers={{
+              click: () => map.flyToBounds(L.latLngBounds(boundsList), { padding: [60, 60], maxZoom: map.getZoom() + 3 }),
+            }}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 /** 地图底图瓦片 SourcePicker：默认使用第一个启用的源。 */
 function BaseTile({ sources, sourceKey }: { sources: Record<string, MapSourceInfo>; sourceKey?: string }) {
   const key = sourceKey && sources[sourceKey]?.enabled ? sourceKey : Object.keys(sources).find((k) => sources[k]?.enabled);
@@ -164,6 +247,7 @@ export function MapView({
   extraLines = [],
   draftLine = null,
   displaySpace = null,
+  clusterFaults = false,
   onPick,
   center = [30.2741, 120.1551],
   zoom = 12,
@@ -235,21 +319,25 @@ export function MapView({
             style={{ color: "#5B7FFF", weight: 4 }}
           />
         )}
-        {faultPoints.map(({ lat, lng, f }) => {
-          const [dlng, dlat] = toDisplaySpace(lng, lat, space);
-          return (
-            <Marker key={`f${f.id}`} position={[dlat, dlng]} icon={defaultIcon}>
-              <Popup>
-                <div>
-                  <b>故障 #{f.id}</b>
-                  <div>{f.fault_type || "未分类"}（{["低", "中", "高"][f.severity - 1] ?? f.severity}）</div>
-                  <div>{f.description || "—"}</div>
-                  <div>状态：{["待处理", "处理中", "待验证", "已修复", "已关闭"][f.status] ?? f.status}</div>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
+        {clusterFaults && overlays.faults.length > 0 ? (
+          <FaultClusterLayer faults={overlays.faults} space={space} />
+        ) : (
+          faultPoints.map(({ lat, lng, f }) => {
+            const [dlng, dlat] = toDisplaySpace(lng, lat, space);
+            return (
+              <Marker key={`f${f.id}`} position={[dlat, dlng]} icon={defaultIcon}>
+                <Popup>
+                  <div>
+                    <b>故障 #{f.id}</b>
+                    <div>{f.fault_type || "未分类"}（{["低", "中", "高"][f.severity - 1] ?? f.severity}）</div>
+                    <div>{f.description || "—"}</div>
+                    <div>状态：{["待处理", "处理中", "待验证", "已修复", "已关闭"][f.status] ?? f.status}</div>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })
+        )}
         {markerPoints.map(({ lat, lng, m }) => {
           const [dlng, dlat] = toDisplaySpace(lng, lat, space);
           return (

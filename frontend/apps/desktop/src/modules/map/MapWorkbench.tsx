@@ -26,6 +26,20 @@ const TYPE_LABEL: Record<string, string> = { wire: "电线", fiber: "光缆", ne
 const DEFAULT_VIEW: { center: LatLng; zoom: number } = { center: [30.2741, 120.1551], zoom: 15 };
 /** 「回到我的定位」目标缩放级别（街道级）。 */
 const MY_LOCATE_ZOOM = 17;
+/** 最后定位持久化键：用户再次打开地图自动回到该位置。 */
+const LAST_POS_KEY = "wlt.map.last_position";
+
+function loadLastPosition(): LatLng | null {
+  try {
+    const raw = localStorage.getItem(LAST_POS_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as { lat?: number; lng?: number };
+    if (typeof p.lat === "number" && typeof p.lng === "number") return [p.lat, p.lng];
+  } catch {
+    /* 损坏数据/隐私模式忽略 */
+  }
+  return null;
+}
 
 /** 工具栏小按钮（设计稿：40px 图标 + 8.5px 文字，激活=品牌蓝）。 */
 function ToolbarBtn({ active, tip, icon, label, onClick }: { active?: boolean; tip: string; icon: React.ReactNode; label: string; onClick: () => void }) {
@@ -77,10 +91,32 @@ export function MapWorkbenchPage() {
   const [measureOpen, setMeasureOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [map, setMap] = useState<L.Map | null>(null);
-  // 定位：我的当前位置（WGS84）+ 定位中标记 + 显示坐标系偏好（缓存管理设置）
-  const [myPos, setMyPos] = useState<LatLng | null>(null);
+  // 定位：我的当前位置（WGS84，持久化——打开地图自动回到上次位置）+ 定位中标记 + 显示坐标系偏好
+  const [myPos, setMyPos] = useState<LatLng | null>(loadLastPosition);
   const [locating, setLocating] = useState(false);
   const [displayPref, setDisplayPref] = useState<string | null>(null);
+  // 打开地图时的初始视图：有历史定位 → 回到上次位置（15 级）；否则默认中心
+  const initialCenter = useMemo(() => loadLastPosition() ?? DEFAULT_VIEW.center, []);
+
+  useEffect(() => {
+    if (!myPos) return;
+    try {
+      localStorage.setItem(LAST_POS_KEY, JSON.stringify({ lat: myPos[0], lng: myPos[1], at: Date.now() }));
+    } catch {
+      /* 存储不可用时静默 */
+    }
+  }, [myPos]);
+
+  // 选中故障点后：持续刷新我的定位点（原生 GPS 可用时；HTTP 页面无 Geolocation 则静默跳过）
+  useEffect(() => {
+    if (navFault === undefined || typeof navigator === "undefined" || !navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      (pos) => setMyPos([pos.coords.latitude, pos.coords.longitude]),
+      () => undefined,
+      { enableHighAccuracy: true, maximumAge: 5000 },
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, [navFault]);
   // 画线工具：绘制模式 / 草稿节点（WGS84）/ 已完成线条
   const [drawMode, setDrawMode] = useState(false);
   const [draftPoints, setDraftPoints] = useState<LatLng[]>([]);
@@ -303,6 +339,9 @@ export function MapWorkbenchPage() {
         extraLines={drawnLines}
         draftLine={drawMode && draftPoints.length > 0 ? draftPoints : null}
         displaySpace={displayPref}
+        clusterFaults
+        center={initialCenter}
+        zoom={initialCenter !== DEFAULT_VIEW.center ? DEFAULT_VIEW.zoom : 12} // 有历史定位→15级回位；否则默认12级
         onMapReady={setMap}
         onPick={
           pickMode === "navStart"

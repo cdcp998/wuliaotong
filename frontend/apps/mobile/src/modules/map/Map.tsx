@@ -5,7 +5,7 @@
  * - 定位降级链（浏览器 GPS → IP 兜底）：修复 HTTP 内网/手机浏览器无 Geolocation API 时无法定位；
  * - 显示层坐标转换（默认 GCJ-02 加密显示，与桌面工作台一致；数据/接口仍一律 WGS84）；
  * - 我的位置蓝色标识点随定位更新。 */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Dialog, Input, NavBar, Picker, Popup, Selector, Switch, Tag, TextArea, Toast } from "antd-mobile";
 import { MapContainer, Marker, Polyline, TileLayer, useMapEvents, ZoomControl } from "react-leaflet";
@@ -53,6 +53,21 @@ const myLocationIcon = L.divIcon({
 /** 显示坐标系：手机端底图固定经后端代理（WGS84 源）→ 默认 GCJ-02 加密显示（与桌面端一致）。 */
 const DISPLAY_SPACE = resolveDisplaySpace("wgs84", null);
 
+/** 最后定位持久化（与桌面端共用键）：再次打开地图自动回到上次位置。 */
+const LAST_POS_KEY = "wlt.map.last_position";
+
+function loadLastPosition(): [number, number] | null {
+  try {
+    const raw = localStorage.getItem(LAST_POS_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as { lat?: number; lng?: number };
+    if (typeof p.lat === "number" && typeof p.lng === "number") return [p.lat, p.lng];
+  } catch {
+    /* 损坏数据/隐私模式忽略 */
+  }
+  return null;
+}
+
 function ClickCatcher({ onPick }: { onPick: (lat: number, lng: number) => void }) {
   useMapEvents({
     click(e) {
@@ -98,11 +113,22 @@ export function MobileMapPage() {
   const [highlight, setHighlight] = useState<[number, number] | null>(null);
   const [selFaultId, setSelFaultId] = useState<number | undefined>();
   const [navStart, setNavStart] = useState<[number, number] | null>(null);
-  const [myPos, setMyPos] = useState<[number, number] | null>(null);
+  const [myPos, setMyPos] = useState<[number, number] | null>(loadLastPosition);
   const [navInfo, setNavInfo] = useState<string>("");
   const [navPath, setNavPath] = useState<[number, number][] | null>(null);
   const [navigating, setNavigating] = useState(false);
   const watchRef = useRef<number | null>(null);
+  // 打开地图回到最后定位（无历史则默认中心）；定位更新即持久化
+  const initialCenter = useMemo(() => loadLastPosition() ?? ([30.2741, 120.1551] as [number, number]), []);
+
+  useEffect(() => {
+    if (!myPos) return;
+    try {
+      localStorage.setItem(LAST_POS_KEY, JSON.stringify({ lat: myPos[0], lng: myPos[1], at: Date.now() }));
+    } catch {
+      /* 存储不可用时静默 */
+    }
+  }, [myPos]);
 
   const load = useCallback(async () => {
     try {
@@ -230,7 +256,7 @@ export function MobileMapPage() {
       <NavBar onBack={() => navigate(-1)}>地图工作台</NavBar>
       {/* 地图区（全屏最大化；底部工具栏常驻） */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, marginBottom: 56 }}>
-        <MapContainer center={disp([30.2741, 120.1551])} zoom={12} zoomControl={false} style={{ height: "100%", width: "100%" }}>
+        <MapContainer center={disp(initialCenter)} zoom={12} zoomControl={false} style={{ height: "100%", width: "100%" }}>
           <ZoomControl position="bottomright" />
           <TileLayer url={mapApi.tileUrl("esri", "{z}", "{x}", "{y}")} maxZoom={19} attribution="© 卫星影像" />
           <ClickCatcher onPick={(lat, lng) => {
