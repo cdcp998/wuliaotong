@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.core.excel_guard import safe_excel_value
 from app.models.sys import SysConfig
+from app.services.export_format import ExportSpec
 
 EXPORT_CONFIG_KEYS: dict[str, str] = {
     "global": "export.global",
@@ -165,6 +166,45 @@ def _cell_value(v, fmt: dict, header_hint: str = ""):
         nf = f"#{',##0.' + '0' * decimals}" if thousands else f"0.{('0' * decimals)}" if decimals else "0"
         return v, nf
     return s, None
+
+
+def apply_column_spec(
+    headers: list[str],
+    data: list[list],
+    spec: ExportSpec | None,
+) -> tuple[list[str], list[list], dict | None]:
+    """把请求级规格（ExportFormatModal 的 fmt）应用到表头/数据并生成 request_spec。
+
+    - 列筛选 + 重排（spec.order 引用源列下标）；
+    - 生成 write_table_xlsx 可直接消费的 request_spec（列宽/文本列/数值列，键随重排更新）；
+    - spec 为空或未选任何列时原样返回（request_spec=None，行为与无规格一致）。
+    /reports/export、/logs/export、/checks/{id}/export 统一复用，禁止各自拼转换。
+    """
+    if spec is None or not spec.has_column_filter():
+        return headers, data, None
+    order = [i for i in spec.order if 0 <= i < len(headers)]
+    if not order:
+        return headers, data, None
+    headers = [headers[i] for i in order]
+    data = [[(r[i] if 0 <= i < len(r) else "") for i in order] for r in data]
+    col_widths: dict[int, float] = {}
+    text_cols: list[int] = []
+    number_cols: dict[int, int] = {}
+    for src, cf in (spec.fmt or {}).items():
+        if src not in range(len(headers)):
+            continue
+        pos = order.index(src)
+        if cf.type == "text":
+            text_cols.append(pos)
+        elif cf.type == "number":
+            number_cols[pos] = cf.decimals or 2
+    for src, w in (spec.col_widths or {}).items():
+        if src in order:
+            col_widths[order.index(src)] = w
+    req_spec = {"colWidths": {str(k): v for k, v in col_widths.items()},
+                "textCols": text_cols,
+                "numberCols": {str(k): v for k, v in number_cols.items()}}
+    return headers, data, req_spec
 
 
 def write_table_xlsx(

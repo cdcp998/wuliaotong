@@ -114,13 +114,22 @@ export const adminApi = {
     q.set("page_size", String(params.page_size ?? 20));
     return http.get<PageData<OperationLog>>(`/logs?${q}`);
   },
-  /** 操作日志导出 Excel（统一导出服务，模块标识 operation_logs）。 */
-  logsExportUrl: (params: { username?: string; module?: string; method?: string; start?: string; end?: string } = {}) => {
+  /** 操作日志导出 Excel（统一导出服务，模块标识 operation_logs；fmt=「导出格式设置」JSON 可选）。 */
+  logsExportUrl: (params: { username?: string; module?: string; method?: string; start?: string; end?: string; fmt?: string } = {}) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== "") q.set(k, String(v));
     }
     return `${apiBase()}/logs/export?${q}`;
+  },
+  /** 操作日志导出预览：preview=1 返回前 10 条 JSON（「导出格式设置」预览用）。 */
+  logsExportPreview: (params: { username?: string; module?: string; method?: string; start?: string; end?: string; fmt?: string } = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== "") q.set(k, String(v));
+    }
+    q.set("preview", "1");
+    return http.get<{ headers: string[]; rows: string[][] }>(`/logs/export?${q}`);
   },
 
   backups: (page = 1, pageSize = 20) => http.get<PageData<BackupRecord>>(`/backups?page=${page}&page_size=${pageSize}`),

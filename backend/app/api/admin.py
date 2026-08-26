@@ -341,9 +341,16 @@ def export_logs(
     method: str = Query("", max_length=10),
     start: str = Query(""),
     end: str = Query(""),
+    fmt: str = Query("", max_length=8000),  # 「导出格式设置」JSON（ExportFormatModal 生成；空=默认样式）
+    preview: int = Query(0, ge=0, le=1),  # 1=不生成文件，返回前 10 条 JSON（格式设置预览）
     db: Session = Depends(get_db),
 ):
     """操作日志导出 Excel（统一导出服务，模块标识 operation_logs；最多导出最近 5000 条）。"""
+    from app.services.export_format import parse_export_spec
+
+    spec = parse_export_spec(fmt)
+    if fmt and spec is None:
+        raise BizError(E_PARAM, "导出格式设置（fmt）不是合法 JSON")
     stmt = select(SysOperationLog)
     if username:
         stmt = stmt.where(SysOperationLog.username.like(f"%{username}%"))
@@ -358,7 +365,7 @@ def export_logs(
     rows = db.scalars(stmt.order_by(SysOperationLog.id.desc()).limit(5000)).all()
 
     method_cn = {"POST": "新增", "PUT": "修改", "DELETE": "删除", "PATCH": "更新", "GET": "查询"}
-    headers = ["时间", "操作人", "模块", "动作", "方法", "URL", "查询参数", "提交内容", "IP", "耗时(ms)", "状态码"]
+    headers = ["时间", "操作人", "模块", "动作", "方法", "URL", "查询参数", "提交内容", "变更对比", "IP", "耗时(ms)", "状态码"]
     data = [
         [
             log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else "",
@@ -376,7 +383,12 @@ def export_logs(
         ]
         for log in rows
     ]
-    from app.services.export_service import write_table_xlsx
+    if preview:
+        return ok({"headers": headers, "rows": [[str(c) if c is not None else "" for c in r] for r in data[:10]]})
+
+    from app.services.export_service import apply_column_spec, write_table_xlsx
+
+    headers, data, req_spec = apply_column_spec(headers, data, spec)
 
     today = datetime.now().strftime("%Y%m%d")
     return write_table_xlsx(
@@ -384,7 +396,8 @@ def export_logs(
         headers=headers, rows=data,
         filename=f"操作日志_{today}.xlsx",
         sheet="操作日志",
-        column_widths=[19, 12, 12, 18, 14, 30, 24, 36, 15, 11, 9],
+        column_widths=[19, 12, 12, 18, 14, 30, 24, 36, 30, 15, 11, 9],
+        request_spec=req_spec,
     )
 
 

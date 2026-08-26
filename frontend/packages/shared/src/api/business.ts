@@ -86,8 +86,15 @@ export const checkApi = {
   saveItems: (id: number, items: { check_item_id: number; real_qty: string; photo_file_id?: number; product_id?: number }[]) =>
     http.put<null>(`/checks/${id}/items`, { items }),
   audit: (id: number) => http.post<null>(`/checks/${id}/audit`),
-  /** 导出盘点结果 Excel（收发存模板格式 + 盘点字段），浏览器直接下载（session cookie 同源）。 */
-  exportUrl: (id: number) => `${apiBase()}/checks/${id}/export`,
+  /** 导出盘点结果 Excel（收发存模板格式 + 盘点字段），浏览器直接下载（session cookie 同源）；fmt=「导出格式设置」JSON 可选。 */
+  exportUrl: (id: number, fmt?: string) =>
+    `${apiBase()}/checks/${id}/export${fmt ? `?fmt=${encodeURIComponent(fmt)}` : ""}`,
+  /** 导出预览：preview=1 返回前 10 条 JSON（「导出格式设置」预览用）。 */
+  exportPreview: (id: number, fmt?: string) => {
+    const q = new URLSearchParams({ preview: "1" });
+    if (fmt) q.set("fmt", fmt);
+    return http.get<{ headers: string[]; rows: string[][] }>(`/checks/${id}/export?${q}`);
+  },
 };
 
 export interface TransferBill {

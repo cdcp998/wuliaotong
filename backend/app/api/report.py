@@ -411,34 +411,12 @@ def _export_xlsx(
 ) -> StreamingResponse:
     """统一导出入口（委托 services/export_service.write_table_xlsx，三级格式合并）。
 
-    spec（ExportFormatModal 请求级格式）转换为 request_spec 叠加：请求级 > 模块级 > 全局 > 内置。
+    spec（ExportFormatModal 请求级格式）经 apply_column_spec 转换为 request_spec 叠加：
+    请求级 > 模块级 > 全局 > 内置。
     """
-    from app.services.export_service import write_table_xlsx
+    from app.services.export_service import apply_column_spec, write_table_xlsx
 
-    req_spec: dict | None = None
-    if spec and spec.has_column_filter():
-        order = [i for i in spec.order if 0 <= i < len(headers)]
-        if order:
-            headers = [headers[i] for i in order]
-            data = [[(r[i] if 0 <= i < len(r) else "") for i in order] for r in data]
-            col_widths: dict[int, float] = {}
-            text_cols: list[int] = []
-            number_cols: dict[int, int] = {}
-            for src, cf in (spec.fmt or {}).items():
-                if src not in range(len(headers)):
-                    continue
-                pos = order.index(src)
-                if cf.type == "text":
-                    text_cols.append(pos)
-                elif cf.type == "number":
-                    number_cols[pos] = cf.decimals or 2
-            for src, w in (spec.col_widths or {}).items():
-                if src in order:
-                    col_widths[order.index(src)] = w
-            req_spec = {"colWidths": {str(k): v for k, v in col_widths.items()},
-                        "textCols": text_cols,
-                        "numberCols": {str(k): v for k, v in number_cols.items()}}
-
+    headers, data, req_spec = apply_column_spec(headers, data, spec)
     return write_table_xlsx(
         db, module, headers=headers, rows=data, filename=filename,
         sheet=sheet, title=title, request_spec=req_spec,

@@ -522,8 +522,18 @@ def _month_flow_rows(db: Session, warehouse_id: int, start: datetime, end: datet
 
 
 @router.get("/checks/{bill_id}/export", dependencies=[Depends(require_permission("stk:check"))])
-def export_check(bill_id: int, db: Session = Depends(get_db)):
+def export_check(
+    bill_id: int,
+    fmt: str = Query("", max_length=8000),  # 「导出格式设置」JSON（ExportFormatModal 生成；空=默认样式）
+    preview: int = Query(0, ge=0, le=1),  # 1=不生成文件，返回前 10 条 JSON（格式设置预览）
+    db: Session = Depends(get_db),
+):
     """导出盘点结果 Excel（统一导出服务，模块标识 check_export）：21 列收发存结构 + 账面/实盘/盈亏。"""
+    from app.services.export_format import parse_export_spec
+
+    spec = parse_export_spec(fmt)
+    if fmt and spec is None:
+        raise BizError(E_PARAM, "导出格式设置（fmt）不是合法 JSON")
     b = db.get(StkCheck, bill_id)
     if b is None:
         raise BizError(E_NOT_FOUND, "盘点单不存在")
@@ -568,16 +578,21 @@ def export_check(bill_id: int, db: Session = Depends(get_db)):
         ])
 
     title = f"{month_start.year}年{month_start.month}月库存金额收发存表（盘点结果 {b.bill_no}）"
-    from app.services.export_service import write_table_xlsx
+    if preview:
+        return ok({"headers": list(_CHECK_HEADERS), "rows": [[str(c) if c is not None else "" for c in r] for r in rows_out[:10]]})
 
+    from app.services.export_service import apply_column_spec, write_table_xlsx
+
+    headers, rows_out, req_spec = apply_column_spec(list(_CHECK_HEADERS), rows_out, spec)
     return write_table_xlsx(
         db, "check_export",
-        headers=list(_CHECK_HEADERS),
+        headers=headers,
         rows=rows_out,
         filename=f"库存金额收发存表_{b.bill_no}.xlsx",
         sheet="盘点结果",
         title=title,
         column_widths=[10, 18, 13, 14, 20, 26, 22, 10, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 14, 14, 20],
+        request_spec=req_spec,
     )
 
 

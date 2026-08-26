@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { App, Button, InputNumber, Select, Space, Tag } from "antd";
+import { App, Button, InputNumber, Select, Space, Tag, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { SettingOutlined } from "@ant-design/icons";
 import { useNavigate, useParams } from "react-router";
 
 import { baseApi, checkApi, FileImage, type CheckItem } from "@wlt/shared";
 
 import { DataTable } from "../components/DataTable";
+import { ExportFormatModal, type ExportFormatSpec } from "../components/ExportFormatModal";
+import { CHECK_FIELDS } from "./exportFields";
 
 /** 盘点执行（电脑端）：录入实盘 → 提交 → 审核。 */
 export function CheckDetailPage() {
@@ -24,6 +27,15 @@ export function CheckDetailPage() {
   const [products, setProducts] = useState<{ id: number; name: string; spec?: string }[]>([]);
   const [newProductId, setNewProductId] = useState<number | undefined>();
   const [newReal, setNewReal] = useState<number | undefined>();
+  const [fmtOpen, setFmtOpen] = useState(false);
+
+  /** 导出盘点 Excel（统一导出服务，模块标识 check_export；fmt=「导出格式设置」JSON 可选）。 */
+  function doExport(fmt?: ExportFormatSpec) {
+    window.open(checkApi.exportUrl(Number(id), fmt ? JSON.stringify(fmt) : undefined), "_self");
+  }
+
+  /** 导出预览：后端 preview=1 返回前 10 条真实数据（源列全序）。 */
+  const previewRows = () => checkApi.exportPreview(Number(id)).then((r) => r.rows);
 
   useEffect(() => {
     if (!id) return;
@@ -131,7 +143,7 @@ export function CheckDetailPage() {
             {["待盘点", "盘点中", "已审核"][status]}（{items.length} 项）
           </span>
         </h2>
-        <Space2 status={status} saving={saving} auditing={auditing} onExport={() => window.open(checkApi.exportUrl(Number(id)), "_self")} onSave={() => void save()} onAudit={() => void audit()} onBack={() => navigate("/checks")} />
+        <Space2 status={status} saving={saving} auditing={auditing} onFormat={() => setFmtOpen(true)} onExport={() => doExport()} onSave={() => void save()} onAudit={() => void audit()} onBack={() => navigate("/checks")} />
       </div>
       {/* 盘点进度（设计页 25：进度条） */}
       {items.length > 0 && (() => {
@@ -174,14 +186,27 @@ export function CheckDetailPage() {
           ))}
         </div>
       )}
+
+      {/* 导出格式设置弹窗（模块标识 check_export，与系统设置「导出格式设置」统一管理） */}
+      <ExportFormatModal
+        open={fmtOpen}
+        onClose={() => setFmtOpen(false)}
+        fields={CHECK_FIELDS}
+        storageKey="export_fmt_check_export"
+        getPreviewRows={previewRows}
+        onExport={(spec) => doExport(spec)}
+      />
     </div>
   );
 }
 
-function Space2({ status, saving, auditing, onExport, onSave, onAudit, onBack }: { status: number; saving: boolean; auditing: boolean; onExport: () => void; onSave: () => void; onAudit: () => void; onBack: () => void }) {
+function Space2({ status, saving, auditing, onFormat, onExport, onSave, onAudit, onBack }: { status: number; saving: boolean; auditing: boolean; onFormat: () => void; onExport: () => void; onSave: () => void; onAudit: () => void; onBack: () => void }) {
   return (
     <Space>
       <Button onClick={onBack}>返回</Button>
+      <Tooltip title="点击设置导出文件的列选择、格式、列宽等选项">
+        <Button icon={<SettingOutlined style={{ color: "#5B7FFF" }} />} onClick={onFormat}>导出设置</Button>
+      </Tooltip>
       <Button onClick={onExport}>导出 Excel</Button>
       {status !== 2 && (
         <Button type="primary" loading={saving} onClick={onSave}>

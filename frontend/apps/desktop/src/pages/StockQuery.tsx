@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
-import { App, Button, Input, Select, Space, Table, Tag, theme } from "antd";
+import { App, Button, Input, Select, Space, Table, Tag, Tooltip, theme } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { ReloadOutlined, DownloadOutlined, SearchOutlined, AppstoreOutlined, InboxOutlined, ApartmentOutlined, WarningOutlined } from "@ant-design/icons";
+import { ReloadOutlined, DownloadOutlined, SearchOutlined, AppstoreOutlined, InboxOutlined, ApartmentOutlined, WarningOutlined, SettingOutlined } from "@ant-design/icons";
 
-import { baseApi, exportReportUrl, stockApi, type StockRow, type Warehouse } from "@wlt/shared";
+import { baseApi, exportReportPreview, exportReportUrl, stockApi, type StockRow, type Warehouse } from "@wlt/shared";
+
+import { ExportFormatModal, type ExportFormatSpec } from "../components/ExportFormatModal";
+import { STOCK_FIELDS } from "./exportFields";
 
 /** 物料 × 仓库/库位聚合行（树表父节点）。 */
 interface MatGroup {
@@ -38,6 +41,17 @@ export function StockQueryPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
+  const [fmtOpen, setFmtOpen] = useState(false);
+
+  /** 导出 Excel（统一导出服务 type=stock，与库存报表共用列格式；fmt=「导出格式设置」JSON 可选）。 */
+  function doExport(fmtSpec?: ExportFormatSpec) {
+    const a = document.createElement("a");
+    a.href = exportReportUrl({ type: "stock", keyword, ...(fmtSpec ? { fmt: JSON.stringify(fmtSpec) } : {}) });
+    a.click();
+  }
+
+  /** 导出预览：后端 preview=1 返回前 10 条真实数据（源列全序）。 */
+  const previewRows = () => exportReportPreview({ type: "stock" }).then((r) => r.rows);
 
   useEffect(() => {
     baseApi.warehouses().then(setWhs).catch(() => undefined);
@@ -201,14 +215,23 @@ export function StockQueryPage() {
           </p>
         </div>
         <Space>
-          <Button icon={<DownloadOutlined />} onClick={() => {
-            const a = document.createElement("a");
-            a.href = exportReportUrl({ type: "stock", keyword });
-            a.click();
-          }}>导出 Excel</Button>
+          <Tooltip title="点击设置导出文件的列选择、格式、列宽等选项">
+            <Button icon={<SettingOutlined style={{ color: "#5B7FFF" }} />} onClick={() => setFmtOpen(true)}>导出设置</Button>
+          </Tooltip>
+          <Button icon={<DownloadOutlined />} onClick={() => doExport()}>导出 Excel</Button>
           <Button icon={<ReloadOutlined />} onClick={() => void load(keyword, warehouseId, true)}>刷新</Button>
         </Space>
       </div>
+
+      {/* 导出格式设置弹窗（与库存报表共用 export_fmt_stock，统一修改入口） */}
+      <ExportFormatModal
+        open={fmtOpen}
+        onClose={() => setFmtOpen(false)}
+        fields={STOCK_FIELDS}
+        storageKey="export_fmt_stock"
+        getPreviewRows={previewRows}
+        onExport={(spec) => doExport(spec)}
+      />
 
       {/* 筛选条 */}
       <div className="wlt-glass-sm" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>

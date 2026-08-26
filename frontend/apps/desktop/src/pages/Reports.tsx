@@ -9,37 +9,8 @@ import { baseApi, exportReportPreview, exportReportUrl, reportApi, type Inventor
 import dayjs from "dayjs";
 
 import { DataTable } from "../components/DataTable";
-import { ExportFormatModal, type ExportField, type ExportFormatSpec } from "../components/ExportFormatModal";
-
-/** 库存报表源列（与后端 export_report stock 分支表头一致）。 */
-const STOCK_FIELDS: ExportField[] = [
-  { key: 0, label: "商品编码", hint: "text" },
-  { key: 1, label: "商品名称" },
-  { key: 2, label: "规格" },
-  { key: 3, label: "仓库" },
-  { key: 4, label: "数量", hint: "number" },
-  { key: 5, label: "成本价", hint: "number" },
-  { key: 6, label: "金额", hint: "number" },
-  { key: 7, label: "30天出库", hint: "number" },
-  { key: 8, label: "最近变动" },
-  { key: 9, label: "呆滞天数", hint: "number" },
-];
-
-/** 库存流水源列（与后端 flow 分支表头一致）。 */
-const FLOW_FIELDS: ExportField[] = [
-  { key: 0, label: "时间" },
-  { key: 1, label: "商品编码", hint: "text" },
-  { key: 2, label: "商品名称" },
-  { key: 3, label: "仓库" },
-  { key: 4, label: "库位" },
-  { key: 5, label: "类型" },
-  { key: 6, label: "单据号", hint: "text" },
-  { key: 7, label: "变动前", hint: "number" },
-  { key: 8, label: "变动数量", hint: "number" },
-  { key: 9, label: "变动后", hint: "number" },
-  { key: 10, label: "成本价", hint: "number" },
-  { key: 11, label: "备注" },
-];
+import { ExportFormatModal, type ExportFormatSpec } from "../components/ExportFormatModal";
+import { FLOW_FIELDS, STOCK_FIELDS } from "./exportFields";
 
 /** 报表中心（电脑端，管理者，设计页 29 风格）：进销存汇总、库存报表、Excel 导出、AI 月报摘要。 */
 export function ReportsPage() {
