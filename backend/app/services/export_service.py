@@ -259,6 +259,7 @@ def write_table_xlsx(
         c = ws.cell(row, ci, name)
         c.font, c.fill, c.alignment, c.border = head_font, head_fill, head_align, border
     ws.row_dimensions[row].height = 30
+    header_row = row  # 表头所在行（有标题行=2，无=1）；冻结/筛选/打印标题均以它为锚
 
     for r in rows:
         row += 1
@@ -292,14 +293,15 @@ def write_table_xlsx(
             width = max(min_w, min(max_w, content_max + 4))
         ws.column_dimensions[get_column_letter(ci)].width = width
 
+    # 冻结首行（表头行+1）：此前误用最后一行数据，导致整表被冻结、xlsx 无法滚动
     if fmt["options"]["freezeHeader"]:
-        ws.freeze_panes = f"A{row + 1}"
+        ws.freeze_panes = f"A{header_row + 1}"
+    # 自动筛选：从表头行覆盖到最后一行数据
     if fmt["options"]["autoFilter"]:
-        last = row + max(len(rows), 1)
-        ws.auto_filter.ref = f"A{row}:{get_column_letter(len(headers))}{last}"
+        ws.auto_filter.ref = f"A{header_row}:{get_column_letter(len(headers))}{max(row, header_row)}"
     ws.page_setup.left_margin = ws.page_setup.right_margin = float(fmt["options"]["pageMargin"])
     if fmt["options"]["printTitleRows"]:
-        ws.print_title_rows = f"{row}:{row}"
+        ws.print_title_rows = f"{header_row}:{header_row}"
 
     buf = io.BytesIO()
     wb.save(buf)

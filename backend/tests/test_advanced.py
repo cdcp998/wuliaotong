@@ -158,6 +158,10 @@ def test_check_flow():
     ws = openpyxl.load_workbook(io.BytesIO(r.content)).active
     title = ws.cell(1, 1).value
     assert title.startswith(ws.cell(3, 1).value[:4] + "年") and "月库存金额收发存表（盘点结果" in title
+    # 冻结窗格锚定表头行+1（标题占第 1 行、表头第 2 行）——回归锁：曾误冻整表导致 xlsx 无法滚动
+    assert ws.freeze_panes == "A3"
+    # 自动筛选从表头行覆盖到数据区（而非从表尾开始）
+    assert ws.auto_filter.ref and ws.auto_filter.ref.startswith("A2:")
     assert ws.cell(2, 17).value == "账面数量" and ws.cell(2, 18).value == "实盘数量"
     assert float(ws.cell(3, 17).value) == 10.0 and float(ws.cell(3, 18).value) == 12.0
     assert float(ws.cell(3, 19).value) == 2.0
