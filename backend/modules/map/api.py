@@ -234,8 +234,21 @@ def list_regions(db: Session = Depends(get_db)) -> dict:
     仅本模块感知不到的外部改动由后台对账任务（默认 10 分钟）纠偏）。
     """
     default_row = _ensure_default_region(db)
+    rows = db.scalars(select(MapCacheRegion).order_by(MapCacheRegion.id.desc())).all()
+
+    # 每区域任务瓦片集合（单条全量查询；同时供孤儿判定与各区域磁盘占用汇总，避免重复扫描）
+    region_pieces: dict[int, dict[str, set[tuple[int, int, int]]]] = {}
+    for rid, source, z, x, y in db.execute(
+        select(MapDownloadTask.region_id, MapDownloadTask.source, MapDownloadTask.z,
+               MapDownloadTask.x, MapDownloadTask.y)
+    ):
+        region_pieces.setdefault(rid, {}).setdefault(source or "", set()).add((int(z), int(x), int(y)))
+    kept: dict[str, set[tuple[int, int, int]]] = {}
+    for pieces_by_source in region_pieces.values():
+        for s, coords in pieces_by_source.items():
+            kept.setdefault(s, set()).update(coords)
+
     # 孤儿瓦片统计（不属于任何下载任务的磁盘文件）→ 归入「默认缓存」
-    kept = _kept_task_tiles(db)
     orphan_count = 0
     orphan_size = 0
     for source, z, x, y, size in tile_cache.scan_tiles():
@@ -246,9 +259,21 @@ def list_regions(db: Session = Depends(get_db)) -> dict:
     default_row.cache_size = orphan_size
     if orphan_count > 0 and default_row.last_download_at is None:
         default_row.last_download_at = datetime.now()
+
+    # 各任务区域磁盘占用**实时如实统计**（不区分进行中/暂停/已完成）：
+    # 按增量注册表现算实际落盘字节——失败但已有文件的瓦片照常计入，下不到的天然计 0；
+    # 「暂停即见当前占用」，完成时刻的写入（worker）与本处口径一致。
+    for r in rows:
+        if r.name == DEFAULT_REGION_NAME:
+            continue
+        pieces = [
+            (s, z, x, y)
+            for s, coords in region_pieces.get(r.id, {}).items()
+            for (z, x, y) in coords
+        ]
+        r.cache_size = tile_cache.total_size_for(pieces)
     db.commit()
 
-    rows = db.scalars(select(MapCacheRegion).order_by(MapCacheRegion.id.desc())).all()
     return ok([
         {
             "id": r.id, "name": r.name, "geometry": json.loads(r.geometry) if r.geometry else None,
