@@ -10,7 +10,7 @@ import type { ColumnsType } from "antd/es/table";
 
 import { baseApi, fileApi, useAuthStore } from "@wlt/shared";
 
-import { cableApi, type CableItem, FAULT_FLOW_STEPS, FAULT_STATUS, type FaultItem } from "./api";
+import { cableApi, type CableItem, FAULT_STATUS, type FaultItem } from "./api";
 import { CableFaultForm } from "./CableFaultForm";
 import { taskApi } from "../task/api";
 import { mapApi, type MapSourceInfo } from "../map/api";
@@ -320,16 +320,6 @@ export function CableFaultsPage() {
             columns={columns}
             rowClassName={(r) => (String(r.id) === focusedId ? "wlt-row-focus" : "")}
           />
-          {/* 状态流转说明（任务池驱动：发布→领取处理→完毕待审→归档） */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "12px 10px 4px", borderTop: `1px solid ${token.colorBorder}`, marginTop: 4 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: token.colorTextSecondary }}>状态流转</span>
-            {FAULT_FLOW_STEPS.map((s, i) => (
-              <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                <span style={{ fontSize: 11.5, padding: "3px 10px", borderRadius: 999, background: i === 3 ? "#F3E8FF" : "#F6F8FE", color: i === 3 ? "#7C3AED" : token.colorTextSecondary, fontWeight: i === 3 ? 700 : 400 }}>{s}</span>
-                {i < FAULT_FLOW_STEPS.length - 1 && <span style={{ color: token.colorTextTertiary }}>›</span>}
-              </span>
-            ))}
-          </div>
         </div>
 
       {/* 故障上报弹窗（复用 CableFaultForm；上报成功即自动发布关联任务入任务池） */}
