@@ -131,8 +131,8 @@ CREATE TABLE IF NOT EXISTS map_download_task (
 INSERT IGNORE INTO sys_permission (name, code, type, sort, module_code) VALUES
   ('线缆/地图查看', 'cable:view',   2, 80, 'cable'),
   ('线缆管理',     'cable:manage', 2, 81, 'cable'),
-  ('故障上报',     'fault:report', 2, 82, 'cable'),
-  ('故障管理',     'fault:manage', 2, 83, 'cable'),
+  ('线路故障上报', 'fault:report', 2, 82, 'cable'),
+  ('线路故障管理', 'fault:manage', 2, 83, 'cable'),
   ('地图源配置',   'map:config',   2, 84, 'cable'),
   ('地图缓存管理', 'map:cache',    2, 85, 'cable');
 
@@ -167,7 +167,7 @@ WHERE m.parent_id = 0 AND m.name = '线缆管理' AND m.module_code = 'cable'
   AND NOT EXISTS (SELECT 1 FROM sys_menu s WHERE s.parent_id = m.id AND s.path = '/cable/list');
 
 INSERT INTO sys_menu (parent_id, name, path, icon, perm_code, visible, sort, module_code)
-SELECT m.id, '故障管理', '/cable/faults', 'AlertOutlined', 'fault:manage', 1, 30, 'cable'
+SELECT m.id, '线路故障管理', '/cable/faults', 'AlertOutlined', 'fault:manage', 1, 30, 'cable'
 FROM sys_menu m
 WHERE m.parent_id = 0 AND m.name = '线缆管理' AND m.module_code = 'cable'
   AND NOT EXISTS (SELECT 1 FROM sys_menu s WHERE s.parent_id = m.id AND s.path = '/cable/faults');

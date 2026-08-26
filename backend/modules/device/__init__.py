@@ -23,7 +23,7 @@ module = ModuleDef(
     dependencies=["task>=1.3.0,<2.0.0"],
     audit_labels={
         "devices": "设备",
-        "device-tasks": "设备维修任务",
+        "device-tasks": "设备故障管理",
     },
     install_sql=["sql/install.sql"],
 )

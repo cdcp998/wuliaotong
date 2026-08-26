@@ -433,11 +433,23 @@ def delete_fault(fault_id: int, user: SysUser = Depends(get_current_user), db: S
 
 @router.put("/faults/{fault_id}", dependencies=[Depends(require_permission("fault:manage"))])
 def update_fault(fault_id: int, req: FaultUpdate, db: Session = Depends(get_db)) -> dict:
+    """编辑故障；支持后台人员标记/移动故障点（lat/lng 变更时按线缆重算累计距离）。"""
     f = db.get(CableFault, fault_id)
     if f is None:
         raise BizError(E_NOT_FOUND, "故障不存在")
-    for k, v in req.model_dump(exclude_none=True).items():
+    data = req.model_dump(exclude_none=True)
+    new_lat, new_lng = data.pop("lat", None), data.pop("lng", None)
+    for k, v in data.items():
         setattr(f, k, v)
+    if new_lat is not None and new_lng is not None:
+        f.lat, f.lng = new_lat, new_lng
+        # 关联线缆时重算累计距离（后台标记故障点）
+        if f.cable_id:
+            coords = [(float(p.lat), float(p.lng)) for p in db.scalars(
+                select(CablePoint).where(CablePoint.cable_id == f.cable_id).order_by(CablePoint.seq)).all()]
+            if len(coords) >= 2:
+                _, cum = geo_math.project_to_polyline(coords, (float(f.lat), float(f.lng)))
+                f.cumulative_distance = round(cum, 2)
     db.commit()
     return ok(_fault_out(f))
 

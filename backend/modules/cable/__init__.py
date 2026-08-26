@@ -25,7 +25,7 @@ module = ModuleDef(
     dependencies=["map", "task>=1.3.0,<2.0.0"],
     audit_labels={
         "cables": "线缆",
-        "faults": "故障",
+        "faults": "线路故障",
         "geo": "定位",
     },
     audit_actions={

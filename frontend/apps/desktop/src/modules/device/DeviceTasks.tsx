@@ -156,7 +156,7 @@ export function DeviceTasksPage() {
     <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0 }}>设备维修任务</h2>
+          <h2 style={{ margin: 0 }}>设备故障管理</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>与线缆任务共用任务池与状态机：创建自动置「维修中」，后台审核通过即归档并按快照回退原状态</p>
         </div>
         <Space>
@@ -180,7 +180,7 @@ export function DeviceTasksPage() {
 
       <div className="wlt-glass" style={{ padding: 12 }}>
         <Table<DeviceTaskItem>
-          rowKey="id" loading={loading} dataSource={rows} locale={{ emptyText: "暂无设备维修任务" }}
+          rowKey="id" loading={loading} dataSource={rows} locale={{ emptyText: "暂无设备故障任务" }}
           pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条`, onChange: (p, ps) => { if (ps !== pageSize) { setPage(1); setPageSize(ps); } else setPage(p); } }}
           columns={columns}
           rowClassName={(r) => (`d${r.id}` === focusedKey ? "wlt-row-focus" : "")}
@@ -199,7 +199,7 @@ export function DeviceTasksPage() {
       </div>
 
       {/* 新建任务（复用 DeviceTaskForm：发布任务弹窗的设备任务页签嵌入同一表单） */}
-      <Modal open={open} onCancel={() => setOpen(false)} title="新建设备维修任务" width={560} destroyOnHidden footer={null}>
+      <Modal open={open} onCancel={() => setOpen(false)} title="新建设备故障任务" width={560} destroyOnHidden footer={null}>
         <DeviceTaskForm
           onCancel={() => setOpen(false)}
           onSubmitted={() => {

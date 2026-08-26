@@ -90,6 +90,8 @@ class FaultUpdate(BaseModel):
     severity: int | None = None
     description: str | None = None
     fault_type: str | None = None
+    lat: float | None = Field(default=None, ge=-90, le=90, description="纬度（后台标记/移动故障点）")
+    lng: float | None = Field(default=None, ge=-180, le=180, description="经度（后台标记/移动故障点）")
 
 
 class FaultStatusUpdate(BaseModel):

@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from app.modules.cable.models import CableFault
 
-# fault.status 枚举：0 待派发 / 1 已派发 / 2 进行中 / 3 完成待验 / 4 已验证 / 5 已关闭
+# fault.status 枚举（v2 任务池驱动，标签对齐任务态）：0 待处理 / 1 已派发(legacy)
+# / 2 进行中 / 3 待审核 / 4 已完成(审核通过) / 5 已关闭
 FAULT_PENDING, FAULT_DISPATCHED, FAULT_PROCESSING, FAULT_TO_VERIFY, FAULT_VERIFIED, FAULT_CLOSED = 0, 1, 2, 3, 4, 5
 
 # 兼容别名（历史调用方语义：FAULT_FIXED ≡ 验收通过后的终验态）
@@ -23,11 +24,11 @@ FAULT_FIXED = FAULT_VERIFIED
 
 # 状态 → 中文标签（前端同款映射；后端通知/提示词生成用）
 FAULT_STATUS_LABELS: dict[int, str] = {
-    FAULT_PENDING: "待派发",
+    FAULT_PENDING: "待处理",
     FAULT_DISPATCHED: "已派发",
     FAULT_PROCESSING: "进行中",
-    FAULT_TO_VERIFY: "完成待验",
-    FAULT_VERIFIED: "已验证",
+    FAULT_TO_VERIFY: "待审核",
+    FAULT_VERIFIED: "已完成",
     FAULT_CLOSED: "已关闭",
 }
 

@@ -131,7 +131,7 @@ export function TaskDetailModal({ item, onClose, onChanged }: {
               <span>设备：{t.device_name || "—"}{t.device_code ? `（${t.device_code}）` : ""}</span>
               {t.device_status != null && <Tag style={{ borderRadius: 999, marginInlineEnd: 0 }}>{DEVICE_STATUS[t.device_status]?.label ?? t.device_status}</Tag>}
               <span style={{ color: token.colorTextTertiary }}>快照回退目标：{t.previous_status ? DEVICE_STATUS[t.previous_status]?.label ?? "-" : "-"}</span>
-              <Button size="small" type="link" style={{ padding: 0 }} onClick={() => navigate(`/device/tasks?focus=d${t.id}`)}>查看设备维修任务 ›</Button>
+              <Button size="small" type="link" style={{ padding: 0 }} onClick={() => navigate(`/device/tasks?focus=d${t.id}`)}>查看设备故障管理 ›</Button>
             </div>
           ) : null}
         </div>

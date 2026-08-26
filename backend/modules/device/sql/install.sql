@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS device_file (
 -- =====================================================================
 INSERT IGNORE INTO sys_permission (name, code, type, sort, module_code) VALUES
   ('设备台账管理', 'device:manage', 2, 100, 'device'),
-  ('设备维修任务', 'device:task',   2, 101, 'device');
+  ('设备故障管理', 'device:task',   2, 101, 'device');
 
 INSERT INTO sys_role_permission (role_id, permission_id)
 SELECT r.id, p.id FROM sys_role r, sys_permission p
@@ -130,7 +130,7 @@ WHERE m.parent_id = 0 AND m.name = '设备管理' AND m.module_code = 'device'
   AND NOT EXISTS (SELECT 1 FROM sys_menu s WHERE s.parent_id = m.id AND s.path = '/device/list');
 
 INSERT INTO sys_menu (parent_id, name, path, icon, perm_code, visible, sort, module_code)
-SELECT m.id, '设备维修任务', '/device/tasks', 'ToolOutlined', 'device:task', 1, 20, 'device'
+SELECT m.id, '设备故障管理', '/device/tasks', 'ToolOutlined', 'device:task', 1, 20, 'device'
 FROM sys_menu m
 WHERE m.parent_id = 0 AND m.name = '设备管理' AND m.module_code = 'device'
   AND NOT EXISTS (SELECT 1 FROM sys_menu s WHERE s.parent_id = m.id AND s.path = '/device/tasks');

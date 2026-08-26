@@ -198,8 +198,9 @@ def list_tasks(
     return ok({"total": total, "page": page, "page_size": page_size, "items": _attach_participants(db, items)})
 
 
-@router.post("/tasks", dependencies=[Depends(require_permission("task:dispatch"))])
+@router.post("/tasks", dependencies=[Depends(require_any_permission("task:dispatch", "task:process"))])
 def create_task(req: TaskCreate, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """发布任务（v2 无锁协作：维修人员上报故障即可发布到任务池，调度/管理者亦可）。"""
     if req.cable_id or req.fault_id:
         _cable_guard(db)
     if req.fault_id:

@@ -227,7 +227,7 @@ export function TaskListPage() {
         <div>
           <h2 style={{ margin: 0 }}>维修任务列表</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
-            统一任务池{archived ? " · 已归档（已关闭/已取消，仅可查看详情）" : ""}：联动状态同步展示，可跳转故障管理与设备维修任务
+            统一任务池{archived ? " · 已归档（已关闭/已取消，仅可查看详情）" : ""}：联动状态同步展示，可跳转线路故障管理与设备故障管理
           </p>
         </div>
         <Space>

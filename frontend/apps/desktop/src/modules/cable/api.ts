@@ -66,19 +66,20 @@ export interface Page<T> {
   items: T[];
 }
 
-/** 故障状态六态（v1.1 与维修任务态一一对应，统一联动视图）：
- *  待派发 › 已派发 › 进行中 › 完成待验 › 已验证 › 已关闭 */
-export const FAULT_STATUS: Record<number, { label: string; fg: string; bg: string; next?: number }> = {
-  0: { label: "待派发", fg: "#DC2626", bg: "#FDEBEC", next: 1 },
-  1: { label: "已派发", fg: "#3B5BDB", bg: "#EAEFFF", next: 2 },
-  2: { label: "进行中", fg: "#0E7490", bg: "#E0F2FE", next: 3 },
-  3: { label: "完成待验", fg: "#B45309", bg: "#FEF4E2", next: 4 },
-  4: { label: "已验证", fg: "#15803D", bg: "#E8F9EF", next: 5 },
-  5: { label: "已关闭", fg: "#8A93A8", bg: "#EFF3FC" },
+/** 线路故障状态（v2 任务池驱动，标签对齐任务态）：
+ *  发布故障任务(待处理) › 领取处理(进行中) › 处理完毕(待审核) › 审核通过(已完成) › 已关闭。
+ *  1 已派发为 legacy 兼容态（不再产生）。状态由关联任务自动同步，不手动流转。 */
+export const FAULT_STATUS: Record<number, { label: string; fg: string; bg: string }> = {
+  0: { label: "待处理", fg: "#B91C1C", bg: "#FDEBEC" },
+  1: { label: "已派发", fg: "#3B5BDB", bg: "#EAEFFF" },
+  2: { label: "进行中", fg: "#0E7490", bg: "#E0F2FE" },
+  3: { label: "待审核", fg: "#B45309", bg: "#FEF4E2" },
+  4: { label: "已完成", fg: "#15803D", bg: "#E8F9EF" },
+  5: { label: "已关闭", fg: "#6A748A", bg: "#EFF3FC" },
 };
 
-/** 状态流转步骤（与 DeviceTasks 状态流转条同款文案）。 */
-export const FAULT_FLOW_STEPS = ["待派发", "已派发", "进行中", "完成待验", "已验证", "已关闭"];
+/** 流程步骤条（任务池驱动：发布→领取处理→领料可选→处理完毕→待审核→归档）。 */
+export const FAULT_FLOW_STEPS = ["发布故障任务", "进行中", "待审核", "已归档"];
 
 export interface MeasureResult {
   lat: number;
@@ -133,6 +134,9 @@ export const cableApi = {
   deleteFault: (id: number) => http.delete<null>(`/faults/${id}`),
   createFault: (body: { cable_id?: number | null; lat: number; lng: number; fault_type?: string; severity?: number; description?: string }) =>
     http.post<{ id: number }>("/faults", body),
+  /** 编辑故障；后台标记/移动故障点时传 lat+lng（后端按关联线缆重算累计距离）。 */
+  updateFault: (id: number, body: { cable_id?: number | null; fault_type?: string; severity?: number; description?: string; lat?: number; lng?: number }) =>
+    http.put<FaultItem>(`/faults/${id}`, body),
   updateFaultStatus: (id: number, status: number) =>
     http.put<FaultItem>(`/faults/${id}/status`, { status }),
   addFaultPhoto: (id: number, fileId: number, category = "现场") =>
