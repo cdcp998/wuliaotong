@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { ActionSheet, Button, DatePicker, Dialog, DotLoading, Input, List, NavBar, Popup, Tag, Toast } from "antd-mobile";
 import { useNavigate, useSearchParams } from "react-router";
 import { AlbumIcon, BarcodeScanner, CameraAlbum, CameraIcon, ProductPicker, baseApi, fileApi, fileUrl, ocrApi, purchaseIn, resolveByBarcode, type Location, type OcrDeliveryItem, type OcrTask, type Product, type Supplier, type Unit, type Warehouse } from "@wlt/shared";
@@ -410,7 +410,7 @@ export function InboundPage() {
           </div>
         )}
         {deliveryFiles.length < 10 && (
-          <div onClick={() => deliveryFileRef.current?.click()} style={{ padding: 12, textAlign: "center", color: "#475FE8", fontSize: 13, cursor: "pointer" }}>
+          <div onClick={() => deliveryFileRef.current?.click()} style={{ padding: 12, textAlign: "center", color: "#5B7FFF", fontSize: 13, cursor: "pointer" }}>
             ＋ 添加上传送货单图片
           </div>
         )}

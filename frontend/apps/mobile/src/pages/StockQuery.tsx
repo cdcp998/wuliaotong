@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Button, Input, List, NavBar, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -94,7 +94,7 @@ export function StockQueryPage() {
                 onClick={() => toggleExpand(g.product_id)}
                 style={{
                   background: "#fff",
-                  border: open ? "1px solid #475FE8" : "1px solid #E4EAF6",
+                  border: open ? "1px solid #5B7FFF" : "1px solid #E4EAF6",
                   borderRadius: 14,
                   padding: "12px 14px",
                   cursor: "pointer",
@@ -105,7 +105,7 @@ export function StockQueryPage() {
                   <span
                     style={{
                       width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                      background: "#EAEFFF", color: "#475FE8",
+                      background: "#EAEFFF", color: "#5B7FFF",
                       display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600,
                     }}
                   >

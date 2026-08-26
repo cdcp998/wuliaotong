@@ -1,20 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Checkbox, Dialog, List, NavBar, SpinLoading, Tag, Toast } from "antd-mobile";
+import { Checkbox, Dialog, SpinLoading, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
 import { notificationApi, type NotificationItem } from "@wlt/shared";
 
-const BIZ_STYLE: Record<string, { text: string; color: "danger" | "warning" | "primary" | "success" }> = {
-  "预警": { text: "预警", color: "danger" },
-  "待办": { text: "待办", color: "warning" },
-  "审批": { text: "审批", color: "primary" },
-};
+/** 通知类型胶囊（OP M7：审计=蓝 / 预警=红 / 识别=琥珀）。
+ * 后端 biz_type 实际值为 预警/待办/审批/提醒 等：按语义映射配色，文案保留真实业务类型。 */
+function bizPill(t: string): { label: string; cls: string } {
+  if (t === "预警") return { label: t, cls: "wlt-pill--red" };
+  if (t === "待办" || t === "审批" || t === "审计") return { label: t, cls: "wlt-pill--blue" };
+  if (t === "识别" || t === "提醒") return { label: t, cls: "wlt-pill--amber" };
+  return { label: t || "通知", cls: "wlt-pill--gray" };
+}
 
 /** 移动端可跳转的通知链接前缀（其余如删除审核在电脑端处理，仅标记已读不跳转）。 */
 const MOBILE_LINK_PREFIXES = ["/requisitions/", "/stock/query"];
 
-/** 通知列表（手机端 TabBar 第 4 项）：预警/待办/审批；点击业务通知跳转对应单据并自动已读。
- * 管理模式下支持全选 + 一键删除选中、清空全部（《UI设计方案.md》§5.8）。 */
+/** 通知列表（手机端 TabBar 第 4 项）——OP 规格（设计页 M7）：
+ * NavBar 右侧「管理」；管理模式条（全选/已选 n 条·清空全部）；卡片行 r14 p12 gap10
+ * （未读=品牌浅底+蓝点，已读=白底+灰点；标题 12.5 + 内容 11 + 类型胶囊 + 时间）；
+ * 管理模式底部操作栏（删除选中(红) + 全部已读）。点击业务通知跳转对应单据并自动已读。 */
 export function NotificationsPage() {
   const navigate = useNavigate();
   const [list, setList] = useState<NotificationItem[]>([]);
@@ -136,33 +141,36 @@ export function NotificationsPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: manage ? 64 : 0 }}>
-      <NavBar
-        onBack={() => navigate("/")}
-        right={
-          <span style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            {!manage && (
-              marking ? (
-                <SpinLoading style={{ "--size": "18px" } as React.CSSProperties} />
-              ) : (
-                <span style={{ fontSize: 12, color: "#475FE8" }} onClick={() => void markAllRead()}>
-                  全部已读
-                </span>
-              )
-            )}
-            <span style={{ fontSize: 12, color: manage ? "#EF4444" : "#475FE8" }} onClick={toggleManage}>
-              {manage ? "完成" : "管理"}
-            </span>
-          </span>
-        }
+    <div style={{ minHeight: "100dvh", background: "#F2F5FB", paddingBottom: manage ? 76 : 0 }}>
+      {/* NavBar（OP：‹ 通知 · 右侧「管理」） */}
+      <div
+        style={{
+          height: 48,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "0 14px",
+          background: "#fff",
+          borderBottom: "1px solid #F2F5FB",
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+        }}
       >
-        通知
-      </NavBar>
+        <span onClick={() => navigate("/")} style={{ fontSize: 16, fontWeight: 600, color: "#1E2433", padding: "4px 6px", cursor: "pointer" }}>
+          ‹
+        </span>
+        <span style={{ flex: 1, fontSize: 16, fontWeight: 600, color: "#1E2433" }}>通知</span>
+        <span style={{ fontSize: 12, fontWeight: 500, color: manage ? "#DC2626" : "#5B7FFF", padding: "6px 2px", cursor: "pointer" }} onClick={toggleManage}>
+          {manage ? "完成" : "管理"}
+        </span>
+      </div>
 
+      {/* 管理模式条（OP Manage 白底 p12/14：全选 + 已选 n 条 · 清空全部） */}
       {manage && (
         <div
           style={{
-            padding: "8px 12px",
+            padding: "12px 14px",
             background: "#fff",
             borderBottom: "1px solid #E4EAF6",
             display: "flex",
@@ -171,56 +179,55 @@ export function NotificationsPage() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={toggleAll}>
-            <Checkbox checked={allSelected} style={{ "--icon-size": "18px" } as React.CSSProperties} />
-            <span style={{ fontSize: 13, color: "#1E2433" }}>全选</span>
+            <Checkbox checked={allSelected} style={{ "--icon-size": "16px" } as React.CSSProperties} />
+            <span style={{ fontSize: 12, color: "#5B6478" }}>全选</span>
           </div>
-          <span style={{ fontSize: 12, color: "#5B6478", display: "flex", alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "#8A93A8", display: "flex", alignItems: "center" }}>
             已选 {selected.size} 条
-            <span style={{ color: "#475FE8", marginLeft: 12 }} onClick={() => void clearAll()}>
+            <span style={{ color: "#3B5BDB", marginLeft: 12 }} onClick={() => void clearAll()}>
               清空全部
             </span>
           </span>
         </div>
       )}
 
-      <List style={{ "--border-top": "0" } as React.CSSProperties}>
+      {/* 通知卡流（OP NRow r14 p12 gap10；未读品牌浅底 + 蓝点 / 已读白底 + 灰点） */}
+      <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
         {list.map((n) => {
-          const style = BIZ_STYLE[n.biz_type] ?? { text: n.biz_type, color: "default" as const };
+          const pill = bizPill(n.biz_type);
           const checked = selected.has(n.id);
+          const unread = !n.is_read;
           return (
-            <List.Item
+            <div
               key={n.id}
               onClick={() => void onItemClick(n)}
-              prefix={
-                manage ? (
-                  <Checkbox checked={checked} style={{ "--icon-size": "20px" } as React.CSSProperties} />
-                ) : (
-                  <span
-                    style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 9,
-                      background: n.is_read ? "#f2f3f5" : "#EAEFFF",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {!n.is_read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#475FE8" }} />}
-                  </span>
-                )
-              }
-              description={
-                <div>
-                  <div style={{ fontSize: 12.5, color: "#4e5969", lineHeight: 1.6, marginTop: 2 }}>{n.content}</div>
-                  <div style={{ fontSize: 10.5, color: "var(--adm-color-weak)", marginTop: 5 }}>{n.created_at.slice(0, 16)}</div>
-                </div>
-              }
-              extra={<Tag color={style.color}>{style.text}</Tag>}
-              style={manage && checked ? { background: "#EAEFFF" } : undefined}
+              style={{
+                borderRadius: 14,
+                padding: 12,
+                display: "flex",
+                gap: 10,
+                cursor: "pointer",
+                background: checked ? "#D9E3FF" : unread ? "#EAEFFF" : "#fff",
+                border: unread ? "none" : "1px solid #EDF1FA",
+              }}
             >
-              <span style={{ fontWeight: n.is_read ? 400 : 600, fontSize: 13.5 }}>{n.title}</span>
-            </List.Item>
+              {/* 圆点 / 勾选框 */}
+              {manage ? (
+                <Checkbox checked={checked} style={{ "--icon-size": "17px", marginTop: 2 } as React.CSSProperties} />
+              ) : (
+                <span style={{ width: 8, height: 8, borderRadius: 4, marginTop: 5, flexShrink: 0, background: unread ? "#5B7FFF" : "#CBD6EC" }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+                <div style={{ fontSize: 12.5, fontWeight: unread ? 600 : 500, color: "#1E2433", lineHeight: 1.45 }}>{n.title}</div>
+                <div style={{ fontSize: 11, color: "#5B6478", lineHeight: 1.5 }}>{n.content}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1 }}>
+                  <span className={`wlt-pill ${pill.cls}`} style={{ fontSize: 12, lineHeight: "18px", padding: "1px 10px" }}>
+                    {pill.label}
+                  </span>
+                  <span style={{ fontSize: 10, color: "#8A93A8" }}>{n.created_at.slice(0, 16).replace("T", " ")}</span>
+                </div>
+              </div>
+            </div>
           );
         })}
         {loading && (
@@ -228,36 +235,49 @@ export function NotificationsPage() {
             <SpinLoading />
           </div>
         )}
-        {!loading && list.length === 0 && <List.Item>暂无通知</List.Item>}
-      </List>
+        {!loading && list.length === 0 && (
+          <div style={{ textAlign: "center", color: "#8A93A8", fontSize: 13, padding: "48px 0" }}>暂无通知</div>
+        )}
+      </div>
 
-      {/* 管理模式底部操作栏：一键删除选中（宽屏「应用窗口化」时居中限宽，避免横向超出界面） */}
+      {/* 管理模式底部操作栏（OP Bar rgba(255,255,255,.95)：删除选中(红浅底) + 全部已读(白底)；
+          .wlt-fixed-bar 宽屏由 widescreen.css 限宽居中） */}
       {manage && (
-        <div
-          style={{
-            position: "fixed",
-            left: "50%",
-            transform: "translateX(-50%)",
-            bottom: 0,
-            width: "100%",
-            maxWidth: 720,
-            boxSizing: "border-box",
-            padding: "10px 12px",
-            paddingBottom: "calc(10px + env(safe-area-inset-bottom))",
-            background: "#fff",
-            borderTop: "1px solid #E4EAF6",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            zIndex: 20,
-          }}
-        >
-          <div style={{ flex: 1, fontSize: 13, color: "#5B6478", textAlign: "right", marginRight: 10 }}>
-            共 <b style={{ color: "#1E2433", fontSize: 15, margin: "0 2px" }}>{list.length}</b> 条
-          </div>
-          <Button block color="danger" loading={deleting} disabled={selected.size === 0} style={{ height: 40, fontSize: 14, borderRadius: 10, flex: 2 }} onClick={() => void deleteSelected()}>
+        <div className="wlt-fixed-bar" style={{ padding: "12px 14px", gap: 10 }}>
+          <button
+            onClick={() => void deleteSelected()}
+            disabled={selected.size === 0 || deleting}
+            style={{
+              flex: 1,
+              height: 38,
+              borderRadius: 11,
+              border: "none",
+              background: "#FDEBEC",
+              color: selected.size === 0 ? "#F0A6AA" : "#DC2626",
+              fontSize: 12.5,
+              fontWeight: 600,
+              cursor: selected.size === 0 ? "default" : "pointer",
+            }}
+          >
             删除选中（{selected.size}）
-          </Button>
+          </button>
+          <button
+            onClick={() => void markAllRead()}
+            disabled={marking}
+            style={{
+              height: 38,
+              borderRadius: 11,
+              border: "1px solid #E4EAF6",
+              background: "#fff",
+              color: "#5B6478",
+              fontSize: 12,
+              fontWeight: 500,
+              padding: "0 14px",
+              cursor: "pointer",
+            }}
+          >
+            全部已读
+          </button>
         </div>
       )}
     </div>

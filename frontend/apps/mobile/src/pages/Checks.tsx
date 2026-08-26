@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Badge, Button, List, Modal, NavBar, Selector, Tabs, Tag, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -97,7 +97,7 @@ export function ChecksPage() {
                   {/* 盘点进度（设计页 M18：进度条） */}
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
                     <div style={{ flex: 1, height: 6, borderRadius: 999, background: "#EFF3FC", overflow: "hidden" }}>
-                      <div style={{ width: `${pct}%`, height: "100%", background: c.status === 2 ? "#22C55E" : "#475FE8", borderRadius: 999, transition: "width .3s" }} />
+                      <div style={{ width: `${pct}%`, height: "100%", background: c.status === 2 ? "#22C55E" : "#5B7FFF", borderRadius: 999, transition: "width .3s" }} />
                     </div>
                     <span style={{ fontSize: 10.5, color: "#6A748A", whiteSpace: "nowrap" }}>{done}/{total}</span>
                   </div>

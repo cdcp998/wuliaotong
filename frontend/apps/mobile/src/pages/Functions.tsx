@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { NavBar } from "antd-mobile";
 import { useNavigate } from "react-router";
 
@@ -44,7 +44,7 @@ export function FunctionsPage() {
       <NavBar
         onBack={() => navigate("/")}
         right={
-          <span style={{ fontSize: 12, color: editMode ? "#EF4444" : "#475FE8" }} onClick={() => setEditMode((v) => !v)}>
+          <span style={{ fontSize: 12, color: editMode ? "#EF4444" : "#5B7FFF" }} onClick={() => setEditMode((v) => !v)}>
             {editMode ? "完成" : "编辑"}
           </span>
         }
@@ -113,7 +113,7 @@ export function FunctionsPage() {
                   >
                     {pinned ? "★" : "☆"}
                   </span>
-                  <span style={{ color: "#475FE8" }}>{a.icon}</span>
+                  <span style={{ color: "#5B7FFF" }}>{a.icon}</span>
                   <span style={{ fontSize: 11.5, color: "#1E2433", fontWeight: 500 }}>{a.title}</span>
                   <span style={{ fontSize: 9.5, color: "var(--adm-color-weak)" }}>{a.sub}</span>
                 </div>
@@ -168,7 +168,7 @@ export function FunctionsPage() {
                   >
                     {pinned ? "★" : "☆"}
                   </span>
-                  <span style={{ color: "#475FE8" }}>{a.icon}</span>
+                  <span style={{ color: "#5B7FFF" }}>{a.icon}</span>
                   <span style={{ fontSize: 11.5, color: "#1E2433", fontWeight: 500 }}>{a.title}</span>
                   <span style={{ fontSize: 9.5, color: "var(--adm-color-weak)" }}>{a.sub}</span>
                 </div>

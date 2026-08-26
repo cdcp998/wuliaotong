@@ -1,13 +1,16 @@
-/** 手机端：地图工作台（map 模块，方案 §7.3）——全屏地图 + 底部工具栏（上报/故障管理/测距/导航），
- * 点击按钮弹窗打开对应面板（Popup 弹层，可关闭）。依赖 cable 模块数据（线缆/故障）。
+/** 手机端：地图工作台（map 模块，方案 §7.3）——OP 规格（设计页 M2）重构：
+ * NavBar「‹ 地图 · 右侧图层」；地图全屏（左上「故障 n · 线缆 n」白底徽标胶囊 +
+ * 右上 36×36 图层按钮）；底部五键工具栏（我的位置/测距/图层/故障/上报，10px 标签，
+ * 激活深蓝加粗）；图层弹层三行（线缆层/故障层/设备层，圆点 蓝/红/紫 + 开关）。
  *
- * 体验修复批次：
- * - 定位降级链（浏览器 GPS → IP 兜底）：修复 HTTP 内网/手机浏览器无 Geolocation API 时无法定位；
- * - 显示层坐标转换（默认 GCJ-02 加密显示，与桌面工作台一致；数据/接口仍一律 WGS84）；
- * - 我的位置蓝色标识点随定位更新。 */
+ * 业务逻辑保留：故障上报弹层、故障管理（行内 定位/导航/删除）、测距定位、故障导航
+ * （从「故障」面板行内进入）、定位降级链、显示坐标 GCJ-02 转换、最后定位持久化。
+ * 「导航」不再占工具栏：由故障面板行内发起（先选故障再导航，语义更顺）。
+ *
+ * 体验修复批次（沿用）：定位降级链（GPS→IP 兜底）；显示层坐标转换；我的位置蓝色标识点。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { Button, Dialog, Input, NavBar, Picker, Popup, Selector, Switch, Tag, TextArea, Toast } from "antd-mobile";
+import { Button, Dialog, Input, NavBar, Picker, Popup, Selector, Switch, TextArea, Toast } from "antd-mobile";
 import { MapContainer, Marker, Polyline, TileLayer, useMapEvents, ZoomControl } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -16,6 +19,7 @@ import { fromDisplaySpace, getCurrentPositionWithFallback, resolveDisplaySpace, 
 
 import { ModuleGate } from "../../components/ModuleGate";
 import { cableApi, type CableItem, type FaultItem } from "../cable/api";
+import { deviceApi, type DeviceItem } from "../api";
 import { mapApi } from "./api";
 
 interface MeasureResult {
@@ -31,13 +35,19 @@ const FAULT_STATUS = ["待派发", "已派发", "进行中", "完成待验", "�
 
 const warnIcon = L.divIcon({
   className: "wlt-m",
-  html: '<div style="width:14px;height:14px;border-radius:50%;background:#EF4444;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:#DC2626;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [14, 14], iconAnchor: [7, 7],
 });
 const navIcon = L.divIcon({
   className: "wlt-m",
   html: '<div style="width:16px;height:16px;border-radius:50%;background:#EF4444;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)"></div>',
   iconSize: [16, 16], iconAnchor: [8, 8],
+});
+/** 设备层：紫色方形小点（OP 设备 Dot r1 #7C3AED）。 */
+const deviceIcon = L.divIcon({
+  className: "wlt-m",
+  html: '<div style="width:10px;height:10px;border-radius:2px;background:#7C3AED;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.35)"></div>',
+  iconSize: [10, 10], iconAnchor: [5, 5],
 });
 /** 我的位置：蓝色定位标识点（外圈光晕 + 内芯）。 */
 const myLocationIcon = L.divIcon({
@@ -87,19 +97,68 @@ function disp([lat, lng]: [number, number]): [number, number] {
 
 type PanelKey = "report" | "faults" | "measure" | "nav" | "layers" | null;
 
-const TOOLS: { key: Exclude<PanelKey, null>; label: string; color: string }[] = [
-  { key: "report", label: "上报", color: "#EF4444" },
-  { key: "faults", label: "故障", color: "#fa8c16" },
-  { key: "measure", label: "测距", color: "#475FE8" },
-  { key: "nav", label: "导航", color: "#EF4444" },
+/** 工具栏五键（OP Toolbar：我的位置/测距/图层/故障/上报）。location 为即时动作非面板。 */
+const TOOLS: { key: PanelKey | "location"; label: string; icon: React.ReactNode }[] = [
+  {
+    key: "location",
+    label: "我的位置",
+    icon: (
+      <>
+        <path d="M12 21s-7-5.1-7-11a7 7 0 0 1 14 0c0 5.9-7 11-7 11z" />
+        <circle cx="12" cy="10" r="2.6" />
+      </>
+    ),
+  },
+  {
+    key: "measure",
+    label: "测距",
+    icon: (
+      <>
+        <path d="M3 16.5L16.5 3 21 7.5 7.5 21z" />
+        <path d="M7 13l2 2M10.5 9.5l2 2M14 6l2 2" />
+      </>
+    ),
+  },
+  {
+    key: "layers",
+    label: "图层",
+    icon: (
+      <>
+        <path d="M12 3l9 5-9 5-9-5 9-5z" />
+        <path d="M3 13l9 5 9-5" />
+      </>
+    ),
+  },
+  {
+    key: "faults",
+    label: "故障",
+    icon: (
+      <>
+        <path d="M12 3L2 20h20L12 3z" />
+        <path d="M12 10v4M12 17h.01" />
+      </>
+    ),
+  },
+  {
+    key: "report",
+    label: "上报",
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v8M8 12h8" />
+      </>
+    ),
+  },
 ];
 
 export function MobileMapPage() {
   const navigate = useNavigate();
+  const mapRef = useRef<L.Map | null>(null);
   const [cables, setCables] = useState<CableItem[]>([]);
   const [faults, setFaults] = useState<FaultItem[]>([]);
+  const [devices, setDevices] = useState<DeviceItem[]>([]); // 设备层数据（模块未启用时为空）
   const [panel, setPanel] = useState<PanelKey>(null);
-  const [layers, setLayers] = useState({ cables: true, faults: true });
+  const [layers, setLayers] = useState({ cables: true, faults: true, devices: true });
 
   const [pick, setPick] = useState<{ lat: number; lng: number } | null>(null);
   const [mode, setMode] = useState<"none" | "fault" | "navStart">("none");
@@ -131,15 +190,31 @@ export function MobileMapPage() {
   }, [myPos]);
 
   const load = useCallback(async () => {
-    try {
-      const [c, f] = await Promise.all([cableApi.list({ page_size: 50 }), cableApi.faults({ page_size: 50, exclude_closed: true })]);
-      setCables(c.items);
-      setFaults(f.items);
-    } catch {
-      /* 模块未启用等由守卫提示 */
+    // 设备层并行加载（device 模块禁用/无权限时静默为空）
+    const [c, f, d] = await Promise.allSettled([
+      cableApi.list({ page_size: 50 }),
+      cableApi.faults({ page_size: 50, exclude_closed: true }),
+      deviceApi.list({ page_size: 100 }),
+    ]);
+    if (c.status === "fulfilled") setCables(c.value.items);
+    if (f.status === "fulfilled") setFaults(f.value.items);
+    if (d.status === "fulfilled") {
+      setDevices(d.value.items.filter((x) => x.lat != null && x.lng != null));
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
+
+  /** 「我的位置」：定位降级链（GPS→IP 兜底）+ 平移地图到当前点。 */
+  const locateMe = async () => {
+    try {
+      const first = await getCurrentPositionWithFallback();
+      if (first.source === "ip") Toast.show("浏览器定位不可用，已使用 IP 粗略定位");
+      setMyPos([first.lat, first.lng]);
+      mapRef.current?.setView(disp([first.lat, first.lng]), Math.max(mapRef.current?.getZoom() ?? 12, 15));
+    } catch {
+      Toast.show("定位失败，请检查定位权限");
+    }
+  };
 
   const stopNav = () => {
     if (watchRef.current) { window.clearInterval(watchRef.current); watchRef.current = null; }
@@ -250,13 +325,31 @@ export function MobileMapPage() {
     if (key === "faults") void load();
   };
 
+  /** 从故障面板行内发起导航：预选该故障并打开导航面板。 */
+  const navToFault = (f: FaultItem) => {
+    setSelFaultId(f.id);
+    setHighlight([f.lat, f.lng]);
+    setPanel("nav");
+  };
+
   return (
     <ModuleGate code="map" title="地图">
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh" }}>
-      <NavBar onBack={() => navigate(-1)}>地图工作台</NavBar>
-      {/* 地图区（全屏最大化；底部工具栏常驻） */}
-      <div style={{ flex: 1, position: "relative", minHeight: 0, marginBottom: 56 }}>
-        <MapContainer center={disp(initialCenter)} zoom={12} zoomControl={false} style={{ height: "100%", width: "100%" }}>
+      {/* NavBar（OP：‹ 地图 · 右侧「图层」链接） */}
+      <NavBar
+        onBack={() => navigate(-1)}
+        right={
+          <span style={{ fontSize: 12, fontWeight: 500, color: "#5B7FFF", padding: "4px 2px" }} onClick={() => setPanel(panel === "layers" ? null : "layers")}>
+            图层
+          </span>
+        }
+      >
+        地图
+      </NavBar>
+
+      {/* 地图区（全屏最大化；左上徽标 + 右上图层钮 + 底部五键工具栏常驻） */}
+      <div style={{ flex: 1, position: "relative", minHeight: 0, background: "#DDE7F5", marginBottom: 56 }}>
+        <MapContainer ref={mapRef} center={disp(initialCenter)} zoom={12} zoomControl={false} style={{ height: "100%", width: "100%", background: "#DDE7F5" }}>
           <ZoomControl position="bottomright" />
           <TileLayer url={mapApi.tileUrl("esri", "{z}", "{x}", "{y}")} maxZoom={19} attribution="© 卫星影像" />
           <ClickCatcher onPick={(lat, lng) => {
@@ -266,130 +359,173 @@ export function MobileMapPage() {
           }} />
           {layers.cables && cables.filter((c) => c.geometry).map((c) => (
             <Polyline key={c.id} positions={(c.geometry!.coordinates as [number, number][]).map(([lng, lat]) => disp([lat, lng]))}
-              pathOptions={{ color: "#475FE8", weight: 4 }} />
+              pathOptions={{ color: "#5B7FFF", weight: 4 }} />
           ))}
           {layers.faults && faults.map((f) => <Marker key={f.id} position={disp([f.lat, f.lng])} icon={warnIcon} />)}
+          {layers.devices && devices.map((d) => <Marker key={`d${d.id}`} position={disp([d.lat!, d.lng!])} icon={deviceIcon} />)}
           {myPos && <Marker position={disp(myPos)} icon={myLocationIcon} />}
           {highlight && <Marker position={disp(highlight)} icon={navIcon} />}
           {navPath && navPath.length > 1 && (
             <Polyline positions={navPath.map((p) => disp(p))} pathOptions={{ color: "#EF4444", weight: 5, dashArray: "8 6" }} />
           )}
         </MapContainer>
-        {/* 图层叠加选择（右上角小图标，主流地图交互） */}
+
+        {/* 左上徽标（OP Badge 白底胶囊 r999：红点 + 「故障 n · 线缆 m」） */}
+        <div
+          style={{
+            position: "absolute", top: 8, left: 8, zIndex: 1000,
+            display: "flex", alignItems: "center", gap: 4,
+            background: "#fff", borderRadius: 999, padding: "4px 10px",
+            boxShadow: "0 2px 10px rgba(30,36,51,.12)",
+          }}
+        >
+          <span style={{ width: 7, height: 7, borderRadius: 4, background: "#DC2626" }} />
+          <span style={{ fontSize: 10.5, fontWeight: 500, color: "#5B6478" }}>故障 {faults.length} · 线缆 {cables.length}</span>
+        </div>
+
+        {/* 右上图层按钮（OP LayerBtn 36×36 r12 白底） */}
         <div
           onClick={() => setPanel(panel === "layers" ? null : "layers")}
           style={{
-            position: "absolute", top: 8, right: 8, zIndex: 1000, width: 34, height: 34, borderRadius: 10,
-            background: "#fff", boxShadow: "0 1px 6px rgba(0,0,0,.18)", display: "flex", alignItems: "center",
+            position: "absolute", top: 8, right: 8, zIndex: 1000, width: 36, height: 36, borderRadius: 12,
+            background: "#fff", boxShadow: "0 2px 10px rgba(30,36,51,.12)", display: "flex", alignItems: "center",
             justifyContent: "center", cursor: "pointer",
           }}
         >
-          <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke={panel === "layers" ? "#475FE8" : "#555"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke={panel === "layers" ? "#5B7FFF" : "#5B6478"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 3l9 5-9 5-9-5 9-5z" />
             <path d="M3 13l9 5 9-5" />
           </svg>
         </div>
-        {mode === "fault" && <div style={{ position: "absolute", top: 8, left: 8, background: "#fff", padding: "4px 10px", borderRadius: 8, fontSize: 12, zIndex: 1000 }}>请点击地图选择故障位置</div>}
-        {navInfo && <div style={{ position: "absolute", bottom: 12, left: 8, right: 8, background: "#fff", padding: 8, borderRadius: 12, fontSize: 14, zIndex: 1000, textAlign: "center" }}>{navInfo}</div>}
+
+        {mode === "fault" && <div style={{ position: "absolute", top: 52, left: 8, background: "#fff", padding: "4px 10px", borderRadius: 8, fontSize: 12, zIndex: 1000, boxShadow: "0 2px 10px rgba(30,36,51,.12)" }}>请点击地图选择故障位置</div>}
+        {navInfo && <div style={{ position: "absolute", bottom: 12, left: 8, right: 8, background: "#fff", padding: 8, borderRadius: 12, fontSize: 14, zIndex: 1000, textAlign: "center", boxShadow: "0 2px 10px rgba(30,36,51,.12)" }}>{navInfo}</div>}
       </div>
 
-      {/* 底部工具栏（固定；zIndex 低于 Popup，避免遮挡呼出的功能界面） */}
-      <div style={{
-        position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 900,
-        display: "flex", background: "rgba(255,255,255,0.94)", backdropFilter: "blur(10px)",
-        borderTop: "1px solid #E4EAF6", boxShadow: "0 -4px 16px rgba(30,36,51,.08)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-      }}>
-        {TOOLS.map((t) => (
-          <div key={t.key} onClick={() => openPanel(t.key)}
-            style={{ flex: 1, padding: "8px 0 6px", textAlign: "center", cursor: "pointer", color: panel === t.key ? t.color : "#5B6478", fontSize: 11 }}>
-            <div style={{ width: 22, height: 22, margin: "0 auto 2px", borderRadius: 11, background: panel === t.key ? t.color : "#f2f3f5", color: "#fff", lineHeight: "22px", fontSize: 13 }}>●</div>
-            {t.label}
-          </div>
-        ))}
-      </div>
-
-      {/* 图层叠加选择（右上角小图标呼出） */}
-      <Popup visible={panel === "layers"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
-        <div style={{ padding: 16, paddingBottom: 24 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <span style={{ fontWeight: 600 }}>图层叠加</span>
-            <span style={{ color: "var(--adm-color-weak)", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
-          </div>
-          {[
-            { key: "cables" as const, label: "线缆", color: "#475FE8" },
-            { key: "faults" as const, label: "故障点", color: "#EF4444" },
-          ].map((l) => (
-            <div key={l.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F2F5FB" }}>
-              <span style={{ fontSize: 14 }}>
-                <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: l.key === "cables" ? 1 : 5, background: l.color, marginRight: 8, verticalAlign: "middle" }} />
-                {l.label}
-              </span>
-              <Switch checked={layers[l.key]} onChange={(v) => setLayers((s) => ({ ...s, [l.key]: v }))} />
+      {/* 底部五键工具栏（OP Toolbar rgba(255,255,255,.95)；.wlt-fixed-bar 宽屏限宽居中；
+          zIndex 低于 Popup，避免遮挡呼出的功能界面） */}
+      <div className="wlt-fixed-bar" style={{ justifyContent: "space-around", padding: "6px 8px", zIndex: 900 }}>
+        {TOOLS.map((t) => {
+          const active = t.key !== "location" && panel === t.key;
+          return (
+            <div
+              key={t.key}
+              onClick={() => {
+                if (t.key === "location") void locateMe();
+                else openPanel(t.key as Exclude<PanelKey, null>);
+              }}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                padding: "4px 0", cursor: "pointer",
+                color: active ? "#3B5BDB" : "#5B6478",
+                minWidth: 52,
+              }}
+            >
+              <svg viewBox="0 0 24 24" width={18} height={18} fill="none"
+                stroke={active ? "#3B5BDB" : "#5B6478"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                {t.icon}
+              </svg>
+              <span style={{ fontSize: 10, fontWeight: active ? 700 : 400, lineHeight: 1.2 }}>{t.label}</span>
             </div>
-          ))}
+          );
+        })}
+      </div>
+
+      {/* 图层叠加弹层（OP Panel r20：标题行 + 三行 层×开关，圆点 蓝/红/紫） */}
+      <Popup visible={panel === "layers"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
+        <div style={{ padding: 16, paddingBottom: 28 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#1E2433" }}>图层叠加</span>
+            <span style={{ color: "#8A93A8", fontSize: 12 }} onClick={() => setPanel(null)}>收起 ×</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {[
+              { key: "cables" as const, label: `线缆层（${cables.length}）`, color: "#5B7FFF", radius: 4 },
+              { key: "faults" as const, label: `故障层（${faults.length}）`, color: "#DC2626", radius: 4 },
+              { key: "devices" as const, label: `设备层（${devices.length}）`, color: "#7C3AED", radius: 1 },
+            ].map((l, i) => (
+              <div
+                key={l.key}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  borderRadius: 10, padding: "7px 8px",
+                  background: i === 2 ? "#F6F8FE" : "#EAEFFF",
+                }}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: l.radius, background: l.color, flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 12, color: "#5B6478" }}>{l.label}</span>
+                <Switch checked={layers[l.key]} onChange={(v) => setLayers((s) => ({ ...s, [l.key]: v }))} style={{ "--adm-color-checked": "#5B7FFF" } as React.CSSProperties} />
+              </div>
+            ))}
+          </div>
         </div>
       </Popup>
 
-      {/* 弹窗式面板（Popup 底部弹层，可关闭） */}
+      {/* 上报故障弹层 */}
       <Popup visible={panel === "report"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "75dvh", overflow: "auto" }}>
-        <div style={{ padding: 16, paddingBottom: 24 }}>
+        <div style={{ padding: 16, paddingBottom: 28 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <span style={{ fontWeight: 600 }}>上报故障</span>
-            <span style={{ color: "var(--adm-color-weak)", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#1E2433" }}>上报故障</span>
+            <span style={{ color: "#8A93A8", fontSize: 12 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
-          {pick && <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>位置：{pick.lat.toFixed(6)}, {pick.lng.toFixed(6)}</div>}
-          <Button block size="small" fill="outline" color="danger" onClick={() => setMode(mode === "fault" ? "none" : "fault")} style={{ marginBottom: 8 }}>
+          {pick && <div style={{ fontSize: 12, color: "#8A93A8", marginBottom: 6 }}>位置：{pick.lat.toFixed(6)}, {pick.lng.toFixed(6)}</div>}
+          <Button block size="small" fill="outline" color="danger" onClick={() => setMode(mode === "fault" ? "none" : "fault")} style={{ marginBottom: 8, borderColor: "#CBD6EC", color: "#DC2626" }}>
             {mode === "fault" ? "点击地图取点中…（再点取消）" : (pick ? "重新选择位置" : "在地图上选择位置")}
           </Button>
-          <Selector options={[{ label: "低", value: 1 }, { label: "中", value: 2 }, { label: "高", value: 3 }]} value={[sev]} onChange={(v) => setSev(v[0] ?? 1)} style={{ marginBottom: 8 }} />
-          <TextArea placeholder="故障描述（可选）" value={desc} onChange={setDesc} rows={2} maxLength={500} style={{ marginBottom: 8 }} />
+          <Selector options={[{ label: "低", value: 1 }, { label: "中", value: 2 }, { label: "高", value: 3 }]} value={[sev]} onChange={(v) => setSev(v[0] ?? 1)} style={{ marginBottom: 8, "--adm-color-primary": "#5B7FFF" } as React.CSSProperties} />
+          <TextArea placeholder="故障描述（可选）" value={desc} onChange={setDesc} rows={2} maxLength={500} style={{ marginBottom: 8, "--background-color": "#F6F8FE" } as React.CSSProperties} />
           <input type="file" accept="image/*" style={{ display: "none" }} id="fault-photo" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />
-          <label htmlFor="fault-photo" style={{ display: "inline-block", marginBottom: 8, color: "#475FE8", fontSize: 14 }}>{photo ? "已选照片（点击更换）" : "+ 拍照/选择现场照片"}</label>
-          <Button block color="danger" loading={reporting} disabled={!pick} onClick={submitFault}>提交故障上报</Button>
+          <label htmlFor="fault-photo" style={{ display: "inline-block", marginBottom: 8, color: "#3B5BDB", fontSize: 13 }}>{photo ? "已选照片（点击更换）" : "+ 拍照/选择现场照片"}</label>
+          <Button block color="danger" loading={reporting} disabled={!pick} onClick={submitFault} style={{ background: "#EF4444", borderColor: "#EF4444" }}>提交故障上报</Button>
         </div>
       </Popup>
 
+      {/* 故障管理弹层（行内 定位/导航/删除；「导航」由此发起） */}
       <Popup visible={panel === "faults"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "75dvh", overflow: "auto" }}>
-        <div style={{ padding: 16, paddingBottom: 24 }}>
+        <div style={{ padding: 16, paddingBottom: 28 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <span style={{ fontWeight: 600 }}>故障管理（共 {faults.length} 条）</span>
-            <span style={{ color: "#475FE8", fontSize: 13 }} onClick={() => void load()}>刷新</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#1E2433" }}>故障管理（共 {faults.length} 条）</span>
+            <span style={{ color: "#3B5BDB", fontSize: 12 }} onClick={() => void load()}>刷新</span>
           </div>
           {faults.map((f) => (
             <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #F2F5FB" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13 }}>
-                  #{f.id}　{f.fault_type || "未分类"}　<Tag color={f.severity === 3 ? "danger" : f.severity === 2 ? "warning" : "default"}>{["低", "中", "高"][f.severity - 1] ?? f.severity}</Tag>
+                  #{f.id}　{f.fault_type || "未分类"}
+                  <span className={`wlt-pill ${f.severity === 3 ? "wlt-pill--red" : f.severity === 2 ? "wlt-pill--amber" : "wlt-pill--gray"}`} style={{ marginLeft: 6, fontSize: 10.5, lineHeight: "16px", padding: "0 8px" }}>
+                    {["低", "中", "高"][f.severity - 1] ?? f.severity}
+                  </span>
                 </div>
-                <div style={{ fontSize: 11, color: "#888" }}>{f.lat.toFixed(5)}, {f.lng.toFixed(5)}　{FAULT_STATUS[f.status] ?? f.status}</div>
+                <div style={{ fontSize: 11, color: "#8A93A8" }}>{f.lat.toFixed(5)}, {f.lng.toFixed(5)}　{FAULT_STATUS[f.status] ?? f.status}</div>
               </div>
-              <Button size="mini" color="primary" fill="outline" onClick={() => { setHighlight([f.lat, f.lng]); setPanel(null); }}>定位</Button>
-              <Button size="mini" color="danger" fill="outline" onClick={() => deleteFault(f)}>删除标点</Button>
+              <Button size="mini" color="primary" fill="outline" onClick={() => { setHighlight([f.lat, f.lng]); setPanel(null); }} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>定位</Button>
+              <Button size="mini" color="primary" fill="outline" onClick={() => navToFault(f)} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>导航</Button>
+              <Button size="mini" color="danger" fill="outline" onClick={() => deleteFault(f)} style={{ color: "#DC2626", borderColor: "#CBD6EC" }}>删除</Button>
             </div>
           ))}
-          {faults.length === 0 && <div style={{ textAlign: "center", color: "var(--adm-color-weak)", padding: 16 }}>暂无故障</div>}
+          {faults.length === 0 && <div style={{ textAlign: "center", color: "#8A93A8", padding: 16 }}>暂无故障</div>}
         </div>
       </Popup>
 
+      {/* 测距定位弹层 */}
       <Popup visible={panel === "measure"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "60dvh", overflow: "auto" }}>
-        <div style={{ padding: 16, paddingBottom: 24 }}>
+        <div style={{ padding: 16, paddingBottom: 28 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <span style={{ fontWeight: 600 }}>测距定位</span>
-            <span style={{ color: "var(--adm-color-weak)", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#1E2433" }}>测距定位</span>
+            <span style={{ color: "#8A93A8", fontSize: 12 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <Picker
               columns={[cables.filter((c) => c.status === 1).map((c) => ({ label: `${c.name}（${Math.round(c.total_length)}m）`, value: c.id }))]}
               onConfirm={(v) => setSelCableId(v[0] as number)}
             >
-              {(items) => <Button size="small" fill="outline">{items[0]?.label ?? "选择线缆"}</Button>}
+              {(items) => <Button size="small" fill="outline" style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>{items[0]?.label ?? "选择线缆"}</Button>}
             </Picker>
             <Input placeholder="距离(m)" type="number" value={distance} onChange={setDistance} style={{ flex: 1 }} />
-            <Button size="small" color="primary" onClick={doMeasure}>定位</Button>
+            <Button size="small" color="primary" onClick={doMeasure} style={{ background: "#5B7FFF", borderColor: "#5B7FFF" }}>定位</Button>
           </div>
           {measureResult && (
-            <div style={{ fontSize: 12, color: "#666", marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: "#5B6478", marginTop: 8 }}>
               定位点 {measureResult.lat.toFixed(6)}, {measureResult.lng.toFixed(6)}　累计 {measureResult.cumulative_distance.toFixed(1)}m
               {measureResult.nearest_marker && `　最近：${measureResult.nearest_marker.label}（${measureResult.nearest_marker.distance.toFixed(1)}m）`}
             </div>
@@ -397,27 +533,29 @@ export function MobileMapPage() {
         </div>
       </Popup>
 
+      {/* 故障导航弹层（由故障面板行内「导航」进入，已预选故障） */}
       <Popup visible={panel === "nav"} onMaskClick={() => setPanel(null)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "60dvh", overflow: "auto" }}>
-        <div style={{ padding: 16, paddingBottom: 24 }}>
+        <div style={{ padding: 16, paddingBottom: 28 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <span style={{ fontWeight: 600 }}>故障导航</span>
-            <span style={{ color: "var(--adm-color-weak)", fontSize: 13 }} onClick={() => setPanel(null)}>收起 ×</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#1E2433" }}>故障导航</span>
+            <span style={{ color: "#8A93A8", fontSize: 12 }} onClick={() => setPanel(null)}>收起 ×</span>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <Picker
               columns={[faults.map((f) => ({ label: `#${f.id} ${f.fault_type || "故障"}（${f.description?.slice(0, 10) || ""}）`, value: f.id }))]}
+              value={selFaultId ? [selFaultId] : undefined}
               onConfirm={(v) => setSelFaultId(v[0] as number)}
             >
-              {(items) => <Button size="small" fill="outline">{items[0]?.label ?? "选择故障点"}</Button>}
+              {(items) => <Button size="small" fill="outline" style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>{items[0]?.label ?? "选择故障点"}</Button>}
             </Picker>
-            <Button size="small" fill="outline" onClick={() => setMode(mode === "navStart" ? "none" : "navStart")}>
+            <Button size="small" fill="outline" onClick={() => setMode(mode === "navStart" ? "none" : "navStart")} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>
               {mode === "navStart" ? "取点中…" : "选起点"}
             </Button>
           </div>
-          {navStart && <div style={{ fontSize: 12, color: "#888", marginTop: 6 }}>起点 {navStart[0].toFixed(6)}, {navStart[1].toFixed(6)}</div>}
+          {navStart && <div style={{ fontSize: 12, color: "#8A93A8", marginTop: 6 }}>起点 {navStart[0].toFixed(6)}, {navStart[1].toFixed(6)}</div>}
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <Button block color="primary" size="small" onClick={startNav} disabled={!selFaultId}>{navigating ? "导航中…" : "开始导航"}</Button>
-            <Button block size="small" fill="outline" onClick={stopNav}>停止</Button>
+            <Button block color="primary" size="small" onClick={startNav} disabled={!selFaultId} style={{ background: "#5B7FFF", borderColor: "#5B7FFF" }}>{navigating ? "导航中…" : "开始导航"}</Button>
+            <Button block size="small" fill="outline" onClick={stopNav} style={{ color: "#5B6478", borderColor: "#CBD6EC" }}>停止</Button>
           </div>
         </div>
       </Popup>

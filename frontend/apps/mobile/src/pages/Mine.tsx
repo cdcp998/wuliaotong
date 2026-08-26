@@ -1,15 +1,19 @@
 import { useState } from "react";
-import { Button, Dialog, Form, Input, List, NavBar, Popup, Toast } from "antd-mobile";
+import { Button, Dialog, Form, Input, NavBar, Popup, Toast } from "antd-mobile";
 import { useNavigate } from "react-router";
 
 import { authApi, otherEndUrl, useAuthStore } from "@wlt/shared";
 
-/** 我的（手机端 TabBar 第 5 项）：个人信息、修改密码、电脑版入口、退出登录。 */
+/** 我的（手机端 TabBar 第 5 项）——OP 规格（设计页 M6）：
+ * 头像卡（52×52 r16 品牌底 + 姓名/「角色 · 账号」副行 + 右箭头）
+ * + 菜单组（r16 白卡：个人信息/修改密码/电脑版入口/消息通知设置/退出登录，行 p14/13 + 左图标 + 右箭头）
+ * + 版本脚注。修改密码沿用全屏弹层。 */
 export function MinePage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const [pwdVisible, setPwdVisible] = useState(false);
+  const [infoVisible, setInfoVisible] = useState(false); // 个人信息（只读展示）
   const [oldPwd, setOldPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
@@ -46,72 +50,161 @@ export function MinePage() {
     }
   }
 
+  /** 菜单行（OP MR：p14/13 gap10，左图标 17×17 stroke，右箭头 12px）。 */
+  function MenuRow({ icon, label, danger, onClick }: { icon: React.ReactNode; label: string; danger?: boolean; onClick: () => void }) {
+    return (
+      <div
+        onClick={onClick}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "14px 13px",
+          cursor: "pointer",
+          borderBottom: "1px solid #F2F5FB",
+        }}
+      >
+        <span style={{ display: "inline-flex", color: danger ? "#DC2626" : "#5B6478" }}>{icon}</span>
+        <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: danger ? "#DC2626" : "#1E2433" }}>{label}</span>
+        <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="#8A93A8" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: "100dvh", background: "#F2F5FB" }}>
       <NavBar onBack={() => navigate("/")}>我的</NavBar>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, padding: 16, margin: 12, boxShadow: "0 6px 20px rgba(30,36,51,.06)" }}>
+
+      {/* 头像卡（OP Profile r18 白卡 p16 gap12） */}
+      <div
+        onClick={() => setInfoVisible(true)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          background: "#fff",
+          border: "1px solid #E4EAF6",
+          borderRadius: 18,
+          padding: 16,
+          margin: 12,
+          boxShadow: "0 6px 20px rgba(30,36,51,.06)",
+          cursor: "pointer",
+        }}
+      >
         <div
           style={{
-            width: 48,
-            height: 48,
-            borderRadius: 14,
-            background: "#475FE8",
+            width: 52,
+            height: 52,
+            borderRadius: 16,
+            background: "#5B7FFF",
             color: "#fff",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             fontSize: 18,
-            fontWeight: 600,
+            fontWeight: 700,
             flexShrink: 0,
           }}
         >
           {(user?.real_name ?? "用")[0]}
         </div>
-        <div>
-          <div style={{ fontSize: 15.5, fontWeight: 600 }}>{user?.real_name}</div>
-          <div style={{ fontSize: 12, color: "#5B6478", marginTop: 3 }}>{user?.role?.name}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#1E2433" }}>{user?.real_name || user?.username}</div>
+          {/* 班组字段后端暂无（UserInfo 无 team），以「角色 · @账号」代替，后续加班组字段时替换 */}
+          <div style={{ fontSize: 11.5, color: "#8A93A8", marginTop: 3 }}>
+            {user?.role?.name ?? "未分配角色"} · @{user?.username}
+          </div>
         </div>
+        <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="#8A93A8" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 6l6 6-6 6" />
+        </svg>
       </div>
 
-      {/* 快捷入口（设计页 M6：我的申请/通知/设置） */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, margin: "0 12px 12px", padding: 10, boxShadow: "0 6px 20px rgba(30,36,51,.06)" }}>
-        <div onClick={() => navigate("/requisitions/list")} style={{ textAlign: "center", padding: "8px 0", cursor: "pointer" }}>
-          <div style={{ fontSize: 20 }}>📋</div>
-          <div style={{ fontSize: 11.5, color: "#1E2433", marginTop: 4 }}>我的申请</div>
-        </div>
-        <div onClick={() => navigate("/notifications")} style={{ textAlign: "center", padding: "8px 0", cursor: "pointer" }}>
-          <div style={{ fontSize: 20 }}>🔔</div>
-          <div style={{ fontSize: 11.5, color: "#1E2433", marginTop: 4 }}>通知</div>
-        </div>
-        <div onClick={() => setPwdVisible(true)} style={{ textAlign: "center", padding: "8px 0", cursor: "pointer" }}>
-          <div style={{ fontSize: 20 }}>⚙️</div>
-          <div style={{ fontSize: 11.5, color: "#1E2433", marginTop: 4 }}>设置</div>
-        </div>
-      </div>
-
+      {/* 菜单组（OP Menu r16 白卡 p4/0） */}
       <div style={{ background: "#fff", border: "1px solid #E4EAF6", borderRadius: 16, margin: "0 12px 12px", overflow: "hidden", boxShadow: "0 6px 20px rgba(30,36,51,.06)" }}>
-        <List style={{ "--border-top": "0" } as React.CSSProperties}>
-          <List.Item onClick={() => setPwdVisible(true)}>
-            修改密码
-          </List.Item>
-          <List.Item onClick={() => window.open(otherEndUrl("desktop"), "_blank")}>
-            电脑版入口
-          </List.Item>
-          <List.Item
-            onClick={async () => {
-              await Dialog.alert({ content: "报表、系统管理等功能请使用电脑端操作。" });
-            }}
-          >
-            电脑端功能提示
-          </List.Item>
-          <List.Item onClick={() => void onLogout()}>退出登录</List.Item>
-        </List>
+        <MenuRow
+          label="个人信息"
+          onClick={() => setInfoVisible(true)}
+          icon={
+            <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="8" r="3.5" />
+              <path d="M5 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5" />
+            </svg>
+          }
+        />
+        <MenuRow
+          label="消息通知设置"
+          onClick={() => navigate("/notifications")}
+          icon={
+            <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+            </svg>
+          }
+        />
+        <MenuRow
+          label="修改密码"
+          onClick={() => setPwdVisible(true)}
+          icon={
+            <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="4" y="10" width="16" height="10" rx="2" />
+              <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+            </svg>
+          }
+        />
+        <MenuRow
+          label="电脑版入口"
+          onClick={() => window.open(otherEndUrl("desktop"), "_blank")}
+          icon={
+            <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="12" rx="2" />
+              <path d="M8 20h8M12 16v4" />
+            </svg>
+          }
+        />
+        <div style={{ borderBottom: "1px solid #F2F5FB" }} />
+        <MenuRow
+          label="退出登录"
+          danger
+          onClick={() => void onLogout()}
+          icon={
+            <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17l5-5-5-5M21 12H9" />
+            </svg>
+          }
+        />
       </div>
 
-      <div style={{ padding: "0 16px", fontSize: 11, color: "var(--adm-color-weak)", lineHeight: 1.7, textAlign: "center" }}>
+      <div style={{ padding: "0 16px", fontSize: 10.5, color: "#8A93A8", lineHeight: 1.7, textAlign: "center" }}>
         物料通管理系统 v{__APP_VERSION__}<br />
         照片永久保存 · 全程操作留痕
       </div>
+
+      {/* 个人信息弹层（只读；OP M6 菜单项「个人信息」落地） */}
+      <Popup visible={infoVisible} onMaskClick={() => setInfoVisible(false)} bodyStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
+        <div style={{ padding: "16px 16px 28px" }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>个人信息</div>
+          <div className="wlt-card" style={{ borderRadius: 14, overflow: "hidden" }}>
+            {[
+              ["账号", user?.username ?? "—"],
+              ["姓名", user?.real_name || "—"],
+              ["角色", user?.role?.name ?? "—"],
+              ["用户 ID", String(user?.id ?? "—")],
+            ].map(([k, v]) => (
+              <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: "1px solid #F2F5FB" }}>
+                <span style={{ fontSize: 12.5, color: "#5B6478" }}>{k}</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: "#1E2433" }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <Button block color="primary" onClick={() => setInfoVisible(false)} style={{ marginTop: 14, borderRadius: 12, background: "#5B7FFF", borderColor: "#5B7FFF" }}>
+            关闭
+          </Button>
+        </div>
+      </Popup>
 
       {/* 修改密码：全屏弹层界面（标题栏 + 账号提示 + 表单卡片 + 底部主按钮） */}
       <Popup visible={pwdVisible} onMaskClick={() => setPwdVisible(false)} bodyStyle={{ height: "100dvh" }} destroyOnClose>
@@ -119,7 +212,7 @@ export function MinePage() {
           <NavBar
             onBack={() => setPwdVisible(false)}
             right={
-              <span onClick={() => setPwdVisible(false)} style={{ fontSize: 14, color: "#475FE8", padding: "0 12px" }}>
+              <span onClick={() => setPwdVisible(false)} style={{ fontSize: 14, color: "#3B5BDB", padding: "0 12px" }}>
                 关闭
               </span>
             }
@@ -146,8 +239,8 @@ export function MinePage() {
             {/* 表单卡片 */}
             <div style={{ background: "#fff", borderRadius: 12, padding: "4px 16px 16px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0 4px" }}>
-                <span style={{ fontSize: 13, color: "#4e5969" }}>输入新密码</span>
-                <span onClick={() => setShowPwd((v) => !v)} style={{ fontSize: 13, color: "#475FE8", padding: 4 }}>
+                <span style={{ fontSize: 13, color: "#5B6478" }}>输入新密码</span>
+                <span onClick={() => setShowPwd((v) => !v)} style={{ fontSize: 13, color: "#3B5BDB", padding: 4 }}>
                   {showPwd ? "隐藏密码" : "显示密码"}
                 </span>
               </div>
@@ -168,14 +261,14 @@ export function MinePage() {
                   />
                 </Form.Item>
               </Form>
-              <div style={{ fontSize: 11, color: "var(--adm-color-weak)", lineHeight: 1.6, marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: "#8A93A8", lineHeight: 1.6, marginTop: 4 }}>
                 修改成功后请使用新密码登录；如忘记密码请联系管理员重置。
               </div>
             </div>
           </div>
           {/* 底部主操作 */}
           <div style={{ padding: 12, background: "#fff", borderTop: "1px solid #f0f1f3" }}>
-            <Button block color="primary" loading={saving} onClick={() => void changePwd()}>
+            <Button block color="primary" loading={saving} onClick={() => void changePwd()} style={{ background: "#5B7FFF", borderColor: "#5B7FFF" }}>
               确认修改
             </Button>
           </div>

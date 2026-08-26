@@ -123,7 +123,7 @@ export function CheckRunPage() {
                 height: 40,
                 border: "1px dashed #c9cdd4",
                 borderRadius: 10,
-                color: "#475FE8",
+                color: "#5B7FFF",
                 fontSize: 13.5,
                 cursor: "pointer",
                 background: "#fafbfd",

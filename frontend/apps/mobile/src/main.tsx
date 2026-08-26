@@ -1,4 +1,4 @@
-﻿import { DotLoading, unstableSetRender } from "antd-mobile";
+import { DotLoading, unstableSetRender } from "antd-mobile";
 import React, { lazy, Suspense } from "react";
 import ReactDOM, { type Root } from "react-dom/client";
 import { RouterProvider, createBrowserRouter } from "react-router";
@@ -94,9 +94,10 @@ function PageLoading() {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    {/* 品牌主题 v2（浅色玻璃/大圆角现代风，与 OpenPencil 设计稿一致）：
+    {/* 品牌主题 v2（浅色玻璃/大圆角现代风，与 OpenPencil 设计稿一致：
+        主色 #5B7FFF =《UI设计交付文档.md》§2.1 brand token）：
         antd-mobile 通过 CSS 变量换肤 */}
-    <style>{`:root{--adm-color-primary:#475FE8;--adm-color-success:#22C55E;--adm-color-warning:#F59E0B;--adm-color-danger:#EF4444;--adm-color-background:#F2F5FB;--adm-color-box:#FFFFFF;--adm-color-text:#1E2433;--adm-color-weak:#5B6478;--adm-color-light:#6A748A;--adm-color-border:#E4EAF6;--adm-radius-s:8px;--adm-radius-m:10px;--adm-radius-l:16px}`}</style>
+    <style>{`:root{--adm-color-primary:#5B7FFF;--adm-color-success:#22C55E;--adm-color-warning:#F59E0B;--adm-color-danger:#EF4444;--adm-color-background:#F2F5FB;--adm-color-box:#FFFFFF;--adm-color-text:#1E2433;--adm-color-weak:#8A93A8;--adm-color-light:#6A748A;--adm-color-border:#E4EAF6;--adm-radius-s:8px;--adm-radius-m:10px;--adm-radius-l:16px}`}</style>
     <Suspense fallback={<PageLoading />}>
       <RouterProvider router={tabRouter} />
     </Suspense>

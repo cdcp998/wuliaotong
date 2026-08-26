@@ -156,6 +156,103 @@ button:focus-visible,
   white-space: nowrap;
 }
 
+/* ---------- 6b. OP 设计 Token（《UI设计交付文档.md》§2 Design Tokens）----------
+ * 六大重构页（M2/M3/M6/M7/M14/M20）与其余风格页共用同一套变量取色。 */
+:root {
+  --wlt-brand: #5b7fff; /* 主色 brand */
+  --wlt-brand-deep: #3b5bdb; /* 主色深（按钮文字/激活态） */
+  --wlt-brand-soft: #eaefff; /* 主色浅底 */
+  --wlt-bg: #f2f5fb; /* 页面背景 */
+  --wlt-surface-2: #f6f8fe; /* 辅助底（输入框/浅块） */
+  --wlt-border: #e4eaf6; /* 描边 */
+  --wlt-border-strong: #cbd6ec; /* 控件描边 */
+  --wlt-text: #1e2433; /* 主文本 */
+  --wlt-text-2: #5b6478; /* 次文本 */
+  --wlt-text-3: #8a93a8; /* 弱文本 */
+  --wlt-purple: #7c3aed; /* 设备层/待验收（底 #F3E8FF） */
+}
+
+.wlt-card {
+  background: #fff;
+  border: 1px solid var(--wlt-border);
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(30, 36, 51, 0.06);
+}
+
+/* 状态胶囊配色（OP：审计=蓝 / 预警=红 / 识别=琥珀 / 完成=绿 / 待验收=紫 / 中性=灰） */
+.wlt-pill--blue {
+  background: var(--wlt-brand-soft);
+  color: var(--wlt-brand);
+}
+.wlt-pill--green {
+  background: #e8f9ef;
+  color: #15803d;
+}
+.wlt-pill--red {
+  background: #fdebec;
+  color: #dc2626;
+}
+.wlt-pill--amber {
+  background: #fef4e2;
+  color: #b45309;
+}
+.wlt-pill--purple {
+  background: #f3e8ff;
+  color: var(--wlt-purple);
+}
+.wlt-pill--gray {
+  background: #eff3fc;
+  color: #64748b;
+}
+
+/* 固定底部操作栏（通知管理栏/地图工具栏等）：宽屏居中规则见 widescreen.css */
+.wlt-fixed-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--wlt-border);
+  box-shadow: 0 -4px 16px rgba(30, 36, 51, 0.08);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ---------- 8. 登录页表单卡（M20 OP 规格：label 11px + 输入块 h40/r11/#F6F8FE）---------- */
+.wlt-login-form {
+  --border-top: 0;
+  --border-bottom: 0;
+  --border-inner: 0;
+}
+.wlt-login-form .adm-list-body {
+  background: transparent;
+}
+.wlt-login-form .adm-list-item,
+.wlt-login-form .adm-list-item-content {
+  background: transparent;
+}
+.wlt-login-form .adm-list-item-content-main {
+  padding: 0;
+}
+.wlt-login-form .adm-form-item-label-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--wlt-text-2);
+  padding-bottom: 4px;
+}
+.wlt-login-form .adm-input {
+  --font-size: 14px;
+  --placeholder-color: var(--wlt-text-3);
+  --text-color: var(--wlt-text);
+}
+/* 输入块容器（Login.tsx 内联 h40/r11/#F6F8FE），Input 元素去默认内边距贴合 */
+.wlt-login-field .adm-input-element {
+  height: 40px;
+}
+
 /* 大圆角按钮基调（antd-mobile 默认 border-radius 较小） */
 .adm-button {
   border-radius: 12px;
