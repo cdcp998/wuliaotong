@@ -195,7 +195,7 @@ export function MobileMapPage() {
       }
     };
     tick();
-    watchRef.current = window.setInterval(tick, 2000);
+    watchRef.current = window.setInterval(tick, 1000);
   };
 
   const submitFault = async () => {

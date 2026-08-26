@@ -95,8 +95,14 @@ export function MapWorkbenchPage() {
   const [myPos, setMyPos] = useState<LatLng | null>(loadLastPosition);
   const [locating, setLocating] = useState(false);
   const [displayPref, setDisplayPref] = useState<string | null>(null);
-  // 打开地图时的初始视图：有历史定位 → 回到上次位置（15 级）；否则默认中心
-  const initialCenter = useMemo(() => loadLastPosition() ?? DEFAULT_VIEW.center, []);
+  // 打开地图时的初始视图：有历史定位 → 回到上次位置（15 级，且禁用 fitBounds 覆盖）；否则默认中心
+  const [initialCenter, restoringLastPos] = useMemo(
+    () => {
+      const saved = loadLastPosition();
+      return [saved ?? DEFAULT_VIEW.center, saved !== null] as const;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!myPos) return;
@@ -282,22 +288,78 @@ export function MapWorkbenchPage() {
     return dists.length ? dists[dists.length - 1] : 0;
   }, [draftPoints]);
 
-  const doNavigate = async () => {
-    if (!navFault || !navStart) {
+  // ============================ 实时导航（1 秒自动更新位置） ============================
+  const [navInfo, setNavInfo] = useState<string>("");
+  const navTimerRef = useRef<number | null>(null);
+
+  /** 停止实时刷新（保留最近一次结果与路径展示）。 */
+  const stopLiveNav = useCallback(() => {
+    if (navTimerRef.current !== null) {
+      window.clearInterval(navTimerRef.current);
+      navTimerRef.current = null;
+    }
+    setNavigating(false);
+    setNavInfo("");
+  }, []);
+
+  useEffect(() => () => stopLiveNav(), [stopLiveNav]);
+  // 故障点被清空/切换时停止当前导航循环
+  useEffect(() => {
+    if (navFault === undefined) stopLiveNav();
+  }, [navFault, stopLiveNav]);
+
+  /** 单次定位修正：调后端重算剩余距离/路径（失败静默，下一秒重试）。 */
+  const runNavFix = useCallback(
+    async (lat: number, lng: number) => {
+      if (navFault === undefined) return;
+      try {
+        const r = await cableApi.navigate({ lat, lng, fault_id: navFault });
+        setNavResult(r);
+        if (r.projection) setHighlight([r.projection.lat, r.projection.lng]);
+        setNavInfo(`剩余 ${r.remaining_distance.toFixed(0)}m · 直线 ${r.straight_distance.toFixed(0)}m · 1s 自动更新`);
+      } catch {
+        /* 瞬时网络/服务异常静默，下一秒自然重试 */
+      }
+    },
+    [navFault],
+  );
+
+  /** 开始导航：先取一次当前位置（降级链），随后每 1 秒用原生 GPS 刷新并重算。 */
+  const startLiveNav = useCallback(async () => {
+    if (!navFault) {
       message.warning("请选择故障点并设置起点（我的位置或地图选点）");
       return;
     }
-    setNavigating(true);
+    let startPos = navStart;
     try {
-      const r = await cableApi.navigate({ lat: navStart[0], lng: navStart[1], fault_id: navFault });
-      setNavResult(r);
-      if (r.projection) setHighlight([r.projection.lat, r.projection.lng]);
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "导航计算失败");
-    } finally {
-      setNavigating(false);
+      const p = await getCurrentPositionWithFallback();
+      startPos = [p.lat, p.lng];
+      setMyPos(startPos); // 触发持久化 + 定位点刷新
+    } catch {
+      if (!startPos) {
+        message.warning("无法获取定位，请点击地图选择起点");
+        return;
+      }
+      message.info("实时定位不可用，按起点位置开始导航");
     }
-  };
+    setNavStart(startPos);
+    setNavigating(true);
+    void runNavFix(startPos[0], startPos[1]);
+    const tick = () => {
+      // 仅原生 GPS 可用时逐秒刷新；HTTP/iOS 无 Geolocation 环境保持初始位置不放大误差
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setMyPos([pos.coords.latitude, pos.coords.longitude]);
+            void runNavFix(pos.coords.latitude, pos.coords.longitude);
+          },
+          () => undefined,
+          { enableHighAccuracy: true, maximumAge: 1000 },
+        );
+      }
+    };
+    navTimerRef.current = window.setInterval(tick, 1000);
+  }, [navFault, navStart, runNavFix, message]);
 
   /** 当前底图源显示名（与 MapView 选择逻辑一致）。 */
   const activeKey = activeSource && sources[activeSource]?.enabled ? activeSource : Object.keys(sources).find((k) => sources[k]?.enabled);
@@ -341,7 +403,9 @@ export function MapWorkbenchPage() {
         displaySpace={displayPref}
         clusterFaults
         center={initialCenter}
-        zoom={initialCenter !== DEFAULT_VIEW.center ? DEFAULT_VIEW.zoom : 12} // 有历史定位→15级回位；否则默认12级
+        zoom={restoringLastPos ? DEFAULT_VIEW.zoom : 12} // 有历史定位→15级回位；否则默认12级
+        autoFit={!restoringLastPos} // 回位场景禁用 fitBounds，避免数据加载后覆盖初始视图
+        navStartPoint={navStart}
         onMapReady={setMap}
         onPick={
           pickMode === "navStart"
@@ -483,7 +547,14 @@ export function MapWorkbenchPage() {
             {pickMode === "navStart" ? "点击地图选择起点…" : "地图选起点"}
           </Button>
           {navStart && <span style={{ fontSize: 11.5, color: "#5B6478" }}>起点：{navStart[0].toFixed(6)}, {navStart[1].toFixed(6)}</span>}
-          <Button size="small" type="primary" loading={navigating} onClick={doNavigate} block>开始导航</Button>
+          {navigating ? (
+            <>
+              <span style={{ fontSize: 11.5, color: "#15803D" }}>{navInfo || "实时导航中（1s 自动更新位置）…"}</span>
+              <Button danger size="small" onClick={stopLiveNav} block>停止导航</Button>
+            </>
+          ) : (
+            <Button size="small" type="primary" onClick={() => void startLiveNav()} block>开始导航</Button>
+          )}
           {navResult && (
             <Descriptions column={1} size="small" bordered>
               <Descriptions.Item label="直线距离">{navResult.straight_distance.toFixed(1)} m</Descriptions.Item>

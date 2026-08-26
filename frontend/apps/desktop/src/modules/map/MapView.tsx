@@ -53,6 +53,10 @@ interface MapViewProps {
   displaySpace?: string | null;
   /** 故障点以网格聚合渲染（近距离折叠为计数簇，点击展开）；默认逐点渲染 */
   clusterFaults?: boolean;
+  /** 数据加载后自动 fitBounds 线缆范围（默认开）；「回到最后定位」场景应关闭避免覆盖初始视图 */
+  autoFit?: boolean;
+  /** 导航起点 [lat, lng] WGS84（绿色 ✦ 标记，地图选起点/使用我的位置后可见） */
+  navStartPoint?: LatLng | null;
   /** 地图点击回调（已转换为 WGS84 lat/lng） */
   onPick?: (lat: number, lng: number) => void;
   /** 初始中心 [lat, lng] 与缩放 */
@@ -134,16 +138,26 @@ function MapHandle({ onMapReady }: { onMapReady?: (map: L.Map | null) => void })
   return null;
 }
 
-function FitCables({ cables, previewPath }: { cables: CableItem[]; previewPath?: LatLng[] | null }) {
+/** 数据加载后自动缩放适配线缆范围；autoFit=false 时跳过（如「回到最后定位」优先场景）。 */
+function FitCables({
+  cables,
+  previewPath,
+  autoFit = true,
+}: {
+  cables: CableItem[];
+  previewPath?: LatLng[] | null;
+  autoFit?: boolean;
+}) {
   const map = useMap();
   useEffect(() => {
+    if (!autoFit) return; // 让位给「最后定位回位」，避免 fitBounds 覆盖初始视图
     const pts: L.LatLngTuple[] = [];
     for (const c of cables) {
       for (const [lng, lat] of c.geometry?.coordinates ?? []) pts.push([lat, lng]);
     }
     for (const [lat, lng] of previewPath ?? []) pts.push([lat, lng]);
     if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { padding: [40, 40] });
-  }, [cables, previewPath, map]);
+  }, [cables, previewPath, map, autoFit]);
   return null;
 }
 
@@ -248,6 +262,8 @@ export function MapView({
   draftLine = null,
   displaySpace = null,
   clusterFaults = false,
+  autoFit = true,
+  navStartPoint = null,
   onPick,
   center = [30.2741, 120.1551],
   zoom = 12,
@@ -311,7 +327,7 @@ export function MapView({
         <MapHandle onMapReady={onMapReady} />
         <BaseTile sources={sources} sourceKey={sourceKey} />
         <ClickCatcher onPick={onPick} space={space} />
-        <FitCables cables={overlays.cables} previewPath={previewPath} />
+        <FitCables cables={overlays.cables} previewPath={previewPath} autoFit={autoFit} />
         {cableGeojson.features.length > 0 && (
           <GeoJSON
             key={JSON.stringify(cableGeojson.features.map((f) => f.properties?.code))}
@@ -430,6 +446,21 @@ export function MapView({
               );
             })}
           </>
+        )}
+        {/* 导航起点：绿色 ✦ 标记（地图选起点/使用我的位置后可见） */}
+        {navStartPoint && (
+          <Marker
+            position={toDisplaySpace(navStartPoint[1], navStartPoint[0], space).reverse() as L.LatLngTuple}
+            icon={startIcon}
+            zIndexOffset={900}
+          >
+            <Popup>
+              <div>
+                <b>导航起点 ✦</b>
+                <div>{navStartPoint[0].toFixed(6)}, {navStartPoint[1].toFixed(6)}（WGS84）</div>
+              </div>
+            </Popup>
+          </Marker>
         )}
         {/* 我的位置：蓝色定位标识点（GPS/IP 定位结果，WGS84 → 显示坐标系转换后渲染） */}
         {myPosition && (
