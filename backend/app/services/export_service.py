@@ -226,6 +226,11 @@ def write_table_xlsx(
     - request_spec：请求级格式（ExportFormatModal fmt 参数），叠加在配置之上（键为列位置）
       形如 {"colWidths": {"1": 30}, "textCols": [0], "numberCols": {"3": 2}}
     """
+    # 文件名追加 4 位时间戳（HHMM）：同日多次导出不重名，浏览器不再生成 xxx(1).xlsx
+    stem, dot, ext = filename.rpartition(".")
+    if dot and ext.lower() == "xlsx":
+        filename = f"{stem}_{datetime.now().strftime('%H%M')}{dot}{ext}"
+
     fmt = get_effective_format(db, module)
     req = request_spec or {}
     text_cols = set(req.get("textCols") or [])
