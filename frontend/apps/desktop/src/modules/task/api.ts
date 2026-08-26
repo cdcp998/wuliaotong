@@ -25,6 +25,9 @@ export interface TaskItem {
   fault_status_label?: string;
   severity?: number | null;
   cable_name?: string;
+  /* —— v2 无锁协作：参与留痕 ——*/
+  participants?: ParticipantSummary[];
+  events?: ParticipantEvent[];
 }
 
 export interface Page<T> {
@@ -32,6 +35,22 @@ export interface Page<T> {
   page: number;
   page_size: number;
   items: T[];
+}
+
+/** 参与留痕明细（task_participant 事件，v2 无锁协作制）。 */
+export interface ParticipantEvent {
+  user_id: number;
+  name: string;
+  action: string;
+  action_label: string;
+  created_at: string | null;
+}
+
+/** 参与人聚合（卡片/列表用）。 */
+export interface ParticipantSummary {
+  user_id: number;
+  name: string;
+  actions: string[];
 }
 
 /** 统一任务池条目（/tasks/pool）：线缆维修任务 + 设备维修任务合并视图。 */
@@ -53,7 +72,9 @@ export interface PoolItem {
   cancel_reason: string;
   creator_name: string;
   created_at: string;
-  dispatch_mode: string;
+  /* v2 无锁协作：参与留痕 */
+  participants?: ParticipantSummary[];
+  events?: ParticipantEvent[];
   /* 线缆故障关联信息 */
   fault_id: number | null;
   fault_type: string;
@@ -89,15 +110,16 @@ export const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   cancelled: { label: "已取消", color: "error" },
 };
 
-/** 任务状态元数据（看板列头/卡片/详情弹窗共用配色）。 */
+/** 任务状态元数据（看板列头/卡片/详情弹窗共用配色）。
+ *  v2 无锁协作制：pending 待领取 / done 待审核；assigned/verified 为历史兼容态。 */
 export const ST: Record<string, { label: string; fg: string; bg: string }> = {
-  pending: { label: "待派发", fg: "#B45309", bg: "#FEF4E2" },
+  pending: { label: "待领取", fg: "#B45309", bg: "#FEF4E2" },
   assigned: { label: "已派发", fg: "#3B5BDB", bg: "#EAEFFF" },
   in_progress: { label: "进行中", fg: "#0E7490", bg: "#E0F2FE" },
-  done: { label: "完成待验", fg: "#7C3AED", bg: "#F3E8FF" },
+  done: { label: "待审核", fg: "#7C3AED", bg: "#F3E8FF" },
   verified: { label: "已验证", fg: "#15803D", bg: "#E8F9EF" },
-  closed: { label: "已关闭", fg: "#64748B", bg: "#EFF3FC" },
-  cancelled: { label: "已取消", fg: "#DC2626", bg: "#FDEBEC" },
+  closed: { label: "已关闭", fg: "#475569", bg: "#EFF3FC" },
+  cancelled: { label: "已取消", fg: "#B91C1C", bg: "#FDEBEC" },
 };
 
 export const taskApi = {
@@ -120,8 +142,7 @@ export const taskApi = {
   create: (body: { cable_id?: number | null; fault_id?: number | null; title: string; description?: string; priority?: number }) =>
     http.post<TaskItem>("/tasks", body),
   update: (id: number, body: { title?: string; description?: string; priority?: number }) => http.put<TaskItem>(`/tasks/${id}`, body),
-  assign: (id: number, assigneeId: number) => http.post<TaskItem>(`/tasks/${id}/assign`, { assignee_id: assigneeId }),
-  status: (id: number, body: { action: string; assignee_id?: number; verdict?: string; reason?: string }) =>
+  status: (id: number, body: { action: string; verdict?: string; reason?: string }) =>
     http.post<TaskItem>(`/tasks/${id}/status`, body),
   records: (id: number) => http.get<TaskRecordItem[]>(`/tasks/${id}/records`),
   addRecord: (id: number, body: { content: string; files: { file_id: number; category?: string }[]; materials_used?: unknown[] }) =>

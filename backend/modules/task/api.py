@@ -16,7 +16,7 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, Query
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api import requisition as req_api
@@ -27,7 +27,6 @@ from app.core.task_engine import ACTIVE_STATUSES, TERMINAL_STATUS, transition
 from app.db import get_db
 from app.models import SysNotification, SysRole, SysUser
 from app.modules.cable.services.fault_sync import (
-    FAULT_DISPATCHED,
     FAULT_PENDING,
     FAULT_PROCESSING,
     FAULT_TO_VERIFY,
@@ -35,8 +34,9 @@ from app.modules.cable.services.fault_sync import (
     fault_briefs,
     set_fault_status,
 )
-from app.modules.task.models import MaintenanceTask, TaskRecord, TaskRecordFile, TaskRequisition
-from app.modules.task.schemas import AssignReq, RecordCreate, StatusReq, TaskCreate, TaskRequisitionReq, TaskUpdate
+from app.modules.task.models import MaintenanceTask, TaskParticipant, TaskRecord, TaskRecordFile, TaskRequisition
+from app.modules.task.schemas import RecordCreate, StatusReq, TaskCreate, TaskRequisitionReq, TaskUpdate
+from app.modules.task.services import participants as participant_svc
 
 logger = logging.getLogger("app.task")
 
@@ -54,6 +54,18 @@ def _cable_guard(db: Session) -> None:
 def _scope_all(db: Session, user: SysUser) -> bool:
     role = db.get(SysRole, user.role_id)
     return (role.code if role else "") in ALL_SCOPE_ROLES
+
+
+def _has_process_perm(db: Session, user: SysUser) -> bool:
+    """是否持有 task:process（维修处理）权限；后台角色视为可代办。"""
+    if _scope_all(db, user):
+        return True
+    from app.core.deps import SUPER_ADMIN_ROLE_CODE, _load_role_perms
+
+    role = db.get(SysRole, user.role_id)
+    if role and role.code == SUPER_ADMIN_ROLE_CODE:
+        return True
+    return "task:process" in _load_role_perms(db, user.role_id)
 
 
 def _task_or_404(db: Session, task_id: int) -> MaintenanceTask:
@@ -98,6 +110,11 @@ def _link_info(db: Session, t: MaintenanceTask) -> dict:
     return info
 
 
+def _attach_participants(db: Session, items: list[dict], task_type: str = "cable") -> list[dict]:
+    """为任务条目批量附加参与留痕：participants（聚合）+ events（明细，上限 50 条/任务）。"""
+    return participant_svc.attach(db, items, task_type)
+
+
 def _task_out(db: Session, t: MaintenanceTask) -> dict:
     assignee = db.get(SysUser, t.assignee_id) if t.assignee_id else None
     creator = db.get(SysUser, t.created_by) if t.created_by else None
@@ -109,6 +126,7 @@ def _task_out(db: Session, t: MaintenanceTask) -> dict:
         "title": t.title,
         "description": t.description,
         "assignee_id": t.assignee_id,
+        # v2 无锁协作制：assignee 仅为主责（首位领取人）；实际参与者见 participants/events
         "assignee_name": assignee.real_name if assignee else "",
         "status": t.status,
         "priority": t.priority,
@@ -158,7 +176,15 @@ def list_tasks(
 ) -> dict:
     stmt = select(MaintenanceTask)
     if not _scope_all(db, user):
-        stmt = stmt.where(MaintenanceTask.assignee_id == user.id)
+        # 任务池可见性（v2 无锁协作）：未领取未归档的池内任务 + 本人参与的/主责的任务
+        part_ids = select(TaskParticipant.task_id).where(
+            TaskParticipant.task_type == "cable", TaskParticipant.user_id == user.id
+        )
+        stmt = stmt.where(or_(
+            MaintenanceTask.assignee_id == user.id,
+            and_(MaintenanceTask.assignee_id == 0, MaintenanceTask.status.notin_(TERMINAL_STATUS)),
+            MaintenanceTask.id.in_(part_ids),
+        ))
     if status:
         stmt = stmt.where(MaintenanceTask.status == status)
     else:
@@ -168,7 +194,8 @@ def list_tasks(
         stmt = stmt.where(MaintenanceTask.task_no.like(like) | MaintenanceTask.title.like(like))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(MaintenanceTask.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
-    return ok({"total": total, "page": page, "page_size": page_size, "items": [_task_out(db, t) for t in rows]})
+    items = [_task_out(db, t) for t in rows]
+    return ok({"total": total, "page": page, "page_size": page_size, "items": _attach_participants(db, items)})
 
 
 @router.post("/tasks", dependencies=[Depends(require_permission("task:dispatch"))])
@@ -202,7 +229,7 @@ def create_task(req: TaskCreate, user: SysUser = Depends(get_current_user), db: 
         try:
             db.commit()
             db.refresh(t)
-            return ok(_task_out(db, t))
+            return ok(_attach_participants(db, [_task_out(db, t)])[0])
         except IntegrityError as exc:
             db.rollback()
             if "uk_task_no" not in str(getattr(exc, "orig", None) or ""):
@@ -222,7 +249,18 @@ def _device_pool_items(db: Session, user: SysUser, status: str, keyword: str, ar
         return []
     stmt = select(DeviceTask)
     if not _scope_all(db, user):
-        stmt = stmt.where(DeviceTask.assignee_id == user.id)
+        # 任务池可见性（v2 无锁协作）：未领取未归档的池内任务 + 本人参与的/主责的任务
+        try:
+            part_ids = select(TaskParticipant.task_id).where(
+                TaskParticipant.task_type == "device", TaskParticipant.user_id == user.id
+            )
+        except Exception:
+            part_ids = None
+        stmt = stmt.where(or_(
+            DeviceTask.assignee_id == user.id,
+            and_(DeviceTask.assignee_id == 0, DeviceTask.status.notin_(TERMINAL_STATUS)),
+            *((DeviceTask.id.in_(part_ids),) if part_ids is not None else ()),
+        ))
     if status:
         stmt = stmt.where(DeviceTask.status == status)
     elif archived:
@@ -291,7 +329,15 @@ def task_pool(
     if source in ("", "cable"):
         stmt = select(MaintenanceTask)
         if not _scope_all(db, user):
-            stmt = stmt.where(MaintenanceTask.assignee_id == user.id)
+            # 任务池可见性（v2 无锁协作）：未领取未归档的池内任务 + 本人参与的/主责的任务
+            part_ids = select(TaskParticipant.task_id).where(
+                TaskParticipant.task_type == "cable", TaskParticipant.user_id == user.id
+            )
+            stmt = stmt.where(or_(
+                MaintenanceTask.assignee_id == user.id,
+                and_(MaintenanceTask.assignee_id == 0, MaintenanceTask.status.notin_(TERMINAL_STATUS)),
+                MaintenanceTask.id.in_(part_ids),
+            ))
         if status:
             stmt = stmt.where(MaintenanceTask.status == status)
         else:
@@ -353,16 +399,20 @@ def task_pool(
     if source in ("", "device"):
         items.extend(_device_pool_items(db, user, status, kw, archived))
 
+    # 参与留痕（按来源分表批量附加）
+    _attach_participants(db, [x for x in items if x["source"] == "cable"], task_type="cable")
+    _attach_participants(db, [x for x in items if x["source"] == "device"], task_type="device")
+
     items.sort(key=lambda x: (x.get("created_at") or "", x.get("id") or 0), reverse=True)
     total = len(items)
     paged = items[(page - 1) * page_size: page * page_size]
     return ok({"total": total, "page": page, "page_size": page_size, "items": paged})
 
 
-@router.get("/tasks/{task_id}", dependencies=[Depends(require_permission("task:dispatch"))])
+@router.get("/tasks/{task_id}", dependencies=[Depends(require_any_permission("task:dispatch", "task:process"))])
 def get_task(task_id: int, db: Session = Depends(get_db)) -> dict:
     t = _task_or_404(db, task_id)
-    return ok(_task_out(db, t))
+    return ok(_attach_participants(db, [_task_out(db, t)])[0])
 
 
 @router.post("/tasks/auto-link", dependencies=[Depends(require_permission("task:dispatch"))])
@@ -390,27 +440,7 @@ def update_task(task_id: int, req: TaskUpdate, db: Session = Depends(get_db)) ->
     return ok(_task_out(db, t))
 
 
-# ============================ 派发 / 状态流转 ============================
-
-@router.post("/tasks/{task_id}/assign", dependencies=[Depends(require_permission("task:dispatch"))])
-def assign_task(task_id: int, req: AssignReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
-    t = _task_or_404(db, task_id)
-    assignee = db.get(SysUser, req.assignee_id)
-    if assignee is None or assignee.status != 1:
-        raise BizError(E_PARAM, "维修人员不存在或已停用")
-
-    def _cb(db: Session, task, action, actor_id, actor_name):
-        if action == "assign":
-            # 故障联动：待派发(0) → 已派发(1)（看板/列表/故障管理三处同步展示）
-            set_fault_status(db, task.fault_id, FAULT_DISPATCHED)
-            _notify(db, task.assignee_id, "新维修任务",
-                    f"任务 {task.task_no}「{task.title}」已派发给你，请及时处理。",
-                    f"/task/board", biz_type="待办")
-
-    transition(db, t, "assign", user.id, user.real_name, callbacks=[_cb], assignee_id=req.assignee_id)
-    db.commit()
-    return ok(_task_out(db, t))
-
+# ============================ 任务池流转（自助领取制） ============================
 
 @router.post("/tasks/{task_id}/status", dependencies=[Depends(require_any_permission("task:process", "task:verify", "task:dispatch"))])
 def task_status(
@@ -420,42 +450,53 @@ def task_status(
     db: Session = Depends(get_db),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict:
+    """任务池状态流转（v2 自助领取制，流程：发布→领取处理→完成→后台审核→关闭）。
+
+    动作权限（v2 无锁协作制，人员留痕）：
+    - claim（领取处理）/ complete（完成任务）：task:process 持有者均可——过程不锁人，
+      任意维修人员可接力处理同一任务；每次动作记入 task_participant 留痕；
+    - verify（审核通过即归档）/ reject（驳回退回参与者重做）/ close / cancel：
+      调度员/管理者/超管（_scope_all）。
+    完成为「上传图片可选」：不再强制维修记录与照片。
+    """
     t = _task_or_404(db, task_id)
-    # 动作权限：验收/驳回=task:verify；关闭/取消=task:dispatch；接单/完成=task:process（被指派者）
+    if req.action in ("claim", "complete") and not _has_process_perm(db, user):
+        raise BizError(4005, "无权限（仅维修人员可领取/处理任务）", http_status=403)
     if req.action in ("verify", "reject", "close", "cancel"):
         if not _scope_all(db, user):
-            raise BizError(4005, "无权限（仅调度员可执行验收/关闭/取消）", http_status=403)
-    if req.action in ("accept", "complete") and not _scope_all(db, user) and t.assignee_id != user.id:
-        raise BizError(4005, "仅被指派人员可执行该操作", http_status=403)
+            raise BizError(4005, "无权限（仅调度员/管理者可执行审核/关闭/取消）", http_status=403)
 
     def _cb(db: Session, task, action, actor_id, actor_name):
-        if action == "accept":
-            # 故障联动：已派发(1) → 进行中(2)
+        if action == "claim":
+            # 留痕：领取处理；故障联动 待派发(0) → 进行中(2)；通知发布人
+            participant_svc.add_event(db, "cable", task.id, actor_id, participant_svc.ACTION_CLAIM)
             set_fault_status(db, task.fault_id, FAULT_PROCESSING)
+            if task.created_by and task.created_by != actor_id:
+                _notify(db, task.created_by, "任务已被领取",
+                        f"任务 {task.task_no}「{task.title}」已由 {actor_name} 领取处理。", "/task/list")
         elif action == "complete":
-            # cable 依赖兜底：故障联动需要 cable 模块可用
+            # 留痕：处理完毕；cable 依赖兜底：故障联动需要 cable 模块可用
+            participant_svc.add_event(db, "cable", task.id, actor_id, participant_svc.ACTION_COMPLETE)
             if task.fault_id and not module_enabled(db, "cable"):
                 raise BizError(4009, "依赖模块 cable 未启用，无法联动故障状态", http_status=403)
-            # 必填维修记录+照片
-            rec_cnt = db.scalar(select(func.count()).select_from(TaskRecord).where(TaskRecord.task_id == task.id)) or 0
-            file_cnt = db.scalar(
-                select(func.count()).select_from(TaskRecordFile)
-                .join(TaskRecord, TaskRecord.id == TaskRecordFile.record_id)
-                .where(TaskRecord.task_id == task.id)
-            ) or 0
-            if rec_cnt == 0 or file_cnt == 0:
-                raise BizError(E_BILL_STATUS, "完成任务前必须填写维修记录并上传维修照片")
+            # 上传图片可选：不再强制记录/照片
             set_fault_status(db, task.fault_id, FAULT_TO_VERIFY)
-            _notify(db, task.assigned_by, "任务待验收",
-                    f"任务 {task.task_no}「{task.title}」已完成，等待验收。", f"/task/board")
+            _notify(db, task.created_by or task.assigned_by, "任务待审核",
+                    f"任务 {task.task_no}「{task.title}」已由 {actor_name} 完成，等待后台审核。", "/task/list")
         elif action == "verify":
             set_fault_status(db, task.fault_id, FAULT_VERIFIED)
         elif action == "reject":
+            # 驳回重做：回到进行中，并退回全部参与人重做（留痕人员名单）
             set_fault_status(db, task.fault_id, FAULT_PROCESSING)
+            for uid in participant_svc.participant_user_ids(db, "cable", task.id):
+                if uid != actor_id:
+                    _notify(db, uid, "任务未通过审核",
+                            f"任务 {task.task_no}「{task.title}」未通过审核：{req.verdict}，请重新处理。",
+                            "/task/list")
         elif action == "cancel":
             set_fault_status(db, task.fault_id, FAULT_PENDING)
             _notify(db, task.assignee_id, "任务已取消",
-                    f"任务 {task.task_no}「{task.title}」已被取消：{task.cancel_reason}", f"/task/board")
+                    f"任务 {task.task_no}「{task.title}」已被取消：{task.cancel_reason}", f"/task/list")
         # complete 回调开头已做依赖兜底（cable 模块停用时 403）
 
     if req.action == "cancel":
@@ -466,11 +507,10 @@ def task_status(
     transition(
         db, t, req.action, user.id, user.real_name,
         callbacks=[_cb],
-        assignee_id=req.assignee_id or None,
         verdict=req.verdict, reason=req.reason,
     )
     db.commit()
-    return ok(_task_out(db, t))
+    return ok(_attach_participants(db, [_task_out(db, t)])[0])
 
 
 # ============================ 维修记录 ============================
@@ -588,6 +628,8 @@ def create_task_requisition(task_id: int, req: TaskRequisitionReq, user: SysUser
             bill.total_qty = total
             shortages = req_api._deduct_items(db, bill, user.id)
             db.add(TaskRequisition(task_type="cable", task_id=t.id, requisition_id=bill.id, created_by=user.id))
+            # 留痕：领用材料（无锁协作——任意维修人员可为任务领料）
+            participant_svc.add_event(db, "cable", t.id, user.id, participant_svc.ACTION_REQUISITION)
             db.commit()
             return ok({"id": bill.id, "bill_no": bill.bill_no, "status": bill.status, "shortages": shortages})
         except IntegrityError as exc:

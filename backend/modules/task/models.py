@@ -63,6 +63,23 @@ class TaskRecordFile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
 
+class TaskParticipant(Base):
+    """任务参与留痕（无锁协作制）：谁领料/谁处理/谁完成，一动作一行。
+
+    task_type：cable（maintenance_task）/ device（device_task）；跨模块共享本表。
+    """
+
+    __tablename__ = "task_participant"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    task_type: Mapped[str] = mapped_column(String(10), nullable=False, default="cable")  # cable / device
+    task_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)  # 参与人 → sys_user.id
+    action: Mapped[str] = mapped_column(String(20), nullable=False, default="")  # claim/requisition/complete
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+
 class TaskRequisition(Base):
     __tablename__ = "task_requisition"
 

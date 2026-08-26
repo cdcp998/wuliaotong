@@ -61,12 +61,9 @@ export function TaskListPage() {
   /** 统一状态流转：按来源路由到对应模块接口。 */
   const act = async (t: PoolItem, action: string, extra?: object) => {
     try {
-      const r = t.source === "device"
-        ? await deviceApi.taskStatus(t.id, { action, ...extra })
-        : await taskApi.status(t.id, { action, ...extra });
+      if (t.source === "device") await deviceApi.taskStatus(t.id, { action, ...extra });
+      else await taskApi.status(t.id, { action, ...extra });
       message.success("已更新");
-      const prompt = (r as { rollback_prompt?: string }).rollback_prompt;
-      if (prompt) message.info(prompt, 5);
       void load();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "操作失败");
@@ -154,7 +151,12 @@ export function TaskListPage() {
         return <Tag style={{ borderRadius: 999, background: m.bg, color: m.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{m.label}</Tag>;
       },
     },
-    { title: "负责人", dataIndex: "assignee_name", width: 95, render: (v: string, t) => v || (t.status === "pending" && t.dispatch_mode !== "manual" ? <span style={{ color: "#3B5BDB", fontSize: 12 }}>待领取</span> : <span style={{ color: "#6A748A", fontSize: 12 }}>—</span>) },
+    { title: "参与人", key: "members", width: 120, render: (_, t) => {
+      const names = t.participants?.map((p) => p.name) ?? [];
+      return names.length > 0
+        ? <span title={names.join("、")} style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>{names.join("、")}</span>
+        : <span style={{ color: "#6A748A", fontSize: 12 }}>暂无人接手</span>;
+    } },
     { title: "状态", key: "status", width: 100, render: (_, t) => { const s = ST[t.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? t.status}</Tag>; } },
     {
       title: "联动状态", key: "link", width: 120,
@@ -181,27 +183,33 @@ export function TaskListPage() {
             </Space>
           );
         }
-        const claimHint = t.source === "device" && t.status === "pending" && t.dispatch_mode !== "manual" && !t.assignee_id;
         return (
           <Space size={10} style={{ padding: "0 10px", flexWrap: "wrap" }}>
             <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B6478" }} onClick={() => openRecords(t)}>
               {t.source === "device" ? "详情 ›" : "记录"}
             </Button>
             <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#5B6478" }} onClick={() => setDetail(t)}>详情</Button>
-            {claimHint && (
-              <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#3B5BDB" }} onClick={() => navigate(`/device/tasks?focus=d${t.id}`)}>领取 ›</Button>
+            {t.status === "pending" && (
+              <Popconfirm title="领取并处理该任务？过程不锁人，其他维修人员仍可接续。" onConfirm={() => void act(t, "claim")}>
+                <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#B45309" }}>领取处理</Button>
+              </Popconfirm>
             )}
             {t.status === "done" && (
               <>
-                <Popconfirm title="验收通过该任务？" onConfirm={() => void act(t, "verify", { verdict: "验收通过" })}>
-                  <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#15803D" }}>验收</Button>
+                <Popconfirm title="审核通过？任务将归档进入任务历史。" onConfirm={() => void act(t, "verify", { verdict: "审核通过" })}>
+                  <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#15803D" }}>审核通过</Button>
                 </Popconfirm>
                 <Popconfirm title="驳回该任务？" onConfirm={() => void act(t, "reject", { verdict: "驳回重做" })}>
                   <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#DC2626" }}>驳回</Button>
                 </Popconfirm>
               </>
             )}
-            {(t.status === "pending" || t.status === "assigned") && !claimHint && (
+            {t.status === "in_progress" && (
+              <Popconfirm title="确认处理完毕？（上传图片可选）任务将进入待审核。" onConfirm={() => void act(t, "complete")}>
+                <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#0E7490" }}>处理完毕</Button>
+              </Popconfirm>
+            )}
+            {(t.status === "pending" || t.status === "assigned") && (
               <Popconfirm title="取消该任务（需填写原因）？" onConfirm={() => cancel(t)}>
                 <Button type="link" size="small" style={{ padding: 0, fontSize: 12.5, color: "#DC2626" }}>取消</Button>
               </Popconfirm>

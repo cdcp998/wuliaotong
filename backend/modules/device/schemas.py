@@ -45,18 +45,15 @@ class DeviceTaskCreate(BaseModel):
     description: str = Field(default="", max_length=500)
     priority: int = Field(default=1, ge=1, le=2)
     scheduled_time: datetime | None = None
-    dispatch_mode: str = Field(default="manual", pattern="^(manual|open|hybrid)$")
+    # dispatch_mode 已随公开领取模式移除（v1.2 统一手动派发，走任务池派发）；
+    # 兼容：旧客户端仍传该字段时由 Pydantic 忽略多余字段（默认行为）
 
 
 class DeviceStatusReqT(BaseModel):
-    action: str = Field(pattern="^(assign|accept|complete|verify|reject|close|cancel)$")
-    assignee_id: int = 0
+    # v2 自助领取制：claim 领取处理（assign/accept 已废弃）
+    action: str = Field(pattern="^(claim|complete|verify|reject|close|cancel)$")
     verdict: str = Field(default="", max_length=500)
     reason: str = Field(default="", max_length=500)
-
-
-class AssignReq(BaseModel):
-    assignee_id: int = Field(gt=0)
 
 
 class RecordFileIn(BaseModel):

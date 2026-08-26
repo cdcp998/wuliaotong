@@ -1,21 +1,21 @@
 /** device 模块：设备维修任务创建表单（可复用）。
  *  供两处嵌入：①「设备维修任务」页新建弹窗；②任务管理「发布任务」弹窗的设备任务标签页
- *  （跨模块直接调用本模块的创建界面，需求 2）。 */
+ *  （跨模块直接调用本模块的创建界面）。v1.2 起统一手动派发——公开领取模式已随
+ *  设备自有任务池移除，派发在任务管理统一任务池/本列表进行。 */
 import { useEffect, useState } from "react";
-import { App, Button, Form, Input, Radio, Select, Space } from "antd";
+import { App, Button, Form, Input, Select, Space } from "antd";
 
-import { DISPATCH_MODES, DEVICE_STATUS, deviceApi, type DeviceItem } from "./api";
+import { DEVICE_STATUS, deviceApi, type DeviceItem } from "./api";
 
 export function DeviceTaskForm({ onSubmitted, onCancel }: {
   /** 创建成功回调（父级负责关弹窗/跳转）。 */
-  onSubmitted?: (task: { id: number; dispatch_mode: string }) => void;
+  onSubmitted?: () => void;
   onCancel?: () => void;
 }) {
   const { message } = App.useApp();
   const [form] = Form.useForm();
   const [devices, setDevices] = useState<DeviceItem[]>([]);
   const [creating, setCreating] = useState(false);
-  const [dispatchMode, setDispatchMode] = useState<keyof typeof DISPATCH_MODES>("manual");
 
   useEffect(() => {
     // page_size 上限为后端 le=100（超限会被 422 拒绝导致下拉为空）
@@ -29,15 +29,13 @@ export function DeviceTaskForm({ onSubmitted, onCancel }: {
     const v = await form.validateFields();
     setCreating(true);
     try {
-      const r = await deviceApi.createTask({
+      await deviceApi.createTask({
         device_id: v.device_id, title: v.title, description: v.description ?? "",
-        priority: v.priority ?? 1, dispatch_mode: dispatchMode,
+        priority: v.priority ?? 1,
       });
-      message.success(dispatchMode === "manual"
-        ? "设备任务已发布（设备自动置维修中），请在列表中派发维修人员"
-        : "设备任务已发布到任务池（设备自动置维修中），维修人员可自行领取");
+      message.success("设备任务已发布（设备自动置维修中），请在任务管理统一任务池派发维修人员");
       form.resetFields();
-      onSubmitted?.({ id: r.id, dispatch_mode: dispatchMode });
+      onSubmitted?.();
     } catch (e) {
       message.error(e instanceof Error ? e.message : "创建失败");
     } finally {
@@ -62,19 +60,9 @@ export function DeviceTaskForm({ onSubmitted, onCancel }: {
           <Select style={{ width: 140 }} options={[{ value: 1, label: "普通" }, { value: 2, label: "紧急" }]} />
         </Form.Item>
       </Space>
-      {/* 派发方式（三种模式）：手动派发 / 公开任务单 / 公开+可派发 */}
-      <Form.Item label="派发方式" initialValue="manual">
-        <Radio.Group value={dispatchMode} onChange={(e) => setDispatchMode(e.target.value)} style={{ display: "flex", gap: 8, width: "100%" }}>
-          {(Object.keys(DISPATCH_MODES) as (keyof typeof DISPATCH_MODES)[]).map((m) => (
-            <Radio key={m} value={m} style={{ flex: 1, marginInlineEnd: 0 }}>
-              <div style={{ paddingTop: 2, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#1E2433", whiteSpace: "nowrap" }}>{DISPATCH_MODES[m].label}</div>
-                <div style={{ fontSize: 11, color: "#6A748A", lineHeight: 1.5 }}>{DISPATCH_MODES[m].desc}</div>
-              </div>
-            </Radio>
-          ))}
-        </Radio.Group>
-      </Form.Item>
+      <div style={{ fontSize: 11.5, color: "#6A748A", marginBottom: 8 }}>
+        任务发布后进入「任务管理 · 统一任务池」，由调度员在看板/列表派发维修人员。
+      </div>
       <div style={{ display: "flex", gap: 10, marginTop: 6, borderTop: "1px solid #E4EAF6", paddingTop: 12 }}>
         <Button style={{ width: 120 }} onClick={onCancel}>取消</Button>
         <Button type="primary" loading={creating} style={{ flex: 1 }} onClick={() => void submit()}>发布设备任务</Button>

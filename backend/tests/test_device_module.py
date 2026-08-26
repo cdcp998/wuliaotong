@@ -77,28 +77,18 @@ def _cleanup_file(file_id: int) -> None:
 
 # ============================ 模块依赖 ============================
 
-def test_device_no_hard_dependency_on_task() -> None:
-    """v1.1 起设备管理不依赖 task（增强模块）：task 停用时 device 仍可独立启用。
+def test_device_dependency_on_task() -> None:
+    """v1.2 系统重构·强依赖：task 停用 → device 启用被拒（4002）；恢复后可再启用。
 
-    领用关联等增强接口运行期经 module_enabled("task") 守卫（403），不影响本体功能。
-    """
+    任务管理是唯一任务池与派发入口；设备自有任务池（公开领取）已移除。"""
     _login("admin", "admin123")
     assert client.post("/api/v1/modules/task/disable").json()["code"] == 0
     assert client.post("/api/v1/modules/device/disable").json()["code"] == 0
     r = client.post("/api/v1/modules/device/enable")
-    assert r.json()["code"] == 0, r.text  # 无硬依赖 → task 停用仍可启用
-    # 增强功能守卫：task 未启用时领用关联接口 403
-    d = _mk_device()
-    r = client.post("/api/v1/device-tasks", json={"device_id": d["id"], "title": "T-无依赖领用"})
-    tid = r.json()["data"]["id"]
-    r = client.get(f"/api/v1/device-tasks/{tid}/requisitions")
-    assert r.status_code == 403 and r.json()["code"] == 4009
-    # 恢复 task → 守卫解除
+    assert r.json()["code"] == 4002  # 依赖不满足 → 拒绝
     assert client.post("/api/v1/modules/task/enable").json()["code"] == 0
-    r = client.get(f"/api/v1/device-tasks/{tid}/requisitions")
-    assert r.json()["code"] == 0
-    # 清理：取消任务回退设备状态
-    assert client.post(f"/api/v1/device-tasks/{tid}/status", json={"action": "cancel", "reason": "T-清理"}).json()["code"] == 0
+    r = client.post("/api/v1/modules/device/enable")
+    assert r.json()["code"] == 0, r.text
 
 
 # ============================ 台账与生命周期 ============================
@@ -133,7 +123,7 @@ def test_device_task_full_flow_and_snapshot_rollback() -> None:
     _login("admin", "admin123")
     d = _mk_device()
     did = d["id"]
-    uname, rep_id = _mk_repairer()
+    uname, _rep_id = _mk_repairer()
 
     # 创建任务 → 设备自动置维修中 + previous_status 快照=1
     r = client.post("/api/v1/device-tasks", json={"device_id": did, "title": "T-熔接机保养", "priority": 2})
@@ -148,10 +138,11 @@ def test_device_task_full_flow_and_snapshot_rollback() -> None:
     r = client.post("/api/v1/device-tasks", json={"device_id": did, "title": "T-重复任务"})
     assert r.json()["code"] == 4002
 
-    # 派发 → 接单 → 记录+照片 → 完成（设备保持维修中）
-    assert client.post(f"/api/v1/device-tasks/{tid}/assign", json={"assignee_id": rep_id}).json()["code"] == 0
+    # 领取处理（维修人员自助，v2 任务池领取制）→ 记录+照片（可选，仍支持）→ 完成
     _login(uname, "pass123")
-    assert client.post(f"/api/v1/device-tasks/{tid}/status", json={"action": "accept"}).json()["code"] == 0
+    r = client.post(f"/api/v1/device-tasks/{tid}/status", json={"action": "claim"})
+    d2 = r.json()["data"]
+    assert r.json()["code"] == 0 and d2["status"] == "in_progress" and d2["assignee_id"], r.text
     file_id = _mk_file()
     r = client.post(f"/api/v1/device-tasks/{tid}/records", json={"content": "T-更换光模块", "files": [{"file_id": file_id}]})
     assert r.json()["code"] == 0
@@ -160,21 +151,17 @@ def test_device_task_full_flow_and_snapshot_rollback() -> None:
     dev = client.get(f"/api/v1/devices/{did}").json()["data"]
     assert dev["status"] == 2  # 完成未验收 → 仍维修中
 
-    # 验收 → 设备按快照回退到在用(1)，并生成回退文本提示词（响应 rollback_prompt）
+    # 后台审核（v2：审核通过即归档 closed）→ 设备按快照自动回退到在用(1)
     _login("admin", "admin123")
     r = client.post(f"/api/v1/device-tasks/{tid}/status", json={"action": "verify", "verdict": "T-验收合格"})
     data = r.json()["data"]
-    assert r.json()["code"] == 0 and data["status"] == "verified"
-    assert "rollback_prompt" in data and "维修中" in data["rollback_prompt"] and "在用" in data["rollback_prompt"], data
+    assert r.json()["code"] == 0 and data["status"] == "closed"
     dev = client.get(f"/api/v1/devices/{did}").json()["data"]
     assert dev["status"] == 1
-    assert client.post(f"/api/v1/device-tasks/{tid}/status", json={"action": "close"}).json()["code"] == 0
-
-    # 回退通知已生成（创建者收到「设备状态已自动回退」文本提示词）
-    r = client.get("/api/v1/notifications", params={"page_size": 50})
-    if r.json().get("code") == 0:
-        titles = [n.get("title", "") for n in r.json()["data"].get("list", r.json()["data"])]
-        assert any("自动回退" in t for t in titles)
+    # 参与留痕：领取/完成事件已记录（聚合非空）
+    r = client.get("/api/v1/device-tasks", params={"page_size": 50})
+    row = next((x for x in r.json()["data"]["items"] if x["id"] == tid), None)
+    assert row is not None and len(row.get("participants") or []) >= 1
     _cleanup_file(file_id)
 
 
@@ -224,27 +211,26 @@ def test_device_task_cancel_rollback_and_scope() -> None:
     _login("admin", "admin123")
     d = _mk_device()
     did = d["id"]
-    uname, rep_id = _mk_repairer()
+    uname, _rep_id = _mk_repairer()
     r = client.post("/api/v1/device-tasks", json={"device_id": did, "title": "T-取消保养"})
     assert r.json()["code"] == 0
     tid = r.json()["data"]["id"]
-    assert client.post(f"/api/v1/device-tasks/{tid}/assign", json={"assignee_id": rep_id}).json()["code"] == 0
 
-    # 取消 → 设备回退快照(1)
+    # 取消（未被领取，pending 直接取消）→ 设备回退快照(1)
     r = client.post(f"/api/v1/device-tasks/{tid}/status", json={"action": "cancel", "reason": "T-计划调整"})
     assert r.json()["code"] == 0 and r.json()["data"]["status"] == "cancelled"
     dev = client.get(f"/api/v1/devices/{did}").json()["data"]
     assert dev["status"] == 1
 
-    # 未指派任务（管理员创建，不给维修工指派）→ 维修工不可见
+    # 待领取任务（管理员发布，进入任务池）
     d2 = _mk_device()
-    r = client.post("/api/v1/device-tasks", json={"device_id": d2["id"], "title": "T-未指派的设备任务"})
+    r = client.post("/api/v1/device-tasks", json={"device_id": d2["id"], "title": "T-待领取设备任务"})
     assert r.json()["code"] == 0
-    unassigned_id = r.json()["data"]["id"]
-    # 数据范围：维修工可见「被指派」任务（含已取消）；未指派任务不可见
+    pool_id = r.json()["data"]["id"]
+    # 数据范围（v2 领取制）：维修工可见「待领取池内任务」；已取消且未领取的任务不可见
     _login(uname, "pass123")
     r = client.get("/api/v1/device-tasks")
     assert r.json()["code"] == 0
     ids = [t["id"] for t in r.json()["data"]["items"]]
-    assert tid in ids  # 已被指派 → 可见
-    assert unassigned_id not in ids  # 未指派 → 不可见
+    assert tid not in ids  # 已取消且未被领取 → 归档，不可见
+    assert pool_id in ids  # 待领取 → 任务池对维修人员可见

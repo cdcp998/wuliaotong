@@ -1,13 +1,13 @@
 """device 模块接口（设备台账 CRUD/生命周期/设备维修任务（复用 task_engine）/领用关联，方案 §6.5）。
 
-router 级依赖：require_module_enabled("device")。
-架构说明（v1.1）：设备维修任务复用核心 task_engine，**不依赖 task 模块**独立运行；
-「任务→物料领用链接」复用 task 模块的 task_requisition 表，属增强功能——运行期经
-module_enabled("task") 守卫（task 未启用时领用关联接口 403，其余不受影响）。
+router 级依赖：require_module_enabled("device")；模块强依赖 task（dependencies 声明）。
+架构说明（v1.2 系统重构）：设备维修任务复用核心 task_engine，**统一手动派发**——
+自有任务池机制（open/hybrid 公开领取与 claim 接口）已移除，任务的合并显示/派发
+统一走任务管理「统一任务池」（GET /tasks/pool）；「任务→物料领用链接」复用 task
+模块的 task_requisition 表（强依赖下直接使用，守卫保留为双保险）。
 
 设备生命周期（§5.8）：1 在用 ⇄ 2 维修中 ⇄ 3 闲置 → 4 报废；2 维修中禁止报废；
-创建设备维修任务自动置维修中（previous_status 快照）；任务 verify/cancel 按快照回退，
-并生成回退文本提示词（通知 + 响应 rollback_prompt 字段）。
+创建设备维修任务自动置维修中（previous_status 快照）；任务 verify/cancel 按快照自动回退。
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, Query
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api import requisition as req_api
@@ -27,8 +27,8 @@ from app.core.task_engine import ACTIVE_STATUSES, TERMINAL_STATUS, transition
 from app.db import get_db
 from app.models import SysNotification, SysRole, SysUser
 from app.modules.device.models import Device, DeviceTask, DeviceTaskRecord, DeviceTaskRecordFile
+from app.modules.task.models import TaskParticipant
 from app.modules.device.schemas import (
-    AssignReq,
     DeviceCreate,
     DeviceFileIn,
     DeviceRequisitionReq,
@@ -38,6 +38,7 @@ from app.modules.device.schemas import (
     DeviceTaskCreate,
     DeviceUpdate,
 )
+from app.modules.task.services import participants as participant_svc
 
 logger = logging.getLogger("app.device")
 
@@ -52,6 +53,18 @@ _DEVICE_FLOW = {1: {2, 3}, 2: {1, 3}, 3: {1, 4}, 4: set()}
 def _scope_all(db: Session, user: SysUser) -> bool:
     role = db.get(SysRole, user.role_id)
     return (role.code if role else "") in ALL_SCOPE_ROLES
+
+
+def _has_task_perm(db: Session, user: SysUser) -> bool:
+    """是否持有 device:task（维修处理）权限；后台角色视为可代办。"""
+    if _scope_all(db, user):
+        return True
+    from app.core.deps import SUPER_ADMIN_ROLE_CODE, _load_role_perms
+
+    role = db.get(SysRole, user.role_id)
+    if role and role.code == SUPER_ADMIN_ROLE_CODE:
+        return True
+    return "device:task" in _load_role_perms(db, user.role_id)
 
 
 def _device_or_404(db: Session, device_id: int) -> Device:
@@ -109,7 +122,7 @@ def _device_out(db: Session, d: Device) -> dict:
     }
 
 
-def _task_out(db: Session, t: DeviceTask, rollback_prompt: str = "") -> dict:
+def _task_out(db: Session, t: DeviceTask) -> dict:
     assignee = db.get(SysUser, t.assignee_id) if t.assignee_id else None
     creator = db.get(SysUser, t.created_by) if t.created_by else None
     d = db.get(Device, t.device_id)
@@ -120,7 +133,7 @@ def _task_out(db: Session, t: DeviceTask, rollback_prompt: str = "") -> dict:
         "title": t.title, "description": t.description,
         "assignee_id": t.assignee_id, "assignee_name": assignee.real_name if assignee else "",
         "status": t.status,
-        "dispatch_mode": getattr(t, "dispatch_mode", "manual") or "manual",
+        "dispatch_mode": "manual",  # v1.2：公开领取模式已移除，统一手动派发（历史列值不再生效）
         "priority": t.priority,
         "scheduled_time": t.scheduled_time.isoformat() if t.scheduled_time else None,
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
@@ -129,9 +142,6 @@ def _task_out(db: Session, t: DeviceTask, rollback_prompt: str = "") -> dict:
         "created_by": t.created_by, "creator_name": creator.real_name if creator else "",
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }
-    if rollback_prompt:
-        # 回退文本提示词（验收/取消自动回退设备状态时生成，前端直接展示）
-        out["rollback_prompt"] = rollback_prompt
     return out
 
 
@@ -278,12 +288,22 @@ def list_device_tasks(
 ) -> dict:
     stmt = select(DeviceTask)
     if not _scope_all(db, user):
-        stmt = stmt.where(DeviceTask.assignee_id == user.id)
+        # 任务池可见性（v2 无锁协作）：未领取未归档的池内任务 + 本人参与的/主责的任务
+        part_ids = select(TaskParticipant.task_id).where(
+            TaskParticipant.task_type == "device", TaskParticipant.user_id == user.id
+        )
+        stmt = stmt.where(or_(
+            DeviceTask.assignee_id == user.id,
+            and_(DeviceTask.assignee_id == 0, DeviceTask.status.notin_(TERMINAL_STATUS)),
+            DeviceTask.id.in_(part_ids),
+        ))
     if status:
         stmt = stmt.where(DeviceTask.status == status)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(DeviceTask.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
-    return ok({"total": total, "page": page, "page_size": page_size, "items": [_task_out(db, t) for t in rows]})
+    items = [_task_out(db, t) for t in rows]
+    return ok({"total": total, "page": page, "page_size": page_size,
+               "items": participant_svc.attach(db, items, task_type="device")})
 
 
 @router.post("/device-tasks", dependencies=[Depends(require_permission("device:task"))])
@@ -302,9 +322,8 @@ def create_device_task(req: DeviceTaskCreate, user: SysUser = Depends(get_curren
     t = DeviceTask(
         task_no="", device_id=d.id, title=req.title, description=req.description,
         priority=req.priority, scheduled_time=req.scheduled_time,
-        dispatch_mode=getattr(req, "dispatch_mode", "manual") or "manual",
         created_by=user.id, status="pending",
-        previous_status=d.status,  # v2.1：创建时设备状态快照（完成/取消回退）
+        previous_status=d.status,  # 创建时设备状态快照（完成/取消回退）
     )
     from sqlalchemy.exc import IntegrityError
 
@@ -324,50 +343,6 @@ def create_device_task(req: DeviceTaskCreate, user: SysUser = Depends(get_curren
     raise BizError(E_BILL_STATUS, "任务单号生成失败，请重试")
 
 
-@router.post("/device-tasks/{task_id}/assign", dependencies=[Depends(require_permission("device:task"))])
-def assign_device_task(task_id: int, req: AssignReq, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
-    t = _task_or_404(db, task_id)
-    if (getattr(t, "dispatch_mode", "manual") or "manual") == "open" and t.status == "pending":
-        raise BizError(E_PARAM, "公开任务单任务由维修人员自行领取，不可手动派发")
-    assignee = db.get(SysUser, req.assignee_id)
-    if assignee is None or assignee.status != 1:
-        raise BizError(E_PARAM, "维修人员不存在或已停用")
-
-    def _cb(db: Session, task, action, actor_id, actor_name):
-        if action == "assign":
-            _notify(db, task.assignee_id, "新设备维修任务",
-                    f"设备任务 {task.task_no}「{task.title}」已派发给你。", "/device/tasks")
-
-    transition(db, t, "assign", user.id, user.real_name, callbacks=[_cb], assignee_id=req.assignee_id)
-    db.commit()
-    return ok(_task_out(db, t))
-
-
-@router.post("/device-tasks/{task_id}/claim", dependencies=[Depends(require_permission("device:task"))])
-def claim_device_task(task_id: int, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
-    """维修人员领取公开任务（open/hybrid 模式且未被领取时可用）。
-
-    领取 = 自我指派：assignee_id=当前用户、状态 pending → assigned；通知其他调度员略。
-    """
-    t = _task_or_404(db, task_id)
-    if (getattr(t, "dispatch_mode", "manual") or "manual") not in ("open", "hybrid"):
-        raise BizError(E_PARAM, "该任务为指定派发，不支持自行领取")
-    if t.status != "pending" or t.assignee_id:
-        raise BizError(E_BILL_STATUS, "任务已被领取或不在待领取状态")
-    if t.created_by == user.id and not _scope_all(db, user):
-        raise BizError(E_PARAM, "不能领取自己创建的任务")
-
-    def _cb(db: Session, task, action, actor_id, actor_name):
-        # 通知创建者：任务已被领取
-        if task.created_by and task.created_by != actor_id:
-            _notify(db, task.created_by, "设备维修任务已被领取",
-                    f"任务 {task.task_no}「{task.title}」已由 {actor_name} 领取。", "/device/tasks")
-
-    transition(db, t, "assign", user.id, user.real_name, callbacks=[_cb], assignee_id=user.id)
-    db.commit()
-    return ok(_task_out(db, t))
-
-
 @router.post("/device-tasks/{task_id}/status", dependencies=[Depends(require_any_permission("device:task", "device:manage"))])
 def device_task_status(
     task_id: int,
@@ -376,47 +351,41 @@ def device_task_status(
     db: Session = Depends(get_db),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict:
+    """设备任务池流转（v2 无锁协作制）：claim/complete 人人可接力（留痕），后台审核即归档。"""
     t = _task_or_404(db, task_id)
+    if req.action in ("claim", "complete") and not _has_task_perm(db, user):
+        raise BizError(4005, "无权限（仅维修人员可领取/处理任务）", http_status=403)
     if req.action in ("verify", "reject", "close", "cancel") and not _scope_all(db, user):
-        raise BizError(4005, "无权限（仅调度员可执行验收/关闭/取消）", http_status=403)
-    if req.action in ("accept", "complete") and not _scope_all(db, user) and t.assignee_id != user.id:
-        raise BizError(4005, "仅被指派人员可执行该操作", http_status=403)
-
-    rollback_prompt = ""  # 回退文本提示词（verify/cancel 自动回退设备状态时生成）
+        raise BizError(4005, "无权限（仅调度员/管理者可执行审核/关闭/取消）", http_status=403)
 
     def _cb(db: Session, task, action, actor_id, actor_name):
-        nonlocal rollback_prompt
         d = db.get(Device, task.device_id)
         if d is None:
             return
-        if action == "complete":
-            rec_cnt = db.scalar(select(func.count()).select_from(DeviceTaskRecord).where(DeviceTaskRecord.task_id == task.id)) or 0
-            file_cnt = db.scalar(
-                select(func.count()).select_from(DeviceTaskRecordFile)
-                .join(DeviceTaskRecord, DeviceTaskRecord.id == DeviceTaskRecordFile.record_id)
-                .where(DeviceTaskRecord.task_id == task.id)
-            ) or 0
-            if rec_cnt == 0 or file_cnt == 0:
-                raise BizError(E_BILL_STATUS, "完成任务前必须填写维修记录并上传维修照片")
-            _notify(db, task.assigned_by, "设备任务待验收",
-                    f"设备任务 {task.task_no}「{task.title}」已完成，等待验收。", "/device/tasks")
+        if action == "claim":
+            # 留痕：领取处理；通知发布人
+            participant_svc.add_event(db, "device", task.id, actor_id, participant_svc.ACTION_CLAIM)
+            if task.created_by and task.created_by != actor_id:
+                _notify(db, task.created_by, "设备任务已被领取",
+                        f"设备任务 {task.task_no}「{task.title}」已由 {actor_name} 领取处理。", "/device/tasks")
+        elif action == "complete":
+            # 留痕：处理完毕；上传图片可选：不再强制记录/照片
+            participant_svc.add_event(db, "device", task.id, actor_id, participant_svc.ACTION_COMPLETE)
+            _notify(db, task.created_by or task.assigned_by, "设备任务待审核",
+                    f"设备任务 {task.task_no}「{task.title}」已由 {actor_name} 完成，等待后台审核。", "/device/tasks")
+        elif action == "reject":
+            # 驳回重做：退回全部参与人
+            for uid in participant_svc.participant_user_ids(db, "device", task.id):
+                if uid != user.id:
+                    _notify(db, uid, "设备任务未通过审核",
+                            f"设备任务 {task.task_no}「{task.title}」未通过审核：{req.verdict}，请重新处理。",
+                            "/device/tasks")
         elif action in ("verify", "cancel"):
-            # 验收通过/取消：按快照回退（无快照/快照异常回退在用）
-            old_status, new_status = d.status, (task.previous_status if task.previous_status in (1, 3) else 1)
-            d.status = new_status
-            # 生成回退文本提示词：说明「维修中 → 快照前一状态」的自动回退
-            rollback_prompt = (
-                f"任务 {task.task_no}{'验收通过' if action == 'verify' else '已取消'}，"
-                f"设备「{d.name}」（{d.code}）状态已自动回退："
-                f"{STATUS_LABEL.get(old_status, old_status)} → {STATUS_LABEL.get(new_status, new_status)}"
-                f"（快照前一状态：{STATUS_LABEL.get(task.previous_status, task.previous_status) if task.previous_status else '未知'}）"
-            )
-            if action == "verify":
-                _notify(db, task.created_by or task.assigned_by, "设备状态已自动回退", rollback_prompt, "/device/tasks")
-            else:
+            # 审核通过/取消：按快照自动回退（无快照/快照异常回退在用）
+            d.status = task.previous_status if task.previous_status in (1, 3) else 1
+            if action == "cancel":
                 _notify(db, task.assignee_id, "设备任务已取消",
                         f"设备任务 {task.task_no}「{task.title}」已被取消：{task.cancel_reason}", "/device/tasks")
-                _notify(db, task.created_by, "设备状态已自动回退", rollback_prompt, "/device/tasks")
         # reject：保持维修中
 
     if req.action == "cancel" and module_enabled(db, "task"):
@@ -428,9 +397,9 @@ def device_task_status(
         if link_cnt:
             raise BizError(E_BILL_STATUS, "任务已关联领用单，请先取消领用再取消任务")
     transition(db, t, req.action, user.id, user.real_name, callbacks=[_cb],
-               assignee_id=req.assignee_id or None, verdict=req.verdict, reason=req.reason)
+               verdict=req.verdict, reason=req.reason)
     db.commit()
-    return ok(_task_out(db, t, rollback_prompt=rollback_prompt))
+    return ok(participant_svc.attach(db, [_task_out(db, t)], task_type="device")[0])
 
 
 # ============================ 设备维修记录 ============================
@@ -545,6 +514,8 @@ def create_device_requisition(task_id: int, req: DeviceRequisitionReq, user: Sys
             bill.total_qty = total
             shortages = req_api._deduct_items(db, bill, user.id)
             db.add(TaskRequisition(task_type="device", task_id=t.id, requisition_id=bill.id, created_by=user.id))
+            # 留痕：领用材料（无锁协作——任意维修人员可为任务领料）
+            participant_svc.add_event(db, "device", t.id, user.id, participant_svc.ACTION_REQUISITION)
             db.commit()
             return ok({"id": bill.id, "bill_no": bill.bill_no, "status": bill.status, "shortages": shortages})
         except IntegrityError as exc:

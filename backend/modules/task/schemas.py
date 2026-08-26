@@ -23,13 +23,9 @@ class TaskUpdate(BaseModel):
     scheduled_time: datetime | None = None
 
 
-class AssignReq(BaseModel):
-    assignee_id: int = Field(gt=0)
-
-
 class StatusReq(BaseModel):
-    action: str = Field(pattern="^(assign|accept|complete|verify|reject|close|cancel)$")
-    assignee_id: int = 0
+    # v2 自助领取制：claim 领取处理（assign/accept 已废弃）
+    action: str = Field(pattern="^(claim|complete|verify|reject|close|cancel)$")
     verdict: str = Field(default="", max_length=500)
     reason: str = Field(default="", max_length=500)
 

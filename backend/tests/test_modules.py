@@ -60,8 +60,9 @@ def test_module_list_install_upgrade() -> None:
     assert r.json()["code"] == 0
     row = next(m for m in r.json()["data"] if m["code"] == "cable")
     assert row["deployed"] is True and row["state"] == "ENABLED"
-    assert row["source_version"] == "1.0.0" and row["version"] == "1.0.0"
-    assert row["depends"] == ["map"]
+    assert row["source_version"] == "1.1.0" and row["version"] == "1.1.0"
+    # v1.1 系统重构：cable 强依赖 map（地图基础设施）+ task（统一任务池/派单）
+    assert row["depends"] == ["map", "task>=1.3.0,<2.0.0"]
     # 地图部分已拆分：菜单/权限（地图工作台/缓存管理 + map:config/map:cache）归属 map 模块
     assert row["menu_count"] == 3 and row["perm_count"] == 4
 
@@ -77,7 +78,7 @@ def test_module_list_install_upgrade() -> None:
     # 升级（无新迁移 → 幂等成功，版本不变）
     r = client.post("/api/v1/modules/cable/upgrade")
     assert r.json()["code"] == 0
-    assert r.json()["data"]["version"] == "1.0.0"
+    assert r.json()["data"]["version"] == "1.1.0"
 
     # baseline 迁移记录已写（checksum 拦截基础）
     db = SessionLocal()

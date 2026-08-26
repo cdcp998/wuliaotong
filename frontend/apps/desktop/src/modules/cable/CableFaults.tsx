@@ -310,7 +310,7 @@ export function CableFaultsPage() {
               </span>
             ))}
             <span style={{ fontSize: 11, color: token.colorTextTertiary, marginLeft: 8 }}>
-              关联任务的派发/接单/完成/验收自动同步以上状态{taskEnabled ? "；设备维修任务完成后设备自动回退快照状态并生成文本提示词" : ""}
+              关联任务的领取/完成/审核自动同步以上状态{taskEnabled ? "；设备维修任务审核通过后设备自动回退快照前一状态" : ""}
             </span>
           </div>
         </div>

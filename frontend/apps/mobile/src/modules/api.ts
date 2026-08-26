@@ -18,8 +18,10 @@ export interface Page<T> {
 }
 
 export const TASK_STATUS: Record<string, string> = {
-  pending: "待派发", assigned: "已派发", in_progress: "进行中",
-  done: "已完成", verified: "已验证", closed: "已关闭", cancelled: "已取消",
+  pending: "待领取", in_progress: "进行中", done: "待审核",
+  closed: "已关闭", cancelled: "已取消",
+  // 历史兼容态（不再产生新数据）
+  assigned: "已派发", verified: "已验证",
 };
 
 export const taskApi = {

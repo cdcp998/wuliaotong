@@ -1,4 +1,5 @@
-/** 手机端：我的任务（方案 §7.3）——被指派任务处理（接单/完成+记录照片/知识推荐）。 */
+/** 手机端：我的任务（v2 无锁协作制）——维修人员在任务池领取/接力处理任务：
+ *  待领取→「领取并处理」；进行中→填记录/传照片（可选）后「完成任务」；完成后进入后台审核。 */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Card, List, NavBar, Tag, TextArea, Toast } from "antd-mobile";
@@ -19,8 +20,8 @@ export function MyTasksPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // 后端按数据范围返回：未领取的池内任务 + 本人参与/主责的任务（已关闭自动归档不出现）
       const r = await taskApi.list({ page_size: 100 });
-      // 已关闭/已取消的任务不再显示（用户要求）
       setRows(r.items.filter((t) => t.status !== "closed" && t.status !== "cancelled"));
     } finally {
       setLoading(false);
@@ -31,7 +32,7 @@ export function MyTasksPage() {
   const act = async (t: TaskItem, action: string) => {
     try {
       await taskApi.status(t.id, { action });
-      Toast.show("已更新");
+      Toast.show(action === "claim" ? "已领取，请开始处理" : "已更新");
       setCurrent(null);
       void load();
     } catch (e) {
@@ -49,15 +50,18 @@ export function MyTasksPage() {
         const up = await fileApi.upload(photo, "task");
         fileId = up.file_id;
       }
-      await taskApi.addRecord(current.id, { content, files: fileId ? [{ file_id: fileId }] : [] });
+      // 记录与照片均为可选：有内容才落记录
+      if (content.trim() || fileId) {
+        await taskApi.addRecord(current.id, { content, files: fileId ? [{ file_id: fileId }] : [] });
+      }
       await taskApi.status(current.id, { action: "complete" });
-      Toast.show("任务完成");
+      Toast.show("已完成，等待后台审核");
       setCurrent(null);
       setContent("");
       setPhoto(null);
       void load();
     } catch (e) {
-      Toast.show(e instanceof Error ? e.message : "完成失败（需填写记录并上传照片）");
+      Toast.show(e instanceof Error ? e.message : "完成失败");
     } finally {
       setBusy(false);
     }
@@ -72,26 +76,25 @@ export function MyTasksPage() {
           <List.Item key={t.id} description={`${t.task_no}　${t.priority === 2 ? "紧急　" : ""}${t.description || ""}`}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>{t.title}</span>
-              <Tag color={t.status === "completed" ? "success" : t.status === "cancelled" ? "danger" : "primary"}>{TASK_STATUS[t.status]}</Tag>
+              <Tag color={t.status === "done" ? "warning" : t.status === "cancelled" ? "danger" : "primary"}>{TASK_STATUS[t.status]}</Tag>
             </div>
             <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-              {t.status === "assigned" && <Button size="mini" color="primary" onClick={() => act(t, "accept")}>接单</Button>}
-              {t.status === "in_progress" && <Button size="mini" color="primary" onClick={() => { setCurrent(t); setContent(""); setPhoto(null); setRecommend([]); }}>填写记录并完成</Button>}
-              {t.status === "assigned" && <Button size="mini" fill="outline" onClick={() => setCurrent(t)}>补记录</Button>}
+              {t.status === "pending" && <Button size="mini" color="primary" onClick={() => act(t, "claim")}>领取并处理</Button>}
+              {t.status === "in_progress" && <Button size="mini" color="primary" onClick={() => { setCurrent(t); setContent(""); setPhoto(null); setRecommend([]); }}>处理完毕</Button>}
             </div>
           </List.Item>
         ))}
-        {!loading && rows.length === 0 && <List.Item>暂未被指派任务</List.Item>}
+        {!loading && rows.length === 0 && <List.Item>任务池暂无可处理的任务</List.Item>}
       </List>
 
       {current && (
         <Card className="wlt-mobile-sheet" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "70dvh", overflow: "auto" }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>{current.title}</div>
-          <TextArea placeholder="维修内容（完成必填）" value={content} onChange={setContent} rows={3} />
+          <TextArea placeholder="维修内容（可选）" value={content} onChange={setContent} rows={3} />
           <input type="file" accept="image/*" id="task-photo" style={{ display: "none" }} onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />
-          <label htmlFor="task-photo" style={{ display: "inline-block", margin: "8px 0", color: "#475FE8" }}>{photo ? "已选照片（点击更换）" : "+ 维修照片（完成必填）"}</label>
+          <label htmlFor="task-photo" style={{ display: "inline-block", margin: "8px 0", color: "#475FE8" }}>{photo ? "已选照片（点击更换）" : "+ 上传图片（可选）"}</label>
           <div style={{ display: "flex", gap: 8 }}>
-            {current.status === "in_progress" && <Button block color="primary" loading={busy} onClick={complete}>完成任务</Button>}
+            <Button block color="primary" loading={busy} onClick={complete}>完成任务</Button>
             <Button block fill="outline" onClick={() => {
               taskApi.recommend(current.id).then((r) => setRecommend(r.items ?? [])).catch(() => undefined);
             }}>知识推荐</Button>

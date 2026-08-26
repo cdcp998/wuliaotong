@@ -76,6 +76,21 @@ CREATE TABLE IF NOT EXISTS task_requisition (
   KEY idx_requisition (requisition_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务-领用关联';
 
+-- ---------- 任务参与留痕（v2 无锁协作制） ----------
+CREATE TABLE IF NOT EXISTS task_participant (
+  id          BIGINT NOT NULL AUTO_INCREMENT,
+  task_type   VARCHAR(10) NOT NULL DEFAULT 'cable' COMMENT 'cable 线缆任务 / device 设备任务',
+  task_id     BIGINT NOT NULL COMMENT '→ maintenance_task.id 或 device_task.id',
+  user_id     BIGINT NOT NULL COMMENT '参与人 → sys_user.id',
+  action      VARCHAR(20) NOT NULL DEFAULT '' COMMENT 'claim 领取处理 / requisition 领用材料 / complete 完成',
+  created_by  BIGINT NOT NULL DEFAULT 0,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_participant (task_type, task_id, user_id, action),
+  KEY idx_task (task_type, task_id),
+  KEY idx_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务参与留痕';
+
 -- =====================================================================
 -- 权限点种子（module_code='task'）
 -- =====================================================================

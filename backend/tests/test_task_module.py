@@ -80,25 +80,23 @@ def _cleanup_file(file_id: int) -> None:
 
 # ============================ 依赖校验（模块机制） ============================
 
-def test_task_or_dependency_on_business_modules() -> None:
-    """v1.3 业务依赖门禁：task 以 cable/device 为数据入口——两者均未启用时拒绝启用（软「或」依赖）；
-    任一恢复后可启用。关联故障的运行期操作仍经 _cable_guard 兜底 403。"""
+def test_task_standalone_enable() -> None:
+    """v1.4 任务池唯一化：task 为任务体系基座——无业务依赖门禁，可独立启用；
+    依赖方向已反转：cable/device 强依赖 task（见各自模块测试）。"""
     _login("admin", "admin123")
-    # 记录 device 原状态（收尾还原，避免影响其他用例）
+    # 记录 cable/device 原状态（收尾还原，避免影响后续用例）
     mods = {m["code"]: m["state"] for m in client.get("/api/v1/modules").json()["data"]}
     device_was_enabled = mods.get("device") == "ENABLED"
     assert client.post("/api/v1/modules/cable/disable").json()["code"] == 0
     client.post("/api/v1/modules/device/disable")  # 未安装时静默失败即可
     assert client.post("/api/v1/modules/task/disable").json()["code"] == 0
-    # 无任何业务模块 → 启用被拒（业务依赖门禁）
-    r = client.post("/api/v1/modules/task/enable")
-    assert r.json()["code"] == 4002, r.text
-    # 恢复 cable → 可启用；不存在的故障关联仍被业务校验拦截（404）
-    assert client.post("/api/v1/modules/cable/enable").json()["code"] == 0
+    # 无任何业务模块 → task 仍可独立启用（基座，无循环门禁）
     r = client.post("/api/v1/modules/task/enable")
     assert r.json()["code"] == 0, r.text
-    r = client.post("/api/v1/tasks", json={"fault_id": 999999, "title": "T-停缆期任务"})
-    assert r.status_code == 404 and r.json()["code"] == 4003
+    # 恢复业务模块
+    assert client.post("/api/v1/modules/cable/enable").json()["code"] == 0
+    if device_was_enabled:
+        assert client.post("/api/v1/modules/device/enable").json()["code"] == 0
     if device_was_enabled:
         client.post("/api/v1/modules/device/enable")
 
@@ -153,8 +151,10 @@ def test_task_archived_filter_and_auto_link() -> None:
 # ============================ 状态机全链路 ============================
 
 def test_task_lifecycle_full_flow() -> None:
+    """v2 无锁协作制全链路：发布→A领取→B接力完成→驳回退回参与者重做→A重做→审核通过即归档。"""
     _login("admin", "admin123")
-    uname = _mk_repairer()
+    uname_a = _mk_repairer()
+    uname_b = _mk_repairer()
     fault_id = _mk_fault("T-全流程故障")
     task = _mk_task(fault_id, "T-主线任务")
 
@@ -164,58 +164,63 @@ def test_task_lifecycle_full_flow() -> None:
     task_id = task["id"]
     assert task["status"] == "pending"
 
-    # 派发（调度员）→ 通知 + 故障联动「已派发(1)」
-    rep_user = None
-    r = client.get("/api/v1/users", params={"keyword": uname})
-    for row in r.json()["data"]["list"]:
-        if row["username"] == uname:
-            rep_user = row["id"]
-    assert rep_user is not None
-    r = client.post(f"/api/v1/tasks/{task_id}/assign", json={"assignee_id": rep_user})
-    assert r.json()["code"] == 0 and r.json()["data"]["status"] == "assigned", r.text
-    fault = client.get("/api/v1/faults", params={"status": "1"}).json()["data"]["items"]
-    assert any(f["id"] == fault_id for f in fault)
-
-    # 接单（维修工）→ 故障联动「进行中(2)」（管理员视角校验：故障列表为 OWN 数据范围）
-    _login(uname, "pass123")
-    r = client.post(f"/api/v1/tasks/{task_id}/status", json={"action": "accept"})
-    assert r.json()["code"] == 0 and r.json()["data"]["status"] == "in_progress", r.text
+    # 维修A 领取处理：pending → in_progress，主责=A；故障联动「进行中(2)」
+    _login(uname_a, "pass123")
+    r = client.post(f"/api/v1/tasks/{task_id}/status", json={"action": "claim"})
+    data = r.json()["data"]
+    assert r.json()["code"] == 0 and data["status"] == "in_progress" and data["assignee_id"], r.text
     _login("admin", "admin123")
     fault = client.get("/api/v1/faults", params={"status": "2"}).json()["data"]["items"]
     assert any(f["id"] == fault_id for f in fault)
-    _login(uname, "pass123")
 
-    # 维修记录 + 照片
-    file_id = _mk_file()
-    r = client.post(f"/api/v1/tasks/{task_id}/records", json={
-        "content": "T-更换断芯并熔接",
-        "materials_used": [{"name": "光纤熔接管", "qty": 2}],
-        "files": [{"file_id": file_id, "category": "维修后"}],
-    })
-    assert r.json()["code"] == 0, r.text
-
-    # 完成 → 故障进入「完成待验(3)」（管理员视角验证联动）
+    # 维修B 接力完成（过程不锁，人员留痕）：in_progress → done（待审核）
+    _login(uname_b, "pass123")
     r = client.post(f"/api/v1/tasks/{task_id}/status", json={"action": "complete"})
     assert r.json()["code"] == 0 and r.json()["data"]["status"] == "done", r.text
+    detail = client.get(f"/api/v1/tasks/{task_id}").json()["data"]
+    pnames = {p["name"] for p in detail.get("participants", [])}
+    assert len(pnames) >= 1  # 留痕聚合非空
     _login("admin", "admin123")
     fault = client.get("/api/v1/faults", params={"status": "3"}).json()["data"]["items"]
     assert any(f["id"] == fault_id for f in fault)
 
-    # 验收（调度员）→ 故障「已验证(4)」；verdict 必填
+    # 审核不通过（带理由）→ 退回参与者重做：done → in_progress
     r = client.post(f"/api/v1/tasks/{task_id}/status", json={"action": "verify"})
     assert r.json()["code"] == 4002  # 未填结论
-    r = client.post(f"/api/v1/tasks/{task_id}/status", json={"action": "verify", "verdict": "T-验收通过"})
-    assert r.json()["code"] == 0 and r.json()["data"]["status"] == "verified", r.text
+    r = client.post(f"/api/v1/tasks/{task_id}/status", json={"action": "reject", "verdict": "T-熔接不合格重做"})
+    assert r.json()["code"] == 0 and r.json()["data"]["status"] == "in_progress", r.text
+
+    # 参与人 A 重做完成 → 审核通过即归档（closed），故障「已验证(4)」
+    _login(uname_a, "pass123")
+    r = client.post(f"/api/v1/tasks/{task_id}/status", json={"action": "complete"})
+    assert r.json()["code"] == 0 and r.json()["data"]["status"] == "done"
+    _login("admin", "admin123")
+    r = client.post(f"/api/v1/tasks/{task_id}/status", json={"action": "verify", "verdict": "T-复验通过"})
+    assert r.json()["code"] == 0 and r.json()["data"]["status"] == "closed", r.text
     fault = client.get("/api/v1/faults", params={"status": "4"}).json()["data"]["items"]
     assert any(f["id"] == fault_id for f in fault)
-
-    # 关闭（终态）→ 任务关闭后故障列表带反向关联 linked_tasks
-    r = client.post(f"/api/v1/tasks/{task_id}/status", json={"action": "close"})
-    assert r.json()["code"] == 0 and r.json()["data"]["status"] == "closed"
+    # 归档后故障列表仍带反向关联 linked_tasks
     flist = client.get("/api/v1/faults", params={"page_size": 100}).json()["data"]["items"]
     target = next((f for f in flist if f["id"] == fault_id), None)
     assert target is not None and any(t["id"] == task_id for t in (target.get("linked_tasks") or []))
-    _cleanup_file(file_id)
+
+    # 参与人可见性：已归档任务保留在参与者的历史任务单中（归档视图）
+    _login(uname_b, "pass123")
+    ids = [t["id"] for t in client.get("/api/v1/tasks", params={"archived": 1}).json()["data"]["items"]]
+    assert task_id in ids
+
+
+def test_task_complete_without_records_allowed() -> None:
+    """v2 流程：处理完毕「上传图片可选」——完成任务不再强制维修记录与照片。"""
+    _login("admin", "admin123")
+    uname = _mk_repairer()
+    fault_id = _mk_fault("T-免记录完成")
+    task = _mk_task(fault_id, "T-免记录任务")
+    tid = task["id"]
+    _login(uname, "pass123")
+    assert client.post(f"/api/v1/tasks/{tid}/status", json={"action": "claim"}).json()["code"] == 0
+    r = client.post(f"/api/v1/tasks/{tid}/status", json={"action": "complete"})
+    assert r.json()["code"] == 0 and r.json()["data"]["status"] == "done", r.text
 
 
 def test_task_pool_merges_cable_and_device() -> None:
@@ -228,7 +233,7 @@ def test_task_pool_merges_cable_and_device() -> None:
     items = r.json()["data"]["items"]
     mine = next((x for x in items if x.get("key") == f"c{task['id']}"), None)
     assert mine is not None and mine["source"] == "cable" and mine["fault_id"] == fault_id
-    assert mine["fault_type"] == "T-断芯" and mine["fault_status"] in (0, 1)  # 故障实时状态随任务流转
+    assert mine["fault_type"] == "T-断芯" and mine["fault_status"] == 0  # 故障实时状态随任务流转（待派发）
 
     # source 过滤：仅设备任务时不含线缆任务
     r = client.get("/api/v1/tasks/pool", params={"source": "device"})
@@ -251,7 +256,7 @@ def test_task_cancel_and_scope() -> None:
     fault = client.get("/api/v1/faults", params={"status": "0"}).json()["data"]["items"]
     assert any(f["id"] == fault_id for f in fault)
 
-    # 数据范围：维修工只能看到被指派任务（未指派任务不可见）
+    # 数据范围（v2 领取制）：已取消且未被领取的任务 → 归档，维修工不可见
     _login(uname, "pass123")
     r = client.get("/api/v1/tasks")
     assert r.json()["code"] == 0

@@ -3,34 +3,27 @@
 模块契约（方案 §2.2）：源码位于 backend/modules/task/，由 build_modules.py 部署到
 backend/app/modules/task/。
 
-依赖策略（v1.3 业务依赖）：
-- 对 cable/device 无**硬**依赖声明（ModuleDef.dependencies=[]，安装不阻塞）；
-- 但任务管理以「线缆管理 / 设备管理」为数据与操作入口——on_enable 钩子强制
-  **至少一个业务模块已启用**（软「或」依赖：cable OR device，均未启用 → 拒绝启用 4002）；
-- 关联故障/线缆的运行期操作仍经 _cable_guard 兜底 403；设备任务经任务池懒加载合并。
+依赖策略（v1.4 系统重构：任务池唯一化）：
+- task 为任务体系基座，无外部模块依赖；**cable / device 反向强依赖本模块**
+ （v1.3 的「至少一个业务模块启用」门禁随之移除——避免循环依赖）；
+- 全系统唯一的任务池 = 本模块「统一任务池」（GET /tasks/pool）：线缆维修任务 +
+ 设备维修任务合并显示与派发；cable/device 不再拥有独立任务池
+ （设备 open/hybrid 公开领取模式与 claim 接口已移除，统一手动派发）；
+- 关联故障/线缆的运行期操作仍经 _cable_guard 兜底 403。
 
-v1.2 统一任务池：GET /tasks/pool 合并线缆维修任务与设备维修任务，供看板/列表形成统一
-联动视图。v1.2 起故障六态全程联动、已关闭自动归档、历史孤儿任务自动关联
-（services/auto_link.py，on_enable 时执行 + POST /tasks/auto-link 手动补跑）。
+历史未关联任务自动关联：services/auto_link.py，on_enable 时执行 +
+POST /tasks/auto-link 手动补跑。故障六态全程联动、已关闭自动归档。
 """
 from __future__ import annotations
 
 import logging
 
-__version__ = "1.3.0"
+__version__ = "1.5.0"
 
-from app.core.modules import ModuleDef, module_enabled
+from app.core.modules import ModuleDef
 from app.modules.task.api import router
 
 logger = logging.getLogger("app.task")
-
-
-def _ensure_business_dep(db, module, ctx) -> None:
-    """软「或」依赖门禁：cable / device 至少一个已启用（任务的数据与操作入口）。"""
-    if not (module_enabled(db, "cable") or module_enabled(db, "device")):
-        from app.core.response import BizError
-
-        raise BizError(4002, "任务管理依赖「线缆管理」或「设备管理」至少一个模块启用（请先启用其一）")
 
 
 def _auto_link_on_enable(db, module, ctx) -> None:
@@ -47,19 +40,13 @@ def _auto_link_on_enable(db, module, ctx) -> None:
         logger.warning("task 启用时自动关联失败（已跳过）", exc_info=True)
 
 
-def _on_enable(db, module, ctx) -> None:
-    """启用钩子：先过业务依赖门禁，再补跑历史任务自动关联。"""
-    _ensure_business_dep(db, module, ctx)
-    _auto_link_on_enable(db, module, ctx)
-
-
 module = ModuleDef(
     code="task",
     name="任务管理",
     version=__version__,
     router=router,
     dependencies=[],
-    on_enable=_on_enable,
+    on_enable=_auto_link_on_enable,
     audit_labels={
         "tasks": "任务管理",
     },

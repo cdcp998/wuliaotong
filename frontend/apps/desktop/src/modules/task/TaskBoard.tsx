@@ -1,6 +1,6 @@
-/** task 模块：维修任务看板（/task/board，task:dispatch）——统一任务池合并视图（v5 简略卡片）。
- *  · 仅活动任务列（待派发›已派发›进行中›完成待验›已验证）；已关闭/已取消自动归档至列表页「已归档」；
- *  · 卡片简略展示：类型/优先级/标题/一行摘要/负责人/排期；点击弹出详情 Modal（完整信息+操作）；
+/** task 模块：维修任务看板（/task/board，task:dispatch）——统一任务池合并视图（v6 简略卡片）。
+ *  · v2 无锁协作三活动列（待领取›进行中›待审核）；过程不锁人、人员留痕；审核通过即归档进历史；
+ *  · 卡片简略展示：类型/优先级/标题/一行摘要/参与人/排期；点击弹出详情 Modal（完整信息+操作）；
  *  · 「发布任务」走标签式弹窗（设备任务/线缆任务，嵌入对应模块表单）；
  *  · 支持 ?focus_task=c12|d3 跨页定位。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -14,15 +14,13 @@ import { taskApi, ST, type PoolItem } from "./api";
 import { PublishTaskModal } from "./PublishTaskModal";
 import { TaskDetailModal } from "./TaskDetailModal";
 
-/** 看板仅展示活动列（终态自动归档）。 */
-const COLUMNS = ["pending", "assigned", "in_progress", "done", "verified"];
+/** 看板仅展示活动列（审核通过即归档）。 */
+const COLUMNS = ["pending", "in_progress", "done"];
 
 const COL_META: Record<string, { fg: string; bg: string; dot: string }> = {
   pending: { fg: "#B45309", bg: "#FEF4E2", dot: "#F59E0B" },
-  assigned: { fg: "#3B5BDB", bg: "#EAEFFF", dot: "#5B7FFF" },
   in_progress: { fg: "#0E7490", bg: "#E0F2FE", dot: "#0891B2" },
   done: { fg: "#7C3AED", bg: "#F3E8FF", dot: "#8B5CF6" },
-  verified: { fg: "#15803D", bg: "#E8F9EF", dot: "#22C55E" },
 };
 
 export function TaskBoardPage() {
@@ -72,7 +70,7 @@ export function TaskBoardPage() {
         <div>
           <h2 style={{ margin: 0 }}>维修任务看板</h2>
           <p style={{ margin: "6px 0 0", fontSize: 12.5, color: token.colorTextSecondary }}>
-            统一任务池{deviceEnabled ? "（线缆 + 设备合并显示）" : ""} · 简略卡片，点击查看完整详情；已关闭任务自动进入列表页「已归档」
+            统一任务池{deviceEnabled ? "（线缆 + 设备合并显示）" : ""} · 无锁协作：维修人员均可领取/接力处理，人员留痕；审核通过即归档
           </p>
         </div>
         <Space wrap>
@@ -130,10 +128,12 @@ export function TaskBoardPage() {
                       <span title={t.title} style={{ fontSize: 11.5, fontWeight: 600, color: "#1E2433", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</span>
                       {/* 行3：一行摘要（单行截断） */}
                       <span title={summary} style={{ fontSize: 10.5, color: "#6A748A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</span>
-                      {/* 行4：负责人 + 排期（截断 MM-DD HH:mm） */}
+                      {/* 行4：参与人 + 排期（截断 MM-DD HH:mm；无锁协作显示接力人员） */}
                       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#5B6478" }}>
                         <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {t.assignee_name || "未派发"}
+                          {(t.participants?.length ?? 0) > 0
+                            ? t.participants!.map((p) => p.name).join("、")
+                            : "暂无人接手"}
                           {t.scheduled_time ? ` · ${t.scheduled_time.slice(5, 16).replace("T", " ")}` : ""}
                         </span>
                       </div>
