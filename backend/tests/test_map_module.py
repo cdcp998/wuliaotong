@@ -460,3 +460,34 @@ def test_generator_tick_isolates_region_error(monkeypatch):
     assert ok_region.status == 1
     assert bad_region.status == 0
     assert db.rollbacks >= 1
+
+
+# ============================ IP 定位兜底（iOS 等非安全上下文无浏览器定位） ============================
+
+def test_ip_locate_private_ip_detection():
+    """私网/环回/链路本地地址不可公网解析 → 走服务器出口定位；公网 IP 显式查询。"""
+    from app.modules.map.api import _is_private_ip
+
+    assert _is_private_ip("192.168.1.50")  # NAT 后设备直连地址
+    assert _is_private_ip("10.0.0.2")
+    assert _is_private_ip("172.16.0.9")
+    assert _is_private_ip("127.0.0.1")
+    assert _is_private_ip("::1")
+    assert _is_private_ip("fe80::1")
+    assert _is_private_ip("169.254.3.4")
+    assert _is_private_ip("not-an-ip")  # 解析失败一律按私网处理
+    assert _is_private_ip("")
+    assert _is_private_ip(None)
+    assert not _is_private_ip("8.8.8.8")
+
+
+def test_ip_locate_payload_parsers():
+    """上游 IP 服务响应解析：合法结构取坐标；异常结构返回 None 由调用方尝试下一家。"""
+    from app.modules.map.api import _parse_geojs, _parse_ip_api
+
+    assert _parse_ip_api({"status": "success", "lat": 30.1, "lon": 120.2}) == (30.1, 120.2)
+    assert _parse_ip_api({"status": "fail", "lat": 1, "lon": 2}) is None
+    assert _parse_ip_api({}) is None
+    assert _parse_geojs({"latitude": "31.5", "longitude": "121.5"}) == (31.5, 121.5)  # 字符串数字兼容
+    assert _parse_geojs({"latitude": "x", "longitude": "1"}) is None
+    assert _parse_geojs({}) is None

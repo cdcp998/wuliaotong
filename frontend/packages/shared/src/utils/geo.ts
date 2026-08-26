@@ -226,27 +226,55 @@ export function resolveDisplaySpace(
 
 // ============================ 定位获取（含降级链） ============================
 
+import { http } from "../api/client";
+
 export interface AppPosition {
   lat: number;
   lng: number;
   accuracy?: number;
-  /** gps=浏览器定位（WGS84）；ip=IP 粗略定位兜底。均为 WGS84 坐标。 */
-  source: "gps" | "ip";
+  /** gps=浏览器定位（WGS84）；ip=浏览器侧 IP 粗略定位；server=后端代理 IP 定位。均为 WGS84。 */
+  source: "gps" | "ip" | "server";
+}
+
+/** 单个上游服务超时（毫秒）：总降级链最坏 ≈ gps 8s + 4×3s + 服务端 6s，典型 2~5s 内命中。 */
+const PROVIDER_TIMEOUT_MS = 3000;
+/** 非GPS粗定位的会话内缓存时长：避免每次点击都重走整条降级链等待。 */
+const IP_FIX_TTL_MS = 10 * 60_000;
+
+let _lastNonGpsFix: (AppPosition & { at: number }) | null = null;
+
+function fetchJsonWithTimeout(url: string, timeoutMs = PROVIDER_TIMEOUT_MS): Promise<Record<string, unknown>> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return fetch(url, { cache: "no-store", signal: ctrl.signal })
+    .then(async (resp) => {
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return (await resp.json()) as Record<string, unknown>;
+    })
+    .finally(() => clearTimeout(timer));
+}
+
+function num(v: unknown): number {
+  const n = typeof v === "string" ? Number(v) : (v as number);
+  if (typeof n !== "number" || !Number.isFinite(n)) throw new Error("no coords");
+  return n;
 }
 
 /**
- * 获取当前位置（WGS84），带降级链，修复 HTTP 内网/手机端浏览器无 Geolocation API 时无法定位：
- * 1. 浏览器 Geolocation（GPS/WiFi，精度高；仅安全上下文可用）；
- * 2. ipapi.co HTTPS IP 定位；
- * 3. ip-api.com HTTP IP 定位（内网 HTTP 部署下可用）。
- * 全部失败才 reject（调用方提示手动选点）。
+ * 获取当前位置（WGS84），带完整降级链。修复 iOS / HTTP 内网部署下无法定位：
+ *
+ * 1. 浏览器 Geolocation（仅 HTTPS/localhost 可用；iOS Safari 在 HTTP 页面直接不暴露）；
+ * 2. 浏览器侧无键 HTTPS IP 服务 ×3（geojs.io → freeipapi.com → ipapi.co）；
+ * 3. ip-api.com HTTP 版（页面本身是 HTTP 时可用；HTTPS 页面被混合内容拦截自动跳过）；
+ * 4. 后端代理 GET /map/ip-locate（服务端发起查询，无 CORS/混合内容/可达性限制，最后兜底）。
+ *
+ * 全部失败才 reject（调用方提示手动选点）。非 GPS 粗定位结果会话内缓存 10 分钟。
  */
-export function getCurrentPositionWithFallback(timeoutMs = 10000): Promise<AppPosition> {
-  const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
-    new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("timeout")), ms);
-      p.then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
-    });
+export function getCurrentPositionWithFallback(timeoutMs = 8000): Promise<AppPosition> {
+  // 上次粗定位仍新鲜 → 秒回（避免重复等待整条链）
+  if (_lastNonGpsFix && Date.now() - _lastNonGpsFix.at < IP_FIX_TTL_MS) {
+    return Promise.resolve(_lastNonGpsFix);
+  }
 
   const viaBrowser = (): Promise<AppPosition> =>
     new Promise((resolve, reject) => {
@@ -261,22 +289,49 @@ export function getCurrentPositionWithFallback(timeoutMs = 10000): Promise<AppPo
       );
     });
 
-  const viaIpapi = async (): Promise<AppPosition> => {
-    const resp = await withTimeout(fetch("https://ipapi.co/json/", { cache: "no-store" }), timeoutMs);
-    if (!resp.ok) throw new Error(`ipapi HTTP ${resp.status}`);
-    const j = (await resp.json()) as { latitude?: number; longitude?: number };
-    if (typeof j.latitude !== "number" || typeof j.longitude !== "number") throw new Error("ipapi no coords");
-    return { lat: j.latitude, lng: j.longitude, source: "ip" };
+  const viaGeojs = async (): Promise<AppPosition> => {
+    const j = await fetchJsonWithTimeout("https://get.geojs.io/v1/ip/geo.json");
+    return { lat: num(j.latitude), lng: num(j.longitude), source: "ip" };
   };
-
+  const viaFreeIpApi = async (): Promise<AppPosition> => {
+    const j = await fetchJsonWithTimeout("https://freeipapi.com/api/json");
+    return { lat: num(j.latitude), lng: num(j.longitude), source: "ip" };
+  };
+  const viaIpapiCo = async (): Promise<AppPosition> => {
+    const j = await fetchJsonWithTimeout("https://ipapi.co/json/");
+    return { lat: num(j.latitude), lng: num(j.longitude), source: "ip" };
+  };
+  // 免费版 ip-api 仅支持 HTTP：HTTP 页面可用（本系统典型部署形态）；HTTPS 页面会因混合内容被拦，异常后自然跳过
   const viaIpApiCom = async (): Promise<AppPosition> => {
-    const resp = await withTimeout(fetch("https://ip-api.com/json/?fields=status,lat,lon", { cache: "no-store" }), timeoutMs);
-    if (!resp.ok) throw new Error(`ip-api HTTP ${resp.status}`);
-    const j = (await resp.json()) as { status?: string; lat?: number; lon?: number };
-    if (j.status !== "success" || typeof j.lat !== "number" || typeof j.lon !== "number") throw new Error("ip-api no coords");
-    return { lat: j.lat, lng: j.lon, source: "ip" };
+    const j = await fetchJsonWithTimeout("http://ip-api.com/json/?fields=status,lat,lon");
+    if (j.status !== "success") throw new Error("ip-api failed");
+    return { lat: num(j.lat), lng: num(j.lon), source: "ip" };
+  };
+  // 最后兜底：后端代理查询（服务端网络环境通常与浏览器不同，且不受任何浏览器限制）
+  const viaServerProxy = async (): Promise<AppPosition> => {
+    const r = await http.get<{ lat: number; lng: number }>("/map/ip-locate", 6000);
+    return { lat: num(r.lat), lng: num(r.lng), source: "server" };
   };
 
-  // 浏览器优先；失败（不支持/被拒绝/超时）依次降级到两个 IP 定位服务
-  return viaBrowser().catch(() => viaIpapi().catch(() => viaIpApiCom()));
+  const chain: (() => Promise<AppPosition>)[] = [
+    viaBrowser,
+    viaGeojs,
+    viaFreeIpApi,
+    viaIpapiCo,
+    viaIpApiCom,
+    viaServerProxy,
+  ];
+
+  const tryNext = async (idx: number): Promise<AppPosition> => {
+    if (idx >= chain.length) throw new Error("所有定位方式均失败");
+    try {
+      const pos = await chain[idx]();
+      if (pos.source !== "gps") _lastNonGpsFix = { ...pos, at: Date.now() };
+      else _lastNonGpsFix = null; // 有精确 GPS 后使缓存的粗定位失效
+      return pos;
+    } catch {
+      return tryNext(idx + 1);
+    }
+  };
+  return tryNext(0);
 }

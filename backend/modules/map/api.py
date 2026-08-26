@@ -5,11 +5,14 @@ router 级依赖：require_module_enabled("map")——模块未启用时全部�
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
+import time
+import urllib.request
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -79,6 +82,77 @@ def _read_source_config(db: Session, source: str) -> dict:
     if src is None or not src.get("enabled", False):
         raise BizError(E_NOT_FOUND, f"地图源 {source} 未配置")
     return src
+
+
+# ============================ IP 定位兜底（iOS 等非安全上下文无浏览器定位） ============================
+# 背景：Geolocation API 仅安全上下文（HTTPS/localhost）可用，HTTP 内网部署的 iOS 浏览器拿不到；
+# 前端直连公网 IP 服务还受 CORS/混合内容/网络可达性限制。由后端代理查询规避全部浏览器侧限制。
+_IP_LOOKUP_TIMEOUT = 4  # 单个上游 IP 服务超时（秒）
+
+
+def _is_private_ip(host: str | None) -> bool:
+    """内网/环回/链路本地地址判定：此类地址无法被公网 IP 服务解析。
+
+    设备在 NAT 后时客户端地址为私网 → 改查「不带 IP」的服务端出口定位
+    （同一办公网出口与设备实际位置同量级——城市级粗定位）。
+    """
+    if not host:
+        return True
+    try:
+        addr = ipaddress.ip_address(host.strip())
+    except ValueError:
+        return True
+    return addr.is_private or addr.is_loopback or addr.is_link_local or not addr.is_global
+
+
+def _parse_ip_api(payload: dict) -> tuple[float, float] | None:
+    """ip-api.com 响应 → (lat, lng)；结构不符返回 None。"""
+    if payload.get("status") == "success" and isinstance(payload.get("lat"), (int, float)) \
+            and isinstance(payload.get("lon"), (int, float)):
+        return float(payload["lat"]), float(payload["lon"])
+    return None
+
+
+def _parse_geojs(payload: dict) -> tuple[float, float] | None:
+    """get.geojs.io 响应 → (lat, lng)；结构不符返回 None。"""
+    try:
+        lat, lng = float(payload["latitude"]), float(payload["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return (lat, lng) if lat or lng else None
+
+
+def _fetch_json(url: str) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": "wuliaotong-map-proxy/1.0"})
+    with urllib.request.urlopen(req, timeout=_IP_LOOKUP_TIMEOUT) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+@router.get("/map/ip-locate", dependencies=[Depends(require_permission("cable:view"))])
+def ip_locate(request: Request) -> dict:
+    """IP 定位兜底：后端代理查询公网 IP 库（WGS84 城市级粗定位；不持 DB 会话）。
+
+    客户端 IP 取 X-Forwarded-For 首段 / 直连地址；私网地址则让上游按服务器出口 IP 解析。
+    """
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    client_ip = forwarded or (request.client.host if request.client else "")
+    # 公网客户端 IP 显式查询；私网（NAT 后设备）→ 空 suffix 让上游按服务器出口解析
+    suffix = f"/{client_ip}" if not _is_private_ip(client_ip) else ""
+    errors: list[str] = []
+    for parse, url in (
+        (_parse_ip_api, f"http://ip-api.com/json{suffix}?fields=status,message,lat,lon"),
+        (_parse_geojs, f"https://get.geojs.io/v1/ip/geo{suffix}.json"),
+    ):
+        try:
+            parsed = parse(_fetch_json(url))
+        except Exception as exc:  # noqa: BLE001 单一上游失败尝试下一个
+            errors.append(f"{url.split('/')[2]}: {exc}")
+            continue
+        if parsed is not None:
+            lat, lng = parsed
+            return ok({"lat": lat, "lng": lng})
+    logger.warning("IP 定位失败 %s：%s", client_ip or "-", "; ".join(errors))
+    raise BizError(E_PARAM, "IP 定位服务暂不可用")
 
 
 @router.get("/map/tile/{source}/{z}/{x}/{y}", dependencies=[Depends(require_permission("cable:view"))])
