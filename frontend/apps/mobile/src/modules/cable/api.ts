@@ -14,8 +14,9 @@ export interface CableItem {
 export interface FaultItem {
   id: number;
   cable_id: number | null;
-  lat: number;
-  lng: number;
+  /** 位置可空（上报不强制选点，维修寻找/后台标记后补） */
+  lat: number | null;
+  lng: number | null;
   cumulative_distance: number;
   fault_type: string;
   severity: number;

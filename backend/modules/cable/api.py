@@ -121,8 +121,9 @@ def _fault_out(f: CableFault, linked_tasks: list[dict] | None = None) -> dict:
     out = {
         "id": f.id,
         "cable_id": f.cable_id,
-        "lat": float(f.lat),
-        "lng": float(f.lng),
+        # 位置可空（v2：上报不强制选点，位置由维修人员寻找/后台标记后补）
+        "lat": float(f.lat) if f.lat is not None else None,
+        "lng": float(f.lng) if f.lng is not None else None,
         "cumulative_distance": float(f.cumulative_distance),
         "fault_type": f.fault_type,
         "severity": f.severity,
@@ -383,7 +384,8 @@ def list_faults(
             lat, lng, radius = [float(x) for x in near.split(",")]
         except ValueError:
             raise BizError(E_PARAM, "near 格式应为 lat,lng,radius_m") from None
-        filtered = [f for f in rows if geo_math.haversine(lat, lng, float(f.lat), float(f.lng)) <= radius]
+        filtered = [f for f in rows if f.lat is not None and f.lng is not None
+                    and geo_math.haversine(lat, lng, float(f.lat), float(f.lng)) <= radius]
         filtered.sort(key=lambda f: geo_math.haversine(lat, lng, float(f.lat), float(f.lng)))
         page_rows = filtered[(page - 1) * page_size: page * page_size]
         linked = _linked_tasks_by_fault(db, [f.id for f in page_rows])
@@ -398,8 +400,9 @@ def list_faults(
 
 @router.post("/faults", dependencies=[Depends(require_permission("fault:report"))])
 def create_fault(req: FaultCreate, user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """上报故障（v2：位置可选——不强制选点，位置由维修人员寻找/后台标记后补）。"""
     cum = 0.0
-    if req.cable_id:
+    if req.cable_id and req.lat is not None and req.lng is not None:
         c = _cable_or_404(db, req.cable_id)
         coords = [(float(p.lat), float(p.lng)) for p in db.scalars(select(CablePoint).where(CablePoint.cable_id == c.id).order_by(CablePoint.seq)).all()]
         if len(coords) >= 2:
@@ -555,6 +558,8 @@ def geo_navigate(req: NavigateReq, db: Session = Depends(get_db)) -> dict:
     fault = db.get(CableFault, req.fault_id)
     if fault is None or fault.deleted:
         raise BizError(E_NOT_FOUND, "故障不存在")
+    if fault.lat is None or fault.lng is None:
+        raise BizError(E_PARAM, "该故障尚未标记位置，请先由后台标记故障点")
     user_pt = (req.lat, req.lng)
     fault_pt = (float(fault.lat), float(fault.lng))
     straight = geo_math.haversine(user_pt[0], user_pt[1], fault_pt[0], fault_pt[1])

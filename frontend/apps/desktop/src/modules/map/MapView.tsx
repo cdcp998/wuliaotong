@@ -183,6 +183,7 @@ function FaultClusterLayer({ faults, space }: { faults: FaultItem[]; space: stri
     const padded = map.getBounds().pad(0.25);
     const byCell = new Map<string, { dlat: number; dlng: number; items: FaultItem[] }>();
     for (const f of faults) {
+      if (f.lat == null || f.lng == null) continue; // 未标记位置不上图
       const [dlng, dlat] = toDisplaySpace(f.lng, f.lat, space);
       if (!padded.contains([dlat, dlng])) continue;
       const p = map.project([dlat, dlng], view.zoom);
@@ -219,7 +220,7 @@ function FaultClusterLayer({ faults, space }: { faults: FaultItem[]; space: stri
           );
         }
         const boundsList = g.items.map((f) => {
-          const [dlng, dlat] = toDisplaySpace(f.lng, f.lat, space);
+          const [dlng, dlat] = toDisplaySpace(f.lng!, f.lat!, space);
           return [dlat, dlng] as L.LatLngTuple;
         });
         return (
@@ -289,7 +290,8 @@ export function MapView({
   }, [overlays.cables]);
 
   const faultPoints = useMemo(
-    () => overlays.faults.map((f) => ({ lat: f.lat, lng: f.lng, f })),
+    // 未标记位置的故障（lat/lng 可空）自动跳过，不上图
+    () => overlays.faults.filter((f) => f.lat != null && f.lng != null).map((f) => ({ lat: f.lat!, lng: f.lng!, f })),
     [overlays.faults],
   );
   const markerPoints = useMemo(
@@ -335,8 +337,8 @@ export function MapView({
             style={{ color: "#5B7FFF", weight: 4 }}
           />
         )}
-        {clusterFaults && overlays.faults.length > 0 ? (
-          <FaultClusterLayer faults={overlays.faults} space={space} />
+        {clusterFaults && faultPoints.length > 0 ? (
+          <FaultClusterLayer faults={faultPoints.map((p) => p.f)} space={space} />
         ) : (
           faultPoints.map(({ lat, lng, f }) => {
             const [dlng, dlat] = toDisplaySpace(lng, lat, space);

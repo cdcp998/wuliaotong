@@ -385,8 +385,9 @@ export function MobileMapPage() {
     if (key === "faults") void load();
   };
 
-  /** 从故障面板行内发起导航：预选该故障并打开导航面板。 */
+  /** 从故障面板行内发起导航：预选该故障并打开导航面板（未标记位置不可导航）。 */
   const navToFault = (f: FaultItem) => {
+    if (f.lat == null || f.lng == null) { Toast.show("该故障尚未标记位置"); return; }
     setSelFaultId(f.id);
     setHighlight([f.lat, f.lng]);
     setPanel("nav");
@@ -422,7 +423,7 @@ export function MobileMapPage() {
             <Polyline key={c.id} positions={(c.geometry!.coordinates as [number, number][]).map(([lng, lat]) => disp([lat, lng]))}
               pathOptions={{ color: "#5B7FFF", weight: 4 }} />
           ))}
-          {layers.faults && faults.map((f) => <Marker key={f.id} position={disp([f.lat, f.lng])} icon={warnIcon} />)}
+          {layers.faults && faults.filter((f) => f.lat != null && f.lng != null).map((f) => <Marker key={f.id} position={disp([f.lat!, f.lng!])} icon={warnIcon} />)}
           {layers.devices && devices.map((d) => <Marker key={`d${d.id}`} position={disp([d.lat!, d.lng!])} icon={deviceIcon} />)}
           {myPos && <Marker position={disp(myPos)} icon={myLocationIcon} />}
           {highlight && <Marker position={disp(highlight)} icon={navIcon} />}
@@ -602,10 +603,16 @@ export function MobileMapPage() {
                     {["低", "中", "高"][f.severity - 1] ?? f.severity}
                   </span>
                 </div>
-                <div style={{ fontSize: 11, color: "#8A93A8" }}>{f.lat.toFixed(5)}, {f.lng.toFixed(5)}　{FAULT_STATUS[f.status] ?? f.status}</div>
+                <div style={{ fontSize: 11, color: "#8A93A8" }}>{f.lat != null && f.lng != null ? `${f.lat.toFixed(5)}, ${f.lng.toFixed(5)}` : "待标记位置"}　{FAULT_STATUS[f.status] ?? f.status}</div>
               </div>
-              <Button size="mini" color="primary" fill="outline" onClick={() => { setHighlight([f.lat, f.lng]); setPanel(null); mapRef.current?.flyTo(disp([f.lat, f.lng]), 17); }} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>定位</Button>
-              <Button size="mini" color="primary" fill="outline" onClick={() => navToFault(f)} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>导航</Button>
+              {f.lat != null && f.lng != null ? (
+                <>
+                  <Button size="mini" color="primary" fill="outline" onClick={() => { setHighlight([f.lat!, f.lng!]); setPanel(null); mapRef.current?.flyTo(disp([f.lat!, f.lng!]), 17); }} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>定位</Button>
+                  <Button size="mini" color="primary" fill="outline" onClick={() => navToFault(f)} style={{ color: "#3B5BDB", borderColor: "#CBD6EC" }}>导航</Button>
+                </>
+              ) : (
+                <span style={{ fontSize: 10.5, color: "#B45309" }}>由后台标记后可定位</span>
+              )}
               <Button size="mini" color="danger" fill="outline" onClick={() => deleteFault(f)} style={{ color: "#DC2626", borderColor: "#CBD6EC" }}>删除</Button>
             </div>
           ))}

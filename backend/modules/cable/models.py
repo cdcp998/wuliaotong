@@ -62,13 +62,14 @@ class CableFault(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     cable_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    lat: Mapped[float] = mapped_column(Numeric(10, 7), nullable=False)
-    lng: Mapped[float] = mapped_column(Numeric(10, 7), nullable=False)
+    # 位置可空（v2：上报不强制选点，维修寻找/后台标记后补）
+    lat: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+    lng: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
     cumulative_distance: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     fault_type: Mapped[str] = mapped_column(String(30), nullable=False, default="")
     severity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)  # 1低/2中/3高
     description: Mapped[str] = mapped_column(String(500), nullable=False, default="")
-    status: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 0待派发/1已派发/2进行中/3完成待验/4已验证/5已关闭（v1.1 与任务态联动）
+    status: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 0待处理/2进行中/3待审核/4已完成/5已关闭（任务池驱动）
     deleted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 软删除：1=已删除（错误标点，migration 0002）
     reported_by: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     reported_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())

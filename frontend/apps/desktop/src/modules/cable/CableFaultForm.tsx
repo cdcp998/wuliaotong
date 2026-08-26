@@ -34,16 +34,11 @@ export function CableFaultForm({ onSubmitted, onCancel }: {
 
   const submit = async () => {
     const values = await form.validateFields();
-    if (!picked) {
-      message.warning("请在地图上点击选择故障位置");
-      return;
-    }
     setSaving(true);
     try {
       const r = await cableApi.createFault({
         cable_id: values.cable_id ?? null,
-        lat: picked.lat,
-        lng: picked.lng,
+        ...(picked ? { lat: picked.lat, lng: picked.lng } : {}),
         fault_type: values.fault_type ?? "",
         severity: values.severity,
         description: values.description ?? "",
@@ -88,7 +83,7 @@ export function CableFaultForm({ onSubmitted, onCancel }: {
       <Form.Item name="description" label="描述" style={{ marginBottom: 12 }}>
         <Input.TextArea rows={3} maxLength={500} placeholder="故障现象、影响范围、现场情况…" />
       </Form.Item>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#5B6478", marginBottom: 6 }}>故障位置（点击地图选点）</div>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#5B6478", marginBottom: 6 }}>故障位置（可选，点击地图选点；留空则由维修人员寻找/后台标记）</div>
       <div style={{ height: 220, borderRadius: 12, overflow: "hidden", border: "1px solid #E4EAF6", marginBottom: 8 }}>
         <MapView sources={sources} overlays={{ cables, faults: [], markersByCable: {} }}
           highlight={picked ? [picked.lat, picked.lng] : null}

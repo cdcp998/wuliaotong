@@ -32,13 +32,14 @@ export interface FaultLinkedTask {
 export interface FaultItem {
   id: number;
   cable_id: number | null;
-  lat: number;
-  lng: number;
+  /** 位置可空（v2：上报不强制选点，维修寻找/后台标记后补） */
+  lat: number | null;
+  lng: number | null;
   cumulative_distance: number;
   fault_type: string;
   severity: number; // 1低/2中/3高
   description: string;
-  /** v1.1 六态：0待派发/1已派发/2进行中/3完成待验/4已验证/5已关闭（与维修任务态联动） */
+  /** 任务池驱动：0待处理/1已派发(legacy)/2进行中/3待审核/4已完成/5已关闭 */
   status: number;
   status_label?: string;
   reported_by: number;
@@ -132,7 +133,7 @@ export const cableApi = {
     return http.get<Page<FaultItem>>(`/faults?${p.toString()}`);
   },
   deleteFault: (id: number) => http.delete<null>(`/faults/${id}`),
-  createFault: (body: { cable_id?: number | null; lat: number; lng: number; fault_type?: string; severity?: number; description?: string }) =>
+  createFault: (body: { cable_id?: number | null; lat?: number; lng?: number; fault_type?: string; severity?: number; description?: string }) =>
     http.post<{ id: number }>("/faults", body),
   /** 编辑故障；后台标记/移动故障点时传 lat+lng（后端按关联线缆重算累计距离）。 */
   updateFault: (id: number, body: { cable_id?: number | null; fault_type?: string; severity?: number; description?: string; lat?: number; lng?: number }) =>

@@ -49,8 +49,8 @@ export function CableFaultsPage() {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [creatingTask, setCreatingTask] = useState(false);
   const [locFault, setLocFault] = useState<FaultItem | null>(null);
-  /** 后台标记故障点：{fault, lat, lng} 选点态 */
-  const [markTarget, setMarkTarget] = useState<{ fault: FaultItem; lat: number; lng: number } | null>(null);
+  /** 后台标记故障点：{fault, lat, lng} 选点态（未标记故障 lat/lng 为 null，选点后写入） */
+  const [markTarget, setMarkTarget] = useState<{ fault: FaultItem; lat: number | null; lng: number | null } | null>(null);
   const [delFault, setDelFault] = useState<FaultItem | null>(null);
   const [delReason, setDelReason] = useState("");
   const [delSubmitting, setDelSubmitting] = useState(false);
@@ -138,10 +138,13 @@ export function CableFaultsPage() {
 
   /** 后台标记故障点：保存新坐标（后端按关联线缆重算累计距离）。 */
   const saveMarkedPoint = async () => {
-    if (!markTarget) return;
+    if (!markTarget || markTarget.lat == null || markTarget.lng == null) {
+      message.warning("请先在地图上点击选择故障点位置");
+      return;
+    }
     try {
       await cableApi.updateFault(markTarget.fault.id, { lat: markTarget.lat, lng: markTarget.lng });
-      message.success(`故障 #${markTarget.fault.id} 故障点已更新`);
+      message.success(`故障 #${markTarget.fault.id} 故障点已标记`);
       setMarkTarget(null);
       void load();
     } catch (e) {
@@ -210,7 +213,9 @@ export function CableFaultsPage() {
         </div>
       ) },
       { title: "严重度", width: 90, render: (_, f) => { const s = SEVERITY[f.severity]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? f.severity}</Tag>; } },
-      { title: "位置", width: 180, render: (_, f) => <span style={{ fontSize: 12, color: token.colorTextSecondary, fontVariantNumeric: "tabular-nums" }}>{f.lat.toFixed(6)}, {f.lng.toFixed(6)}</span> },
+      { title: "位置", width: 180, render: (_, f) => f.lat != null && f.lng != null
+        ? <span style={{ fontSize: 12, color: token.colorTextSecondary, fontVariantNumeric: "tabular-nums" }}>{f.lat.toFixed(6)}, {f.lng.toFixed(6)}</span>
+        : <Tag style={{ borderRadius: 999, background: "#FEF4E2", color: "#B45309", borderColor: "transparent", marginInlineEnd: 0 }}>待标记</Tag> },
       { title: "状态", width: 110, render: (_, f) => { const s = FAULT_STATUS[f.status]; return <Tag style={{ borderRadius: 999, background: s?.bg, color: s?.fg, borderColor: "transparent", marginInlineEnd: 0 }}>{s?.label ?? f.status}</Tag>; } },
       {
         title: "关联维修任务", key: "linked", width: 190,
@@ -242,11 +247,13 @@ export function CableFaultsPage() {
         render: (_, f) => (
           <Space size={2}>
             {isManager && (
-              <Tooltip title="标记故障点（后台修正位置）">
+              <Tooltip title="标记故障点（后台标注/修正位置）">
                 <Button size="small" icon={<EnvironmentOutlined />} onClick={() => setMarkTarget({ fault: f, lat: f.lat, lng: f.lng })} />
               </Tooltip>
             )}
-            <Tooltip title="定位到故障点"><Button size="small" icon={<AimOutlined />} onClick={() => setLocFault(f)} /></Tooltip>
+            {f.lat != null && f.lng != null && (
+              <Tooltip title="定位到故障点"><Button size="small" icon={<AimOutlined />} onClick={() => setLocFault(f)} /></Tooltip>
+            )}
             <Tooltip title="照片/详情"><Button size="small" icon={<CameraOutlined />} onClick={() => openDetail(f)} /></Tooltip>
             {f.status === 5 ? (
               <Tooltip title="删除（已关闭故障，需管理员审核）">
@@ -343,9 +350,9 @@ export function CableFaultsPage() {
         />
       </Modal>
 
-      {/* 定位到故障点（内嵌地图） */}
+      {/* 定位到故障点（内嵌地图；未标记位置不可进入） */}
       <Modal open={!!locFault} onCancel={() => setLocFault(null)} footer={null} title={locFault ? `故障 #${locFault.id} 位置` : ""} width={720} destroyOnHidden>
-        {locFault && (
+        {locFault && locFault.lat != null && locFault.lng != null && (
           <>
             <p style={{ marginBottom: 8, color: token.colorTextSecondary, fontSize: 12.5 }}>
               {locFault.fault_type || "未分类"} · 状态：{FAULT_STATUS[locFault.status]?.label} · {locFault.lat.toFixed(6)}, {locFault.lng.toFixed(6)}
@@ -372,15 +379,19 @@ export function CableFaultsPage() {
         {markTarget && (
           <>
             <p style={{ marginBottom: 8, color: token.colorTextSecondary, fontSize: 12.5 }}>
-              在地图上点击选择新位置（红色高亮点为当前选定位置，蓝色圆点为原故障点）；当前 {markTarget.fault.lat.toFixed(6)}, {markTarget.fault.lng.toFixed(6)} → 新位置 <b>{markTarget.lat.toFixed(6)}, {markTarget.lng.toFixed(6)}</b>
+              在地图上点击选择故障点位置（红色高亮为当前选定，蓝色圆点为原位置）；
+              {markTarget.fault.lat != null && markTarget.fault.lng != null
+                ? <>当前 {markTarget.fault.lat.toFixed(6)}, {markTarget.fault.lng.toFixed(6)}</>
+                : "该故障尚未标记位置"}
+              {markTarget.lat != null && markTarget.lng != null && <> → 新位置 <b>{markTarget.lat.toFixed(6)}, {markTarget.lng.toFixed(6)}</b></>}
             </p>
             <div style={{ height: 400, border: `1px solid ${token.colorBorder}`, borderRadius: 12, overflow: "hidden" }}>
               <MapView
                 sources={sources}
-                center={[markTarget.lat, markTarget.lng]}
+                center={markTarget.lat != null && markTarget.lng != null ? [markTarget.lat, markTarget.lng] : undefined}
                 zoom={16}
                 overlays={{ cables, faults: [markTarget.fault], markersByCable: {} }}
-                highlight={[markTarget.lat, markTarget.lng]}
+                highlight={markTarget.lat != null && markTarget.lng != null ? [markTarget.lat, markTarget.lng] : null}
                 clusterFaults={false} autoFit={false}
                 picking="在地图上单击选择新的故障点位置"
                 height="400px"
@@ -417,7 +428,9 @@ export function CableFaultsPage() {
               　状态：
               <Tag style={{ borderRadius: 999, background: FAULT_STATUS[detail.status]?.bg, color: FAULT_STATUS[detail.status]?.fg, borderColor: "transparent" }}>{FAULT_STATUS[detail.status]?.label}</Tag>
             </div>
-            <div style={{ color: token.colorTextSecondary, fontSize: 12.5 }}>位置：{detail.lat.toFixed(6)}, {detail.lng.toFixed(6)}（累计 {detail.cumulative_distance.toFixed(1)} m）</div>
+            <div style={{ color: token.colorTextSecondary, fontSize: 12.5 }}>
+              位置：{detail.lat != null && detail.lng != null ? `${detail.lat.toFixed(6)}, ${detail.lng.toFixed(6)}（累计 ${detail.cumulative_distance.toFixed(1)} m）` : "尚未标记（可由后台「标记故障点」标注）"}
+            </div>
             <div style={{ fontSize: 13 }}>描述：{detail.description || "—"}</div>
             {/* 反向关联维修任务：跳转任务列表定位；无关联时可一键转维修任务 */}
             <div style={{ border: `1px solid ${token.colorBorder}`, borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>

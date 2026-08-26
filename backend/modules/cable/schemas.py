@@ -77,8 +77,8 @@ class MarkerCreate(BaseModel):
 
 class FaultCreate(BaseModel):
     cable_id: int | None = None
-    lat: float
-    lng: float
+    lat: float | None = Field(default=None, ge=-90, le=90, description="纬度（可选：上报不强制选点）")
+    lng: float | None = Field(default=None, ge=-180, le=180, description="经度（可选：上报不强制选点）")
     fault_type: str = ""
     severity: int = 1
     description: str = ""
