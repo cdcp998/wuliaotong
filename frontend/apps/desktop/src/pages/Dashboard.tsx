@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Alert, Button, Empty, Skeleton, Switch, Tag, theme } from "antd";
-import { BarChartOutlined, CheckSquareOutlined, CodeSandboxOutlined, ExportOutlined, FileTextOutlined, ReloadOutlined } from "@ant-design/icons";
+import { ArrowDownOutlined, ArrowUpOutlined, BarChartOutlined, CheckSquareOutlined, CodeSandboxOutlined, EditOutlined, ExportOutlined, FileTextOutlined, ReloadOutlined } from "@ant-design/icons";
 
 import { reportApi, useAuthStore, type DashboardData } from "@wlt/shared";
 
@@ -21,6 +21,17 @@ const TASK_COL_META: Record<string, { fg: string; bg: string }> = {
 };
 const TASK_COLUMNS = ["pending", "in_progress", "done"];
 const SOURCE_DOT: Record<string, string> = { cable: "#B45309", device: "#3B5BDB" };
+
+/** 看板区块（自定义布局：编辑模式下可上下移动，顺序 localStorage 记忆）。 */
+type BlockKey = "stats" | "trendTodo" | "taskBoard" | "quickLinks";
+const DASH_ORDER_KEY = "wlt.dash.order";
+const DEFAULT_ORDER: BlockKey[] = ["stats", "trendTodo", "taskBoard", "quickLinks"];
+const BLOCK_TITLES: Record<BlockKey, string> = {
+  stats: "统计卡",
+  trendTodo: "趋势与待办",
+  taskBoard: "维修任务看板",
+  quickLinks: "快捷入口",
+};
 
 /** 维修任务看板小组件（任务模块启用且用户开启时显示）：
  *  三活动列（待领取/进行中/待审核）计数与近期任务，点击卡片直达任务看板定位。 */
@@ -165,6 +176,28 @@ export function DashboardPage() {
   // 任务看板显示开关：默认显示；用户关闭后 localStorage 记忆（wlt.dash.taskBoard=0）
   const [showTaskBoard, setShowTaskBoard] = useState<boolean>(() => localStorage.getItem("wlt.dash.taskBoard") !== "0");
   const [reloadTick, setReloadTick] = useState(0);
+  // 自定义布局：编辑模式下区块可上下移动，顺序即时保存（wlt.dash.order）
+  const [editing, setEditing] = useState(false);
+  const [order, setOrder] = useState<BlockKey[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(DASH_ORDER_KEY) ?? "") as BlockKey[];
+      const clean = DEFAULT_ORDER.filter((k) => raw.includes(k));
+      if (clean.length === DEFAULT_ORDER.length) return clean;
+    } catch { /* 解析失败回退默认 */ }
+    return [...DEFAULT_ORDER];
+  });
+
+  const moveBlock = (key: BlockKey, dir: -1 | 1) => {
+    setOrder((prev) => {
+      const arr = [...prev];
+      const i = arr.indexOf(key);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= arr.length) return prev;
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+      try { localStorage.setItem(DASH_ORDER_KEY, JSON.stringify(arr)); } catch { /* 忽略 */ }
+      return arr;
+    });
+  };
 
   const load = useCallback(async () => {
     try {
@@ -187,6 +220,99 @@ export function DashboardPage() {
   /** 页头动作按钮（设计页 13：白底灰描边 + 品牌图标 + 深色文字）。 */
   const headBtn = { borderColor: "#CBD6EC", color: "#1E2433", background: "#FFFFFF" };
 
+  /** 区块可见性：维修任务看板需任务模块启用且用户开启；其余恒可见。 */
+  const applicable = (k: BlockKey) => k !== "taskBoard" || (taskEnabled && showTaskBoard);
+  const visibleBlocks = order.filter(applicable);
+
+  /** 区块渲染（自定义布局）：stats 统计卡 / trendTodo 趋势+待办 / taskBoard 任务看板 / quickLinks 快捷入口。 */
+  const renderBlock = (bk: BlockKey) => {
+    if (bk === "taskBoard") return <TaskBoardWidget reloadTick={reloadTick} />;
+    if (!data) return null;
+    if (bk === "stats") {
+      return (
+        /* 4 张统计卡（设计页 13：数值 22/700 彩色 + 标签 12.5，点击直达） */
+        <div className="wlt-grid" style={{ marginBottom: 16 }}>
+          {[
+            { value: fmt(Number(data.today.in_qty)), label: "今日入库（件）", path: "/purchase-in", color: "#5B7FFF" },
+            { value: fmt(Number(data.today.out_qty)), label: "今日出库（件）", path: "/stock", color: "#0E7490" },
+            { value: fmt(data.alert_count), label: "库存预警", path: "/stock", color: "#DC2626" },
+            { value: fmt(data.todos.pending_requisitions), label: "待审计领用单", path: "/requisitions", color: "#B45309" },
+          ].map((c) => (
+            <div key={c.label} className="wlt-glass" onClick={() => navigate(c.path)} style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 6, cursor: "pointer" }}>
+              <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.5, color: c.color, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{c.value}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 500, color: token.colorTextSecondary }}>{c.label}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    if (bk === "trendTodo") {
+      return (
+        /* 近 7 日趋势 + 待办清单（设计页 13：Trend 自适应 + Todo 330） */
+        <div style={{ display: "flex", gap: 16, alignItems: "stretch", flexWrap: "wrap", marginBottom: 16 }}>
+          <div className="wlt-glass" style={{ flex: 1, minWidth: 340, padding: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#1E2433", marginBottom: 10 }}>近 7 日出入库趋势</div>
+            <TrendChart trend={data.trend_7d} />
+          </div>
+          <div className="wlt-glass" style={{ width: 330, flexShrink: 0, padding: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#1E2433" }}>待办清单</span>
+              <span style={{ padding: "3px 10px", borderRadius: 999, background: "#EFF3FC", fontSize: 11, fontWeight: 600, color: "#5B6478" }}>
+                {data.todos.pending_requisitions + data.todos.pending_transfers + data.todos.pending_checks}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {[
+                { label: "待审计领用单", count: data.todos.pending_requisitions, path: "/requisitions", dot: "#DC2626" },
+                { label: "待审核调拨单", count: data.todos.pending_transfers, path: "/transfers", dot: "#B45309" },
+                { label: "盘点进行中", count: data.todos.pending_checks, path: "/checks", dot: "#5B7FFF" },
+              ].map((item) => (
+                <div
+                  key={item.path}
+                  onClick={() => navigate(item.path)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    background: "#F6F8FE",
+                    cursor: "pointer",
+                  }}
+                >
+                  <span style={{ width: 7, height: 7, borderRadius: 4, background: item.dot, flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: 12.5, color: "#1E2433" }}>{item.label}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: item.count > 0 ? item.dot : token.colorTextTertiary }}>{item.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      /* 快捷入口（设计页 13：图标玻璃卡 ×5，按权限过滤）—— 严格一行 5 张 */
+      <div className="wlt-grid" style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+        {(
+          [
+            { label: "材料入库", icon: <FileTextOutlined />, color: "#5B7FFF", path: "/purchase-in", perm: "pch:in" },
+            { label: "其他出库", icon: <ExportOutlined />, color: "#0E7490", path: "/other-io", perm: "stk:other" },
+            { label: "领用申请", icon: <CheckSquareOutlined />, color: "#3B5BDB", path: "/requisitions/apply", perm: "req:apply" },
+            { label: "盘点", icon: <CodeSandboxOutlined />, color: "#7C3AED", path: "/checks", perm: "stk:check" },
+            { label: "报表中心", icon: <BarChartOutlined />, color: "#16A34A", path: "/reports", perm: "report:view" },
+          ] as { label: string; icon: React.ReactNode; color: string; path: string; perm: string }[]
+        )
+          .filter((q) => can(q.perm))
+          .map((q) => (
+            <div key={q.path} className="wlt-glass" onClick={() => navigate(q.path)} style={{ flex: "1 1 150px", minWidth: 0, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+              <div style={{ width: 34, height: 34, borderRadius: 11, background: "#F6F8FE", color: q.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>{q.icon}</div>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "#1E2433" }}>{q.label}</span>
+            </div>
+          ))}
+      </div>
+    );
+  };
+
   return (
     <div style={{ padding: 24, width: "100%" }}>
       {/* 页头：标题 + 副题 + 快捷动作（设计页 13 幽灵按钮） */}
@@ -201,6 +327,11 @@ export function DashboardPage() {
           {can("pch:in") && <Button style={headBtn} icon={<FileTextOutlined style={{ color: "#5B7FFF" }} />} onClick={() => navigate("/purchase-in")}>新建采购入库</Button>}
           {can("req:audit") && <Button style={headBtn} icon={<CheckSquareOutlined style={{ color: "#5B7FFF" }} />} onClick={() => navigate("/requisitions")}>领用审计</Button>}
           {can("stk:check") && <Button style={headBtn} icon={<CodeSandboxOutlined style={{ color: "#5B7FFF" }} />} onClick={() => navigate("/checks")}>新建盘点</Button>}
+          <Button
+            style={headBtn}
+            icon={<EditOutlined style={{ color: editing ? "#B45309" : "#5B6478" }} />}
+            onClick={() => setEditing((v) => !v)}
+          >{editing ? "完成编辑" : "编辑布局"}</Button>
           <Button style={headBtn} icon={<ReloadOutlined style={{ color: "#5B6478" }} />} onClick={() => { void load(); setReloadTick((t) => t + 1); }} aria-label="刷新" />
         </div>
       </div>
@@ -229,88 +360,26 @@ export function DashboardPage() {
         </div>
       )}
 
-      {data && (
-        <>
-          {/* 4 张统计卡（设计页 13：数值 22/700 彩色 + 标签 12.5，点击直达） */}
-          <div className="wlt-grid" style={{ marginBottom: 16 }}>
-            {[
-              { value: fmt(Number(data.today.in_qty)), label: "今日入库（件）", path: "/purchase-in", color: "#5B7FFF" },
-              { value: fmt(Number(data.today.out_qty)), label: "今日出库（件）", path: "/stock", color: "#0E7490" },
-              { value: fmt(data.alert_count), label: "库存预警", path: "/stock", color: "#DC2626" },
-              { value: fmt(data.todos.pending_requisitions), label: "待审计领用单", path: "/requisitions", color: "#B45309" },
-            ].map((c) => (
-              <div key={c.label} className="wlt-glass" onClick={() => navigate(c.path)} style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 6, cursor: "pointer" }}>
-                <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.5, color: c.color, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{c.value}</div>
-                <div style={{ fontSize: 12.5, fontWeight: 500, color: token.colorTextSecondary }}>{c.label}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* 近 7 日趋势 + 待办清单（设计页 13：Trend 自适应 + Todo 330） */}
-          <div style={{ display: "flex", gap: 16, alignItems: "stretch", flexWrap: "wrap", marginBottom: 16 }}>
-            <div className="wlt-glass" style={{ flex: 1, minWidth: 340, padding: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#1E2433", marginBottom: 10 }}>近 7 日出入库趋势</div>
-              <TrendChart trend={data.trend_7d} />
-            </div>
-            <div className="wlt-glass" style={{ width: 330, flexShrink: 0, padding: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#1E2433" }}>待办清单</span>
-                <span style={{ padding: "3px 10px", borderRadius: 999, background: "#EFF3FC", fontSize: 11, fontWeight: 600, color: "#5B6478" }}>
-                  {data.todos.pending_requisitions + data.todos.pending_transfers + data.todos.pending_checks}
-                </span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {[
-                  { label: "待审计领用单", count: data.todos.pending_requisitions, path: "/requisitions", dot: "#DC2626" },
-                  { label: "待审核调拨单", count: data.todos.pending_transfers, path: "/transfers", dot: "#B45309" },
-                  { label: "盘点进行中", count: data.todos.pending_checks, path: "/checks", dot: "#5B7FFF" },
-                ].map((item) => (
-                  <div
-                    key={item.path}
-                    onClick={() => navigate(item.path)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      background: "#F6F8FE",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <span style={{ width: 7, height: 7, borderRadius: 4, background: item.dot, flexShrink: 0 }} />
-                    <span style={{ flex: 1, fontSize: 12.5, color: "#1E2433" }}>{item.label}</span>
-                    <span style={{ fontSize: 12.5, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: item.count > 0 ? item.dot : token.colorTextTertiary }}>{item.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* 维修任务看板（任务模块启用且用户开启时显示；页头刷新同步刷新） */}
-          {taskEnabled && showTaskBoard && <TaskBoardWidget reloadTick={reloadTick} />}
-
-          {/* 快捷入口（设计页 13：图标玻璃卡 ×5，按权限过滤）—— 严格一行 5 张 */}
-          <div className="wlt-grid" style={{ display: "flex", gap: 12 }}>
-            {(
-              [
-                { label: "材料入库", icon: <FileTextOutlined />, color: "#5B7FFF", path: "/purchase-in", perm: "pch:in" },
-                { label: "其他出库", icon: <ExportOutlined />, color: "#0E7490", path: "/other-io", perm: "stk:other" },
-                { label: "领用申请", icon: <CheckSquareOutlined />, color: "#3B5BDB", path: "/requisitions/apply", perm: "req:apply" },
-                { label: "盘点", icon: <CodeSandboxOutlined />, color: "#7C3AED", path: "/checks", perm: "stk:check" },
-                { label: "报表中心", icon: <BarChartOutlined />, color: "#16A34A", path: "/reports", perm: "report:view" },
-              ] as { label: string; icon: React.ReactNode; color: string; path: string; perm: string }[]
-            )
-              .filter((q) => can(q.perm))
-              .map((q) => (
-                <div key={q.path} className="wlt-glass" onClick={() => navigate(q.path)} style={{ flex: "1 1 150px", minWidth: 0, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 11, background: "#F6F8FE", color: q.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>{q.icon}</div>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "#1E2433" }}>{q.label}</span>
-                </div>
-              ))}
-          </div>
-        </>
+      {/* 编辑模式提示 */}
+      {data && editing && (
+        <div style={{ marginBottom: 12, fontSize: 12, color: token.colorTextSecondary }}>
+          编辑布局：点击各区块右上角 ↑ / ↓ 调整显示顺序，改动即时保存；「维修任务看板」是否显示由页头上方开关控制。
+        </div>
       )}
+
+      {/* 按用户自定义顺序渲染区块（编辑模式下显示移动控件与虚线框） */}
+      {data && visibleBlocks.map((bk, idx) => (
+        <div key={bk} style={{ position: "relative", ...(editing ? { outline: "1px dashed #5B7FFF66", outlineOffset: 6, borderRadius: 14 } : null) }}>
+          {renderBlock(bk)}
+          {editing && (
+            <div style={{ position: "absolute", top: -10, right: 8, zIndex: 5, display: "flex", alignItems: "center", gap: 2, background: "#FFFFFF", border: "1px solid #CBD6EC", borderRadius: 999, padding: "1px 4px", boxShadow: "0 2px 8px rgba(30,36,51,0.08)" }}>
+              <span style={{ fontSize: 11, color: "#5B6478", padding: "0 4px" }}>{BLOCK_TITLES[bk]}</span>
+              <Button size="small" type="text" disabled={idx === 0} icon={<ArrowUpOutlined />} onClick={() => moveBlock(bk, -1)} aria-label={`上移${BLOCK_TITLES[bk]}`} />
+              <Button size="small" type="text" disabled={idx === visibleBlocks.length - 1} icon={<ArrowDownOutlined />} onClick={() => moveBlock(bk, 1)} aria-label={`下移${BLOCK_TITLES[bk]}`} />
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
