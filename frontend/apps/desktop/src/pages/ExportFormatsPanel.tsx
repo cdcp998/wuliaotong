@@ -558,13 +558,13 @@ export function ExportFormatsPanel({ canEdit }: { canEdit: boolean }) {
               {dirty && (
                 <Button icon={<UndoOutlined />} disabled={saving} onClick={() => setEdits({})}>放弃修改</Button>
               )}
-              {/* 文字恒白：全局 .ant-btn-primary 渐变底未锁字色，这里内联保证对比度；禁用态交还 antd 默认灰字 */}
+              {/* 字体恒白（任何状态）：内联样式优先级最高，覆盖主题计算字色 */}
               <Button
                 type="primary"
                 icon={<SaveOutlined />}
                 loading={saving}
                 disabled={!dirty}
-                style={dirty ? { color: "#fff" } : undefined}
+                style={{ color: "#fff" }}
                 onClick={() => void save()}
               >
                 保存{scope === "global" ? "全局默认" : "模块覆盖"}设置
